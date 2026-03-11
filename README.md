@@ -1,4 +1,4 @@
-# ClawGate
+# FoundryGate
 
 [![repo-safety](https://github.com/typelicious/ClawGate/actions/workflows/repo-safety.yml/badge.svg)](https://github.com/typelicious/ClawGate/actions/workflows/repo-safety.yml)
 [![CI](https://github.com/typelicious/ClawGate/actions/workflows/ci.yml/badge.svg)](https://github.com/typelicious/ClawGate/actions/workflows/ci.yml)
@@ -17,21 +17,24 @@
 - [Deployment](#deployment)
 - [Helper Scripts](#helper-scripts)
 - [Repo Safety And CI](#repo-safety-and-ci)
+- [Workflow](#workflow)
 - [Roadmap](#roadmap)
 - [Troubleshooting](#troubleshooting)
 - [Releases](#releases)
 
-🦞 Local OpenAI-compatible router for [OpenClaw](https://openclaw.ai/).
+🦞 Local OpenAI-compatible gateway for [OpenClaw](https://openclaw.ai/).
 
-ClawGate is a local OpenAI-compatible router/proxy for OpenClaw and other clients. Point your client at a single local endpoint, and ClawGate routes each request to the configured upstream provider and model, applies fallbacks on failures, and exposes health and usage data for operations.
+FoundryGate is a local OpenAI-compatible router/proxy for OpenClaw and other clients. Point your client at a single local endpoint, and FoundryGate routes each request to the configured upstream provider and model, applies fallbacks on failures, and exposes health and usage data for operations.
+
+Current compatibility note: the product name is `FoundryGate`, while the current runtime package, service file, helper scripts, and environment variable names still use `clawgate` identifiers. Those compatibility names remain valid until the runtime rename lands.
 
 OpenClaw site: [https://openclaw.ai/](https://openclaw.ai/)
 OpenClaw docs: [https://docs.openclaw.ai/](https://docs.openclaw.ai/)
 
-## Why ClawGate
+## Why FoundryGate
 
 - OpenAI-compatible API: expose `/v1/models` and `/v1/chat/completions` to OpenClaw or any OpenAI-style client.
-- Single endpoint, multiple providers: clients call one local base URL while ClawGate chooses the upstream provider.
+- Single endpoint, multiple providers: clients call one local base URL while FoundryGate chooses the upstream provider.
 - Multi-provider routing: use `auto` for routing or target a provider directly by model id.
 - Robust fallback behavior: provider errors, timeouts, and connection failures fall through the configured fallback chain.
 - Useful observability: `/health` reports provider status, consecutive failures, last error, and average latency.
@@ -73,7 +76,9 @@ curl -fsS http://127.0.0.1:8090/health
 curl -fsS http://127.0.0.1:8090/v1/models
 ```
 
-If every configured provider API key is empty, ClawGate still starts, but it skips those providers at startup and `v1/models` will only expose the virtual `auto` model.
+If you install the project as a package, both `foundrygate` and `clawgate` console scripts are available during the transition.
+
+If every configured provider API key is empty, FoundryGate still starts, but it skips those providers at startup and `v1/models` will only expose the virtual `auto` model.
 
 ## How It Works
 
@@ -105,7 +110,7 @@ Important implementation detail: heuristic keyword scoring only evaluates user m
 
 ## API
 
-These endpoints are implemented today in [clawgate/main.py](./clawgate/main.py).
+These endpoints are implemented today in [clawgate/main.py](./clawgate/main.py). The runtime module path still uses `clawgate` during the transition.
 
 ### `GET /health`
 
@@ -132,10 +137,10 @@ curl -fsS http://127.0.0.1:8090/v1/models
 
 OpenAI-compatible chat completions endpoint.
 
-- `model: "auto"` routes through ClawGate
+- `model: "auto"` routes through FoundryGate
 - `model: "<provider-id>"` routes directly to that loaded provider
 
-For non-streaming responses, ClawGate also adds these response headers:
+For non-streaming responses, FoundryGate also adds these compatibility response headers:
 
 - `X-ClawGate-Provider`
 - `X-ClawGate-Layer`
@@ -166,7 +171,7 @@ curl -fsS 'http://127.0.0.1:8090/api/recent?limit=10'
 
 ## Model Aliases And Routing
 
-ClawGate itself exposes:
+FoundryGate itself exposes:
 
 - `auto` as the virtual routing model
 - direct provider ids such as `deepseek-chat`, `deepseek-reasoner`, `gemini-flash-lite`, `gemini-flash`, and `openrouter-fallback` when those providers are loaded
@@ -186,11 +191,11 @@ If you use OpenClaw, the recommended client-side aliases live in [openclaw-integ
 - `flash`
 - `or`
 
-Those aliases are defined on the OpenClaw side. ClawGate only sees the resulting `model` value and routes accordingly.
+Those aliases are defined on the OpenClaw side. FoundryGate only sees the resulting `model` value and routes accordingly.
 
 ## Configuration
 
-ClawGate loads configuration from:
+FoundryGate loads configuration from:
 
 - `config.yaml`
 - `.env` via `python-dotenv`
@@ -223,7 +228,7 @@ Today, the runtime code implements:
 - `openai-compat`
 - `google-genai`
 
-The stock config also includes commented templates for a wider provider catalog. Enable only the providers that match the backends implemented by your current ClawGate version.
+The stock config also includes commented templates for a wider provider catalog. Enable only the providers that match the backends implemented by your current FoundryGate runtime.
 
 ### Timeout Notes
 
@@ -257,11 +262,11 @@ CLAWGATE_DB_PATH=/home/you/.local/state/clawgate/clawgate.db
 Disable a provider:
 
 - Remove or empty the relevant API key in `.env`, or comment out the provider stanza in `config.yaml`
-- On startup, ClawGate logs that the provider has no API key and skips loading it
+- On startup, FoundryGate logs that the provider has no API key and skips loading it
 
 ## Deployment
 
-ClawGate runs fine as a plain Python process. `systemd` and helper scripts are optional conveniences. Docker can be used for quick evaluation even though the repo does not currently ship a Dockerfile.
+FoundryGate runs fine as a plain Python process. `systemd` and helper scripts are optional conveniences. Docker can be used for quick evaluation even though the repo does not currently ship a Dockerfile.
 
 ### Generic Linux Host
 
@@ -274,7 +279,7 @@ Recommended runtime paths:
 
 ### systemd
 
-The repo includes [clawgate.service](./clawgate.service). Deploy it to:
+The repo includes [clawgate.service](./clawgate.service), which still uses the current compatibility service name. Deploy it to:
 
 ```text
 /etc/systemd/system/clawgate.service
@@ -339,7 +344,7 @@ Running `./scripts/clawgate-install` also creates symlinks in `/usr/local/bin`.
 
 ## Repo Safety And CI
 
-ClawGate includes two GitHub Actions workflows:
+FoundryGate includes two GitHub Actions workflows:
 
 - [CI](./.github/workflows/ci.yml): runs Ruff plus the test matrix on Python 3.10 through 3.13
 - [repo-safety](./.github/workflows/repo-safety.yml): rejects accidental artifacts and secrets-like files
@@ -352,6 +357,17 @@ The `repo-safety` workflow fails pull requests if these patterns are tracked in 
 - `*.log`
 
 This keeps secrets and runtime artifacts out of a public repo and makes cleanup mistakes visible before merge.
+
+## Workflow
+
+FoundryGate uses a protected `main` branch and short-lived implementation branches.
+
+- `main` stays stable and releaseable
+- `feature/<topic>-<date>` is the default branch type for implementation
+- `review/<topic>-<date>` is optional for review-only hardening or secondary agent passes
+- `hotfix/<topic>-<date>` is reserved for urgent fixes on top of current `main`
+
+The detailed workflow is documented in [docs/process/git-workflow.md](./docs/process/git-workflow.md).
 
 ## Troubleshooting
 
@@ -404,8 +420,8 @@ The next product direction is tracked in [docs/FOUNDRYGATE-ROADMAP.md](./docs/FO
 
 Short version:
 
-- `ClawGate` is the current codebase
-- `FoundryGate` is the working name for the broader gateway direction
+- `FoundryGate` is the product name
+- current runtime compatibility names still use `clawgate`
 - the next steps focus on capability-aware routing, local worker support, client profiles, and optional context/optimization hooks
 
 ## Releases
@@ -413,22 +429,6 @@ Short version:
 - [CHANGELOG.md](./CHANGELOG.md) tracks notable user-facing changes
 - [RELEASES.md](./RELEASES.md) describes the lightweight release process for tags and GitHub Releases
 - GitHub Releases: [https://github.com/typelicious/ClawGate/releases](https://github.com/typelicious/ClawGate/releases)
-
-## Suggested GitHub About
-
-Suggested description:
-
-> Local OpenAI-compatible router/proxy for OpenClaw and other LLM clients.
-
-Suggested topics:
-
-- `openclaw`
-- `openai-compatible`
-- `llm-router`
-- `llm-gateway`
-- `proxy`
-- `multi-provider`
-- `fastapi`
 
 ## Contributing
 
@@ -444,4 +444,4 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 MIT. See [LICENSE](./LICENSE).
 
-⭐ If ClawGate saves you time or money, feel free to star the repo. ❤️
+⭐ If FoundryGate saves you time or money, feel free to star the repo. ❤️

@@ -1,4 +1,4 @@
-# ClawGate – Routing Configuration
+# FoundryGate – Routing Configuration
 # Layered routing: static → heuristic → llm-classify
 #
 # Provider reference: https://docs.openclaw.ai/concepts/model-providers

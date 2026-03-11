@@ -1,5 +1,5 @@
 [Unit]
-Description=ClawGate – LLM Routing Proxy for OpenClaw
+Description=FoundryGate – Local AI Gateway for OpenClaw and other clients
 After=network.target
 Wants=network-online.target
 

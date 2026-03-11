@@ -1,12 +1,20 @@
 # Python
 __pycache__/
+.pycache/
 *.pyc
 *.pyo
 *.pyd
+*.egg-info/
 
 # venv
 venv/
 .venv/
+.venv-check/
+.venv-check-313/
+
+# local test/lint caches
+.pytest_cache/
+.ruff_cache/
 
 # local runtime / artifacts
 *.db
@@ -26,3 +34,7 @@ venv/
 
 # never commit ssh
 .ssh/
+
+# local agent workdirs / tool state
+.claude/
+.codex/

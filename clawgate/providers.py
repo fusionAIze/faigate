@@ -128,7 +128,7 @@ class ProviderBackend:
         # OpenRouter wants extra headers
         if "openrouter" in self.base_url:
             headers["HTTP-Referer"] = "https://clawgate.local"
-            headers["X-Title"] = "ClawGate"
+            headers["X-Title"] = "FoundryGate"
 
         url = f"{self.base_url}/chat/completions"
 

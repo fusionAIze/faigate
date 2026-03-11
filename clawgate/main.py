@@ -1,4 +1,4 @@
-"""ClawGate – FastAPI application.
+"""FoundryGate – FastAPI application.
 
 OpenAI-compatible /v1/chat/completions proxy that routes requests
 through a 3-layer classification engine to the optimal provider.
@@ -58,7 +58,7 @@ async def lifespan(app: FastAPI):
         _metrics.init()
 
     logger.info(
-        "ClawGate ready on %s:%s",
+        "FoundryGate ready on %s:%s",
         _config.server.get("host", "127.0.0.1"),
         _config.server.get("port", 8090),
     )
@@ -69,13 +69,13 @@ async def lifespan(app: FastAPI):
     for p in _providers.values():
         await p.close()
     _metrics.close()
-    logger.info("ClawGate shut down")
+    logger.info("FoundryGate shut down")
 
 
 app = FastAPI(
-    title="ClawGate",
-    version="0.1.0",
-    description="Schichtweiser LLM-Router für OpenClaw",
+    title="FoundryGate",
+    version="0.3.0",
+    description="Local OpenAI-compatible routing gateway for OpenClaw and other clients.",
     lifespan=lifespan,
 )
 
@@ -311,7 +311,7 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ClawGate</title>
+<title>FoundryGate</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:system-ui,-apple-system,sans-serif;background:#0a0a0f;color:#e0e0e0;padding:20px}
@@ -348,7 +348,7 @@ tr:hover td{background:#1a1a2a}
 </head>
 <body>
 <div class="topbar">
-  <div><h1><span id="status"></span>ClawGate</h1><div class="sub">LLM Routing Proxy Dashboard</div></div>
+  <div><h1><span id="status"></span>FoundryGate</h1><div class="sub">Local AI Gateway Dashboard</div></div>
   <div><button class="refresh-btn" onclick="load()">&#x21bb; Refresh</button> <span id="ago" class="mono" style="color:#666"></span></div>
 </div>
 

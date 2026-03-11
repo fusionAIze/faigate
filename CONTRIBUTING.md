@@ -1,6 +1,6 @@
-# Contributing to ClawGate
+# Contributing to FoundryGate
 
-Danke für dein Interesse! Beiträge sind willkommen.
+Thanks for your interest. Contributions are welcome.
 
 ## Development Setup
 
@@ -10,6 +10,8 @@ cd ClawGate
 python3 -m venv venv && source venv/bin/activate
 pip install -e ".[dev]"
 ```
+
+Compatibility note: the repo and runtime still use several `clawgate` identifiers during the transition. That is expected for now.
 
 ## Running Tests
 
@@ -54,11 +56,13 @@ Important: Never score the system prompt for keywords. See ClawRouter's insight 
 ## Submitting Changes
 
 1. Fork the repo
-2. Create a feature branch
+2. Create a `feature/<topic>-<date>` branch
 3. Add tests for new functionality
 4. Ensure `pytest` and `ruff check` pass
 5. Open a PR with a clear description
 
-## ClawHub Skill Updates
+See [docs/process/git-workflow.md](./docs/process/git-workflow.md) for the full branch model.
+
+## Skill Updates
 
 The skill lives in `skills/clawgate/SKILL.md`. If you update slash commands or add new endpoints, update the skill too.

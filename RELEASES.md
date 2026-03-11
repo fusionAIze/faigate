@@ -1,4 +1,4 @@
-# Releases
+# FoundryGate Releases
 
 This repo does not require a heavy release process. Use lightweight tags plus GitHub Releases.
 
@@ -18,18 +18,24 @@ This repo does not require a heavy release process. Use lightweight tags plus Gi
 ```bash
 git checkout main
 git pull --ff-only origin main
-git tag -a v0.1.0 -m "ClawGate v0.1.0"
-git push origin v0.1.0
+git tag -a v0.3.0 -m "FoundryGate v0.3.0"
+git push origin v0.3.0
 ```
 
-Then open GitHub Releases and publish a release for `v0.1.0`.
+Then open GitHub Releases and publish a release for `v0.3.0`.
 
 ## Versioning Guidance
 
-- Prefer simple, semantic-ish version tags such as `v0.1.0`, `v0.2.0`, `v0.2.1`.
-- Use a minor bump for new features and notable operational changes.
-- Use a patch bump for fixes and documentation-only polish that affects users or operators.
+- Use `x.y.z` version numbers and matching `vx.y.z` Git tags.
+- Use a patch bump for fixes, documentation polish, and small compatibility updates.
+- Use a minor bump for meaningful features, provider additions, routing behavior improvements, or operational changes.
+- Use a major bump only for explicit breaking changes with a documented migration path.
 - Avoid promising strict semantic versioning unless the project decides to enforce it consistently.
+
+## Current Release Baseline
+
+- `v0.3.0` is the current target for the first FoundryGate-branded release.
+- Until the runtime rename is complete, release notes should call out that some technical identifiers still use `clawgate` for compatibility.
 
 ## What Belongs In Release Notes
 

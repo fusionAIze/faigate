@@ -2,7 +2,7 @@
 
 ## Status
 
-`ClawGate` is the current project name and codebase. `FoundryGate` is the working name for the next product direction: a generic local-first AI gateway and routing layer for OpenClaw, n8n, CLI tools, and other AI-native clients.
+`FoundryGate` is the product name for this project direction. The current runtime package, service file, helper scripts, and some environment variables still use `clawgate` compatibility identifiers during the transition.
 
 This document is intentionally pragmatic. It describes the target shape of the project, the boundaries that keep it maintainable, and the next concrete implementation steps.
 
@@ -226,16 +226,14 @@ Write access should come after read-heavy observability is stable.
 
 ## Rename Strategy
 
-The rename from `ClawGate` to `FoundryGate` should happen deliberately.
+The public rename to `FoundryGate` is underway.
 
-Recommended order:
+Current approach:
 
-1. create this roadmap and align the product direction
-2. introduce `FoundryGate` as the new name in docs and architecture discussions
-3. rename package, service, scripts, and docs in one controlled migration
-4. keep compatibility notes for existing `clawgate` users during transition
-
-The rename should not happen as a side effect of unrelated feature work.
+1. keep the product and documentation under the `FoundryGate` name
+2. preserve `clawgate` runtime identifiers for compatibility until the migration is planned explicitly
+3. migrate package, service, script, and environment names only in a dedicated runtime-rename phase
+4. keep compatibility notes visible for existing users throughout the transition
 
 ## Phased Plan
 
@@ -433,4 +431,4 @@ That is the right long-term shape:
 - OpenAI-compatible HTTP remains the primary interoperability surface for the near term
 - local worker support will be easiest to operationalize if the worker speaks an OpenAI-compatible or similarly simple HTTP contract
 - memory, context, and optimization will remain optional extensions rather than mandatory core behavior
-- the rename to `FoundryGate` will be handled as a dedicated migration, not piecemeal across unrelated feature PRs
+- the runtime identifier migration from `clawgate` to `foundrygate` will be handled as a dedicated follow-up, not piecemeal across unrelated feature PRs

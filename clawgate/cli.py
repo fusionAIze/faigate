@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""clawgate-stats – CLI dashboard for ClawGate metrics.
+"""clawgate-stats – CLI dashboard for FoundryGate metrics.
 
 Usage:
     python -m clawgate.cli              # Full overview
@@ -261,7 +261,7 @@ def cmd_daily(metrics: MetricsStore, days: int):
 def main():
     parser = argparse.ArgumentParser(
         prog="clawgate-stats",
-        description="CLI dashboard for ClawGate metrics",
+        description="CLI dashboard for FoundryGate metrics",
     )
     parser.add_argument("--db", help="Path to metrics DB (default: from config)")
     parser.add_argument("--recent", type=int, metavar="N", help="Show last N requests")

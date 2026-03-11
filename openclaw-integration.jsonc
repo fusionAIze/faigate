@@ -1,11 +1,12 @@
-// OpenClaw Integration – ClawGate
+// OpenClaw Integration – FoundryGate
 // =========================================
 //
 // Add this block to your ~/.openclaw/openclaw.json.
 //
-// Option A: ClawGate as your primary provider (recommended)
+// Option A: FoundryGate as your primary provider (recommended)
 // ---------------------------------------------------------
-// ClawGate handles routing, fallback, and model selection.
+// FoundryGate handles routing, fallback, and model selection.
+// The provider id remains "clawgate" here for compatibility with current examples.
 // OpenClaw only needs to talk to one provider entry.
 
 {
@@ -20,37 +21,37 @@
         "models": [
           {
             "id": "auto",
-            "name": "ClawGate Auto-Router",
+            "name": "FoundryGate Auto-Router",
             "contextWindow": 128000,
             "maxTokens": 8000
           },
           {
             "id": "deepseek-chat",
-            "name": "DeepSeek Chat (via ClawGate)",
+            "name": "DeepSeek Chat (via FoundryGate)",
             "contextWindow": 128000,
             "maxTokens": 8000
           },
           {
             "id": "deepseek-reasoner",
-            "name": "DeepSeek Reasoner (via ClawGate)",
+            "name": "DeepSeek Reasoner (via FoundryGate)",
             "contextWindow": 128000,
             "maxTokens": 8000
           },
           {
             "id": "gemini-flash-lite",
-            "name": "Gemini Flash-Lite (via ClawGate)",
+            "name": "Gemini Flash-Lite (via FoundryGate)",
             "contextWindow": 1000000,
             "maxTokens": 8000
           },
           {
             "id": "gemini-flash",
-            "name": "Gemini Flash (via ClawGate)",
+            "name": "Gemini Flash (via FoundryGate)",
             "contextWindow": 1000000,
             "maxTokens": 8000
           },
           {
             "id": "openrouter-fallback",
-            "name": "OpenRouter Fallback (via ClawGate)",
+            "name": "OpenRouter Fallback (via FoundryGate)",
             "contextWindow": 128000,
             "maxTokens": 8000
           }
@@ -89,9 +90,9 @@
   }
 }
 
-// Option B: ClawGate alongside direct providers
+// Option B: FoundryGate alongside direct providers
 // ---------------------------------------------
-// Use ClawGate for auto-routing while keeping direct providers
+// Use FoundryGate for auto-routing while keeping direct providers
 // available for manual overrides.
 
 // Add this to "models.providers":

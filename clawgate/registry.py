@@ -1,6 +1,6 @@
 """Provider registry – single source of truth for all supported providers.
 
-This module defines every provider ClawGate knows about, keyed by its
+This module defines every provider FoundryGate knows about, keyed by its
 *canonical name* (the name used as config key and model alias).
 
 Each entry describes:
@@ -390,7 +390,7 @@ LOCAL: dict[str, ProviderDef] = {
 
 # ---------------------------------------------------------------------------
 # D. OAuth / interactive providers
-#    These require interactive login and cannot be auto-started by ClawGate.
+#    These require interactive login and cannot be auto-started by FoundryGate.
 #    Listed for completeness; config.yaml can reference them once authenticated.
 # ---------------------------------------------------------------------------
 

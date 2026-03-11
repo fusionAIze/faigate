@@ -3,13 +3,13 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "clawgate"
-version = "0.2.0"
-description = "Smart LLM routing proxy for OpenClaw – routes requests to the cheapest model that can handle them."
+name = "foundrygate"
+version = "0.3.0"
+description = "Local OpenAI-compatible routing gateway for OpenClaw and other AI-native clients."
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.10"
-keywords = ["openclaw", "llm", "router", "proxy", "deepseek", "gemini", "cost-optimization"]
+keywords = ["foundrygate", "openclaw", "llm", "router", "gateway", "proxy", "multi-provider"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -39,14 +39,16 @@ dev = [
 ]
 
 [project.scripts]
+foundrygate = "clawgate.main:main"
+foundrygate-stats = "clawgate.cli:main"
 clawgate = "clawgate.main:main"
 clawgate-stats = "clawgate.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/langenetwork/clawgate"
-Repository = "https://github.com/langenetwork/clawgate"
-Issues = "https://github.com/langenetwork/clawgate/issues"
-Documentation = "https://github.com/langenetwork/clawgate#readme"
+Homepage = "https://github.com/typelicious/ClawGate"
+Repository = "https://github.com/typelicious/ClawGate"
+Issues = "https://github.com/typelicious/ClawGate/issues"
+Documentation = "https://github.com/typelicious/ClawGate#readme"
 
 [tool.setuptools.packages.find]
 include = ["clawgate*"]

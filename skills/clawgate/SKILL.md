@@ -1,12 +1,12 @@
 ---
 name: clawgate
-description: Smart LLM routing proxy stats and control. Use when the user asks about API costs, model routing, token usage, cache hit rates, provider health, or wants to test how a prompt would be routed. Commands — /clawgate stats, /clawgate route, /clawgate health, /clawgate daily.
-metadata: {"openclaw":{"requires":{"bins":["curl"]},"emoji":"🚪","homepage":"https://github.com/langenetwork/clawgate"}}
+description: FoundryGate compatibility skill for routing stats and control. Use when the user asks about API costs, model routing, token usage, cache hit rates, provider health, or wants to test how a prompt would be routed. Commands — /clawgate stats, /clawgate route, /clawgate health, /clawgate daily.
+metadata: {"openclaw":{"requires":{"bins":["curl"]},"emoji":"🚪","homepage":"https://github.com/typelicious/ClawGate"}}
 ---
 
-# ClawGate – LLM Routing Proxy Skill
+# FoundryGate – Compatibility Skill
 
-ClawGate is a local routing proxy that sits between OpenClaw and your LLM providers (DeepSeek, Gemini, OpenRouter). It routes each request to the cheapest model that can handle it using a 3-layer classification engine.
+FoundryGate is a local routing proxy that sits between OpenClaw and your LLM providers (DeepSeek, Gemini, OpenRouter). This skill keeps the current `/clawgate ...` command names for compatibility.
 
 ## Available Commands
 
@@ -90,7 +90,7 @@ A web dashboard is available at http://127.0.0.1:8090/dashboard — open it in a
 
 ## How Routing Works
 
-ClawGate uses 3 layers (evaluated in order, first match wins):
+FoundryGate uses 3 layers (evaluated in order, first match wins):
 
 1. **Static rules**: Pattern matching on model name, system prompt keywords, headers (heartbeats, explicit model requests, subagent detection)
 2. **Heuristic scoring**: Keyword-weighted classification of user messages (NOT system prompt) into reasoning/code/simple/agent categories
@@ -100,7 +100,7 @@ Key insight: Only user messages are scored, never the system prompt. OpenClaw's 
 
 ## Prompt Caching
 
-DeepSeek and Gemini automatically cache repeated prefixes server-side. ClawGate tracks cache hit/miss tokens in metrics. To maximize cache hits:
+DeepSeek and Gemini automatically cache repeated prefixes server-side. FoundryGate tracks cache hit/miss tokens in metrics. To maximize cache hits:
 - Keep system prompts stable (identical prefix between requests)
 - Push variable content to the end of messages
 - Use few-shot examples consistently

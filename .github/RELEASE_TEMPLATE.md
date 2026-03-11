@@ -2,8 +2,10 @@
 
 - [ ] `main` is green
 - [ ] [CHANGELOG.md](../CHANGELOG.md) is updated
+- [ ] Version number and release tag are aligned (for example `v0.3.0`)
 - [ ] Version tag is created from `main`
 - [ ] Tag is pushed to GitHub
 - [ ] GitHub Release is created from the tag
 - [ ] Release notes summarize user-visible changes
+- [ ] Compatibility notes are included if `clawgate` runtime identifiers are still mentioned
 - [ ] Any upgrade notes or rollback notes are included
