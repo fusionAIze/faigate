@@ -378,6 +378,7 @@ What the current runtime guarantees for `local-worker`:
 - `base_url` must point to localhost or private network space
 - `tier` defaults to `local`
 - capability metadata is normalized to `local: true`, `cloud: false`, `network_zone: local`
+- FoundryGate probes `GET /models` for `local-worker` providers at startup and on `/health` refresh intervals
 
 Example:
 
@@ -580,6 +581,8 @@ Check `/health` for `last_error`, then inspect logs:
 curl -fsS http://127.0.0.1:8090/health
 foundrygate-logs
 ```
+
+For `contract: local-worker`, `/health` also refreshes a lightweight `GET /models` probe on the configured health interval. If the worker is reachable but not OpenAI-compatible, the probe will keep marking it unhealthy.
 
 ### `foundrygate-update` removed local edits
 

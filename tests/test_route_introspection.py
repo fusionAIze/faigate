@@ -39,7 +39,7 @@ sys.modules["httpx"] = _httpx
 
 import foundrygate.main as main_module
 from foundrygate.config import load_config
-from foundrygate.main import _resolve_route_preview
+from foundrygate.main import _refresh_local_worker_probes, _resolve_route_preview
 from foundrygate.router import Router
 
 
@@ -69,6 +69,7 @@ class _ProviderStub:
         self.capabilities = capabilities or {}
         self.health = types.SimpleNamespace(
             healthy=healthy,
+            last_check=0.0,
             to_dict=lambda: {
                 "name": name,
                 "healthy": healthy,
@@ -77,6 +78,12 @@ class _ProviderStub:
                 "last_error": "",
             },
         )
+        self.probe_calls = 0
+
+    async def probe_health(self, timeout_seconds: float = 10.0) -> bool:
+        self.probe_calls += 1
+        self.health.last_check = 1.0
+        return self.health.healthy
 
 
 @pytest.fixture
@@ -193,3 +200,15 @@ class TestRoutePreview:
         assert decision.layer == "direct"
         assert decision.provider_name == "cloud-default"
         assert attempt_order == ["cloud-default"]
+
+
+class TestLocalWorkerProbeRefresh:
+    @pytest.mark.asyncio
+    async def test_refresh_only_probes_local_worker_contracts(self, preview_config):
+        await _refresh_local_worker_probes(force=True)
+
+        local_worker = main_module._providers["local-worker"]
+        cloud_default = main_module._providers["cloud-default"]
+
+        assert local_worker.probe_calls == 1
+        assert cloud_default.probe_calls == 0

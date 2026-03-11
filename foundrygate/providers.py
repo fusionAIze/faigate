@@ -81,6 +81,38 @@ class ProviderBackend:
     async def close(self) -> None:
         await self._client.aclose()
 
+    async def probe_health(self, timeout_seconds: float = 10.0) -> bool:
+        """Probe a provider without sending a completion request.
+
+        For OpenAI-compatible providers this uses GET /models. For Google GenAI,
+        which does not expose a compatible models listing here, probing is skipped.
+        """
+        if self.backend_type == "google-genai":
+            return self.health.healthy
+
+        url = f"{self.base_url}/models"
+        headers = {}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+
+        t0 = time.time()
+        try:
+            resp = await self._client.get(url, headers=headers, timeout=timeout_seconds)
+            latency = (time.time() - t0) * 1000
+            if resp.status_code >= 400:
+                error_text = resp.text[:500]
+                self.health.record_failure(f"Probe HTTP {resp.status_code}: {error_text}")
+                return False
+
+            self.health.record_success(latency)
+            return True
+        except httpx.TimeoutException as e:
+            self.health.record_failure(f"Probe timeout: {e}")
+            return False
+        except httpx.ConnectError as e:
+            self.health.record_failure(f"Probe connection error: {e}")
+            return False
+
     # ── OpenAI-compatible completion ───────────────────────────
 
     async def complete(

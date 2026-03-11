@@ -85,6 +85,28 @@ def _install_fake_post(backend: ProviderBackend) -> dict:
     return captured
 
 
+def _install_fake_get(backend: ProviderBackend, status_code: int = 200, text: str = "") -> dict:
+    """Replace _client.get with an async stub that captures the probe request."""
+    captured: dict = {}
+
+    class _FakeResp:
+        def __init__(self):
+            self.status_code = status_code
+            self.text = text
+
+        def json(self):
+            return {"object": "list", "data": []}
+
+    async def _fake_get(url, headers=None, timeout=None, **kw):
+        captured["url"] = url
+        captured["headers"] = headers or {}
+        captured["timeout"] = timeout
+        return _FakeResp()
+
+    backend._client.get = _fake_get  # type: ignore[attr-defined]
+    return captured
+
+
 # ── Google GenAI payload construction ────────────────────────────────────────
 
 
@@ -110,6 +132,50 @@ class TestGooglePayloadConstruction:
         for item in captured.get("contents", []):
             for part in item.get("parts", []):
                 assert isinstance(part.get("text"), str), f"Non-string text in part: {part}"
+
+
+class TestProviderHealthProbes:
+    @pytest.mark.asyncio
+    async def test_local_probe_uses_models_endpoint(self):
+        backend = ProviderBackend(
+            "local-worker",
+            {
+                "backend": "openai-compat",
+                "base_url": "http://127.0.0.1:11434/v1",
+                "api_key": "local",
+                "model": "llama3",
+            },
+        )
+        captured = _install_fake_get(backend)
+
+        ok = await backend.probe_health(timeout_seconds=3.0)
+
+        assert ok is True
+        assert captured["url"] == "http://127.0.0.1:11434/v1/models"
+        assert captured["headers"]["Authorization"] == "Bearer local"
+        assert captured["timeout"] == 3.0
+        assert backend.health.healthy is True
+
+    @pytest.mark.asyncio
+    async def test_local_probe_marks_provider_unhealthy_on_http_error(self):
+        backend = ProviderBackend(
+            "local-worker",
+            {
+                "backend": "openai-compat",
+                "base_url": "http://127.0.0.1:11434/v1",
+                "api_key": "local",
+                "model": "llama3",
+            },
+        )
+        _install_fake_get(backend, status_code=503, text="unavailable")
+
+        await backend.probe_health()
+        await backend.probe_health()
+        ok = await backend.probe_health()
+
+        assert ok is False
+        assert backend.health.healthy is False
+        assert "Probe HTTP 503" in backend.health.last_error
 
     @pytest.mark.asyncio
     async def test_assistant_none_content_converted_to_empty_string(self):

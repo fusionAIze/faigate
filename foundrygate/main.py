@@ -9,6 +9,7 @@ through a 3-layer classification engine to the optimal provider.
 from __future__ import annotations
 
 import logging
+import time
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -27,6 +28,34 @@ _config: Config
 _providers: dict[str, ProviderBackend] = {}
 _router: Router
 _metrics: MetricsStore
+
+
+async def _refresh_local_worker_probes(force: bool = False) -> None:
+    """Refresh local-worker health state when probes are due."""
+    timeout_seconds = float(_config.health.get("timeout_seconds", 10))
+    check_interval = float(_config.health.get("check_interval_seconds", 300))
+    recovery_interval = float(_config.health.get("recovery_check_interval_seconds", 60))
+
+    for provider in _providers.values():
+        if provider.contract != "local-worker":
+            continue
+
+        interval = recovery_interval if not provider.health.healthy else check_interval
+        due = (
+            force
+            or provider.health.last_check == 0
+            or (time.time() - provider.health.last_check) >= interval
+        )
+
+        if not due:
+            continue
+
+        ok = await provider.probe_health(timeout_seconds=timeout_seconds)
+        logger.info(
+            "Local worker probe: %s -> %s",
+            provider.name,
+            "healthy" if ok else "unhealthy",
+        )
 
 
 def _collect_routing_headers(request: Request) -> dict[str, str]:
@@ -170,6 +199,7 @@ async def lifespan(app: FastAPI):
         logger.info("  ✓ %s → %s (%s)", name, pcfg["model"], pcfg.get("tier", "default"))
 
     _router = Router(_config)
+    await _refresh_local_worker_probes(force=True)
 
     # Metrics
     _metrics = MetricsStore(db_path=_config.metrics["db_path"])
@@ -204,6 +234,7 @@ app = FastAPI(
 
 @app.get("/health")
 async def health():
+    await _refresh_local_worker_probes()
     return {
         "status": "ok",
         "providers": {
