@@ -541,6 +541,8 @@ Supported fields in `auto_update`:
 
 - `enabled`
 - `allow_major`
+- `require_healthy_providers`
+- `max_unhealthy_providers`
 - `apply_command`
 
 Example:
@@ -549,6 +551,8 @@ Example:
 auto_update:
   enabled: true
   allow_major: false
+  require_healthy_providers: true
+  max_unhealthy_providers: 0
   apply_command: "foundrygate-update"
 ```
 
@@ -557,6 +561,7 @@ What the current runtime does with it:
 - exposes eligibility in `GET /api/update` under `auto_update`
 - shows the same state in the dashboard
 - lets `foundrygate-auto-update --apply` run only when the current release state is eligible
+- can block helper-driven rollout when provider health is already degraded
 
 What it still does not do:
 
