@@ -26,6 +26,8 @@ $EDITOR .env
 ./scripts/foundrygate-onboarding-report
 ```
 
+`foundrygate-onboarding-report` now includes concrete OpenClaw, n8n, and CLI quickstart hints. Use it after every provider or client change to keep the deployment understandable for the next operator as well.
+
 ### 1. Add one provider
 
 - define the provider in `config.yaml`
@@ -79,6 +81,32 @@ Start with:
 - `cli`
 
 Then tighten it only if the default is not good enough.
+
+### 3a. Start from one of the built-in quickstarts
+
+OpenClaw:
+
+```json
+{
+  "baseUrl": "http://127.0.0.1:8090/v1",
+  "primary": "foundrygate/auto"
+}
+```
+
+n8n:
+
+```text
+Base URL: http://127.0.0.1:8090/v1
+Model: auto
+Header: X-FoundryGate-Client: n8n
+```
+
+CLI:
+
+```bash
+export OPENAI_BASE_URL=http://127.0.0.1:8090/v1
+export OPENAI_API_KEY=local
+```
 
 ### 4. Add request hooks only if needed
 

@@ -54,6 +54,8 @@ auto_update:
     assert report["providers"]["ready"] == 0
     assert report["providers"]["missing_api_keys"] == ["deepseek-chat"]
     assert report["clients"]["presets"] == ["openclaw"]
+    assert report["integrations"]["openclaw"]["recommended"] is True
+    assert report["integrations"]["n8n"]["recommended"] is False
     assert (
         "Keep auto_update disabled until the provider and client set is stable."
         in report["suggestions"]
@@ -105,6 +107,8 @@ auto_update:
     assert report["providers"]["ready"] == 1
     assert report["providers"]["local_workers"] == 1
     assert "local-worker: local-worker / openai-compat / local / ready" in text
+    assert "Integration quickstarts" in text
+    assert "header: X-FoundryGate-Client: codex" in text
 
 
 def test_onboarding_validation_blocks_missing_env_and_unready_providers(
@@ -204,3 +208,47 @@ auto_update:
 
     assert validation["ok"] is True
     assert validation["blockers"] == []
+
+
+def test_onboarding_report_marks_all_builtin_integrations_ready(tmp_path: Path):
+    env_file = tmp_path / ".env"
+    env_file.write_text("DEEPSEEK_API_KEY=sk-demo\n", encoding="utf-8")
+
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(
+        """
+fallback_chain:
+  - deepseek-chat
+providers:
+  deepseek-chat:
+    backend: openai-compat
+    base_url: "https://api.deepseek.com/v1"
+    api_key: "${DEEPSEEK_API_KEY}"
+    model: "deepseek-chat"
+    tier: default
+client_profiles:
+  enabled: true
+  default: generic
+  presets: ["openclaw", "n8n", "cli"]
+  profiles:
+    generic: {}
+  rules: []
+routing_policies:
+  enabled: false
+  rules: []
+request_hooks:
+  enabled: false
+  hooks: []
+update_check:
+  enabled: true
+auto_update:
+  enabled: false
+""".strip(),
+        encoding="utf-8",
+    )
+
+    report = build_onboarding_report(config_path=config_file, env_file=env_file)
+
+    assert report["integrations"]["openclaw"]["recommended"] is True
+    assert report["integrations"]["n8n"]["recommended"] is True
+    assert report["integrations"]["cli"]["recommended"] is True

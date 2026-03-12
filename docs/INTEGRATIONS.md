@@ -22,6 +22,15 @@ Use:
 - [openclaw-integration.jsonc](../openclaw-integration.jsonc)
 - `client_profiles.presets: ["openclaw"]` for a standard starting point
 
+Minimal direction:
+
+```json
+{
+  "baseUrl": "http://127.0.0.1:8090/v1",
+  "primary": "foundrygate/auto"
+}
+```
+
 ## n8n
 
 n8n can use FoundryGate as a stable local model gateway.
@@ -38,6 +47,14 @@ This gives you:
 - cheaper default routing for workflow traffic
 - shared fallback behavior
 - route debugging through `POST /api/route`
+
+Minimal direction:
+
+```text
+Base URL: http://127.0.0.1:8090/v1
+Model: auto
+Header: X-FoundryGate-Client: n8n
+```
 
 ## CLI clients
 
@@ -59,6 +76,13 @@ Recommended pattern:
   - `X-FoundryGate-Prefer-Provider`
   - `X-FoundryGate-Locality`
   - `X-FoundryGate-Profile`
+
+Minimal direction:
+
+```bash
+export OPENAI_BASE_URL=http://127.0.0.1:8090/v1
+export OPENAI_API_KEY=local
+```
 
 ## Provider onboarding
 

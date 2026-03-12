@@ -111,6 +111,53 @@ def build_onboarding_report(
     if update_check.get("enabled") and not auto_update.get("enabled"):
         suggestions.append("Keep auto_update disabled until the provider and client set is stable.")
 
+    enabled_presets = set(client_profiles.get("presets", []))
+    profile_names = set(client_profiles.get("profiles", {}).keys())
+    integration_examples = {
+        "openclaw": {
+            "recommended": "openclaw" in enabled_presets or "openclaw" in profile_names,
+            "header": "x-openclaw-source: planner",
+            "profile": "openclaw",
+            "snippet": [
+                '"baseUrl": "http://127.0.0.1:8090/v1"',
+                '"primary": "foundrygate/auto"',
+            ],
+            "notes": [
+                "Keep one-agent and many-agent traffic on the same OpenAI-compatible base URL.",
+                "Use x-openclaw-source when you want sub-agent traffic to resolve differently.",
+            ],
+        },
+        "n8n": {
+            "recommended": "n8n" in enabled_presets or "n8n" in profile_names,
+            "header": "X-FoundryGate-Client: n8n",
+            "profile": "n8n",
+            "snippet": [
+                "Base URL: http://127.0.0.1:8090/v1",
+                "Model: auto",
+            ],
+            "notes": [
+                "Start workflow traffic with the n8n preset before adding custom policy rules.",
+                "Use route dry-runs to confirm cheaper or local-first defaults before"
+                " production runs.",
+            ],
+        },
+        "cli": {
+            "recommended": "cli" in enabled_presets or "cli" in profile_names,
+            "header": "X-FoundryGate-Client: codex",
+            "profile": "cli",
+            "snippet": [
+                "export OPENAI_BASE_URL=http://127.0.0.1:8090/v1",
+                "export OPENAI_API_KEY=local",
+            ],
+            "notes": [
+                "Use a stable client tag such as codex, claude, or kilocode to keep"
+                " traces readable.",
+                "Only add hook-based locality or provider overrides when one CLI flow"
+                " truly needs them.",
+            ],
+        },
+    }
+
     return {
         "config_path": str(Path(config_path) if config_path else Path.cwd() / "config.yaml"),
         "env_file": str(resolved_env),
@@ -146,6 +193,7 @@ def build_onboarding_report(
             "auto_update_enabled": bool(auto_update.get("enabled")),
             "rollout_ring": auto_update.get("rollout_ring", "early"),
         },
+        "integrations": integration_examples,
         "suggestions": suggestions,
     }
 
@@ -196,6 +244,7 @@ def render_onboarding_report(report: dict[str, Any]) -> str:
     client_block = report["clients"]
     routing_block = report["routing"]
     ops_block = report["operations"]
+    integration_block = report["integrations"]
     preset_text = ", ".join(client_block["presets"]) if client_block["presets"] else "none"
     fallback_text = (
         ", ".join(routing_block["fallback_chain"]) if routing_block["fallback_chain"] else "none"
@@ -250,6 +299,15 @@ def render_onboarding_report(report: dict[str, Any]) -> str:
             f"- rollout ring: {ops_block['rollout_ring']}",
         ]
     )
+
+    lines.extend(["", "Integration quickstarts"])
+    for client_name, data in integration_block.items():
+        readiness = "ready" if data["recommended"] else "needs preset or custom profile"
+        lines.append(f"- {client_name}: {readiness}")
+        lines.append(f"  header: {data['header']}")
+        lines.append(f"  profile: {data['profile']}")
+        for snippet_line in data["snippet"]:
+            lines.append(f"  example: {snippet_line}")
 
     if report["suggestions"]:
         lines.extend(["", "Suggestions"])
