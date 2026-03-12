@@ -206,7 +206,9 @@ Primary goals:
 - expand the release-check baseline into stronger update alerts so operators can see when a newer release is available
 - add an optional automatic update enabler for controlled deployments
 - improve route traces, metrics, and dashboard filters for providers, clients, and profiles
-- keep the dashboard simple, read-heavy, and operationally safe
+- keep the dashboard simple, read-heavy, operationally safe, and intentionally no-build
+
+Until the dashboard clearly needs to become a broader operator application, FoundryGate should avoid adding a frontend framework, a component-library dependency, or a separate web build pipeline.
 
 This release line is about day-2 operations rather than new routing concepts.
 
@@ -314,6 +316,10 @@ Examples:
 - route trace table with provider and client filters
 - provider health panel with capabilities and contract type
 - quick links to dry-run routing and recent failure context
+
+Constraint:
+
+- keep the dashboard self-contained and no-build until there is a concrete operator need that justifies a real frontend stack
 
 ### 4. Image generation and editing routing
 

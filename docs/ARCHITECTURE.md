@@ -103,6 +103,15 @@ The main operational endpoints are:
 
 `/api/stats`, `/api/recent`, and `/api/traces` can now be filtered by provider, client profile, client tag, layer, and success state. The dashboard is a thin UI over those same filtered endpoints and persists its active filters in the URL so operators can share one filtered view.
 
+The dashboard remains intentionally no-build for now:
+
+- no frontend framework runtime
+- no component library dependency
+- no separate JS build pipeline
+- one self-contained operator UI shipped with the gateway
+
+That is deliberate. The current goal is operational clarity and portability, not a second product surface that adds frontend tooling, bundle management, and extra deployment steps.
+
 ## Design target
 
 The longer-term design target is to outperform simpler router designs by making routing multi-dimensional instead of mostly keyword- or model-name-driven.

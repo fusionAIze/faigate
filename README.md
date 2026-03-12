@@ -109,6 +109,17 @@ If every configured provider API key is empty, FoundryGate still starts, but it 
 - [Troubleshooting](./docs/TROUBLESHOOTING.md)
 - [Roadmap](./docs/FOUNDRYGATE-ROADMAP.md)
 
+## Dashboard Direction
+
+The built-in dashboard stays intentionally no-build for now.
+
+- no frontend framework
+- no component library
+- no separate asset pipeline
+- one self-contained operational UI served by the FastAPI app
+
+That keeps deployment simple for local hosts, Docker, and systemd installs while the dashboard remains an operator-facing read-heavy surface.
+
 ## How It Works
 
 ```text
