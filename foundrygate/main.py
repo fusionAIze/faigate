@@ -31,6 +31,28 @@ _router: Router
 _metrics: MetricsStore
 
 
+def _client_error_response(message: str, *, error_type: str, status_code: int) -> JSONResponse:
+    """Return a client-facing JSON error without exposing internal exception details."""
+    return JSONResponse({"error": message, "type": error_type}, status_code=status_code)
+
+
+def _request_hook_error_response(exc: Exception) -> JSONResponse:
+    """Return a sanitized request-hook failure response."""
+    logger.warning("Request hook processing failed: %s", exc)
+    return _client_error_response(
+        "Request hook processing failed",
+        error_type="request_hook_error",
+        status_code=500,
+    )
+
+
+def _invalid_request_response(message: str, *, exc: Exception | None = None) -> JSONResponse:
+    """Return a sanitized invalid-request response."""
+    if exc is not None:
+        logger.info("Invalid request rejected: %s", exc)
+    return _client_error_response(message, error_type="invalid_request_error", status_code=400)
+
+
 async def _refresh_local_worker_probes(force: bool = False) -> None:
     """Refresh local-worker health state when probes are due."""
     timeout_seconds = float(_config.health.get("timeout_seconds", 10))
@@ -537,7 +559,7 @@ async def preview_route(request: Request):
             effective_body,
         ) = await _resolve_route_preview(body, headers)
     except HookExecutionError as exc:
-        return JSONResponse({"error": str(exc), "type": "request_hook_error"}, status_code=500)
+        return _request_hook_error_response(exc)
 
     return {
         "requested_model": model_requested,
@@ -578,9 +600,9 @@ async def image_generations(request: Request):
             effective_body,
         ) = await _resolve_image_route_preview(body, headers)
     except HookExecutionError as exc:
-        return JSONResponse({"error": str(exc), "type": "request_hook_error"}, status_code=500)
+        return _request_hook_error_response(exc)
     except ValueError as exc:
-        return JSONResponse({"error": str(exc), "type": "invalid_request_error"}, status_code=400)
+        return _invalid_request_response("Invalid image generation request", exc=exc)
 
     prompt = effective_body["prompt"].strip()
     image_fields = _collect_image_request_fields(effective_body)
@@ -690,7 +712,7 @@ async def chat_completions(request: Request):
             effective_body,
         ) = await _resolve_route_preview(body, headers)
     except HookExecutionError as exc:
-        return JSONResponse({"error": str(exc), "type": "request_hook_error"}, status_code=500)
+        return _request_hook_error_response(exc)
     messages = effective_body.get("messages", [])
     stream = effective_body.get("stream", False)
     temperature = effective_body.get("temperature")

@@ -46,7 +46,11 @@ from foundrygate.hooks import (
     RequestHookResult,
     apply_request_hooks,
 )
-from foundrygate.main import _resolve_route_preview
+from foundrygate.main import (
+    _invalid_request_response,
+    _request_hook_error_response,
+    _resolve_route_preview,
+)
 from foundrygate.router import Router
 
 
@@ -243,6 +247,27 @@ class TestRequestHookRouting:
 
 
 class TestRequestHookHardening:
+    def test_hook_error_response_hides_exception_text(self):
+        response = _request_hook_error_response(
+            HookExecutionError("traceback: provider token leaked in hook output")
+        )
+
+        assert response.status_code == 500
+        assert b"traceback" not in response.body
+        assert b"provider token leaked" not in response.body
+        assert b"Request hook processing failed" in response.body
+
+    def test_invalid_request_response_hides_exception_text(self):
+        response = _invalid_request_response(
+            "Invalid image generation request",
+            exc=ValueError("prompt missing: user payload echoed"),
+        )
+
+        assert response.status_code == 400
+        assert b"prompt missing" not in response.body
+        assert b"user payload echoed" not in response.body
+        assert b"Invalid image generation request" in response.body
+
     @pytest.mark.asyncio
     async def test_invalid_hook_outputs_are_sanitized(self, monkeypatch):
         def _unsafe_hook(_context):
