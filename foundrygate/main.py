@@ -1488,6 +1488,13 @@ tr:hover td{background:#1a1a2a}
 </div>
 
 <div class="sect">
+  <h2>Operator Actions</h2>
+  <table id="operators"><thead><tr>
+    <th>Event</th><th>Action</th><th>Client</th><th>Status</th><th>Update Type</th><th>Eligible</th><th>Events</th>
+  </tr></thead><tbody></tbody></table>
+</div>
+
+<div class="sect">
   <h2>Route Traces</h2>
   <table id="traces"><thead><tr>
     <th>Time</th><th>Provider</th><th>Profile</th><th>Client</th><th>Layer</th><th>Reason</th><th>Confidence</th><th>Attempts</th>
@@ -1589,13 +1596,14 @@ async function load(){
     persistFilters(query);
     const queryStr = query.toString();
     const suffix = queryStr ? `?${queryStr}` : '';
-    const [health, stats, traces, rec, update, inventory] = await Promise.all([
+    const [health, stats, traces, rec, update, inventory, operatorEvents] = await Promise.all([
       fetch('/health').then(r=>r.json()),
       fetch(`/api/stats${suffix}`).then(r=>r.json()),
       fetch(`/api/traces${suffix}${suffix ? '&' : '?'}limit=20`).then(r=>r.json()),
       fetch(`/api/recent${suffix}${suffix ? '&' : '?'}limit=20`).then(r=>r.json()),
       fetch('/api/update').then(r=>r.json()).catch(() => ({enabled:false,status:'unavailable'})),
       fetch('/api/providers').then(r=>r.json()),
+      fetch('/api/operator-events?limit=20').then(r=>r.json()).catch(() => ({events: []})),
     ]);
 
     const totals = stats.totals || {};
@@ -1609,6 +1617,8 @@ async function load(){
     $('#status').style.background = '#5e5';
     $('#ago').textContent = ago(totals.last_request);
 
+    const operatorRows = stats.operator_actions || [];
+    const latestOperatorEvent = (operatorEvents.events || [])[0] || null;
     $('#cards').innerHTML = `
       <div class="card"><div class="label">Requests</div><div class="value">${fmtTok(totals.total_requests || 0)}</div></div>
       <div class="card"><div class="label">Cost</div><div class="value cost">${fmtUsd(totals.total_cost_usd || 0)}</div></div>
@@ -1620,6 +1630,7 @@ async function load(){
       <div class="card"><div class="label">Capability Coverage</div><div class="value">${coverageEntries.length}</div><div class="detail">${coverageEntries.map(([name]) => name).slice(0,3).join(', ') || 'none'}</div></div>
       <div class="card"><div class="label">Top Modality</div><div class="value">${esc(topModality)}</div><div class="detail">${modalityRows.length} modality groups</div></div>
       <div class="card"><div class="label">Release Status</div><div class="value ${(update.alert_level === 'critical' || update.alert_level === 'warning') ? 'err' : update.update_available ? 'cost' : ''}">${esc(update.latest_version || update.current_version || 'n/a')}</div><div class="detail">${update.enabled ? (update.status === 'ok' ? `${esc(update.update_type || 'current')} / ${esc(update.recommended_action || (update.update_available ? 'Upgrade recommended' : 'No action needed'))}${update.auto_update && update.auto_update.enabled ? ` / auto: ${esc(update.auto_update.eligible ? 'eligible' : (update.auto_update.blocked_reason || 'blocked'))}` : ''}` : esc(update.recommended_action || 'Update check unavailable')) : 'Update checks disabled'}</div></div>
+      <div class="card"><div class="label">Operator Actions</div><div class="value">${fmtTok((operatorEvents.events || []).length)}</div><div class="detail">${latestOperatorEvent ? `${esc(latestOperatorEvent.action || 'update-check')} / ${esc(latestOperatorEvent.status || 'unknown')}` : 'No recent operator events'}</div></div>
     `;
 
     const providerRows = providers.map(provider => `<tr>
@@ -1676,6 +1687,17 @@ async function load(){
       <td class="mono">${fmtMs(row.avg_latency_ms)}</td>
     </tr>`);
     $('#routing tbody').innerHTML = routingRows.length ? routingRows.join('') : emptyRow(6, 'No routing rows for the current filter set');
+
+    const operatorBreakdownRows = operatorRows.map(row => `<tr>
+      <td><span class="pill">${esc(row.event_type || 'update')}</span></td>
+      <td>${esc(row.action || 'update-check')}</td>
+      <td>${esc(row.client_tag || 'operator')}</td>
+      <td>${esc(row.status || 'unknown')}</td>
+      <td>${esc(row.update_type || '—')}</td>
+      <td>${row.eligible ? '<span class="tag tag-healthy">yes</span>' : '<span class="tag tag-unhealthy">no</span>'}</td>
+      <td>${row.events}</td>
+    </tr>`);
+    $('#operators tbody').innerHTML = operatorBreakdownRows.length ? operatorBreakdownRows.join('') : emptyRow(7, 'No operator events recorded yet');
 
     const traceRows = (traces.traces || []).map(row => `<tr>
       <td class="mono">${ago(row.timestamp)}</td>

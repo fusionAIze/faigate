@@ -100,13 +100,14 @@ The main operational endpoints are:
 - `GET /api/stats`
 - `GET /api/recent`
 - `GET /api/traces`
+- `GET /api/operator-events`
 - `GET /dashboard`
 
 `/health` now exposes both provider-level health and top-level capability coverage, so operators can quickly see whether the gateway currently has healthy support for `chat`, `image_generation`, `image_editing`, or other boolean capabilities exposed by loaded providers.
 
 `/api/providers` exposes the normalized provider inventory with optional `capability` and `healthy` filters. This is the inventory surface the dashboard should use when it needs provider metadata beyond raw request metrics.
 
-`/api/stats`, `/api/recent`, and `/api/traces` can now be filtered by provider, client profile, client tag, layer, and success state. The dashboard is a thin UI over those same filtered endpoints and persists its active filters in the URL so operators can share one filtered view.
+`/api/stats`, `/api/recent`, and `/api/traces` can now be filtered by provider, client profile, client tag, layer, and success state. `/api/operator-events` captures operator-side update checks and helper-driven apply attempts. The dashboard is a thin UI over those same filtered endpoints and persists its active filters in the URL so operators can share one filtered view.
 
 ## Design target
 
