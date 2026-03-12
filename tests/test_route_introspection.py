@@ -167,6 +167,7 @@ providers:
       max_outputs: 1
       max_side_px: 1024
       supported_sizes: ["1024x1024"]
+      policy_tags: ["balanced", "cost", "editing"]
   image-large:
     contract: image-provider
     backend: openai-compat
@@ -180,6 +181,7 @@ providers:
       max_outputs: 4
       max_side_px: 2048
       supported_sizes: ["1024x1024", "2048x2048"]
+      policy_tags: ["quality", "batch"]
 client_profiles:
   enabled: true
   default: generic
@@ -235,6 +237,7 @@ metrics:
                     "max_outputs": 1,
                     "max_side_px": 1024,
                     "supported_sizes": ["1024x1024"],
+                    "policy_tags": ["balanced", "cost", "editing"],
                 },
             ),
             "image-large": _ProviderStub(
@@ -253,6 +256,7 @@ metrics:
                     "max_outputs": 4,
                     "max_side_px": 2048,
                     "supported_sizes": ["1024x1024", "2048x2048"],
+                    "policy_tags": ["quality", "batch"],
                 },
             ),
         },
@@ -413,6 +417,47 @@ class TestRoutePreview:
         assert ranking[0]["image_size_fit"] is True
         assert ranking[0]["image_outputs_fit"] is True
 
+    @pytest.mark.asyncio
+    async def test_image_route_preview_prefers_matching_policy_tag(self, preview_config):
+        response = await preview_image_route(
+            _json_request(
+                "/api/route/image",
+                {
+                    "model": "auto",
+                    "capability": "image_generation",
+                    "prompt": "Create a polished product render.",
+                    "size": "1024x1024",
+                    "metadata": {"image_policy": "quality"},
+                },
+            )
+        )
+
+        assert response["effective_request"]["image_policy"] == "quality"
+        assert response["decision"]["provider"] == "image-large"
+        ranking = response["decision"]["details"]["candidate_ranking"]
+        assert ranking[0]["provider"] == "image-large"
+        assert ranking[0]["image_policy_match"] is True
+        assert ranking[0]["requested_image_policy"] == "quality"
+
+    @pytest.mark.asyncio
+    async def test_image_route_preview_header_policy_overrides_metadata(self, preview_config):
+        response = await preview_image_route(
+            _json_request(
+                "/api/route/image",
+                {
+                    "model": "auto",
+                    "capability": "image_generation",
+                    "prompt": "Create a cheap concept sketch.",
+                    "size": "1024x1024",
+                    "metadata": {"image_policy": "quality"},
+                },
+                headers={"x-foundrygate-image-policy": "cost"},
+            )
+        )
+
+        assert response["routing_headers"]["x-foundrygate-image-policy"] == "cost"
+        assert response["decision"]["provider"] == "image-cloud"
+
     def test_extract_image_edit_request_fields_requires_prompt(self):
         with pytest.raises(ValueError, match="non-empty 'prompt'"):
             _extract_image_edit_request_fields({"model": "auto"})
@@ -426,6 +471,7 @@ class TestRoutePreview:
                 "size": "1024x1024",
                 "response_format": "b64_json",
                 "user": "tester",
+                "image_policy": "editing",
             }
         )
 
@@ -435,6 +481,8 @@ class TestRoutePreview:
         assert payload["size"] == "1024x1024"
         assert payload["response_format"] == "b64_json"
         assert payload["user"] == "tester"
+        assert payload["image_policy"] == "editing"
+        assert payload["metadata"]["image_policy"] == "editing"
 
 
 class TestLocalWorkerProbeRefresh:

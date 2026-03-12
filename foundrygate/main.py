@@ -276,6 +276,7 @@ def _estimate_image_request_dimensions(body: dict[str, Any], *, capability: str)
         "prompt_chars": len(str(body.get("prompt") or "")),
         "requested_size": body.get("size") or "",
         "requested_outputs": body.get("n") if isinstance(body.get("n"), int) else 1,
+        "image_policy": _collect_request_image_policy(body),
         "capability": capability,
     }
 
@@ -288,12 +289,25 @@ def _collect_request_cache_preference(body: dict[str, Any]) -> str:
     return ""
 
 
+def _collect_request_image_policy(body: dict[str, Any]) -> str:
+    """Return one optional image-policy hint from request data."""
+    if isinstance(body.get("image_policy"), str) and body["image_policy"].strip():
+        return body["image_policy"].strip().lower()
+    metadata = body.get("metadata") if isinstance(body.get("metadata"), dict) else {}
+    if isinstance(metadata.get("image_policy"), str) and metadata["image_policy"].strip():
+        return metadata["image_policy"].strip().lower()
+    return ""
+
+
 def _merge_routing_context_headers(headers: dict[str, str], body: dict[str, Any]) -> dict[str, str]:
     """Return routing headers plus request-body dimension hints."""
     merged = dict(headers)
     cache_preference = _collect_request_cache_preference(body)
-    if cache_preference:
+    if cache_preference and "x-foundrygate-cache" not in merged:
         merged["x-foundrygate-cache"] = cache_preference
+    image_policy = _collect_request_image_policy(body)
+    if image_policy and "x-foundrygate-image-policy" not in merged:
+        merged["x-foundrygate-image-policy"] = image_policy
     return merged
 
 
@@ -415,6 +429,11 @@ def _extract_image_edit_request_fields(form_data: dict[str, Any]) -> dict[str, A
         if isinstance(value, str) and value.strip():
             payload[key] = value.strip()
 
+    image_policy = form_data.get("image_policy")
+    if isinstance(image_policy, str) and image_policy.strip():
+        payload["image_policy"] = image_policy.strip().lower()
+        payload["metadata"] = {"image_policy": payload["image_policy"]}
+
     return payload
 
 
@@ -446,6 +465,7 @@ async def _resolve_image_route_preview(
 ) -> tuple[RoutingDecision, str, str, list[str], str, AppliedHooks, dict[str, Any]]:
     """Resolve one image-generation request without calling a provider."""
     body, hook_state = await _apply_request_hooks(body, headers)
+    headers = _merge_routing_context_headers(headers, body)
     prompt = body.get("prompt")
     if not isinstance(prompt, str) or not prompt.strip():
         raise ValueError("Image request requires a non-empty 'prompt' string")
