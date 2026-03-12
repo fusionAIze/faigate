@@ -35,8 +35,8 @@ Then open GitHub Releases and publish a release for `v0.3.0`.
 
 ## Current Release Baseline
 
-- `v0.3.0` is the current target for the first FoundryGate-branded release.
-- This release line is the baseline for the full FoundryGate technical naming adoption.
+- `v0.3.0` is the first FoundryGate-branded release.
+- This release establishes the FoundryGate runtime naming, routing foundation, and public docs baseline.
 
 ## What Belongs In Release Notes
 
