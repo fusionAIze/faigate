@@ -8,6 +8,8 @@ The format is intentionally lightweight and human-readable. Group entries by rel
 
 ### Added
 
+- Added `foundrygate-onboarding-report` plus a testable onboarding report module for many-provider and many-client readiness checks
+
 ## v0.7.0 - 2026-03-12
 
 ### Added
