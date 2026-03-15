@@ -22,11 +22,11 @@ This repo does not require a heavy release process. Use lightweight tags plus Gi
 ```bash
 git checkout main
 git pull --ff-only origin main
-git tag -a v0.9.0 -m "FoundryGate v0.9.0"
-git push origin v0.9.0
+git tag -a v1.0.0 -m "FoundryGate v1.0.0"
+git push origin v1.0.0
 ```
 
-Then open GitHub Releases and publish a release for `v0.9.0`.
+Then open GitHub Releases and publish a release for `v1.0.0`.
 
 ## Automation Baseline
 
@@ -59,6 +59,7 @@ The repo also includes [publish-dry-run](./.github/workflows/publish-dry-run.yml
 - `v0.7.0` establishes the operations-polish baseline: update alerts, operator events, rollout guardrails, scoped update checks, maintenance windows, and post-update verification hints.
 - `v0.8.0` establishes the onboarding baseline: repeatable provider/client rollout helpers, starter templates, delegated-traffic examples, env validation, and shareable onboarding reports.
 - `v0.9.0` is the pre-`v1.0` hardening baseline: conservative response headers, bounded request surfaces, stronger functional API coverage, and a full documentation pass over operator-facing behavior.
+- `v1.0.0` establishes the stable baseline: trust-boundary validation for upstream base URLs, sanitized provider-error responses, a documented security review, and the separate `@foundrygate/cli` npm package for CLI-facing workflows.
 
 ## Planned Publishing Path
 
