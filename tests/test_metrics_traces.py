@@ -45,6 +45,16 @@ def test_metrics_store_persists_trace_fields(tmp_path):
     assert client_rows[0]["provider"] == "local-worker"
     assert client_rows[0]["layer"] == "profile"
     assert client_rows[0]["requests"] == 1
+    assert client_rows[0]["prompt_tokens"] == 120
+    assert client_rows[0]["compl_tokens"] == 24
+    assert client_rows[0]["total_tokens"] == 144
+    assert client_rows[0]["failures"] == 0
+    assert client_rows[0]["success_pct"] == 100.0
+
+    client_totals = metrics.get_client_totals()
+    assert client_totals[0]["client_profile"] == "local-only"
+    assert client_totals[0]["client_tag"] == "n8n"
+    assert client_totals[0]["total_tokens"] == 144
 
     metrics.close()
 
@@ -132,6 +142,7 @@ def test_metrics_store_filters_recent_and_breakdowns(tmp_path):
     assert client_rows[0]["modality"] == "image_generation"
     assert client_rows[0]["client_tag"] == "codex"
     assert client_rows[0]["provider"] == "local-worker"
+    assert client_rows[0]["success_pct"] == 100.0
 
     modality_rows = metrics.get_modality_breakdown(modality="image_generation")
     assert len(modality_rows) == 1
@@ -145,6 +156,10 @@ def test_metrics_store_filters_recent_and_breakdowns(tmp_path):
     totals = metrics.get_totals(provider="cloud-default")
     assert totals["total_requests"] == 1
     assert totals["total_failures"] == 1
+
+    client_totals = metrics.get_client_totals()
+    assert len(client_totals) == 2
+    assert client_totals[0]["requests"] >= client_totals[1]["requests"]
 
     metrics.close()
 

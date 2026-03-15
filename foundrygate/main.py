@@ -913,6 +913,7 @@ async def stats(
         "modalities": _metrics.get_modality_breakdown(**filters),
         "routing": _metrics.get_routing_breakdown(**filters),
         "clients": _metrics.get_client_breakdown(**filters),
+        "client_totals": _metrics.get_client_totals(**filters),
         "operator_actions": _metrics.get_operator_breakdown(**operator_filters),
         "hourly": _metrics.get_hourly_series(24),
         "daily": _metrics.get_daily_totals(30),
@@ -1677,9 +1678,16 @@ tr:hover td{background:#1a1a2a}
 </div>
 
 <div class="sect">
+  <h2>Client Totals</h2>
+  <table id="client-totals"><thead><tr>
+    <th>Profile</th><th>Client Tag</th><th>Requests</th><th>Failures</th><th>Success</th><th>Tokens</th><th>Cost</th><th>Cost / Request</th><th>Avg Latency</th><th>Modalities</th><th>Providers</th>
+  </tr></thead><tbody></tbody></table>
+</div>
+
+<div class="sect">
   <h2>Client Breakdown</h2>
   <table id="clients"><thead><tr>
-    <th>Modality</th><th>Profile</th><th>Client Tag</th><th>Provider</th><th>Layer</th><th>Requests</th><th>Cost</th><th>Avg Latency</th>
+    <th>Modality</th><th>Profile</th><th>Client Tag</th><th>Provider</th><th>Layer</th><th>Requests</th><th>Failures</th><th>Success</th><th>Tokens</th><th>Cost</th><th>Cost / Request</th><th>Avg Latency</th>
   </tr></thead><tbody></tbody></table>
 </div>
 
@@ -1828,7 +1836,9 @@ async function load(){
     $('#ago').textContent = ago(totals.last_request);
 
     const operatorRows = stats.operator_actions || [];
+    const clientTotalRows = stats.client_totals || [];
     const latestOperatorEvent = (operatorEvents.events || [])[0] || null;
+    const topClient = clientTotalRows.length ? clientTotalRows[0] : null;
     $('#cards').innerHTML = `
       <div class="card"><div class="label">Requests</div><div class="value">${fmtTok(totals.total_requests || 0)}</div></div>
       <div class="card"><div class="label">Cost</div><div class="value cost">${fmtUsd(totals.total_cost_usd || 0)}</div></div>
@@ -1839,6 +1849,7 @@ async function load(){
       <div class="card"><div class="label">Healthy Providers</div><div class="value">${healthyProviders}/${providers.length}</div><div class="detail">${unhealthyProviders} unhealthy</div></div>
       <div class="card"><div class="label">Capability Coverage</div><div class="value">${coverageEntries.length}</div><div class="detail">${coverageEntries.map(([name]) => name).slice(0,3).join(', ') || 'none'}</div></div>
       <div class="card"><div class="label">Top Modality</div><div class="value">${esc(topModality)}</div><div class="detail">${modalityRows.length} modality groups</div></div>
+      <div class="card"><div class="label">Top Client</div><div class="value">${esc(topClient ? (topClient.client_tag || topClient.client_profile || 'generic') : '—')}</div><div class="detail">${topClient ? `${fmtTok(topClient.total_tokens || 0)} tokens / ${fmtUsd(topClient.cost_usd || 0)}` : 'No client traffic yet'}</div></div>
       <div class="card"><div class="label">Release Status</div><div class="value ${(update.alert_level === 'critical' || update.alert_level === 'warning') ? 'err' : update.update_available ? 'cost' : ''}">${esc(update.latest_version || update.current_version || 'n/a')}</div><div class="detail">${update.enabled ? (update.status === 'ok' ? `${esc(update.release_channel || 'stable')} / ${esc(update.update_type || 'current')} / ${esc(update.recommended_action || (update.update_available ? 'Upgrade recommended' : 'No action needed'))}${update.auto_update && update.auto_update.enabled ? ` / ring: ${esc(update.auto_update.rollout_ring || 'early')} / auto: ${esc(update.auto_update.eligible ? 'eligible' : (update.auto_update.blocked_reason || 'blocked'))}` : ''}` : esc(update.recommended_action || 'Update check unavailable')) : 'Update checks disabled'}</div></div>
       <div class="card"><div class="label">Operator Actions</div><div class="value">${fmtTok((operatorEvents.events || []).length)}</div><div class="detail">${latestOperatorEvent ? `${esc(latestOperatorEvent.action || 'update-check')} / ${esc(latestOperatorEvent.status || 'unknown')}` : 'No recent operator events'}</div></div>
     `;
@@ -1866,6 +1877,21 @@ async function load(){
     </tr>`);
     $('#coverage tbody').innerHTML = coverageRows.length ? coverageRows.join('') : emptyRow(5, 'No capability coverage data');
 
+    const clientTotalsRows = clientTotalRows.map(row => `<tr>
+      <td>${esc(row.client_profile || 'generic')}</td>
+      <td>${esc(row.client_tag || '—')}</td>
+      <td>${row.requests}</td>
+      <td>${row.failures || 0}</td>
+      <td class="mono">${fmt(row.success_pct || 0, 1)}%</td>
+      <td class="mono">${fmtTok(row.total_tokens || 0)}<div class="detail">${fmtTok(row.prompt_tokens || 0)} in / ${fmtTok(row.compl_tokens || 0)} out</div></td>
+      <td class="mono">${fmtUsd(row.cost_usd)}</td>
+      <td class="mono">${fmtUsd(row.cost_per_request_usd)}</td>
+      <td class="mono">${fmtMs(row.avg_latency_ms)}</td>
+      <td>${esc(row.modalities || '—')}</td>
+      <td class="mono">${esc(row.providers || '—')}</td>
+    </tr>`);
+    $('#client-totals tbody').innerHTML = clientTotalsRows.length ? clientTotalsRows.join('') : emptyRow(11, 'No client totals for the current filter set');
+
     const clientRows = (stats.clients || []).map(row => `<tr>
       <td><span class="pill">${esc(row.modality || 'chat')}</span></td>
       <td>${esc(row.client_profile || 'generic')}</td>
@@ -1873,10 +1899,14 @@ async function load(){
       <td>${esc(row.provider)}</td>
       <td>${layerTag(row.layer)}</td>
       <td>${row.requests}</td>
+      <td>${row.failures || 0}</td>
+      <td class="mono">${fmt(row.success_pct || 0, 1)}%</td>
+      <td class="mono">${fmtTok(row.total_tokens || 0)}<div class="detail">${fmtTok(row.prompt_tokens || 0)} in / ${fmtTok(row.compl_tokens || 0)} out</div></td>
       <td class="mono">${fmtUsd(row.cost_usd)}</td>
+      <td class="mono">${fmtUsd(row.cost_per_request_usd)}</td>
       <td class="mono">${fmtMs(row.avg_latency_ms)}</td>
     </tr>`);
-    $('#clients tbody').innerHTML = clientRows.length ? clientRows.join('') : emptyRow(8, 'No client rows for the current filter set');
+    $('#clients tbody').innerHTML = clientRows.length ? clientRows.join('') : emptyRow(12, 'No client rows for the current filter set');
 
     const modalityRowsHtml = modalityRows.map(row => `<tr>
       <td><span class="pill">${esc(row.modality || 'chat')}</span></td>

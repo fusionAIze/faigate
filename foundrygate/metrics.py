@@ -270,11 +270,47 @@ class MetricsStore:
                 provider,
                 layer,
                 COUNT(*)                 AS requests,
+                SUM(CASE WHEN success=0 THEN 1 ELSE 0 END) AS failures,
+                ROUND(CASE WHEN COUNT(*)>0
+                    THEN (COUNT(*) - SUM(CASE WHEN success=0 THEN 1 ELSE 0 END))*100.0/COUNT(*)
+                    ELSE 0 END, 1)       AS success_pct,
+                SUM(prompt_tok)          AS prompt_tokens,
+                SUM(compl_tok)           AS compl_tokens,
+                SUM(prompt_tok+compl_tok) AS total_tokens,
                 ROUND(SUM(cost_usd),6)   AS cost_usd,
+                ROUND(CASE WHEN COUNT(*)>0 THEN SUM(cost_usd)/COUNT(*) ELSE 0 END, 6)
+                    AS cost_per_request_usd,
                 ROUND(AVG(latency_ms),1) AS avg_latency_ms
             FROM requests{where_sql}
             GROUP BY modality, client_profile, client_tag, provider, layer
             ORDER BY requests DESC, modality ASC, client_profile ASC, client_tag ASC
+        """,
+            params,
+        )
+
+    def get_client_totals(self, **filters: Any) -> list[dict]:
+        where_sql, params = self._build_where_clause(filters)
+        return self._q(
+            f"""
+            SELECT client_profile,
+                client_tag,
+                COUNT(*)                 AS requests,
+                SUM(CASE WHEN success=0 THEN 1 ELSE 0 END) AS failures,
+                ROUND(CASE WHEN COUNT(*)>0
+                    THEN (COUNT(*) - SUM(CASE WHEN success=0 THEN 1 ELSE 0 END))*100.0/COUNT(*)
+                    ELSE 0 END, 1)       AS success_pct,
+                SUM(prompt_tok)          AS prompt_tokens,
+                SUM(compl_tok)           AS compl_tokens,
+                SUM(prompt_tok+compl_tok) AS total_tokens,
+                ROUND(SUM(cost_usd),6)   AS cost_usd,
+                ROUND(CASE WHEN COUNT(*)>0 THEN SUM(cost_usd)/COUNT(*) ELSE 0 END, 6)
+                    AS cost_per_request_usd,
+                ROUND(AVG(latency_ms),1) AS avg_latency_ms,
+                GROUP_CONCAT(DISTINCT modality) AS modalities,
+                GROUP_CONCAT(DISTINCT provider) AS providers
+            FROM requests{where_sql}
+            GROUP BY client_profile, client_tag
+            ORDER BY requests DESC, client_profile ASC, client_tag ASC
         """,
             params,
         )

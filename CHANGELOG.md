@@ -4,6 +4,12 @@ All notable changes to FoundryGate should be documented here.
 
 The format is intentionally lightweight and human-readable. Group entries by release and focus on user-visible behavior, operational changes, and compatibility notes.
 
+## Unreleased
+
+### Added
+
+- Added richer client usage reporting in `GET /api/stats` and the dashboard, including per-client tokens, failures, success rate, and aggregate client totals
+
 ## v1.0.0 - 2026-03-15
 
 ### Added
