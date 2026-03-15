@@ -846,8 +846,11 @@ Running `./scripts/foundrygate-install` also creates symlinks in `/usr/local/bin
 Provider starter snippets for the first rollout path live under [docs/examples](./docs/examples):
 
 - [provider-openai-compat.yaml](./docs/examples/provider-openai-compat.yaml)
+- [provider-openai-compat.env.example](./docs/examples/provider-openai-compat.env.example)
 - [provider-local-worker.yaml](./docs/examples/provider-local-worker.yaml)
+- [provider-local-worker.env.example](./docs/examples/provider-local-worker.env.example)
 - [provider-image-provider.yaml](./docs/examples/provider-image-provider.yaml)
+- [provider-image-provider.env.example](./docs/examples/provider-image-provider.env.example)
 | `foundrygate-install` | Installs the unit file, creates `/var/lib/foundrygate`, creates helper symlinks, reloads `systemd`, and starts the service |
 | `foundrygate-start` | Runs `systemctl start foundrygate.service` |
 | `foundrygate-stop` | Runs `systemctl stop foundrygate.service` |

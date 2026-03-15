@@ -44,8 +44,11 @@ It also prints a client matrix:
 Starter snippets:
 
 - [examples/provider-openai-compat.yaml](./examples/provider-openai-compat.yaml)
+- [examples/provider-openai-compat.env.example](./examples/provider-openai-compat.env.example)
 - [examples/provider-local-worker.yaml](./examples/provider-local-worker.yaml)
+- [examples/provider-local-worker.env.example](./examples/provider-local-worker.env.example)
 - [examples/provider-image-provider.yaml](./examples/provider-image-provider.yaml)
+- [examples/provider-image-provider.env.example](./examples/provider-image-provider.env.example)
 
 ### 2. Verify provider health
 

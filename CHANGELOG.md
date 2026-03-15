@@ -15,6 +15,7 @@ The format is intentionally lightweight and human-readable. Group entries by rel
 - Added a client matrix to the onboarding report so profile match rules and routing intent are visible before traffic goes live
 - Added starter example files for OpenClaw, n8n, and CLI clients under `docs/examples/` so onboarding can begin from copy/pasteable templates
 - Added starter provider snippets for cloud, local-worker, and image-provider setups under `docs/examples/`
+- Added matching provider `.env` starter files for cloud, local-worker, and image-provider onboarding flows
 
 ## v0.7.0 - 2026-03-12
 
