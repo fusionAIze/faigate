@@ -348,6 +348,78 @@ def build_onboarding_report(
                 " truly needs them.",
             ],
         },
+        "swe-af": {
+            "recommended": "swe-af" in profile_names,
+            "header": "X-FoundryGate-Client: swe-af",
+            "profile": "swe-af",
+            "snippet": [
+                "export OPENAI_BASE_URL=http://127.0.0.1:8090/v1",
+                "export OPENAI_API_KEY=local",
+            ],
+            "notes": [
+                "Treat SWE-AF like another OpenAI-compatible agent client first, not a"
+                " special runtime.",
+                "Keep a stable client header so coding and delegated subflows remain"
+                " attributable in traces.",
+            ],
+        },
+        "paperclip": {
+            "recommended": "paperclip" in profile_names,
+            "header": "X-FoundryGate-Client: paperclip",
+            "profile": "paperclip",
+            "snippet": [
+                "export OPENAI_BASE_URL=http://127.0.0.1:8090/v1",
+                "export OPENAI_API_KEY=local",
+            ],
+            "notes": [
+                "Start with the common OpenAI-compatible path before inventing a deeper adapter.",
+                "Use client profiles only when paperclip traffic should differ from"
+                " other app traffic.",
+            ],
+        },
+        "ship-faster": {
+            "recommended": "ship-faster" in profile_names,
+            "header": "X-FoundryGate-Client: ship-faster",
+            "profile": "ship-faster",
+            "snippet": [
+                "export OPENAI_BASE_URL=http://127.0.0.1:8090/v1",
+                "export OPENAI_API_KEY=local",
+            ],
+            "notes": [
+                "Use one short client tag first; add more profile splits only when the"
+                " workflow actually needs them.",
+                "Prefer hook-based overrides only for narrow rollout or locality constraints.",
+            ],
+        },
+        "langchain": {
+            "recommended": "langchain" in profile_names,
+            "header": "X-FoundryGate-Client: langchain",
+            "profile": "langchain",
+            "snippet": [
+                "export OPENAI_BASE_URL=http://127.0.0.1:8090/v1",
+                "export OPENAI_API_KEY=local",
+            ],
+            "notes": [
+                "LangChain should stay on the OpenAI-compatible path unless a"
+                " framework-specific blocker appears.",
+                "Use route previews before splitting chain traffic into multiple custom profiles.",
+            ],
+        },
+        "langgraph": {
+            "recommended": "langgraph" in profile_names,
+            "header": "X-FoundryGate-Client: langgraph",
+            "profile": "langgraph",
+            "snippet": [
+                "export OPENAI_BASE_URL=http://127.0.0.1:8090/v1",
+                "export OPENAI_API_KEY=local",
+            ],
+            "notes": [
+                "Keep LangGraph on the shared gateway path and use client tags to"
+                " distinguish graph traffic from generic LangChain traffic.",
+                "Only add dedicated policies when graph workloads need stricter"
+                " locality or cost boundaries.",
+            ],
+        },
     }
 
     return {

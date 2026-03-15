@@ -113,6 +113,47 @@ Starter snippet:
 
 - [examples/client-ai-native-app-profile.yaml](./examples/client-ai-native-app-profile.yaml)
 
+## First-wave agent and framework starters
+
+The first post-`1.0` expansion wave focuses on clients that can already use FoundryGate cleanly through the common OpenAI-compatible path.
+
+### SWE-AF
+
+- starter: [examples/swe-af-foundrygate.env.example](./examples/swe-af-foundrygate.env.example)
+- recommended header: `X-FoundryGate-Client: swe-af`
+- recommended profile name: `swe-af`
+
+### paperclip
+
+- starter: [examples/paperclip-foundrygate.env.example](./examples/paperclip-foundrygate.env.example)
+- recommended header: `X-FoundryGate-Client: paperclip`
+- recommended profile name: `paperclip`
+
+### ship-faster
+
+- starter: [examples/ship-faster-foundrygate.env.example](./examples/ship-faster-foundrygate.env.example)
+- recommended header: `X-FoundryGate-Client: ship-faster`
+- recommended profile name: `ship-faster`
+
+### LangChain
+
+- starter: [examples/langchain-foundrygate.env.example](./examples/langchain-foundrygate.env.example)
+- recommended header: `X-FoundryGate-Client: langchain`
+- recommended profile name: `langchain`
+
+### LangGraph
+
+- starter: [examples/langgraph-foundrygate.env.example](./examples/langgraph-foundrygate.env.example)
+- recommended header: `X-FoundryGate-Client: langgraph`
+- recommended profile name: `langgraph`
+
+These starters are intentionally small:
+
+- keep one local OpenAI-compatible base URL
+- keep one stable client tag
+- use client profiles only when the framework traffic really needs distinct routing behavior
+- validate with `POST /api/route` and `GET /api/traces` before adding policies or hooks
+
 ## Provider onboarding
 
 When onboarding a new provider:
