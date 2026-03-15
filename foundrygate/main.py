@@ -8,7 +8,9 @@ through a 3-layer classification engine to the optimal provider.
 
 from __future__ import annotations
 
+import json
 import logging
+import re
 import time
 from contextlib import asynccontextmanager
 from typing import Any
@@ -30,6 +32,7 @@ from .updates import (
 )
 
 logger = logging.getLogger("foundrygate")
+_SAFE_TOKEN_RE = re.compile(r"[^a-z0-9._-]+")
 
 # ── Globals (initialized in lifespan) ──────────────────────────
 _config: Config
@@ -37,6 +40,10 @@ _providers: dict[str, ProviderBackend] = {}
 _router: Router
 _metrics: MetricsStore
 _update_checker: UpdateChecker
+
+
+class PayloadTooLargeError(ValueError):
+    """Raised when one request or upload exceeds configured size limits."""
 
 
 def _client_error_response(message: str, *, error_type: str, status_code: int) -> JSONResponse:
@@ -59,6 +66,31 @@ def _invalid_request_response(message: str, *, exc: Exception | None = None) -> 
     if exc is not None:
         logger.info("Invalid request rejected: %s", exc)
     return _client_error_response(message, error_type="invalid_request_error", status_code=400)
+
+
+def _payload_too_large_response(message: str, *, exc: Exception | None = None) -> JSONResponse:
+    """Return a sanitized payload-too-large response."""
+    if exc is not None:
+        logger.info("Payload rejected as too large: %s", exc)
+    return _client_error_response(message, error_type="payload_too_large", status_code=413)
+
+
+def _sanitize_header_value(value: Any, *, max_chars: int | None = None) -> str:
+    """Normalize a user-controlled header value to a bounded printable string."""
+    text = str(value or "").strip()
+    cleaned = "".join(ch for ch in text if ch.isprintable() and ch not in "\r\n")
+    if max_chars and len(cleaned) > max_chars:
+        cleaned = cleaned[:max_chars]
+    return cleaned
+
+
+def _sanitize_token(value: Any, *, default: str, max_chars: int | None = None) -> str:
+    """Normalize one token-like value for metrics, tracing, and policy surfaces."""
+    cleaned = _sanitize_header_value(value, max_chars=max_chars).lower()
+    if not cleaned:
+        return default
+    normalized = _SAFE_TOKEN_RE.sub("-", cleaned).strip("-")
+    return normalized or default
 
 
 async def _refresh_local_worker_probes(force: bool = False) -> None:
@@ -92,13 +124,27 @@ async def _refresh_local_worker_probes(force: bool = False) -> None:
 def _collect_routing_headers(request: Request) -> dict[str, str]:
     """Return the request headers that are relevant for routing decisions."""
     prefixes = ("x-openclaw", "x-foundrygate")
-    return {k.lower(): v for k, v in request.headers.items() if k.lower().startswith(prefixes)}
+    max_chars = int((_config.security or {}).get("max_header_value_chars", 160))
+    return {
+        k.lower(): _sanitize_header_value(v, max_chars=max_chars)
+        for k, v in request.headers.items()
+        if k.lower().startswith(prefixes)
+    }
 
 
 def _collect_operator_context(headers: dict[str, str]) -> tuple[str, str]:
     """Return operator action and client tag hints from request headers."""
-    action = headers.get("x-foundrygate-operator-action", "update-check").strip().lower()
-    client_tag = headers.get("x-foundrygate-client", "operator").strip().lower() or "operator"
+    max_chars = int((_config.security or {}).get("max_header_value_chars", 160))
+    action = _sanitize_token(
+        headers.get("x-foundrygate-operator-action", "update-check"),
+        default="update-check",
+        max_chars=max_chars,
+    )
+    client_tag = _sanitize_token(
+        headers.get("x-foundrygate-client", "operator"),
+        default="operator",
+        max_chars=max_chars,
+    )
     return action, client_tag
 
 
@@ -147,7 +193,11 @@ def _resolve_client_profile(
 def _resolve_client_tag(headers: dict[str, str], client_profile: str) -> str:
     """Return a stable client tag for metrics and trace grouping."""
     if headers.get("x-foundrygate-client"):
-        return headers["x-foundrygate-client"].strip().lower()
+        return _sanitize_token(
+            headers["x-foundrygate-client"],
+            default=client_profile,
+            max_chars=int((_config.security or {}).get("max_header_value_chars", 160)),
+        )
     if headers.get("x-openclaw-source"):
         return "openclaw"
     return client_profile
@@ -434,6 +484,23 @@ def _collect_image_request_fields(body: dict[str, Any]) -> dict[str, Any]:
     return fields
 
 
+async def _read_json_body(request: Request, *, operation: str) -> dict[str, Any]:
+    """Read and size-check one JSON request body."""
+    raw = await request.body()
+    max_bytes = int((_config.security or {}).get("max_json_body_bytes", 1_048_576))
+    if len(raw) > max_bytes:
+        raise PayloadTooLargeError(
+            f"{operation} body exceeded security.max_json_body_bytes ({len(raw)} > {max_bytes})"
+        )
+    try:
+        parsed = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("Invalid JSON body") from exc
+    if not isinstance(parsed, dict):
+        raise ValueError("JSON body must be an object")
+    return parsed
+
+
 def _parse_optional_positive_int(value: Any, *, field_name: str) -> int | None:
     """Return one optional positive integer field from request data."""
     if value in (None, ""):
@@ -543,7 +610,7 @@ def _extract_image_edit_request_fields(form_data: dict[str, Any]) -> dict[str, A
 
 
 async def _read_uploaded_file(
-    value: Any, *, field_name: str, required: bool
+    value: Any, *, field_name: str, required: bool, max_bytes: int
 ) -> dict[str, Any] | None:
     """Read one uploaded file into a normalized payload."""
     if value is None:
@@ -557,6 +624,10 @@ async def _read_uploaded_file(
     content = await value.read()
     if not content:
         raise ValueError(f"Uploaded file '{field_name}' must not be empty")
+    if len(content) > max_bytes:
+        raise PayloadTooLargeError(
+            f"Uploaded file '{field_name}' exceeded security.max_upload_bytes"
+        )
 
     return {
         "filename": value.filename or field_name,
@@ -689,6 +760,30 @@ app = FastAPI(
     description="Local OpenAI-compatible routing gateway for OpenClaw and other clients.",
     lifespan=lifespan,
 )
+
+
+@app.middleware("http")
+async def apply_security_headers(request: Request, call_next):
+    """Attach conservative security headers to API and dashboard responses."""
+    response = await call_next(request)
+    security = _config.security if "_config" in globals() else {}
+    if not security.get("response_headers", True):
+        return response
+
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
+    response.headers.setdefault("Cache-Control", str(security.get("cache_control", "no-store")))
+    if request.url.path == "/dashboard":
+        response.headers.setdefault(
+            "Content-Security-Policy",
+            "default-src 'self'; style-src 'self' 'unsafe-inline'; "
+            "script-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+            "connect-src 'self'; object-src 'none'; base-uri 'none'; "
+            "frame-ancestors 'none'; form-action 'self'",
+        )
+    return response
 
 
 # ── Health / Info endpoints ────────────────────────────────────
@@ -910,9 +1005,11 @@ async def operator_events(
 async def preview_route(request: Request):
     """Dry-run one routing decision without sending a provider request."""
     try:
-        body = await request.json()
-    except Exception:
-        return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
+        body = await _read_json_body(request, operation="Route preview")
+    except PayloadTooLargeError as exc:
+        return _payload_too_large_response("Route preview request is too large", exc=exc)
+    except ValueError as exc:
+        return _invalid_request_response("Invalid route preview request", exc=exc)
 
     headers = _collect_routing_headers(request)
     try:
@@ -952,9 +1049,11 @@ async def preview_route(request: Request):
 async def preview_image_route(request: Request):
     """Dry-run one image routing decision without sending a provider request."""
     try:
-        body = await request.json()
-    except Exception:
-        return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
+        body = await _read_json_body(request, operation="Image route preview")
+    except PayloadTooLargeError as exc:
+        return _payload_too_large_response("Image route preview request is too large", exc=exc)
+    except ValueError as exc:
+        return _invalid_request_response("Invalid image route preview request", exc=exc)
 
     capability = str(body.get("capability") or "image_generation").strip().lower()
     if capability not in {"image_generation", "image_editing"}:
@@ -1004,9 +1103,11 @@ async def preview_image_route(request: Request):
 async def image_generations(request: Request):
     """OpenAI-compatible image generation endpoint."""
     try:
-        body = await request.json()
-    except Exception:
-        return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
+        body = await _read_json_body(request, operation="Image generation")
+    except PayloadTooLargeError as exc:
+        return _payload_too_large_response("Image generation request is too large", exc=exc)
+    except ValueError as exc:
+        return _invalid_request_response("Invalid image generation request", exc=exc)
     try:
         body = _normalize_image_request_body(body, capability="image_generation")
     except ValueError as exc:
@@ -1111,8 +1212,21 @@ async def image_edits(request: Request):
         form = await request.form()
         form_data = dict(form.multi_items())
         body = _extract_image_edit_request_fields(form_data)
-        image = await _read_uploaded_file(form_data.get("image"), field_name="image", required=True)
-        mask = await _read_uploaded_file(form_data.get("mask"), field_name="mask", required=False)
+        max_upload_bytes = int((_config.security or {}).get("max_upload_bytes", 10_485_760))
+        image = await _read_uploaded_file(
+            form_data.get("image"),
+            field_name="image",
+            required=True,
+            max_bytes=max_upload_bytes,
+        )
+        mask = await _read_uploaded_file(
+            form_data.get("mask"),
+            field_name="mask",
+            required=False,
+            max_bytes=max_upload_bytes,
+        )
+    except PayloadTooLargeError as exc:
+        return _payload_too_large_response("Image editing upload is too large", exc=exc)
     except ValueError as exc:
         return _invalid_request_response("Invalid image editing request", exc=exc)
     except Exception as exc:
@@ -1233,9 +1347,11 @@ async def chat_completions(request: Request):
     If model matches a provider name: routes directly to that provider.
     """
     try:
-        body = await request.json()
-    except Exception:
-        return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
+        body = await _read_json_body(request, operation="Chat completions")
+    except PayloadTooLargeError as exc:
+        return _payload_too_large_response("Chat completion request is too large", exc=exc)
+    except ValueError as exc:
+        return _invalid_request_response("Invalid chat completion request", exc=exc)
 
     headers = _collect_routing_headers(request)
     try:

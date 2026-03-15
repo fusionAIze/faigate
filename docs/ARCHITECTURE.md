@@ -29,6 +29,7 @@ The core handles:
 - route selection
 - fallback order
 - timeout and failure handling
+- request-size and upload-size guardrails
 - response metadata
 - metrics and traces
 
@@ -86,6 +87,8 @@ This is enough to support:
 
 Request hooks sit beside these caller-aware signals as a narrow extension seam. They can add sanitized request-level hints or profile overrides without giving arbitrary code the ability to mutate the full routing surface.
 
+The pre-`v1.0` hardening baseline also treats caller-controlled headers as bounded inputs. Relevant routing and operator headers are normalized before they influence traces, client tags, or rollout decisions.
+
 ## Operational surface
 
 The main operational endpoints are:
@@ -108,6 +111,8 @@ The main operational endpoints are:
 `/api/providers` exposes the normalized provider inventory with optional `capability` and `healthy` filters. This is the inventory surface the dashboard should use when it needs provider metadata beyond raw request metrics.
 
 `/api/stats`, `/api/recent`, and `/api/traces` can now be filtered by provider, client profile, client tag, layer, and success state. `/api/operator-events` captures operator-side update checks and helper-driven apply attempts. The dashboard is a thin UI over those same filtered endpoints and persists its active filters in the URL so operators can share one filtered view.
+
+The operational surface now also applies conservative response headers by default. The no-build dashboard ships with a restrictive CSP and frame denial, while JSON and multipart request paths use bounded payload limits so obvious oversize failures are rejected before provider calls.
 
 ## Design target
 

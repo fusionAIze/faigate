@@ -19,7 +19,7 @@ The foundation that used to be the near-term buildout is largely in place:
 
 This roadmap now shifts from "rename and foundation" to "deepen the gateway plane without bloating it".
 
-`v0.8.x` is the current release line: many-provider and many-client onboarding is being tightened with validation helpers, starter templates, delegated-traffic examples, and shareable onboarding output on top of the already-shipped routing, modality, and ops foundation.
+`v0.9.x` is the current release line: the focus now shifts to pre-`v1.0` hardening across request boundaries, functional API coverage, and a full documentation pass on the already-shipped routing, modality, onboarding, and ops foundation.
 
 ## Big Picture
 
@@ -252,6 +252,14 @@ Primary goals:
 - close obvious operational gaps discovered during earlier releases
 
 This release line should leave `v1.0.0` focused on stability and security gates, not backlog cleanup.
+
+Current `v0.9.x` baseline is aimed at:
+
+- conservative response headers and dashboard CSP defaults
+- explicit JSON and multipart size guardrails
+- bounded routing and operator header handling
+- broader functional API tests around dashboard, routing, and upload surfaces
+- documentation updates that make the hardened defaults visible to operators
 
 ### `v1.0.0`: stable gateway baseline
 

@@ -99,6 +99,8 @@ Examples:
 - `X-FoundryGate-Client: n8n`
 - `X-FoundryGate-Client: codex`
 
+Keep these tags short and stable. The runtime now bounds routing-header values before they reach traces, client matrices, and rollout decisions.
+
 ### 3. Apply a preset or custom profile
 
 Start with:

@@ -48,6 +48,7 @@ FoundryGate is a local OpenAI-compatible router/proxy for OpenClaw and other cli
 - Robust fallback behavior: provider errors, timeouts, and connection failures fall through the configured fallback chain.
 - Useful observability: `/health` reports provider status, capability coverage, consecutive failures, last error, and average latency.
 - Hardened extension seam: request hooks are sanitized, can fail closed, and expose hook errors in dry-run and completion responses.
+- Pre-1.0 hardening baseline: response headers are conservative, request headers are sanitized, and JSON/uploads are bounded by explicit security limits.
 - Safe database path handling: metrics use `FOUNDRYGATE_DB_PATH`, so the SQLite database does not need to live in the repo checkout.
 
 ## Who Is This For?
@@ -199,6 +200,7 @@ OpenAI-compatible chat completions endpoint.
 
 - `model: "auto"` routes through FoundryGate
 - `model: "<provider-id>"` routes directly to that loaded provider
+- request body size is bounded by `security.max_json_body_bytes`
 
 For non-streaming responses, FoundryGate also adds these response headers:
 
@@ -246,6 +248,7 @@ OpenAI-compatible image editing endpoint.
 - `model: "auto"` selects the best loaded provider with `capabilities.image_editing: true`
 - `model: "<provider-id>"` routes directly to a loaded image-edit-capable provider
 - validates scalar fields such as `prompt`, `n`, and `size` before any provider call
+- rejects uploads larger than `security.max_upload_bytes`
 - optional image-policy hints can be passed via form field `image_policy`, `metadata.image_policy`, or `X-FoundryGate-Image-Policy`
 
 ```bash
@@ -490,6 +493,37 @@ The ranking logic intentionally prefers providers that both fit the request and 
 | `DEEPSEEK_BASE_URL` | Overrides the DeepSeek base URL | Optional |
 | `GEMINI_BASE_URL` | Overrides the Gemini base URL | Optional |
 | `OPENROUTER_BASE_URL` | Overrides the OpenRouter base URL | Optional |
+
+### Security Settings
+
+The runtime also exposes a small `security` block in `config.yaml` for conservative pre-`v1.0` hardening defaults.
+
+Supported fields:
+
+- `response_headers`
+- `cache_control`
+- `max_json_body_bytes`
+- `max_upload_bytes`
+- `max_header_value_chars`
+
+Example:
+
+```yaml
+security:
+  response_headers: true
+  cache_control: "no-store"
+  max_json_body_bytes: 1048576
+  max_upload_bytes: 10485760
+  max_header_value_chars: 160
+```
+
+What the current runtime does with it:
+
+- adds conservative response headers such as `X-Content-Type-Options`, `X-Frame-Options`, and `Referrer-Policy`
+- sends a dashboard CSP that keeps the no-build UI self-contained
+- rejects oversized JSON requests before route resolution
+- rejects oversized image uploads before any provider call
+- bounds operator- and routing-related header values before they reach metrics, traces, or policy surfaces
 
 ### Additional Provider Key Variables Referenced In The Stock Config
 

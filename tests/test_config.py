@@ -2,7 +2,9 @@
 
 from pathlib import Path
 
-from foundrygate.config import _safe_db_path, load_config
+import pytest
+
+from foundrygate.config import ConfigError, _safe_db_path, load_config
 
 # ── _safe_db_path unit tests ──────────────────────────────────────────────────
 
@@ -112,3 +114,39 @@ def test_auto_update_defaults_are_exposed():
 def test_update_check_defaults_include_stable_release_channel():
     cfg = load_config(Path(__file__).parent.parent / "config.yaml")
     assert cfg.update_check["release_channel"] == "stable"
+
+
+def test_security_defaults_are_exposed():
+    cfg = load_config(Path(__file__).parent.parent / "config.yaml")
+    assert cfg.security == {
+        "response_headers": True,
+        "cache_control": "no-store",
+        "max_json_body_bytes": 1048576,
+        "max_upload_bytes": 10485760,
+        "max_header_value_chars": 160,
+    }
+
+
+def test_security_rejects_invalid_limit_values(tmp_path):
+    path = tmp_path / "config.yaml"
+    path.write_text(
+        """
+server:
+  host: "127.0.0.1"
+  port: 8090
+providers:
+  cloud-default:
+    backend: openai-compat
+    base_url: "https://api.example.com/v1"
+    api_key: "secret"
+    model: "chat-model"
+security:
+  max_json_body_bytes: 0
+fallback_chain: []
+metrics:
+  enabled: false
+"""
+    )
+
+    with pytest.raises(ConfigError, match="security.max_json_body_bytes"):
+        load_config(path)

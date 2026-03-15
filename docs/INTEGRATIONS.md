@@ -36,6 +36,8 @@ For a smaller starter snippet without the full alias block, use [examples/opencl
 
 For delegated or many-agent traffic, start from [examples/openclaw-delegated-request.json](./examples/openclaw-delegated-request.json) and keep `x-openclaw-source` stable across sub-agents so traces stay attributable.
 
+Keep delegated/client headers short and stable. The runtime now bounds routing-header values before they reach traces, metrics, and rollout logic.
+
 ## n8n
 
 n8n can use FoundryGate as a stable local model gateway.
@@ -92,6 +94,8 @@ export OPENAI_API_KEY=local
 ```
 
 For a reusable shell starter, use [examples/cli-foundrygate-env.sh](./examples/cli-foundrygate-env.sh).
+
+As with other clients, prefer token-like client tags over long free-form values so the bounded header surface remains readable in traces and operator views.
 
 ## AI-native app clients
 

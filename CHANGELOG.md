@@ -4,6 +4,14 @@ All notable changes to FoundryGate should be documented here.
 
 The format is intentionally lightweight and human-readable. Group entries by release and focus on user-visible behavior, operational changes, and compatibility notes.
 
+## Unreleased
+
+### Added
+
+- Added conservative response-security headers plus a dashboard CSP for the no-build operator UI
+- Added explicit `security` config controls for JSON body size, upload size, and bounded routing-header values
+- Added functional API coverage for dashboard headers, JSON request limits, upload limits, and sanitized routing-header behavior
+
 ## v0.8.0 - 2026-03-15
 
 ### Added

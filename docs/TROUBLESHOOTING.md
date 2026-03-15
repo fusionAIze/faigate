@@ -51,6 +51,28 @@ request_hooks:
   on_error: fail
 ```
 
+## Request is rejected as too large
+
+FoundryGate now enforces explicit request-size limits before provider calls.
+
+Check:
+
+- `security.max_json_body_bytes` for JSON endpoints such as `/api/route` and `/v1/chat/completions`
+- `security.max_upload_bytes` for multipart uploads such as `/v1/images/edits`
+
+Typical symptoms:
+
+- HTTP `413`
+- response type `payload_too_large`
+
+Example:
+
+```yaml
+security:
+  max_json_body_bytes: 1048576
+  max_upload_bytes: 10485760
+```
+
 ## Local worker stays unhealthy
 
 For `contract: local-worker`, FoundryGate probes `GET /models`.

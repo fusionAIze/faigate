@@ -15,6 +15,7 @@ This repo does not require a heavy release process. Use lightweight tags plus Gi
 7. Use the changelog entry as the release notes, then add any short upgrade notes if needed.
 8. Confirm that README plus the relevant docs pages still match the shipped runtime behavior.
 9. If packaging or Docker changed shortly before the release, run the publish dry run first.
+10. For hardening-heavy releases, keep the API functional tests green alongside unit and config coverage.
 
 ## Example
 
@@ -57,6 +58,7 @@ The repo also includes [publish-dry-run](./.github/workflows/publish-dry-run.yml
 - `v0.6.0` establishes the modality-expansion baseline: image route previews, provider capability coverage, shared image request validation, and image policy presets.
 - `v0.7.0` establishes the operations-polish baseline: update alerts, operator events, rollout guardrails, scoped update checks, maintenance windows, and post-update verification hints.
 - `v0.8.0` establishes the onboarding baseline: repeatable provider/client rollout helpers, starter templates, delegated-traffic examples, env validation, and shareable onboarding reports.
+- `v0.9.0` is the pre-`v1.0` hardening baseline: conservative response headers, bounded request surfaces, stronger functional API coverage, and a full documentation pass over operator-facing behavior.
 
 ## Planned Publishing Path
 

@@ -1055,6 +1055,40 @@ def _normalize_auto_update(data: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
+def _normalize_security(data: dict[str, Any]) -> dict[str, Any]:
+    """Validate and normalize runtime security settings."""
+    raw = data.get("security") or {}
+    if raw in (None, ""):
+        raw = {}
+    if not isinstance(raw, dict):
+        raise ConfigError("'security' must be a mapping")
+
+    normalized = dict(data)
+    normalized["security"] = {
+        "response_headers": bool(raw.get("response_headers", True)),
+        "cache_control": str(raw.get("cache_control", "no-store")).strip() or "no-store",
+        "max_json_body_bytes": _normalize_positive_int(
+            raw.get("max_json_body_bytes", 1_048_576),
+            field_name="security.max_json_body_bytes",
+            provider_name="runtime",
+        )
+        or 1_048_576,
+        "max_upload_bytes": _normalize_positive_int(
+            raw.get("max_upload_bytes", 10_485_760),
+            field_name="security.max_upload_bytes",
+            provider_name="runtime",
+        )
+        or 10_485_760,
+        "max_header_value_chars": _normalize_positive_int(
+            raw.get("max_header_value_chars", 160),
+            field_name="security.max_header_value_chars",
+            provider_name="runtime",
+        )
+        or 160,
+    }
+    return normalized
+
+
 class Config:
     """Holds the parsed and expanded configuration."""
 
@@ -1165,6 +1199,19 @@ class Config:
             },
         )
 
+    @property
+    def security(self) -> dict:
+        return self._data.get(
+            "security",
+            {
+                "response_headers": True,
+                "cache_control": "no-store",
+                "max_json_body_bytes": 1_048_576,
+                "max_upload_bytes": 10_485_760,
+                "max_header_value_chars": 160,
+            },
+        )
+
     def provider(self, name: str) -> dict | None:
         return self.providers.get(name)
 
@@ -1190,11 +1237,13 @@ def load_config(path: str | Path | None = None) -> Config:
     with path.open() as f:
         raw = yaml.safe_load(f)
 
-    expanded = _normalize_auto_update(
-        _normalize_update_check(
-            _normalize_request_hooks(
-                _normalize_client_profiles(
-                    _normalize_routing_policies(_normalize_providers(_walk_expand(raw)))
+    expanded = _normalize_security(
+        _normalize_auto_update(
+            _normalize_update_check(
+                _normalize_request_hooks(
+                    _normalize_client_profiles(
+                        _normalize_routing_policies(_normalize_providers(_walk_expand(raw)))
+                    )
                 )
             )
         )
