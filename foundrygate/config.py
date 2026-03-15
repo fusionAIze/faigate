@@ -178,6 +178,30 @@ def _looks_local_base_url(base_url: str) -> bool:
     return ip.is_loopback or ip.is_private or ip.is_link_local
 
 
+def _validate_provider_base_url(name: str, base_url: str) -> str:
+    """Validate provider base URLs against the current trust-boundary baseline."""
+    parsed = urlparse(base_url)
+    scheme = (parsed.scheme or "").strip().lower()
+    if scheme not in {"http", "https"}:
+        raise ConfigError(
+            "Provider "
+            f"'{name}' base_url must use http or https "
+            f"(got '{parsed.scheme or 'missing'}')"
+        )
+
+    if not parsed.netloc:
+        raise ConfigError(f"Provider '{name}' base_url must include a host")
+
+    if scheme == "http" and not _looks_local_base_url(base_url):
+        raise ConfigError(
+            "Provider "
+            f"'{name}' base_url must use https unless it points "
+            "to local/private network space"
+        )
+
+    return base_url
+
+
 def _normalize_provider_capabilities(name: str, cfg: dict[str, Any]) -> dict[str, Any]:
     """Normalize and validate provider capability metadata."""
     raw = cfg.get("capabilities") or {}
@@ -386,6 +410,7 @@ def _normalize_provider(name: str, cfg: Any) -> dict[str, Any]:
         value = normalized.get(field, "")
         if not isinstance(value, str) or not value.strip():
             raise ConfigError(f"Provider '{name}' must define a non-empty '{field}'")
+    normalized["base_url"] = _validate_provider_base_url(name, str(normalized["base_url"]).strip())
 
     context_window = _normalize_positive_int(
         normalized.get("context_window"),

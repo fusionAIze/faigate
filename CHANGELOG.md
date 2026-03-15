@@ -4,6 +4,17 @@ All notable changes to FoundryGate should be documented here.
 
 The format is intentionally lightweight and human-readable. Group entries by release and focus on user-visible behavior, operational changes, and compatibility notes.
 
+## Unreleased
+
+### Added
+
+- Added dashboard CSP hashes plus stricter response-security defaults for the no-build operator UI
+- Added stronger provider base URL validation so non-local upstreams must use `https`
+- Added reduced leakage of upstream provider failure details in client-facing error payloads
+- Added a separate npm CLI package under `packages/foundrygate-cli` for basic health, model, update, and route-preview checks
+- Added a documented `v1.0.0` security review with mitigations and residual-risk notes
+- Added functional API coverage for upstream error sanitization on top of the earlier dashboard and request-boundary hardening tests
+
 ## v0.9.0 - 2026-03-15
 
 ### Added

@@ -1,0 +1,30 @@
+{
+  "name": "@foundrygate/cli",
+  "version": "1.0.0",
+  "description": "Small npm CLI for checking and previewing a FoundryGate gateway.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "files": [
+    "bin",
+    "README.md"
+  ],
+  "bin": {
+    "foundrygate-cli": "./bin/foundrygate.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "foundrygate",
+    "cli",
+    "openai-compatible",
+    "gateway",
+    "router"
+  ],
+  "homepage": "https://github.com/typelicious/FoundryGate",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/typelicious/FoundryGate.git",
+    "directory": "packages/foundrygate-cli"
+  }
+}

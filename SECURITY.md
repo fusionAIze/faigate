@@ -37,6 +37,8 @@ Please report issues such as:
 - dependency vulnerabilities with practical impact
 - trust-boundary issues between FoundryGate and upstream or local providers
 
+For the `v1.0.0` release gate, the reviewed findings and residual risks are summarized in [docs/SECURITY-REVIEW-v1.0.0.md](./docs/SECURITY-REVIEW-v1.0.0.md).
+
 ## Operational Guidance
 
 To reduce risk in deployments:

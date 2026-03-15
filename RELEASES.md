@@ -67,9 +67,9 @@ The repo also includes [publish-dry-run](./.github/workflows/publish-dry-run.yml
 - `v0.6.0`: modality-aware image routing becomes an explicit release line with provider inventory and image-policy guidance.
 - `v0.7.0`: helper-driven update controls become a first-class release line with scoped rollout gates and verification hooks.
 - `v0.8.0`: many-provider and many-client onboarding becomes copy/pasteable and validation-backed through reports, starters, and doctor checks.
-- `v1.0.0`: keep GitHub Releases, Docker, and PyPI, and add a separate npm or TypeScript CLI package if the CLI surface is ready.
+- `v1.0.0`: keep GitHub Releases, Docker, and PyPI, and add the separate npm CLI package under `packages/foundrygate-cli`.
 
-The npm or TypeScript package should stay separate from the Python gateway core. It is meant for CLI-facing integrations, not for rewriting the service runtime.
+The npm package stays separate from the Python gateway core. It is meant for CLI-facing integrations, not for rewriting the service runtime.
 
 ## Scheduled Deployment Examples
 

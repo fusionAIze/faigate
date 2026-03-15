@@ -19,7 +19,7 @@ The foundation that used to be the near-term buildout is largely in place:
 
 This roadmap now shifts from "rename and foundation" to "deepen the gateway plane without bloating it".
 
-`v0.9.x` is the current release line: the focus now shifts to pre-`v1.0` hardening across request boundaries, functional API coverage, and a full documentation pass on the already-shipped routing, modality, onboarding, and ops foundation.
+`v1.0.0` is the current release line: the focus now shifts from feature accretion to a stable gateway baseline, a completed security review gate, and a separate npm CLI surface for Node-facing integrations.
 
 ## Big Picture
 
@@ -266,7 +266,7 @@ Current `v0.9.x` baseline is aimed at:
 Primary goals:
 
 - declare a stable FoundryGate gateway baseline for local-first, multi-provider routing
-- publish the first separate npm or TypeScript CLI package for FoundryGate-adjacent CLI usage
+- publish the first separate npm CLI package for FoundryGate-adjacent CLI usage
 - complete a comprehensive security review before release
 
 The `v1.0.0` security review should explicitly cover:
@@ -278,6 +278,14 @@ The `v1.0.0` security review should explicitly cover:
 - auth, secret-handling, and writable-path assumptions
 
 `v1.0.0` should only ship after those review results are addressed or documented with a clear mitigation plan.
+
+Current `v1.0.0` baseline is aimed at:
+
+- dashboard CSP hardening without turning the no-build UI into a separate frontend app
+- reduced leakage of upstream provider failure details in client responses
+- clearer trust-boundary validation for provider base URLs
+- a documented release-gate security review with explicit residual risks
+- a separate npm CLI package that complements the Python gateway instead of replacing it
 
 ## Updated near-term PR sequence
 

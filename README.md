@@ -112,6 +112,7 @@ If every configured provider API key is empty, FoundryGate still starts, but it 
 - [Integrations](./docs/INTEGRATIONS.md)
 - [Onboarding](./docs/ONBOARDING.md)
 - [Publishing](./docs/PUBLISHING.md)
+- [Security Review](./docs/SECURITY-REVIEW-v1.0.0.md)
 - [Troubleshooting](./docs/TROUBLESHOOTING.md)
 - [Roadmap](./docs/FOUNDRYGATE-ROADMAP.md)
 
@@ -845,6 +846,17 @@ python -m build
 
 Tagged releases always build Python artifacts. PyPI publishing is wired behind the repository variable `PYPI_PUBLISH=true` plus GitHub trusted publishing for the `pypi` environment.
 
+### Separate npm CLI Package
+
+`v1.0.0` adds a separate npm-facing CLI package in [packages/foundrygate-cli](./packages/foundrygate-cli).
+
+The package stays intentionally small and separate from the Python gateway core. It currently focuses on operator- and integration-friendly commands such as:
+
+- `foundrygate-cli health`
+- `foundrygate-cli models`
+- `foundrygate-cli update`
+- `foundrygate-cli route --message "..."`
+
 ## Publishing
 
 FoundryGate now has a real publish dry-run path for both Python artifacts and the container image.
@@ -877,6 +889,17 @@ Running `./scripts/foundrygate-install` also creates symlinks in `/usr/local/bin
 | `foundrygate-doctor` | Checks for config/env presence, writable DB path, at least one configured provider key, and optional local health endpoints |
 | `foundrygate-onboarding-report` | Summarizes provider readiness, staged rollout readiness, client-profile coverage, client match intent, routing layers, onboarding suggestions, and concrete OpenClaw/n8n/CLI quickstarts |
 | `foundrygate-onboarding-validate` | Exits non-zero when onboarding blockers exist and prints warnings for common multi-provider and multi-client misconfigurations |
+| `foundrygate-install` | Installs the unit file, creates `/var/lib/foundrygate`, creates helper symlinks, reloads `systemd`, and starts the service |
+| `foundrygate-start` | Runs `systemctl start foundrygate.service` |
+| `foundrygate-stop` | Runs `systemctl stop foundrygate.service` |
+| `foundrygate-restart` | Runs `systemctl restart foundrygate.service` |
+| `foundrygate-status` | Shows service status and checks whether `127.0.0.1:8090` is listening |
+| `foundrygate-logs` | Tails `journalctl -u foundrygate.service` |
+| `foundrygate-health` | Calls `GET /health` locally with `curl` |
+| `foundrygate-update-check` | Calls `GET /api/update` locally and prints the cached release-check status |
+| `foundrygate-auto-update` | Evaluates the cached update status and, with `--apply`, only runs the configured update command when the release is eligible |
+| `foundrygate-update` | Fetches from Git, hard-resets to `origin/main`, cleans untracked files, reinstalls the unit, restarts, and retries health checks |
+| `foundrygate-uninstall` | Stops and disables the service, removes the unit file, and removes helper symlinks |
 
 Provider starter snippets for the first rollout path live under [docs/examples](./docs/examples):
 
@@ -897,17 +920,6 @@ For delegated OpenClaw traffic and future AI-native app profiles, the new starte
 
 - [openclaw-delegated-request.json](./docs/examples/openclaw-delegated-request.json)
 - [client-ai-native-app-profile.yaml](./docs/examples/client-ai-native-app-profile.yaml)
-| `foundrygate-install` | Installs the unit file, creates `/var/lib/foundrygate`, creates helper symlinks, reloads `systemd`, and starts the service |
-| `foundrygate-start` | Runs `systemctl start foundrygate.service` |
-| `foundrygate-stop` | Runs `systemctl stop foundrygate.service` |
-| `foundrygate-restart` | Runs `systemctl restart foundrygate.service` |
-| `foundrygate-status` | Shows service status and checks whether `127.0.0.1:8090` is listening |
-| `foundrygate-logs` | Tails `journalctl -u foundrygate.service` |
-| `foundrygate-health` | Calls `GET /health` locally with `curl` |
-| `foundrygate-update-check` | Calls `GET /api/update` locally and prints the cached release-check status |
-| `foundrygate-auto-update` | Evaluates the cached update status and, with `--apply`, only runs the configured update command when the release is eligible |
-| `foundrygate-update` | Fetches from Git, hard-resets to `origin/main`, cleans untracked files, reinstalls the unit, restarts, and retries health checks |
-| `foundrygate-uninstall` | Stops and disables the service, removes the unit file, and removes helper symlinks |
 
 `foundrygate-stats --json` now also includes client/profile breakdowns alongside provider and routing summaries.
 
@@ -963,6 +975,7 @@ Security automation and review baseline:
 - [CodeQL](./.github/workflows/codeql.yml) provides code scanning on `main`, pull requests, and a weekly schedule
 - [Dependabot](./.github/dependabot.yml) tracks Python, GitHub Actions, and Docker dependencies
 - GitHub secret scanning is already active at the repository level
+- [Security Review](./docs/SECURITY-REVIEW-v1.0.0.md) captures the `v1.0.0` release-gate review and residual-risk summary
 
 ## Repo Safety And CI
 
@@ -1053,13 +1066,13 @@ Short version:
 - the completed foundation already covers capability-aware routing, local worker support, client profiles, request hooks, route introspection, route traces, local worker probing, and first multi-dimensional route-fit checks
 - `v0.4.x` now focuses on deeper route scoring and dashboard refinement rather than the initial hook/dashboard baseline
 - `v0.5.0` is the operator distribution baseline for Docker and PyPI publishing, onboarding helpers, and release update checks
-- the path to `v1.0.0` includes modality expansion, update operations, a separate npm or TypeScript CLI package, and a full security review
+- `v1.0.0` is the stable gateway baseline with the separate npm CLI package and the completed security review gate
 
 ## Releases
 
 - [CHANGELOG.md](./CHANGELOG.md) tracks notable user-facing changes
 - [RELEASES.md](./RELEASES.md) describes the lightweight release process for tags and GitHub Releases
-- publishing path: GitHub Releases now, Docker and PyPI in `v0.5.0`, separate npm or TypeScript CLI package by `v1.0.0`
+- publishing path: GitHub Releases, Docker, and PyPI are established, and `v1.0.0` adds the separate npm CLI package under `packages/foundrygate-cli`
 - GitHub Releases: [https://github.com/typelicious/FoundryGate/releases](https://github.com/typelicious/FoundryGate/releases)
 
 ## Contributing
