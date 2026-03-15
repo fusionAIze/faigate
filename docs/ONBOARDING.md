@@ -150,6 +150,23 @@ Starter files:
 - [examples/n8n-foundrygate-http-request.json](./examples/n8n-foundrygate-http-request.json)
 - [examples/cli-foundrygate-env.sh](./examples/cli-foundrygate-env.sh)
 - [examples/client-ai-native-app-profile.yaml](./examples/client-ai-native-app-profile.yaml)
+- [examples/swe-af-foundrygate.env.example](./examples/swe-af-foundrygate.env.example)
+- [examples/paperclip-foundrygate.env.example](./examples/paperclip-foundrygate.env.example)
+- [examples/ship-faster-foundrygate.env.example](./examples/ship-faster-foundrygate.env.example)
+- [examples/langchain-foundrygate.env.example](./examples/langchain-foundrygate.env.example)
+- [examples/langgraph-foundrygate.env.example](./examples/langgraph-foundrygate.env.example)
+
+### 3b. First-wave framework starters
+
+The first post-`1.0` framework wave keeps every client on the same OpenAI-compatible entry point and varies only the stable client tag:
+
+- `SWE-AF` -> `X-FoundryGate-Client: swe-af`
+- `paperclip` -> `X-FoundryGate-Client: paperclip`
+- `ship-faster` -> `X-FoundryGate-Client: ship-faster`
+- `LangChain` -> `X-FoundryGate-Client: langchain`
+- `LangGraph` -> `X-FoundryGate-Client: langgraph`
+
+Use the starter env files above first, then add explicit profile rules only if one framework needs different locality, provider, or cost behavior.
 
 ### 4. Add request hooks only if needed
 
