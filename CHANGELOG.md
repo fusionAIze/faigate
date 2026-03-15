@@ -13,6 +13,7 @@ The format is intentionally lightweight and human-readable. Group entries by rel
 - Added built-in OpenClaw, n8n, and CLI quickstart examples to the onboarding report and integration docs so client onboarding can stay copy/paste friendly
 - Added staged provider-rollout reporting and fallback/image readiness warnings so many-provider onboarding is easier to phase safely
 - Added a client matrix to the onboarding report so profile match rules and routing intent are visible before traffic goes live
+- Added starter example files for OpenClaw, n8n, and CLI clients under `docs/examples/` so onboarding can begin from copy/pasteable templates
 
 ## v0.7.0 - 2026-03-12
 

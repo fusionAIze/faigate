@@ -110,6 +110,8 @@ OpenClaw:
 }
 ```
 
+Starter file: [examples/openclaw-foundrygate.jsonc](./examples/openclaw-foundrygate.jsonc)
+
 n8n:
 
 ```text
@@ -124,6 +126,11 @@ CLI:
 export OPENAI_BASE_URL=http://127.0.0.1:8090/v1
 export OPENAI_API_KEY=local
 ```
+
+Starter files:
+
+- [examples/n8n-foundrygate-http-request.json](./examples/n8n-foundrygate-http-request.json)
+- [examples/cli-foundrygate-env.sh](./examples/cli-foundrygate-env.sh)
 
 ### 4. Add request hooks only if needed
 
