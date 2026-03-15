@@ -580,8 +580,7 @@ def render_onboarding_report_markdown(report: dict[str, Any]) -> str:
             "## Clients",
             f"- Profiles enabled: {client_block['profiles_enabled']}",
             f"- Default profile: `{client_block['default_profile']}`",
-            "- Presets: "
-            + (", ".join(f"`{item}`" for item in client_block["presets"]) or "none"),
+            "- Presets: " + (", ".join(f"`{item}`" for item in client_block["presets"]) or "none"),
             f"- Profiles: {client_block['profile_count']}",
             f"- Rules: {client_block['rule_count']}",
         ]
