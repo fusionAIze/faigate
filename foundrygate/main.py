@@ -12,7 +12,9 @@ import json
 import logging
 import re
 import time
+from base64 import b64encode
 from contextlib import asynccontextmanager
+from hashlib import sha256
 from typing import Any
 
 from fastapi import FastAPI, Request
@@ -91,6 +93,31 @@ def _sanitize_token(value: Any, *, default: str, max_chars: int | None = None) -
         return default
     normalized = _SAFE_TOKEN_RE.sub("-", cleaned).strip("-")
     return normalized or default
+
+
+def _provider_error_category(status: int, detail: str) -> str:
+    """Return a coarse provider-error category without exposing upstream details."""
+    if status == 0:
+        lowered = detail.lower()
+        if "timeout" in lowered:
+            return "timeout"
+        if "connection error" in lowered:
+            return "connection_error"
+        return "transport_error"
+    if 400 <= status < 500:
+        return "upstream_client_error"
+    if status >= 500:
+        return "upstream_server_error"
+    return "provider_error"
+
+
+def _serialize_provider_attempt_error(provider_name: str, exc: ProviderError) -> dict[str, Any]:
+    """Return a sanitized provider-attempt failure object for client responses."""
+    return {
+        "provider": provider_name,
+        "status": exc.status,
+        "category": _provider_error_category(exc.status, exc.detail),
+    }
 
 
 async def _refresh_local_worker_probes(force: bool = False) -> None:
@@ -778,10 +805,7 @@ async def apply_security_headers(request: Request, call_next):
     if request.url.path == "/dashboard":
         response.headers.setdefault(
             "Content-Security-Policy",
-            "default-src 'self'; style-src 'self' 'unsafe-inline'; "
-            "script-src 'self' 'unsafe-inline'; img-src 'self' data:; "
-            "connect-src 'self'; object-src 'none'; base-uri 'none'; "
-            "frame-ancestors 'none'; form-action 'self'",
+            _dashboard_csp(),
         )
     return response
 
@@ -1131,7 +1155,7 @@ async def image_generations(request: Request):
 
     prompt = effective_body["prompt"].strip()
     image_fields = _collect_image_request_fields(effective_body)
-    errors: list[str] = []
+    errors: list[dict[str, Any]] = []
 
     for provider_name in attempt_order:
         provider = _providers.get(provider_name)
@@ -1170,7 +1194,7 @@ async def image_generations(request: Request):
             resp.headers["X-FoundryGate-Hook-Errors"] = str(len(hook_state.errors))
             return resp
         except ProviderError as exc:
-            errors.append(f"{provider_name}: {exc.detail}")
+            errors.append(_serialize_provider_attempt_error(provider_name, exc))
             logger.warning(
                 "Image provider %s failed: %s, trying next...",
                 provider_name,
@@ -1196,7 +1220,7 @@ async def image_generations(request: Request):
     return JSONResponse(
         {
             "error": {
-                "message": f"All image providers failed: {'; '.join(errors)}",
+                "message": "All image providers failed",
                 "type": "provider_error",
                 "attempts": errors,
             }
@@ -1250,7 +1274,7 @@ async def image_edits(request: Request):
         return _invalid_request_response("Invalid image editing request", exc=exc)
 
     prompt = effective_body["prompt"].strip()
-    errors: list[str] = []
+    errors: list[dict[str, Any]] = []
 
     for provider_name in attempt_order:
         provider = _providers.get(provider_name)
@@ -1294,7 +1318,7 @@ async def image_edits(request: Request):
             resp.headers["X-FoundryGate-Hook-Errors"] = str(len(hook_state.errors))
             return resp
         except ProviderError as exc:
-            errors.append(f"{provider_name}: {exc.detail}")
+            errors.append(_serialize_provider_attempt_error(provider_name, exc))
             logger.warning(
                 "Image editing provider %s failed: %s, trying next...",
                 provider_name,
@@ -1320,7 +1344,7 @@ async def image_edits(request: Request):
     return JSONResponse(
         {
             "error": {
-                "message": f"All image editing providers failed: {'; '.join(errors)}",
+                "message": "All image editing providers failed",
                 "type": "provider_error",
                 "attempts": errors,
             }
@@ -1382,7 +1406,7 @@ async def chat_completions(request: Request):
 
     # ── Execute with fallback ──────────────────────────────
 
-    errors: list[str] = []
+    errors: list[dict[str, Any]] = []
 
     for provider_name in attempt_order:
         provider = _providers.get(provider_name)
@@ -1454,7 +1478,7 @@ async def chat_completions(request: Request):
             return resp
 
         except ProviderError as e:
-            errors.append(f"{provider_name}: {e.detail}")
+            errors.append(_serialize_provider_attempt_error(provider_name, e))
             logger.warning("Provider %s failed: %s, trying next...", provider_name, e.detail[:200])
             if _config.metrics.get("enabled"):
                 _metrics.log_request(
@@ -1478,7 +1502,7 @@ async def chat_completions(request: Request):
     return JSONResponse(
         {
             "error": {
-                "message": f"All providers failed: {'; '.join(errors)}",
+                "message": "All providers failed",
                 "type": "provider_error",
                 "attempts": errors,
             }
@@ -1505,6 +1529,29 @@ def main():
 
 
 # ── Dashboard HTML ─────────────────────────────────────────────
+
+
+def _inline_asset_hash(tag_name: str, html: str) -> str:
+    """Return the CSP hash token for one inline dashboard asset."""
+    match = re.search(rf"<{tag_name}>(.*?)</{tag_name}>", html, re.DOTALL)
+    if not match:
+        return ""
+    digest = sha256(match.group(1).encode("utf-8")).digest()
+    return f"'sha256-{b64encode(digest).decode('ascii')}'"
+
+
+def _dashboard_csp() -> str:
+    """Return the restrictive CSP for the built-in no-build dashboard."""
+    style_hash = _inline_asset_hash("style", _DASHBOARD_HTML)
+    script_hash = _inline_asset_hash("script", _DASHBOARD_HTML)
+    return (
+        "default-src 'self'; "
+        f"style-src 'self' {style_hash}; "
+        f"script-src 'self' {script_hash}; "
+        "img-src 'self' data:; connect-src 'self'; object-src 'none'; "
+        "base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+    )
+
 
 _DASHBOARD_HTML = """<!DOCTYPE html>
 <html lang="en">

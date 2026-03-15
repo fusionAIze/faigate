@@ -150,3 +150,49 @@ metrics:
 
     with pytest.raises(ConfigError, match="security.max_json_body_bytes"):
         load_config(path)
+
+
+def test_provider_rejects_public_http_base_url(tmp_path):
+    path = tmp_path / "config.yaml"
+    path.write_text(
+        """
+server:
+  host: "127.0.0.1"
+  port: 8090
+providers:
+  cloud-default:
+    backend: openai-compat
+    base_url: "http://api.example.com/v1"
+    api_key: "secret"
+    model: "chat-model"
+fallback_chain: []
+metrics:
+  enabled: false
+"""
+    )
+
+    with pytest.raises(ConfigError, match="must use https"):
+        load_config(path)
+
+
+def test_provider_allows_local_http_base_url(tmp_path):
+    path = tmp_path / "config.yaml"
+    path.write_text(
+        """
+server:
+  host: "127.0.0.1"
+  port: 8090
+providers:
+  local-worker:
+    backend: openai-compat
+    base_url: "http://127.0.0.1:11434/v1"
+    api_key: "local"
+    model: "llama3"
+fallback_chain: []
+metrics:
+  enabled: false
+"""
+    )
+
+    cfg = load_config(path)
+    assert cfg.providers["local-worker"]["base_url"] == "http://127.0.0.1:11434/v1"

@@ -9,6 +9,7 @@ FoundryGate currently ships through:
 - Git tags and GitHub Releases
 - Python distributions (`sdist` and `wheel`)
 - a GHCR container image
+- a separate npm CLI package in [packages/foundrygate-cli](../packages/foundrygate-cli)
 
 PyPI remains opt-in and only publishes when trusted publishing is configured and `PYPI_PUBLISH=true` is set at the repository level.
 
@@ -45,6 +46,7 @@ The real publish flow stays tag-driven through [release-artifacts](../.github/wo
 4. let `release-artifacts` build Python distributions and the GHCR image
 5. publish the GitHub Release
 6. optionally allow PyPI publication through trusted publishing
+7. publish the separate npm CLI package only when you are ready to version the Node-facing surface independently
 
 ## Trust Boundaries
 

@@ -97,6 +97,8 @@ For a reusable shell starter, use [examples/cli-foundrygate-env.sh](./examples/c
 
 As with other clients, prefer token-like client tags over long free-form values so the bounded header surface remains readable in traces and operator views.
 
+If you want a small Node-facing helper instead of shell aliases, the separate npm package lives in [packages/foundrygate-cli](../packages/foundrygate-cli).
+
 ## AI-native app clients
 
 For future app-specific clients, keep the same OpenAI-compatible base URL and add one stable app header before creating multiple custom profiles.

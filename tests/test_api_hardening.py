@@ -78,6 +78,15 @@ class _ProviderStub:
         }
 
 
+class _FailingProviderStub(_ProviderStub):
+    async def complete(self, *_args, **_kwargs):
+        raise main_module.ProviderError(
+            "cloud-default",
+            502,
+            "upstream trace: token=secret should not leak",
+        )
+
+
 class _MetricsStub:
     def log_request(self, **_kwargs):
         return None
@@ -168,7 +177,10 @@ def test_dashboard_sets_security_headers(api_client):
     assert response.headers["x-content-type-options"] == "nosniff"
     assert response.headers["x-frame-options"] == "DENY"
     assert response.headers["referrer-policy"] == "no-referrer"
-    assert "frame-ancestors 'none'" in response.headers["content-security-policy"]
+    csp = response.headers["content-security-policy"]
+    assert "frame-ancestors 'none'" in csp
+    assert "'unsafe-inline'" not in csp
+    assert "sha256-" in csp
 
 
 def test_route_preview_rejects_large_json_payload(api_client):
@@ -224,3 +236,28 @@ def test_chat_completions_returns_security_headers(api_client):
     assert response.headers["x-foundrygate-provider"] == "cloud-default"
     assert response.headers["cache-control"] == "no-store"
     assert response.headers["x-content-type-options"] == "nosniff"
+
+
+def test_chat_completions_hides_upstream_provider_details(api_client, monkeypatch):
+    monkeypatch.setattr(
+        main_module,
+        "_providers",
+        {"cloud-default": _FailingProviderStub()},
+        raising=False,
+    )
+
+    response = api_client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "auto",
+            "messages": [{"role": "user", "content": "cause failure"}],
+        },
+    )
+
+    assert response.status_code == 502
+    body = response.json()
+    assert body["error"]["message"] == "All providers failed"
+    assert "secret" not in response.text
+    assert body["error"]["attempts"] == [
+        {"provider": "cloud-default", "status": 502, "category": "upstream_server_error"}
+    ]
