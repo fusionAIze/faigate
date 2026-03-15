@@ -20,6 +20,7 @@ Current coverage:
 Use:
 
 - [openclaw-integration.jsonc](../openclaw-integration.jsonc)
+- [examples/openclaw-foundrygate.jsonc](./examples/openclaw-foundrygate.jsonc)
 - `client_profiles.presets: ["openclaw"]` for a standard starting point
 
 Minimal direction:
@@ -30,6 +31,8 @@ Minimal direction:
   "primary": "foundrygate/auto"
 }
 ```
+
+For a smaller starter snippet without the full alias block, use [examples/openclaw-foundrygate.jsonc](./examples/openclaw-foundrygate.jsonc).
 
 ## n8n
 
@@ -55,6 +58,8 @@ Base URL: http://127.0.0.1:8090/v1
 Model: auto
 Header: X-FoundryGate-Client: n8n
 ```
+
+For an importable HTTP Request node example, use [examples/n8n-foundrygate-http-request.json](./examples/n8n-foundrygate-http-request.json).
 
 ## CLI clients
 
@@ -83,6 +88,8 @@ Minimal direction:
 export OPENAI_BASE_URL=http://127.0.0.1:8090/v1
 export OPENAI_API_KEY=local
 ```
+
+For a reusable shell starter, use [examples/cli-foundrygate-env.sh](./examples/cli-foundrygate-env.sh).
 
 ## Provider onboarding
 

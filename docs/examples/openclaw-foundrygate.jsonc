@@ -1,0 +1,34 @@
+// Example OpenClaw provider block for FoundryGate.
+// Merge this into ~/.openclaw/openclaw.json.
+{
+  "models": {
+    "mode": "merge",
+    "providers": {
+      "foundrygate": {
+        "baseUrl": "http://127.0.0.1:8090/v1",
+        "apiKey": "local",
+        "auth": "api-key",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "auto",
+            "name": "FoundryGate Auto-Router",
+            "contextWindow": 128000,
+            "maxTokens": 8000
+          }
+        ]
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "foundrygate/auto",
+        "fallbacks": []
+      },
+      "subagents": {
+        "model": "foundrygate/auto"
+      }
+    }
+  }
+}

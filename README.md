@@ -106,6 +106,7 @@ If every configured provider API key is empty, FoundryGate still starts, but it 
 ## Docs
 
 - [Architecture](./docs/ARCHITECTURE.md)
+- [Examples](./docs/examples)
 - [Integrations](./docs/INTEGRATIONS.md)
 - [Onboarding](./docs/ONBOARDING.md)
 - [Publishing](./docs/PUBLISHING.md)
