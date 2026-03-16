@@ -4,7 +4,7 @@ All notable changes to FoundryGate should be documented here.
 
 The format is intentionally lightweight and human-readable. Group entries by release and focus on user-visible behavior, operational changes, and compatibility notes.
 
-## Unreleased
+## v1.1.0 - 2026-03-16
 
 ### Added
 
