@@ -72,9 +72,19 @@ curl -fsS http://127.0.0.1:8090/v1/models
 Then use the onboarding helpers to move from “the server starts” to “real clients are ready”:
 
 ```bash
-./scripts/foundrygate-config-wizard --purpose general > config.yaml
+./scripts/foundrygate-config-wizard --purpose general --client generic > config.yaml
 ./scripts/foundrygate-onboarding-report
 ./scripts/foundrygate-onboarding-validate
+```
+
+To review and selectively adopt multiple candidates during first setup or a later update:
+
+```bash
+./scripts/foundrygate-config-wizard --purpose free --client n8n --list-candidates
+./scripts/foundrygate-config-wizard --purpose free --client n8n \
+  --select kilocode,blackbox-free,gemini-flash-lite > config.yaml
+./scripts/foundrygate-config-wizard --current-config config.yaml --merge-existing \
+  --select openrouter-fallback,anthropic-claude --write config.yaml
 ```
 
 If you prefer a packaged or service-driven install, jump to [Deployment](#deployment) or the fuller [Operations guide](./docs/OPERATIONS.md).

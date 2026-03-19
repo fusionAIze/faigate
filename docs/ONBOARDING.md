@@ -21,7 +21,7 @@ Run the generic helpers before changing config:
 
 ```bash
 ./scripts/foundrygate-bootstrap
-./scripts/foundrygate-config-wizard --purpose general > config.yaml
+./scripts/foundrygate-config-wizard --purpose general --client generic > config.yaml
 $EDITOR .env
 ./scripts/foundrygate-doctor
 ./scripts/foundrygate-onboarding-report
@@ -35,6 +35,18 @@ $EDITOR .env
 - stock routing modes such as `auto`, `eco`, `premium`, and `free`
 - model shortcuts
 - client defaults for OpenClaw, n8n, CLI, and `opencode`
+- purpose-/client-aware candidate lists you can multi-select instead of taking one hardcoded set
+- conservative merges into an existing `config.yaml` for later provider additions
+
+Useful flows:
+
+```bash
+./scripts/foundrygate-config-wizard --purpose coding --client opencode --list-candidates
+./scripts/foundrygate-config-wizard --purpose coding --client opencode \
+  --select deepseek-chat,deepseek-reasoner,anthropic-claude > config.yaml
+./scripts/foundrygate-config-wizard --current-config config.yaml --merge-existing \
+  --select openrouter-fallback,kilocode --write config.yaml
+```
 
 `foundrygate-onboarding-report` now includes concrete OpenClaw, n8n, and CLI quickstart hints plus a staged provider-rollout view. Use it after every provider or client change to keep the deployment understandable for the next operator as well.
 

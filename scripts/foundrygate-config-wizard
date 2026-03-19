@@ -5,7 +5,13 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 env_file="${FOUNDRYGATE_ENV_FILE:-$repo_root/.env}"
 python_bin="${FOUNDRYGATE_PYTHON:-python3}"
 purpose="general"
+client="generic"
 format="yaml"
+current_config=""
+merge_existing="false"
+list_candidates="false"
+write_path=""
+selected_csv=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -15,6 +21,34 @@ while [ $# -gt 0 ]; do
       ;;
     --purpose)
       purpose="$2"
+      shift 2
+      ;;
+    --client)
+      client="$2"
+      shift 2
+      ;;
+    --select)
+      if [ -n "$selected_csv" ]; then
+        selected_csv="${selected_csv},$2"
+      else
+        selected_csv="$2"
+      fi
+      shift 2
+      ;;
+    --current-config)
+      current_config="$2"
+      shift 2
+      ;;
+    --merge-existing)
+      merge_existing="true"
+      shift
+      ;;
+    --list-candidates)
+      list_candidates="true"
+      shift
+      ;;
+    --write)
+      write_path="$2"
       shift 2
       ;;
     --json)
@@ -34,20 +68,82 @@ done
 
 export FOUNDRYGATE_WIZARD_ENV="$env_file"
 export FOUNDRYGATE_WIZARD_PURPOSE="$purpose"
+export FOUNDRYGATE_WIZARD_CLIENT="$client"
 export FOUNDRYGATE_WIZARD_FORMAT="$format"
+export FOUNDRYGATE_WIZARD_CURRENT_CONFIG="$current_config"
+export FOUNDRYGATE_WIZARD_MERGE_EXISTING="$merge_existing"
+export FOUNDRYGATE_WIZARD_LIST_CANDIDATES="$list_candidates"
+export FOUNDRYGATE_WIZARD_WRITE_PATH="$write_path"
+export FOUNDRYGATE_WIZARD_SELECTED="$selected_csv"
 
 "$python_bin" - <<'PY'
 import json
 import os
+from pathlib import Path
 
-from foundrygate.wizard import build_initial_config, render_initial_config_yaml
+import yaml
+
+from foundrygate.wizard import (
+    build_initial_config,
+    list_provider_candidates,
+    merge_initial_config,
+    render_initial_config_yaml,
+)
 
 env_file = os.environ["FOUNDRYGATE_WIZARD_ENV"]
 purpose = os.environ["FOUNDRYGATE_WIZARD_PURPOSE"]
+client = os.environ["FOUNDRYGATE_WIZARD_CLIENT"]
 render_format = os.environ["FOUNDRYGATE_WIZARD_FORMAT"]
+current_config = os.environ["FOUNDRYGATE_WIZARD_CURRENT_CONFIG"] or None
+merge_existing = os.environ["FOUNDRYGATE_WIZARD_MERGE_EXISTING"] == "true"
+list_candidates_only = os.environ["FOUNDRYGATE_WIZARD_LIST_CANDIDATES"] == "true"
+write_path = os.environ["FOUNDRYGATE_WIZARD_WRITE_PATH"] or None
+selected_raw = os.environ["FOUNDRYGATE_WIZARD_SELECTED"]
+selected = [item.strip() for item in selected_raw.split(",") if item.strip()]
 
-if render_format == "json":
-    print(json.dumps(build_initial_config(env_file=env_file, purpose=purpose), indent=2))
+if list_candidates_only:
+    payload = {
+        "purpose": purpose,
+        "client": client,
+        "candidates": list_provider_candidates(
+            env_file=env_file,
+            purpose=purpose,
+            client=client,
+            config_path=current_config,
+        ),
+    }
+    rendered = (
+        json.dumps(payload, indent=2)
+        if render_format == "json"
+        else yaml.safe_dump(payload, sort_keys=False, allow_unicode=False)
+    )
 else:
-    print(render_initial_config_yaml(env_file=env_file, purpose=purpose), end="")
+    suggestion = build_initial_config(
+        env_file=env_file,
+        purpose=purpose,
+        client=client,
+        selected_providers=selected or None,
+    )
+    payload = (
+        merge_initial_config(config_path=current_config, suggestion=suggestion)
+        if merge_existing and current_config is not None
+        else suggestion
+    )
+    rendered = (
+        json.dumps(payload, indent=2)
+        if render_format == "json"
+        else render_initial_config_yaml(
+            env_file=env_file,
+            purpose=purpose,
+            client=client,
+            selected_providers=selected or None,
+            config_path=current_config,
+            merge_existing=merge_existing,
+        )
+    )
+
+if write_path:
+    Path(write_path).write_text(rendered if rendered.endswith("\n") else rendered + "\n", encoding="utf-8")
+else:
+    print(rendered, end="" if rendered.endswith("\n") else "\n")
 PY

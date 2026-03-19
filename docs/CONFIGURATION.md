@@ -96,6 +96,18 @@ For fast-moving offers, the current preferred review inputs are:
 - BlockRun / ClawRouter docs for wallet-routed traffic
 - community watchlists such as `free-llm-api-resources` only as secondary signals
 
+The config wizard can use this catalog metadata during first setup and later updates:
+
+```bash
+./scripts/foundrygate-config-wizard --purpose general --client generic --list-candidates
+./scripts/foundrygate-config-wizard --purpose free --client n8n \
+  --select kilocode,blackbox-free,gemini-flash-lite > config.yaml
+./scripts/foundrygate-config-wizard --current-config config.yaml --merge-existing \
+  --select openrouter-fallback --write config.yaml
+```
+
+That gives operators one purpose-aware candidate list, the ability to pick multiple providers at once, and a safer merge path for incremental catalog-driven updates.
+
 ## Provider Fields
 
 Each provider entry can include:

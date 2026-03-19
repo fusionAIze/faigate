@@ -173,6 +173,11 @@ _CATALOG: dict[str, dict[str, Any]] = {
 }
 
 
+def get_provider_catalog() -> dict[str, dict[str, Any]]:
+    """Return a shallow copy of the curated provider catalog."""
+    return {name: dict(entry) for name, entry in _CATALOG.items()}
+
+
 def _alert(
     *,
     provider: str,

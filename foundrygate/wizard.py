@@ -9,10 +9,13 @@ from typing import Any
 import yaml
 from dotenv import dotenv_values
 
+from .provider_catalog import get_provider_catalog
+
 ProviderFactory = dict[str, Any]
 
 
 _PURPOSES = {"general", "coding", "quality", "free"}
+_CLIENTS = {"generic", "openclaw", "n8n", "cli", "opencode"}
 
 
 _PROVIDER_FACTORIES: dict[str, ProviderFactory] = {
@@ -225,21 +228,35 @@ _PROVIDER_FACTORIES: dict[str, ProviderFactory] = {
 }
 
 
+def _clone(value: Any) -> Any:
+    return yaml.safe_load(yaml.safe_dump(value))
+
+
 def _load_env_values(env_file: str | Path | None = None) -> dict[str, str]:
     """Return environment values from one env file, ignoring empty entries."""
     values = {
         key: value for key, value in os.environ.items() if isinstance(value, str) and value.strip()
     }
-    if env_file is None:
-        path = Path.cwd() / ".env"
-    else:
-        path = Path(env_file)
-    if not path.exists():
-        return values
-    values.update(
-        {k: v for k, v in dotenv_values(path).items() if isinstance(v, str) and v.strip()}
-    )
+    path = Path(env_file) if env_file is not None else Path.cwd() / ".env"
+    if path.exists():
+        values.update(
+            {k: v for k, v in dotenv_values(path).items() if isinstance(v, str) and v.strip()}
+        )
     return values
+
+
+def _load_existing_provider_names(config_path: str | Path | None = None) -> set[str]:
+    if config_path is None:
+        return set()
+    path = Path(config_path)
+    if not path.exists():
+        return set()
+    with path.open(encoding="utf-8") as handle:
+        raw = yaml.safe_load(handle) or {}
+    providers = raw.get("providers") or {}
+    if not isinstance(providers, dict):
+        return set()
+    return set(providers.keys())
 
 
 def detect_wizard_providers(*, env_file: str | Path | None = None) -> list[str]:
@@ -294,6 +311,114 @@ def _preferred_fallback_chain(available: list[str], *, purpose: str) -> list[str
         ],
     }
     return [name for name in by_purpose[purpose] if name in available]
+
+
+def _preferred_provider_set(available: list[str], *, purpose: str, client: str) -> list[str]:
+    chain = _preferred_fallback_chain(available, purpose=purpose)
+    if client == "n8n":
+        preferred = [
+            name
+            for name in (
+                "gemini-flash-lite",
+                "kilocode",
+                "blackbox-free",
+                "deepseek-chat",
+            )
+            if name in available
+        ]
+    elif client == "openclaw":
+        preferred = [
+            name
+            for name in (
+                "deepseek-chat",
+                "deepseek-reasoner",
+                "gemini-flash",
+                "openai-gpt4o",
+            )
+            if name in available
+        ]
+    elif client == "opencode":
+        preferred = [
+            name
+            for name in (
+                "deepseek-reasoner",
+                "deepseek-chat",
+                "anthropic-claude",
+                "openai-gpt4o",
+            )
+            if name in available
+        ]
+    else:
+        preferred = chain
+
+    selected = preferred or chain
+    if "openai-images" in available and "openai-images" not in selected:
+        selected.append("openai-images")
+    return selected
+
+
+def list_provider_candidates(
+    *,
+    env_file: str | Path | None = None,
+    purpose: str = "general",
+    client: str = "generic",
+    config_path: str | Path | None = None,
+) -> list[dict[str, Any]]:
+    """Return detected provider candidates enriched with provider-catalog metadata."""
+    if purpose not in _PURPOSES:
+        supported = ", ".join(sorted(_PURPOSES))
+        raise ValueError(f"Unsupported purpose '{purpose}'. Choose one of: {supported}")
+    if client not in _CLIENTS:
+        supported = ", ".join(sorted(_CLIENTS))
+        raise ValueError(f"Unsupported client '{client}'. Choose one of: {supported}")
+
+    catalog = get_provider_catalog()
+    detected = detect_wizard_providers(env_file=env_file)
+    existing = _load_existing_provider_names(config_path)
+    preferred = set(_preferred_provider_set(detected, purpose=purpose, client=client))
+
+    rows: list[dict[str, Any]] = []
+    for name in detected:
+        factory = _PROVIDER_FACTORIES[name]
+        provider = factory["provider"]
+        catalog_entry = catalog.get(name, {})
+        rows.append(
+            {
+                "provider": name,
+                "env": factory["env"],
+                "configured": name in existing,
+                "selected_by_default": name in preferred,
+                "model": provider.get("model", ""),
+                "tier": provider.get("tier", "default"),
+                "contract": provider.get("contract", "generic"),
+                "provider_type": catalog_entry.get("provider_type", "direct"),
+                "auth_modes": list(catalog_entry.get("auth_modes", ["api_key"])),
+                "offer_track": catalog_entry.get("offer_track", "direct"),
+                "volatility": catalog_entry.get("volatility", "low"),
+                "evidence_level": catalog_entry.get("evidence_level", "official"),
+                "official_source_url": catalog_entry.get("official_source_url", ""),
+                "notes": catalog_entry.get("notes", ""),
+            }
+        )
+    return rows
+
+
+def _resolve_selected_providers(
+    available: list[str],
+    *,
+    purpose: str,
+    client: str,
+    selected_providers: list[str] | None,
+) -> list[str]:
+    if selected_providers:
+        unknown = [name for name in selected_providers if name not in available]
+        if unknown:
+            raise ValueError(
+                "Unsupported or unavailable wizard provider selection: "
+                + ", ".join(sorted(unknown))
+            )
+        return list(dict.fromkeys(selected_providers))
+    return _preferred_provider_set(available, purpose=purpose, client=client)
 
 
 def _available_shortcuts(available: list[str]) -> dict[str, dict[str, Any]]:
@@ -388,23 +513,144 @@ def _build_modes(available: list[str], *, purpose: str) -> dict[str, Any]:
     }
 
 
+def _unique_preserve_order(items: list[str]) -> list[str]:
+    return list(dict.fromkeys(items))
+
+
+def _merge_mapping(existing: dict[str, Any], incoming: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(existing)
+    for key, value in incoming.items():
+        if key not in merged:
+            merged[key] = _clone(value)
+        elif isinstance(merged[key], dict) and isinstance(value, dict):
+            merged[key] = _merge_mapping(merged[key], value)
+    return merged
+
+
+def merge_initial_config(
+    *,
+    config_path: str | Path,
+    suggestion: dict[str, Any],
+) -> dict[str, Any]:
+    """Merge one wizard suggestion into an existing config with conservative defaults."""
+    path = Path(config_path)
+    with path.open(encoding="utf-8") as handle:
+        existing = yaml.safe_load(handle) or {}
+    if not isinstance(existing, dict):
+        raise ValueError("Existing config must be a YAML mapping")
+
+    merged = _clone(existing)
+    for section in ("server", "security", "provider_catalog_check", "update_check", "auto_update"):
+        merged[section] = _merge_mapping(merged.get(section, {}), suggestion.get(section, {}))
+
+    merged["providers"] = dict(merged.get("providers", {}))
+    merged["providers"].update(_clone(suggestion.get("providers", {})))
+
+    merged["fallback_chain"] = _unique_preserve_order(
+        list(merged.get("fallback_chain", [])) + list(suggestion.get("fallback_chain", []))
+    )
+
+    existing_modes = merged.get("routing_modes", {})
+    suggested_modes = suggestion.get("routing_modes", {})
+    existing_modes["enabled"] = bool(
+        existing_modes.get("enabled", suggested_modes.get("enabled", True))
+    )
+    existing_modes["default"] = existing_modes.get(
+        "default",
+        suggested_modes.get("default", "auto"),
+    )
+    existing_modes["modes"] = _merge_mapping(
+        existing_modes.get("modes", {}),
+        suggested_modes.get("modes", {}),
+    )
+    merged["routing_modes"] = existing_modes
+
+    existing_shortcuts = merged.get("model_shortcuts", {})
+    suggested_shortcuts = suggestion.get("model_shortcuts", {})
+    existing_shortcuts["enabled"] = bool(
+        existing_shortcuts.get("enabled", suggested_shortcuts.get("enabled", True))
+    )
+    existing_shortcuts["shortcuts"] = _merge_mapping(
+        existing_shortcuts.get("shortcuts", {}),
+        suggested_shortcuts.get("shortcuts", {}),
+    )
+    merged["model_shortcuts"] = existing_shortcuts
+
+    existing_profiles = merged.get("client_profiles", {})
+    suggested_profiles = suggestion.get("client_profiles", {})
+    existing_profiles["enabled"] = bool(
+        existing_profiles.get("enabled", suggested_profiles.get("enabled", True))
+    )
+    existing_profiles["default"] = existing_profiles.get(
+        "default", suggested_profiles.get("default", "generic")
+    )
+    existing_profiles["presets"] = _unique_preserve_order(
+        list(existing_profiles.get("presets", [])) + list(suggested_profiles.get("presets", []))
+    )
+    profiles = dict(existing_profiles.get("profiles", {}))
+    for name, profile in suggested_profiles.get("profiles", {}).items():
+        profiles[name] = _merge_mapping(profiles.get(name, {}), profile)
+    existing_profiles["profiles"] = profiles
+    rules_by_profile = {rule.get("profile"): rule for rule in existing_profiles.get("rules", [])}
+    for rule in suggested_profiles.get("rules", []):
+        rules_by_profile.setdefault(rule.get("profile"), _clone(rule))
+    existing_profiles["rules"] = list(rules_by_profile.values())
+    merged["client_profiles"] = existing_profiles
+
+    existing_policies = merged.get("routing_policies", {})
+    suggested_policies = suggestion.get("routing_policies", {})
+    existing_policies["enabled"] = bool(
+        existing_policies.get("enabled", suggested_policies.get("enabled", True))
+    )
+    rules_by_name = {rule.get("name"): rule for rule in existing_policies.get("rules", [])}
+    for rule in suggested_policies.get("rules", []):
+        rules_by_name.setdefault(rule.get("name"), _clone(rule))
+    existing_policies["rules"] = list(rules_by_name.values())
+    merged["routing_policies"] = existing_policies
+
+    existing_hooks = merged.get("request_hooks", {})
+    suggested_hooks = suggestion.get("request_hooks", {})
+    existing_hooks["enabled"] = bool(
+        existing_hooks.get("enabled", suggested_hooks.get("enabled", True))
+    )
+    existing_hooks["on_error"] = existing_hooks.get(
+        "on_error", suggested_hooks.get("on_error", "continue")
+    )
+    existing_hooks["hooks"] = _unique_preserve_order(
+        list(existing_hooks.get("hooks", [])) + list(suggested_hooks.get("hooks", []))
+    )
+    merged["request_hooks"] = existing_hooks
+    return merged
+
+
 def build_initial_config(
     *,
     env_file: str | Path | None = None,
     purpose: str = "general",
+    client: str = "generic",
+    selected_providers: list[str] | None = None,
 ) -> dict[str, Any]:
     """Build a suggested initial config from detected API keys and one purpose."""
     if purpose not in _PURPOSES:
         supported = ", ".join(sorted(_PURPOSES))
         raise ValueError(f"Unsupported purpose '{purpose}'. Choose one of: {supported}")
+    if client not in _CLIENTS:
+        supported = ", ".join(sorted(_CLIENTS))
+        raise ValueError(f"Unsupported client '{client}'. Choose one of: {supported}")
 
     available = detect_wizard_providers(env_file=env_file)
+    selected = _resolve_selected_providers(
+        available,
+        purpose=purpose,
+        client=client,
+        selected_providers=selected_providers,
+    )
     providers = {
-        name: yaml.safe_load(yaml.safe_dump(_PROVIDER_FACTORIES[name]["provider"]))
-        for name in available
+        name: _clone(_PROVIDER_FACTORIES[name]["provider"])
+        for name in selected
     }
-    shortcuts = _available_shortcuts(available)
-    fallback_chain = _preferred_fallback_chain(available, purpose=purpose)
+    shortcuts = _available_shortcuts(selected)
+    fallback_chain = _preferred_fallback_chain(selected, purpose=purpose)
 
     config: dict[str, Any] = {
         "server": {
@@ -419,9 +665,17 @@ def build_initial_config(
             "max_upload_bytes": 10485760,
             "max_header_value_chars": 160,
         },
+        "provider_catalog_check": {
+            "enabled": True,
+            "warn_on_untracked": True,
+            "warn_on_model_drift": True,
+            "warn_on_unofficial_sources": True,
+            "warn_on_volatile_offers": True,
+            "max_catalog_age_days": 30,
+        },
         "providers": providers,
         "fallback_chain": fallback_chain,
-        "routing_modes": _build_modes(available, purpose=purpose),
+        "routing_modes": _build_modes(selected, purpose=purpose),
         "model_shortcuts": {
             "enabled": bool(shortcuts),
             "shortcuts": shortcuts,
@@ -537,10 +791,21 @@ def render_initial_config_yaml(
     *,
     env_file: str | Path | None = None,
     purpose: str = "general",
+    client: str = "generic",
+    selected_providers: list[str] | None = None,
+    config_path: str | Path | None = None,
+    merge_existing: bool = False,
 ) -> str:
-    """Render the suggested initial config as YAML."""
-    return yaml.safe_dump(
-        build_initial_config(env_file=env_file, purpose=purpose),
-        sort_keys=False,
-        allow_unicode=False,
+    """Render the suggested config as YAML."""
+    suggestion = build_initial_config(
+        env_file=env_file,
+        purpose=purpose,
+        client=client,
+        selected_providers=selected_providers,
     )
+    payload = (
+        merge_initial_config(config_path=config_path, suggestion=suggestion)
+        if merge_existing and config_path is not None
+        else suggestion
+    )
+    return yaml.safe_dump(payload, sort_keys=False, allow_unicode=False)

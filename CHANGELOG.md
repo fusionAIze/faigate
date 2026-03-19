@@ -10,6 +10,7 @@ The format is intentionally lightweight and human-readable. Group entries by rel
 
 - Added a first `foundrygate-config-wizard` helper that suggests an initial `config.yaml` from the API keys already present in `.env`
 - Added first-class `routing_modes` and `model_shortcuts` config blocks so virtual model ids such as `auto`, `eco`, `premium`, `free`, or custom names can participate in routing
+- Added wizard candidate listing and conservative config merging so operators can select multiple provider candidates during first setup or later catalog-driven updates
 
 ### Changed
 
@@ -17,6 +18,7 @@ The format is intentionally lightweight and human-readable. Group entries by rel
 - `GET /v1/models`, route previews, and runtime response headers now expose configured routing modes and resolved shortcut/mode metadata
 - `foundrygate-doctor`, onboarding reports, and the provider-catalog API now surface curated model-drift, source-confidence, volatility, and catalog-freshness alerts for configured providers
 - Provider catalog entries now distinguish direct providers from aggregators and wallet routers, track auth modes such as `api_key`, `byok`, and `wallet_x402`, and keep community watchlists explicitly secondary to official sources
+- `foundrygate-config-wizard` can now filter candidates by purpose and client, accept multi-select provider input, and merge selected providers back into an existing config instead of forcing a full rewrite
 
 ## v1.2.3 - 2026-03-19
 
