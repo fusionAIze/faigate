@@ -103,6 +103,13 @@ Returns the curated provider-catalog view with drift, freshness, volatility, aut
 curl -fsS http://127.0.0.1:8090/api/provider-catalog
 ```
 
+For local operator use, the same discovery block is also available via:
+
+```bash
+./scripts/foundrygate-provider-discovery
+./scripts/foundrygate-provider-discovery --json
+```
+
 ### `GET /api/stats`
 
 Returns aggregate request counters, token usage, per-client breakdowns, aggregate client totals, client highlight summaries, cost data, and operator-action summaries.

@@ -387,6 +387,64 @@ auto_update:
     assert report["clients"]["presets"] == ["openclaw"]
 
 
+def test_provider_discovery_helper_supports_json_output(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv(
+        "FOUNDRYGATE_PROVIDER_LINK_OPENROUTER_FALLBACK_URL",
+        "https://go.example.test/openrouter",
+    )
+
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(
+        """
+fallback_chain:
+  - openrouter-fallback
+providers:
+  openrouter-fallback:
+    backend: openai-compat
+    base_url: "https://openrouter.ai/api/v1"
+    api_key: "secret"
+    model: "openrouter/auto"
+client_profiles:
+  enabled: false
+  profiles:
+    generic: {}
+  rules: []
+routing_policies:
+  enabled: false
+  rules: []
+request_hooks:
+  enabled: false
+  hooks: []
+update_check:
+  enabled: false
+auto_update:
+  enabled: false
+""".strip(),
+        encoding="utf-8",
+    )
+
+    repo_root = Path(__file__).resolve().parent.parent
+    script = repo_root / "scripts" / "foundrygate-provider-discovery"
+    env = os.environ.copy()
+    env["FOUNDRYGATE_CONFIG_FILE"] = str(config_file)
+    env["FOUNDRYGATE_PYTHON"] = sys.executable
+    env["PYTHONPATH"] = str(repo_root)
+
+    completed = subprocess.run(
+        ["bash", str(script), "--json"],
+        cwd=repo_root,
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    view = json.loads(completed.stdout)
+    assert view["recommendation_policy"]["affiliate_payout_affects_ranking"] is False
+    assert view["providers"][0]["provider"] == "openrouter-fallback"
+    assert view["providers"][0]["resolved_url"] == "https://go.example.test/openrouter"
+
+
 def test_onboarding_report_marks_all_builtin_integrations_ready(tmp_path: Path):
     env_file = tmp_path / ".env"
     env_file.write_text("DEEPSEEK_API_KEY=sk-demo\n", encoding="utf-8")

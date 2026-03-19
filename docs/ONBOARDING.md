@@ -80,6 +80,7 @@ Today that means:
 
 - `foundrygate-onboarding-report` can show the resolved provider discovery URL
 - `foundrygate-doctor` can print the same disclosed link for configured providers
+- `foundrygate-provider-discovery` can give one compact text or JSON view for later automation or browser work
 - both surfaces also print the payout-blind policy state alongside the links
 
 It also prints a client matrix:

@@ -3,7 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from foundrygate.config import load_config
-from foundrygate.provider_catalog import build_provider_catalog_report
+from foundrygate.provider_catalog import (
+    build_provider_catalog_report,
+    build_provider_discovery_view,
+)
 
 
 def _write_config(tmp_path: Path, body: str) -> Path:
@@ -188,3 +191,37 @@ metrics:
     assert discovery["resolved_url"] == "https://go.example.test/openrouter"
     assert discovery["link_source"] == "operator_override"
     assert discovery["disclosure_required"] is True
+
+
+def test_provider_discovery_view_filters_to_resolved_links(tmp_path: Path):
+    cfg = load_config(
+        _write_config(
+            tmp_path,
+            """
+server:
+  host: "127.0.0.1"
+  port: 8090
+providers:
+  deepseek-chat:
+    backend: openai-compat
+    base_url: "https://api.deepseek.com/v1"
+    api_key: "secret"
+    model: "deepseek-chat"
+  openrouter-fallback:
+    backend: openai-compat
+    base_url: "https://openrouter.ai/api/v1"
+    api_key: "secret"
+    model: "openrouter/auto"
+fallback_chain: []
+metrics:
+  enabled: false
+""",
+        )
+    )
+
+    view = build_provider_discovery_view(cfg)
+
+    assert view["recommendation_policy"]["affiliate_payout_affects_ranking"] is False
+    provider_names = [item["provider"] for item in view["providers"]]
+    assert provider_names == ["deepseek-chat", "openrouter-fallback"]
+    assert view["providers"][0]["resolved_url"].startswith("https://")

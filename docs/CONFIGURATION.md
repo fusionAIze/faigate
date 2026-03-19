@@ -109,6 +109,7 @@ The first CLI surfaces for this are the existing operator helpers:
 
 - `foundrygate-onboarding-report`
 - `foundrygate-doctor`
+- `foundrygate-provider-discovery`
 
 They show the resolved link together with the payout-blind policy state, so later browser or control-center work can build on the same rule set.
 

@@ -19,6 +19,7 @@ The format is intentionally lightweight and human-readable. Group entries by rel
 - Added a built-in `foundrygate-config-wizard --help` flow so first setup, catalog review, update suggestions, dry-run previews, and backup-aware writes are all discoverable directly from the CLI
 - Added optional provider-catalog discovery metadata and env-backed signup-link overrides so future CLI or control-center surfaces can show disclosed provider links without mixing affiliate state into normal config files
 - Added first CLI surfacing of disclosed provider discovery links in onboarding and doctor outputs, always alongside a payout-blind recommendation policy signal
+- Added `foundrygate-provider-discovery` for one compact text/JSON discovery view that later browser or control-center work can consume
 
 ### Changed
 

@@ -77,6 +77,7 @@ Then use the onboarding helpers to move from “the server starts” to “real 
 ./scripts/foundrygate-config-wizard --help
 ./scripts/foundrygate-config-wizard --purpose general --client generic > config.yaml
 ./scripts/foundrygate-onboarding-report
+./scripts/foundrygate-provider-discovery
 ./scripts/foundrygate-onboarding-validate
 ```
 

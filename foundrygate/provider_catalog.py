@@ -411,3 +411,35 @@ def build_provider_catalog_report(config: Config) -> dict[str, Any]:
         "alerts": alerts,
         "items": items,
     }
+
+
+def build_provider_discovery_view(config: Config) -> dict[str, Any]:
+    """Return a compact, disclosure-first provider discovery view."""
+    report = build_provider_catalog_report(config)
+    providers: list[dict[str, Any]] = []
+
+    for item in report.get("items", []):
+        discovery = item.get("discovery") or {}
+        resolved_url = str(discovery.get("resolved_url", "") or "").strip()
+        if not resolved_url:
+            continue
+        providers.append(
+            {
+                "provider": item["provider"],
+                "provider_type": item.get("provider_type", "direct"),
+                "offer_track": item.get("offer_track", "direct"),
+                "evidence_level": item.get("evidence_level", "official"),
+                "official_source_url": item.get("official_source_url", ""),
+                "signup_url": discovery.get("signup_url", ""),
+                "resolved_url": resolved_url,
+                "link_source": discovery.get("link_source", "official"),
+                "operator_env_var": discovery.get("operator_env_var", ""),
+                "disclosure": discovery.get("disclosure", ""),
+                "disclosure_required": bool(discovery.get("disclosure_required", False)),
+            }
+        )
+
+    return {
+        "recommendation_policy": report.get("recommendation_policy", {}),
+        "providers": providers,
+    }
