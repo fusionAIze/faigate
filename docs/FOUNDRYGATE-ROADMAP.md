@@ -19,7 +19,23 @@ The foundation that used to be the near-term buildout is largely in place:
 
 This roadmap now shifts from "rename and foundation" to "deepen the gateway plane without bloating it".
 
-`v1.0.0` is now shipped. The next block should stay disciplined: deepen AI-native client coverage, improve client-facing observability, and refine routing policy without turning FoundryGate into a sprawling platform.
+`v1.1.0` is now shipped. The next block should stay disciplined: improve workstation operations, keep adoption friction low across macOS and Windows, and extend runtime packaging guidance without turning FoundryGate into a sprawling platform.
+
+## `v1.2.0`: workstation operations baseline
+
+Primary goals:
+
+- add a dedicated workstation operations guide
+- document macOS `launchd` as a first-class local-runtime path
+- document Windows Task Scheduler / PowerShell as the baseline Windows path
+- keep development checkouts and runtime installs clearly separated
+
+Recommended minimal slices:
+
+1. workstation baseline docs and path layout
+2. macOS `launchd` example and instructions
+3. Windows startup examples and documentation
+4. optional lightweight install helpers only if the docs prove insufficient
 
 ## Post-1.0 direction
 

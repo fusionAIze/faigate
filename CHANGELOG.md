@@ -4,6 +4,13 @@ All notable changes to FoundryGate should be documented here.
 
 The format is intentionally lightweight and human-readable. Group entries by release and focus on user-visible behavior, operational changes, and compatibility notes.
 
+## Unreleased
+
+### Added
+
+- Added a workstation operations guide for Linux, macOS, and Windows runtime layouts
+- Added a macOS `launchd` LaunchAgent example for local workstation installs
+
 ## v1.1.0 - 2026-03-16
 
 ### Added

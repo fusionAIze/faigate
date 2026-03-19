@@ -31,6 +31,18 @@ Recommended persistent state path:
 
 That path is wired through `FOUNDRYGATE_DB_PATH`.
 
+### Workstation Runtime Installs
+
+For workstation usage, keep the runtime install separate from the development checkout.
+
+Recommended baseline:
+
+- Linux: `systemd` or `systemd --user`
+- macOS: `launchd` via `~/Library/LaunchAgents`
+- Windows: Task Scheduler plus direct venv Python invocation
+
+See [WORKSTATIONS.md](./WORKSTATIONS.md) for the path layout and OS-specific runtime guidance.
+
 ### Docker / GHCR
 
 Tagged releases build container artifacts through the release workflow. For local validation you can build from the repo root:
@@ -110,6 +122,7 @@ The repo ships example schedules under [`docs/examples`](./examples):
 - `foundrygate-auto-update.service`
 - `foundrygate-auto-update.timer`
 - `foundrygate-auto-update.cron`
+- `com.typelicious.foundrygate.plist`
 
 Use them only after the manual update path is already validated.
 

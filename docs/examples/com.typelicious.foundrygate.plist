@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.typelicious.foundrygate</string>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/REPLACE_ME/services/foundrygate</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/REPLACE_ME/services/foundrygate/.venv/bin/python</string>
+    <string>-m</string>
+    <string>foundrygate</string>
+    <string>--config</string>
+    <string>/Users/REPLACE_ME/Library/Application Support/FoundryGate/config.yaml</string>
+  </array>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>FOUNDRYGATE_DB_PATH</key>
+    <string>/Users/REPLACE_ME/Library/Application Support/FoundryGate/foundrygate.db</string>
+    <key>PYTHONUNBUFFERED</key>
+    <string>1</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
+
+  <key>StandardOutPath</key>
+  <string>/Users/REPLACE_ME/Library/Logs/FoundryGate/stdout.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/Users/REPLACE_ME/Library/Logs/FoundryGate/stderr.log</string>
+</dict>
+</plist>
