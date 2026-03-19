@@ -12,6 +12,8 @@ merge_existing="false"
 list_candidates="false"
 write_path=""
 selected_csv=""
+apply_groups_csv=""
+profile_csv=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -32,6 +34,22 @@ while [ $# -gt 0 ]; do
         selected_csv="${selected_csv},$2"
       else
         selected_csv="$2"
+      fi
+      shift 2
+      ;;
+    --select-profiles)
+      if [ -n "$profile_csv" ]; then
+        profile_csv="${profile_csv},$2"
+      else
+        profile_csv="$2"
+      fi
+      shift 2
+      ;;
+    --apply)
+      if [ -n "$apply_groups_csv" ]; then
+        apply_groups_csv="${apply_groups_csv},$2"
+      else
+        apply_groups_csv="$2"
       fi
       shift 2
       ;;
@@ -75,6 +93,8 @@ export FOUNDRYGATE_WIZARD_MERGE_EXISTING="$merge_existing"
 export FOUNDRYGATE_WIZARD_LIST_CANDIDATES="$list_candidates"
 export FOUNDRYGATE_WIZARD_WRITE_PATH="$write_path"
 export FOUNDRYGATE_WIZARD_SELECTED="$selected_csv"
+export FOUNDRYGATE_WIZARD_APPLY_GROUPS="$apply_groups_csv"
+export FOUNDRYGATE_WIZARD_SELECTED_PROFILES="$profile_csv"
 
 "$python_bin" - <<'PY'
 import json
@@ -84,6 +104,7 @@ from pathlib import Path
 import yaml
 
 from foundrygate.wizard import (
+    apply_update_suggestions,
     build_initial_config,
     build_update_suggestions,
     list_provider_candidates,
@@ -101,6 +122,10 @@ list_candidates_only = os.environ["FOUNDRYGATE_WIZARD_LIST_CANDIDATES"] == "true
 write_path = os.environ["FOUNDRYGATE_WIZARD_WRITE_PATH"] or None
 selected_raw = os.environ["FOUNDRYGATE_WIZARD_SELECTED"]
 selected = [item.strip() for item in selected_raw.split(",") if item.strip()]
+apply_groups_raw = os.environ["FOUNDRYGATE_WIZARD_APPLY_GROUPS"]
+apply_groups = [item.strip() for item in apply_groups_raw.split(",") if item.strip()]
+selected_profiles_raw = os.environ["FOUNDRYGATE_WIZARD_SELECTED_PROFILES"]
+selected_profiles = [item.strip() for item in selected_profiles_raw.split(",") if item.strip()]
 
 if list_candidates_only:
     payload = {
@@ -129,6 +154,21 @@ elif current_config is not None and not selected:
             config_path=current_config,
         ),
     }
+    rendered = (
+        json.dumps(payload, indent=2)
+        if render_format == "json"
+        else yaml.safe_dump(payload, sort_keys=False, allow_unicode=False)
+    )
+elif current_config is not None and apply_groups:
+    payload = apply_update_suggestions(
+        env_file=env_file,
+        purpose=purpose,
+        client=client,
+        config_path=current_config,
+        apply_groups=apply_groups,
+        selected_providers=selected or None,
+        selected_profiles=selected_profiles or None,
+    )
     rendered = (
         json.dumps(payload, indent=2)
         if render_format == "json"

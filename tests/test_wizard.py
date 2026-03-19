@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from foundrygate.wizard import (
+    apply_update_suggestions,
     build_initial_config,
     build_update_suggestions,
     detect_wizard_providers,
@@ -260,3 +261,63 @@ client_profiles:
     assert "deepseek-chat" in keep_names
     assert "generic" in mode_profiles
     assert "n8n" in mode_profiles
+
+
+def test_apply_update_suggestions_can_apply_provider_and_mode_changes(tmp_path: Path):
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "\n".join(
+            [
+                "DEEPSEEK_API_KEY=sk-demo",
+                "OPENROUTER_API_KEY=or-demo",
+                "KILOCODE_API_KEY=kilo-demo",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """
+server:
+  host: "127.0.0.1"
+  port: 8090
+providers:
+  deepseek-chat:
+    backend: openai-compat
+    base_url: "https://api.deepseek.com/v1"
+    api_key: "${DEEPSEEK_API_KEY}"
+    model: "deepseek-chat"
+  openrouter-fallback:
+    backend: openai-compat
+    base_url: "https://openrouter.ai/api/v1"
+    api_key: "${OPENROUTER_API_KEY}"
+    model: "openrouter/wrong"
+client_profiles:
+  enabled: true
+  default: generic
+  profiles:
+    generic:
+      routing_mode: premium
+    n8n:
+      routing_mode: premium
+fallback_chain:
+  - deepseek-chat
+  - openrouter-fallback
+""",
+        encoding="utf-8",
+    )
+
+    merged = apply_update_suggestions(
+        env_file=env_file,
+        purpose="free",
+        client="generic",
+        config_path=config_path,
+        apply_groups=["recommended_add", "recommended_replace", "recommended_mode_changes"],
+        selected_providers=["kilocode", "openrouter-fallback"],
+        selected_profiles=["n8n"],
+    )
+
+    assert "kilocode" in merged["providers"]
+    assert merged["providers"]["openrouter-fallback"]["model"] == "openrouter/auto"
+    assert merged["client_profiles"]["profiles"]["n8n"]["routing_mode"] == "eco"
+    assert merged["client_profiles"]["profiles"]["generic"]["routing_mode"] == "premium"
