@@ -1605,6 +1605,10 @@ def _inline_asset_hash(tag_name: str, html: str) -> str:
     return f"'sha256-{b64encode(digest).decode('ascii')}'"
 
 
+if __name__ == "__main__":
+    main()
+
+
 def _dashboard_csp() -> str:
     """Return the restrictive CSP for the built-in no-build dashboard."""
     style_hash = _inline_asset_hash("style", _DASHBOARD_HTML)

@@ -12,9 +12,9 @@ class Foundrygate < Formula
   def install
     python = Formula["python@3.12"].opt_bin/"python3.12"
 
-    # Build pydantic-core from source with extra Mach-O header space so
-    # Homebrew's linkage fixups do not trip over the vendored extension.
-    ENV["PIP_NO_BINARY"] = "pydantic-core"
+    # Build native Python extensions from source with extra Mach-O header
+    # space so Homebrew's linkage fixups do not trip over vendored wheels.
+    ENV["PIP_NO_BINARY"] = "pydantic-core,watchfiles"
     ENV.append "RUSTFLAGS", " -C link-arg=-Wl,-headerpad_max_install_names"
     ENV.append "LDFLAGS", " -Wl,-headerpad_max_install_names"
 
@@ -31,7 +31,7 @@ class Foundrygate < Formula
       export FOUNDRYGATE_CONFIG_FILE="${FOUNDRYGATE_CONFIG_FILE:-#{etc}/foundrygate/config.yaml}"
       export FOUNDRYGATE_DB_PATH="${FOUNDRYGATE_DB_PATH:-#{var}/lib/foundrygate/foundrygate.db}"
       cd "#{etc}/foundrygate"
-      exec "#{libexec}/bin/python" -m foundrygate.main "$@"
+      exec "#{libexec}/bin/python" -m foundrygate "$@"
     SH
 
     (bin/"foundrygate-stats").write <<~SH

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import runpy
+import sys
+
 import pytest
 
 import foundrygate.main as main_module
@@ -55,3 +58,13 @@ def test_main_supports_version_flag(monkeypatch, capsys):
 
     assert exc.value.code == 0
     assert "1.2.3" in capsys.readouterr().out
+
+
+def test_main_module_executes_main(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["foundrygate", "--version"])
+
+    with pytest.raises(SystemExit) as exc:
+        runpy.run_module("foundrygate.main", run_name="__main__")
+
+    assert exc.value.code == 0
+    assert "foundrygate" in capsys.readouterr().out
