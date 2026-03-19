@@ -89,6 +89,9 @@ To review and selectively adopt multiple candidates during first setup or a late
 ./scripts/foundrygate-config-wizard --current-config config.yaml --purpose free --client n8n \
   --apply recommended_add,recommended_replace,recommended_mode_changes \
   --select kilocode,openrouter-fallback --select-profiles n8n --write config.yaml
+./scripts/foundrygate-config-wizard --current-config config.yaml --purpose free --client n8n \
+  --apply recommended_add,recommended_replace,recommended_mode_changes \
+  --select kilocode,openrouter-fallback --select-profiles n8n --dry-run-summary
 ```
 
 If you prefer a packaged or service-driven install, jump to [Deployment](#deployment) or the fuller [Operations guide](./docs/OPERATIONS.md).

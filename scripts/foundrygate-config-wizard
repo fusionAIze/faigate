@@ -14,6 +14,7 @@ write_path=""
 selected_csv=""
 apply_groups_csv=""
 profile_csv=""
+dry_run_summary="false"
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -52,6 +53,10 @@ while [ $# -gt 0 ]; do
         apply_groups_csv="$2"
       fi
       shift 2
+      ;;
+    --dry-run-summary)
+      dry_run_summary="true"
+      shift
       ;;
     --current-config)
       current_config="$2"
@@ -95,6 +100,7 @@ export FOUNDRYGATE_WIZARD_WRITE_PATH="$write_path"
 export FOUNDRYGATE_WIZARD_SELECTED="$selected_csv"
 export FOUNDRYGATE_WIZARD_APPLY_GROUPS="$apply_groups_csv"
 export FOUNDRYGATE_WIZARD_SELECTED_PROFILES="$profile_csv"
+export FOUNDRYGATE_WIZARD_DRY_RUN_SUMMARY="$dry_run_summary"
 
 "$python_bin" - <<'PY'
 import json
@@ -105,11 +111,11 @@ import yaml
 
 from foundrygate.wizard import (
     apply_update_suggestions,
+    build_config_change_summary,
     build_initial_config,
     build_update_suggestions,
     list_provider_candidates,
     merge_initial_config,
-    render_initial_config_yaml,
 )
 
 env_file = os.environ["FOUNDRYGATE_WIZARD_ENV"]
@@ -126,6 +132,7 @@ apply_groups_raw = os.environ["FOUNDRYGATE_WIZARD_APPLY_GROUPS"]
 apply_groups = [item.strip() for item in apply_groups_raw.split(",") if item.strip()]
 selected_profiles_raw = os.environ["FOUNDRYGATE_WIZARD_SELECTED_PROFILES"]
 selected_profiles = [item.strip() for item in selected_profiles_raw.split(",") if item.strip()]
+dry_run_summary = os.environ["FOUNDRYGATE_WIZARD_DRY_RUN_SUMMARY"] == "true"
 
 if list_candidates_only:
     payload = {
@@ -169,6 +176,11 @@ elif current_config is not None and apply_groups:
         selected_providers=selected or None,
         selected_profiles=selected_profiles or None,
     )
+    if dry_run_summary:
+        payload = build_config_change_summary(
+            config_path=current_config,
+            updated_config=payload,
+        )
     rendered = (
         json.dumps(payload, indent=2)
         if render_format == "json"
@@ -186,17 +198,15 @@ else:
         if merge_existing and current_config is not None
         else suggestion
     )
+    if dry_run_summary and current_config is not None:
+        payload = build_config_change_summary(
+            config_path=current_config,
+            updated_config=payload,
+        )
     rendered = (
         json.dumps(payload, indent=2)
         if render_format == "json"
-        else render_initial_config_yaml(
-            env_file=env_file,
-            purpose=purpose,
-            client=client,
-            selected_providers=selected or None,
-            config_path=current_config,
-            merge_existing=merge_existing,
-        )
+        else yaml.safe_dump(payload, sort_keys=False, allow_unicode=False)
     )
 
 if write_path:

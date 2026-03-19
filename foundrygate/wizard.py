@@ -298,6 +298,15 @@ def _load_existing_profile_modes(config_path: str | Path | None = None) -> dict[
     return result
 
 
+def _load_existing_config(config_path: str | Path) -> dict[str, Any]:
+    path = Path(config_path)
+    with path.open(encoding="utf-8") as handle:
+        raw = yaml.safe_load(handle) or {}
+    if not isinstance(raw, dict):
+        raise ValueError("Existing config must be a YAML mapping")
+    return raw
+
+
 def detect_wizard_providers(*, env_file: str | Path | None = None) -> list[str]:
     """Return provider names that can be configured from the current env file."""
     env_values = _load_env_values(env_file)
@@ -577,6 +586,57 @@ def apply_update_suggestions(
             profiles[item["profile"]] = profile
 
     return merged
+
+
+def build_config_change_summary(
+    *,
+    config_path: str | Path,
+    updated_config: dict[str, Any],
+) -> dict[str, Any]:
+    """Return one compact summary of config changes."""
+    existing = _load_existing_config(config_path)
+    existing_providers = existing.get("providers") or {}
+    updated_providers = updated_config.get("providers") or {}
+
+    added_providers = sorted(name for name in updated_providers if name not in existing_providers)
+    replaced_models: list[dict[str, str]] = []
+    for name, provider in updated_providers.items():
+        if name not in existing_providers:
+            continue
+        current = existing_providers.get(name) or {}
+        if not isinstance(provider, dict) or not isinstance(current, dict):
+            continue
+        from_model = str(current.get("model", "") or "").strip()
+        to_model = str(provider.get("model", "") or "").strip()
+        if from_model and to_model and from_model != to_model:
+            replaced_models.append(
+                {"provider": name, "from_model": from_model, "to_model": to_model}
+            )
+
+    existing_profiles = ((existing.get("client_profiles") or {}).get("profiles")) or {}
+    updated_profiles = ((updated_config.get("client_profiles") or {}).get("profiles")) or {}
+    changed_profile_modes: list[dict[str, str]] = []
+    for name, profile in updated_profiles.items():
+        current = existing_profiles.get(name) or {}
+        if not isinstance(profile, dict) or not isinstance(current, dict):
+            continue
+        from_mode = str(current.get("routing_mode", "") or "").strip()
+        to_mode = str(profile.get("routing_mode", "") or "").strip()
+        if from_mode and to_mode and from_mode != to_mode:
+            changed_profile_modes.append(
+                {"profile": name, "from_mode": from_mode, "to_mode": to_mode}
+            )
+
+    existing_fallback = list(existing.get("fallback_chain", []) or [])
+    updated_fallback = list(updated_config.get("fallback_chain", []) or [])
+    fallback_additions = [name for name in updated_fallback if name not in existing_fallback]
+
+    return {
+        "added_providers": added_providers,
+        "replaced_models": replaced_models,
+        "changed_profile_modes": changed_profile_modes,
+        "fallback_additions": fallback_additions,
+    }
 
 
 def _resolve_selected_providers(

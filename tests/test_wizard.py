@@ -4,6 +4,7 @@ from pathlib import Path
 
 from foundrygate.wizard import (
     apply_update_suggestions,
+    build_config_change_summary,
     build_initial_config,
     build_update_suggestions,
     detect_wizard_providers,
@@ -321,3 +322,65 @@ fallback_chain:
     assert merged["providers"]["openrouter-fallback"]["model"] == "openrouter/auto"
     assert merged["client_profiles"]["profiles"]["n8n"]["routing_mode"] == "eco"
     assert merged["client_profiles"]["profiles"]["generic"]["routing_mode"] == "premium"
+
+
+def test_build_config_change_summary_reports_added_replaced_and_mode_changes(tmp_path: Path):
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """
+server:
+  host: "127.0.0.1"
+  port: 8090
+providers:
+  deepseek-chat:
+    backend: openai-compat
+    base_url: "https://api.deepseek.com/v1"
+    api_key: "${DEEPSEEK_API_KEY}"
+    model: "deepseek-chat"
+client_profiles:
+  enabled: true
+  default: generic
+  profiles:
+    n8n:
+      routing_mode: premium
+fallback_chain:
+  - deepseek-chat
+""",
+        encoding="utf-8",
+    )
+
+    updated = {
+        "providers": {
+            "deepseek-chat": {
+                "model": "deepseek-chat-v2",
+            },
+            "kilocode": {
+                "model": "z-ai/glm-5:free",
+            },
+        },
+        "client_profiles": {
+            "profiles": {
+                "n8n": {"routing_mode": "eco"},
+            }
+        },
+        "fallback_chain": ["deepseek-chat", "kilocode"],
+    }
+
+    summary = build_config_change_summary(config_path=config_path, updated_config=updated)
+
+    assert summary["added_providers"] == ["kilocode"]
+    assert summary["replaced_models"] == [
+        {
+            "provider": "deepseek-chat",
+            "from_model": "deepseek-chat",
+            "to_model": "deepseek-chat-v2",
+        }
+    ]
+    assert summary["changed_profile_modes"] == [
+        {
+            "profile": "n8n",
+            "from_mode": "premium",
+            "to_mode": "eco",
+        }
+    ]
+    assert summary["fallback_additions"] == ["kilocode"]
