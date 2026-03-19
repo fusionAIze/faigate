@@ -23,6 +23,57 @@ def test_faigate_menu_help_lists_primary_sections():
     assert "Interactive control center" in result.stdout
 
 
+def test_faigate_menu_quit_renders_snapshot_and_tip(tmp_path: Path):
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(
+        """
+server:
+  host: "127.0.0.1"
+  port: 8092
+  log_level: "info"
+providers:
+  deepseek-chat:
+    backend: openai-compat
+    api_key: "${DEEPSEEK_API_KEY}"
+    base_url: "https://api.deepseek.com/v1"
+    model: "deepseek-chat"
+    tier: default
+routing_modes:
+  enabled: true
+  default: auto
+  modes:
+    auto: {}
+client_profiles:
+  enabled: true
+  default: generic
+  profiles:
+    generic: {}
+fallback_chain: [deepseek-chat]
+""".strip(),
+        encoding="utf-8",
+    )
+    env_file = tmp_path / ".env"
+    env_file.write_text("DEEPSEEK_API_KEY=test-key\n", encoding="utf-8")
+    env = os.environ.copy()
+    env["FAIGATE_CONFIG_FILE"] = str(config_file)
+    env["FAIGATE_ENV_FILE"] = str(env_file)
+    env["FAIGATE_PYTHON"] = sys.executable
+
+    result = subprocess.run(
+        ["bash", "scripts/faigate-menu"],
+        cwd=REPO_ROOT,
+        env=env,
+        input="q\n",
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert "Runtime snapshot" in result.stdout
+    assert "Default mode" in result.stdout
+    assert "Tip:" in result.stdout
+
+
 def test_faigate_status_help_lists_summary_and_raw_modes():
     result = subprocess.run(
         ["bash", "scripts/faigate-status", "--help"],

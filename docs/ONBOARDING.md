@@ -38,6 +38,8 @@ The `Configure` section now splits cleanly into:
 
 That keeps the Gate-native flow closer to the later Grid orchestration pattern without hiding the low-level settings when you need them.
 
+The main menu and the service/config submenus also show small runtime snapshots and inline tips now, so operators get a quick sense of the current bind, health, provider count, and default routing posture before choosing the next action.
+
 `faigate-doctor` now also checks whether provider env placeholders referenced in `config.yaml` are actually present in `.env`.
 
 `faigate-config-wizard` gives you a first pass at:

@@ -42,6 +42,71 @@ run_and_pause() {
   return 0
 }
 
+menu_snapshot() {
+  FAIGATE_MENU_CONFIG="$config_file" "$python_bin" - <<'PY'
+from pathlib import Path
+import os
+
+import yaml
+
+config_path = Path(os.environ["FAIGATE_MENU_CONFIG"])
+raw = {}
+if config_path.exists():
+    with config_path.open(encoding="utf-8") as handle:
+        raw = yaml.safe_load(handle) or {}
+
+providers = raw.get("providers") or {}
+fallback_chain = raw.get("fallback_chain") or []
+routing = raw.get("routing_modes") or {}
+client_profiles = raw.get("client_profiles") or {}
+profiles = (client_profiles.get("profiles") or {}) if isinstance(client_profiles, dict) else {}
+
+print(f"providers={len(providers)}")
+print(f"fallbacks={len(fallback_chain)}")
+print(f"default_mode={routing.get('default', 'auto')}")
+print(f"default_profile={client_profiles.get('default', 'generic') if isinstance(client_profiles, dict) else 'generic'}")
+print(f"profiles={len(profiles)}")
+PY
+}
+
+render_main_snapshot() {
+  local state health_state bind snapshot_output line providers_count fallback_count default_mode default_profile profile_count
+  state="$(faigate_service_state)"
+  if faigate_is_healthy; then
+    health_state="healthy"
+  else
+    health_state="unreachable"
+  fi
+  bind="$(faigate_host):$(faigate_port)"
+  snapshot_output="$(menu_snapshot)"
+  providers_count="0"
+  fallback_count="0"
+  default_mode="auto"
+  default_profile="generic"
+  profile_count="0"
+  while IFS= read -r line; do
+    case "$line" in
+      providers=*) providers_count="${line#providers=}" ;;
+      fallbacks=*) fallback_count="${line#fallbacks=}" ;;
+      default_mode=*) default_mode="${line#default_mode=}" ;;
+      default_profile=*) default_profile="${line#default_profile=}" ;;
+      profiles=*) profile_count="${line#profiles=}" ;;
+    esac
+  done <<EOF
+$snapshot_output
+EOF
+
+  printf "  %bRuntime snapshot%b\n" "$FAIGATE_UI_BOLD" "$FAIGATE_UI_RESET"
+  printf "  %-18s %s\n" "Service" "$state"
+  printf "  %-18s %s\n" "Health" "$health_state"
+  printf "  %-18s %s\n" "Bind" "$bind"
+  printf "  %-18s %s\n" "Providers" "$providers_count configured"
+  printf "  %-18s %s\n" "Fallbacks" "$fallback_count targets"
+  printf "  %-18s %s\n" "Default mode" "$default_mode"
+  printf "  %-18s %s\n" "Client default" "$default_profile (${profile_count} profiles)"
+  printf "\n"
+}
+
 show_status_overview() {
   local version host port log_level health_state
   version="$("$python_bin" -m faigate --version 2>/dev/null || echo "faigate unknown")"
@@ -250,6 +315,8 @@ status_menu() {
   while true; do
     show_status_overview
     echo ""
+    faigate_ui_tip "Use Service Status when you want the raw manager output and bound listener details."
+    echo ""
     printf "    1)  Service Status   Detailed service/runtime status\n"
     printf "    2)  Health Check     Query /health\n"
     printf "    3)  Models           List exposed model ids\n"
@@ -272,6 +339,9 @@ status_menu() {
 configure_menu() {
   while true; do
     faigate_ui_header "fusionAIze Gate Configure" "Config, providers, and local gateway settings"
+    render_main_snapshot
+    faigate_ui_tip "Use Guided Setup for provider/client recommendations. Use Direct Settings when you already know the exact values to change."
+    echo ""
     printf "    1)  Current Config   Snapshot of bind settings, providers, modes, and profiles\n"
     printf "    2)  Guided Setup     Wizard-led provider and client-profile flows\n"
     printf "    3)  Direct Settings  API keys, HTTP settings, and routing defaults\n"
@@ -294,6 +364,8 @@ configure_menu() {
 configure_guided_menu() {
   while true; do
     faigate_ui_header "fusionAIze Gate Guided Setup" "Wizard-led flows similar to the later Grid orchestration model"
+    faigate_ui_tip "Start with Full Config Wizard when bootstrapping Gate itself. Use the client-scoped wizards when only one client needs a tuned default."
+    echo ""
     printf "    1)  Full Config Wizard   Providers, routing modes, and client profiles\n"
     printf "    2)  OpenClaw Wizard      Client-scoped wizard for OpenClaw\n"
     printf "    3)  n8n Wizard           Client-scoped wizard for n8n\n"
@@ -320,6 +392,8 @@ configure_guided_menu() {
 configure_direct_menu() {
   while true; do
     faigate_ui_header "fusionAIze Gate Direct Settings" "Edit concrete Gate settings without going through the wizard"
+    faigate_ui_tip "Direct Settings are best for small, deliberate edits after the wizard already created a reasonable baseline."
+    echo ""
     printf "    1)  API Keys         Update provider keys in the env file\n"
     printf "    2)  HTTP Settings    Host, port, and log level in config.yaml\n"
     printf "    3)  Routing Modes    Global default mode and client profile modes\n"
@@ -342,6 +416,8 @@ configure_direct_menu() {
 explore_menu() {
   while true; do
     faigate_ui_header "fusionAIze Gate Explore" "Providers, discovery links, and exposed models"
+    faigate_ui_tip "Start with text discovery for a quick scan. Use the JSON export when another tool or UI will consume the results."
+    echo ""
     printf "    1)  Provider Discovery   Browse provider links and offer tracks\n"
     printf "    2)  Provider Discovery   JSON export\n"
     printf "    3)  Models               List exposed model ids\n"
@@ -366,6 +442,8 @@ explore_menu() {
 clients_menu() {
   while true; do
     faigate_ui_header "fusionAIze Gate Clients" "Client quickstarts, matrix, and client-scoped wizard flows"
+    faigate_ui_tip "Quickstarts explain the current Gate shape for each client. The client wizards are the fastest path when one client needs a different routing posture."
+    echo ""
     printf "    1)  Quickstarts        Show all client quickstarts\n"
     printf "    2)  Client Matrix      Show active client profiles and match intent\n"
     printf "    3)  OpenClaw Wizard    Run a client-scoped wizard for OpenClaw\n"
@@ -394,6 +472,8 @@ clients_menu() {
 validate_menu() {
   while true; do
     faigate_ui_header "fusionAIze Gate Validate" "Operational validation helpers"
+    faigate_ui_tip "Doctor is best for fast local checks. Onboarding Report is better when you want a fuller operator handoff view."
+    echo ""
     printf "    1)  Doctor               Validate config, env, and local endpoints\n"
     printf "    2)  Onboarding Report    Human-readable rollout summary\n"
     printf "    3)  Onboarding Validate  Structured blockers and warnings\n"
@@ -416,6 +496,9 @@ validate_menu() {
 control_menu() {
   while true; do
     faigate_ui_header "fusionAIze Gate Control" "Start, stop, restart, status, and logs"
+    render_main_snapshot
+    faigate_ui_tip "Use Service Overview before restart work, and prefer Recent Logs before jumping into a live tail."
+    echo ""
     printf "    1)  Service Overview   Manager, paths, bind target, and raw status\n"
     printf "    2)  Start              Start the service through the active manager\n"
     printf "    3)  Stop               Stop the service through the active manager\n"
@@ -446,6 +529,8 @@ control_menu() {
 update_menu() {
   while true; do
     faigate_ui_header "fusionAIze Gate Update" "Release checks and guarded auto-update flows"
+    faigate_ui_tip "Check Updates is read-only. Apply Auto-update should stay the last step after status, health, and log review all look clean."
+    echo ""
     printf "    1)  Check Updates        Query /api/update\n"
     printf "    2)  Auto-update Status   Eligibility and guardrails\n"
     printf "    3)  Apply Auto-update    Run the guarded apply path\n"
@@ -473,6 +558,9 @@ update_menu() {
 
 while true; do
   faigate_ui_header "fusionAIze Gate Control Center" "Standalone operations menu"
+  render_main_snapshot
+  faigate_ui_tip "A good default path is Configure -> Guided Setup -> Validate -> Control."
+  echo ""
   printf "    1)  Status       Version, paths, service state, and models\n"
   printf "    2)  Configure    Wizard, API keys, HTTP settings, routing modes\n"
   printf "    3)  Clients      Quickstarts, matrix, and client-scoped wizard flows\n"

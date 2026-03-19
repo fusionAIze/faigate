@@ -51,3 +51,7 @@ faigate_ui_pause() {
   printf "\n  Press Enter to continue..."
   read -r _
 }
+
+faigate_ui_tip() {
+  printf "  %bTip:%b %s\n" "$FAIGATE_UI_CYAN" "$FAIGATE_UI_RESET" "$1"
+}

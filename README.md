@@ -91,6 +91,8 @@ Inside `Configure`, the control center now follows a clearer split:
 - `Guided Setup` for full or client-scoped wizard flows
 - `Direct Settings` for API keys, bind settings, and routing defaults
 
+The main menu and the service/config submenus now also show compact runtime snapshots plus short inline tips, so the shell UX stays orienting even before you drill into a helper.
+
 If you want the client quickstarts or the current profile matrix without stepping through the full menu, use:
 
 ```bash
