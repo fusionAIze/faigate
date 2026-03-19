@@ -1,8 +1,8 @@
 class Foundrygate < Formula
   desc "Local OpenAI-compatible AI gateway for OpenClaw and other AI-native clients"
   homepage "https://github.com/typelicious/FoundryGate"
-  url "https://github.com/typelicious/FoundryGate/archive/refs/tags/v1.2.1.tar.gz"
-  sha256 "be1ac5103c00d2871e97923029066fc32533a28f327b53a5e8ed9cf8215c66df"
+  url "https://github.com/typelicious/FoundryGate/archive/refs/tags/v1.2.2.tar.gz"
+  sha256 "1d656c2b8ce70e7bfd7dec1be5fa2b82cd9791fe3d6f42da51d3207353a3a854"
   license "Apache-2.0"
   head "https://github.com/typelicious/FoundryGate.git", branch: "main"
 
