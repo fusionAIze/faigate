@@ -6,6 +6,16 @@ The format is intentionally lightweight and human-readable. Group entries by rel
 
 ## Unreleased
 
+### Added
+
+- Added a first `foundrygate-config-wizard` helper that suggests an initial `config.yaml` from the API keys already present in `.env`
+- Added first-class `routing_modes` and `model_shortcuts` config blocks so virtual model ids such as `auto`, `eco`, `premium`, `free`, or custom names can participate in routing
+
+### Changed
+
+- `client_profiles` can now choose a default `routing_mode`, letting one client keep the global mode while another uses a different or custom mode by default
+- `GET /v1/models`, route previews, and runtime response headers now expose configured routing modes and resolved shortcut/mode metadata
+
 ## v1.2.3 - 2026-03-19
 
 ### Changed

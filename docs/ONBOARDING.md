@@ -21,12 +21,20 @@ Run the generic helpers before changing config:
 
 ```bash
 ./scripts/foundrygate-bootstrap
+./scripts/foundrygate-config-wizard --purpose general > config.yaml
 $EDITOR .env
 ./scripts/foundrygate-doctor
 ./scripts/foundrygate-onboarding-report
 ```
 
 `foundrygate-doctor` now also checks whether provider env placeholders referenced in `config.yaml` are actually present in `.env`.
+
+`foundrygate-config-wizard` gives you a first pass at:
+
+- detected provider blocks from the API keys already present in `.env`
+- stock routing modes such as `auto`, `eco`, `premium`, and `free`
+- model shortcuts
+- client defaults for OpenClaw, n8n, CLI, and `opencode`
 
 `foundrygate-onboarding-report` now includes concrete OpenClaw, n8n, and CLI quickstart hints plus a staged provider-rollout view. Use it after every provider or client change to keep the deployment understandable for the next operator as well.
 

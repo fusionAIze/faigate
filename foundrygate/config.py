@@ -60,6 +60,8 @@ _POLICY_SELECT_KEYS = {
     "require_capabilities",
     "capability_values",
 }
+_SUPPORTED_ROUTING_MODE_KEYS = {"aliases", "description", "best_for", "savings", "select"}
+_SUPPORTED_MODEL_SHORTCUT_KEYS = {"aliases", "description", "target"}
 _CLIENT_PROFILE_MATCH_KEYS = {"header_contains", "header_present", "any", "all"}
 _SUPPORTED_CLIENT_PROFILE_PRESETS = {"openclaw", "n8n", "cli"}
 _SUPPORTED_REQUEST_HOOKS = set(get_registered_request_hooks())
@@ -531,12 +533,22 @@ def _normalize_policy_match(name: str, match: Any) -> dict[str, Any]:
     return match
 
 
-def _normalize_policy_select(name: str, select: Any, providers: dict[str, Any]) -> dict[str, Any]:
+def _normalize_policy_select(
+    name: str,
+    select: Any,
+    providers: dict[str, Any],
+    *,
+    extra_keys: set[str] | None = None,
+) -> dict[str, Any]:
     """Validate a policy select block."""
     if not isinstance(select, dict):
         raise ConfigError(f"Policy '{name}' select must be a mapping")
 
-    unknown = sorted(set(select) - _POLICY_SELECT_KEYS)
+    supported_keys = set(_POLICY_SELECT_KEYS)
+    if extra_keys:
+        supported_keys |= set(extra_keys)
+
+    unknown = sorted(set(select) - supported_keys)
     if unknown:
         unknown_list = ", ".join(unknown)
         raise ConfigError(f"Policy '{name}' has unknown select keys: {unknown_list}")
@@ -620,6 +632,15 @@ def _normalize_policy_select(name: str, select: Any, providers: dict[str, Any]) 
             raise ConfigError(
                 f"Policy '{name}' cannot allow and deny the same provider(s): {overlap_list}"
             )
+
+    if extra_keys and "routing_mode" in extra_keys:
+        routing_mode = normalized.get("routing_mode", "")
+        if routing_mode in (None, ""):
+            normalized["routing_mode"] = ""
+        elif not isinstance(routing_mode, str) or not routing_mode.strip():
+            raise ConfigError(f"Policy '{name}' field 'routing_mode' must be a non-empty string")
+        else:
+            normalized["routing_mode"] = routing_mode.strip()
 
     return normalized
 
@@ -755,6 +776,7 @@ def _normalize_client_profiles(data: dict[str, Any]) -> dict[str, Any]:
             f"client profile '{preset_name}'",
             dict(preset["profile"]),
             data.get("providers", {}),
+            extra_keys={"routing_mode"},
         )
 
     for profile_name, hints in profiles.items():
@@ -766,6 +788,7 @@ def _normalize_client_profiles(data: dict[str, Any]) -> dict[str, Any]:
             f"client profile '{profile_name.strip()}'",
             hints,
             data.get("providers", {}),
+            extra_keys={"routing_mode"},
         )
 
     if default_profile not in normalized_profiles:
@@ -824,6 +847,178 @@ def _normalize_client_profiles(data: dict[str, Any]) -> dict[str, Any]:
         "rules": normalized_rules,
     }
     return normalized
+
+
+def _normalize_routing_modes(data: dict[str, Any]) -> dict[str, Any]:
+    """Validate optional virtual routing modes."""
+    raw = data.get("routing_modes", {"enabled": False, "default": "auto", "modes": {}})
+    if raw in (None, ""):
+        raw = {"enabled": False, "default": "auto", "modes": {}}
+    if not isinstance(raw, dict):
+        raise ConfigError("'routing_modes' must be a mapping")
+
+    enabled = raw.get("enabled", False)
+    if not isinstance(enabled, bool):
+        raise ConfigError("'routing_modes.enabled' must be a boolean")
+
+    default_mode = raw.get("default", "auto")
+    if not isinstance(default_mode, str) or not default_mode.strip():
+        raise ConfigError("'routing_modes.default' must be a non-empty string")
+    default_mode = default_mode.strip()
+
+    raw_modes = raw.get("modes", {})
+    if raw_modes is None:
+        raw_modes = {}
+    if not isinstance(raw_modes, dict):
+        raise ConfigError("'routing_modes.modes' must be a mapping")
+
+    normalized_modes: dict[str, dict[str, Any]] = {}
+    seen_aliases: dict[str, str] = {}
+    provider_names = data.get("providers", {})
+
+    for mode_name, spec in raw_modes.items():
+        if not isinstance(mode_name, str) or not mode_name.strip():
+            raise ConfigError("Routing mode names must be non-empty strings")
+        if not isinstance(spec, dict):
+            raise ConfigError(f"Routing mode '{mode_name}' must be a mapping")
+
+        normalized_name = mode_name.strip()
+        unknown = sorted(set(spec) - _SUPPORTED_ROUTING_MODE_KEYS)
+        if unknown:
+            unknown_list = ", ".join(unknown)
+            raise ConfigError(f"Routing mode '{normalized_name}' has unknown keys: {unknown_list}")
+
+        aliases = _normalize_string_list(
+            spec.get("aliases", []),
+            field_name="aliases",
+            rule_name=f"routing mode '{normalized_name}'",
+            allow_empty=True,
+        )
+        for alias in [normalized_name, *aliases]:
+            owner = seen_aliases.get(alias)
+            if owner and owner != normalized_name:
+                raise ConfigError(
+                    f"Routing mode alias '{alias}' is already used by routing mode '{owner}'"
+                )
+            seen_aliases[alias] = normalized_name
+
+        normalized_modes[normalized_name] = {
+            "aliases": aliases,
+            "description": str(spec.get("description", "") or "").strip(),
+            "best_for": str(spec.get("best_for", "") or "").strip(),
+            "savings": str(spec.get("savings", "") or "").strip(),
+            "select": _normalize_policy_select(
+                f"routing mode '{normalized_name}'",
+                dict(spec.get("select", {}) or {}),
+                provider_names,
+            ),
+        }
+
+    if default_mode != "auto" and default_mode not in normalized_modes:
+        raise ConfigError(f"'routing_modes.default' references unknown mode '{default_mode}'")
+
+    normalized = dict(data)
+    normalized["routing_modes"] = {
+        "enabled": enabled,
+        "default": default_mode,
+        "modes": normalized_modes,
+    }
+    return normalized
+
+
+def _normalize_model_shortcuts(data: dict[str, Any]) -> dict[str, Any]:
+    """Validate explicit shortcut names that map to concrete providers."""
+    raw = data.get("model_shortcuts", {"enabled": False, "shortcuts": {}})
+    if raw in (None, ""):
+        raw = {"enabled": False, "shortcuts": {}}
+    if not isinstance(raw, dict):
+        raise ConfigError("'model_shortcuts' must be a mapping")
+
+    enabled = raw.get("enabled", False)
+    if not isinstance(enabled, bool):
+        raise ConfigError("'model_shortcuts.enabled' must be a boolean")
+
+    raw_shortcuts = raw.get("shortcuts", {})
+    if raw_shortcuts is None:
+        raw_shortcuts = {}
+    if not isinstance(raw_shortcuts, dict):
+        raise ConfigError("'model_shortcuts.shortcuts' must be a mapping")
+
+    provider_names = set(data.get("providers", {}))
+    mode_names = set((data.get("routing_modes") or {}).get("modes", {}))
+    normalized_shortcuts: dict[str, dict[str, Any]] = {}
+    seen_aliases: dict[str, str] = {}
+
+    for shortcut_name, spec in raw_shortcuts.items():
+        if not isinstance(shortcut_name, str) or not shortcut_name.strip():
+            raise ConfigError("Model shortcut names must be non-empty strings")
+        if not isinstance(spec, dict):
+            raise ConfigError(f"Model shortcut '{shortcut_name}' must be a mapping")
+
+        normalized_name = shortcut_name.strip()
+        unknown = sorted(set(spec) - _SUPPORTED_MODEL_SHORTCUT_KEYS)
+        if unknown:
+            unknown_list = ", ".join(unknown)
+            raise ConfigError(
+                f"Model shortcut '{normalized_name}' has unknown keys: {unknown_list}"
+            )
+
+        target = spec.get("target", "")
+        if not isinstance(target, str) or not target.strip():
+            raise ConfigError(f"Model shortcut '{normalized_name}' must define a non-empty target")
+        target = target.strip()
+        if target not in provider_names:
+            raise ConfigError(
+                f"Model shortcut '{normalized_name}' references unknown provider '{target}'"
+            )
+        if normalized_name in mode_names:
+            raise ConfigError(
+                "Model shortcut "
+                f"'{normalized_name}' conflicts with routing mode '{normalized_name}'"
+            )
+
+        aliases = _normalize_string_list(
+            spec.get("aliases", []),
+            field_name="aliases",
+            rule_name=f"model shortcut '{normalized_name}'",
+            allow_empty=True,
+        )
+        for alias in [normalized_name, *aliases]:
+            owner = seen_aliases.get(alias)
+            if owner and owner != normalized_name:
+                raise ConfigError(
+                    f"Model shortcut alias '{alias}' is already used by model shortcut '{owner}'"
+                )
+            if alias in mode_names:
+                raise ConfigError(
+                    f"Model shortcut alias '{alias}' conflicts with routing mode '{alias}'"
+                )
+            seen_aliases[alias] = normalized_name
+
+        normalized_shortcuts[normalized_name] = {
+            "aliases": aliases,
+            "description": str(spec.get("description", "") or "").strip(),
+            "target": target,
+        }
+
+    normalized = dict(data)
+    normalized["model_shortcuts"] = {
+        "enabled": enabled,
+        "shortcuts": normalized_shortcuts,
+    }
+    return normalized
+
+
+def _validate_routing_mode_references(data: dict[str, Any]) -> dict[str, Any]:
+    """Ensure profile-level routing_mode references existing routing modes."""
+    mode_names = set((data.get("routing_modes") or {}).get("modes", {}))
+    for profile_name, hints in (data.get("client_profiles") or {}).get("profiles", {}).items():
+        routing_mode = str((hints or {}).get("routing_mode", "") or "").strip()
+        if routing_mode and routing_mode not in mode_names:
+            raise ConfigError(
+                f"Client profile '{profile_name}' references unknown routing_mode '{routing_mode}'"
+            )
+    return data
 
 
 def _normalize_request_hooks(data: dict[str, Any]) -> dict[str, Any]:
@@ -1161,6 +1356,20 @@ class Config:
         )
 
     @property
+    def routing_modes(self) -> dict:
+        return self._data.get(
+            "routing_modes",
+            {"enabled": False, "default": "auto", "modes": {}},
+        )
+
+    @property
+    def model_shortcuts(self) -> dict:
+        return self._data.get(
+            "model_shortcuts",
+            {"enabled": False, "shortcuts": {}},
+        )
+
+    @property
     def llm_classifier(self) -> dict:
         return self._data.get("llm_classifier", {"enabled": False})
 
@@ -1273,8 +1482,16 @@ def load_config(path: str | Path | None = None) -> Config:
         _normalize_auto_update(
             _normalize_update_check(
                 _normalize_request_hooks(
-                    _normalize_client_profiles(
-                        _normalize_routing_policies(_normalize_providers(_walk_expand(raw)))
+                    _validate_routing_mode_references(
+                        _normalize_model_shortcuts(
+                            _normalize_routing_modes(
+                                _normalize_client_profiles(
+                                    _normalize_routing_policies(
+                                        _normalize_providers(_walk_expand(raw))
+                                    )
+                                )
+                            )
+                        )
                     )
                 )
             )

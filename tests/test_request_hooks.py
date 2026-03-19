@@ -196,6 +196,8 @@ class TestRequestHookRouting:
             client_tag,
             attempt_order,
             model_requested,
+            _resolved_mode,
+            _resolved_shortcut,
             hook_state,
             effective_body,
         ) = await _resolve_route_preview(
@@ -223,6 +225,8 @@ class TestRequestHookRouting:
             client_tag,
             attempt_order,
             _model_requested,
+            _resolved_mode,
+            _resolved_shortcut,
             hook_state,
             _effective_body,
         ) = await _resolve_route_preview(

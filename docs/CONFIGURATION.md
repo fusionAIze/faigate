@@ -131,14 +131,41 @@ If OpenClaw should route image traffic through FoundryGate, pair this with:
 
 FoundryGate supports two lightweight extension seams:
 
+- `routing_modes`
+  - virtual model ids such as `auto`, `eco`, `premium`, `free`, or custom names
+  - can be global defaults or reused by multiple clients
 - `client_profiles`
   - caller-aware defaults for OpenClaw, n8n, CLI tools, and custom apps
+  - can set `routing_mode` per client before any profile-specific provider hints are applied
   - only apply when policy/static/heuristic routing did not already make a stronger decision
 - `request_hooks`
   - bounded pre-routing hint injection
   - can fail closed depending on `request_hooks.on_error`
 
 Use the onboarding docs and starter examples when introducing a new client instead of hand-authoring these sections from scratch.
+
+## Config Wizard
+
+For a first local config, let FoundryGate suggest one from the API keys already present in your env file:
+
+```bash
+./scripts/foundrygate-config-wizard --purpose general > config.yaml
+```
+
+Supported starting purposes:
+
+- `general`
+- `coding`
+- `quality`
+- `free`
+
+The generated config includes:
+
+- detected provider blocks
+- a fallback chain
+- stock routing modes
+- model shortcuts
+- client profile defaults for OpenClaw, n8n, CLI, and `opencode`
 
 ## Update And Rollout Settings
 

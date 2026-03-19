@@ -71,6 +71,7 @@ curl -fsS http://127.0.0.1:8090/v1/models
 Then use the onboarding helpers to move from “the server starts” to “real clients are ready”:
 
 ```bash
+./scripts/foundrygate-config-wizard --purpose general > config.yaml
 ./scripts/foundrygate-onboarding-report
 ./scripts/foundrygate-onboarding-validate
 ```
@@ -106,6 +107,7 @@ http://127.0.0.1:8090/v1
   +--> static rules
   +--> heuristic rules
   +--> optional request hooks
+  +--> optional routing modes (auto / eco / premium / free / custom)
   +--> optional client profile defaults
   +--> optional LLM classifier
   |
@@ -120,8 +122,9 @@ Routing is layered on purpose:
 1. Policies can enforce locality, capability, cost, or compliance preferences.
 2. Static and heuristic rules catch known patterns without needing a classifier call.
 3. Request hooks can inject bounded routing hints before the final decision.
-4. Client profiles give OpenClaw, n8n, CLI tools, and custom apps different safe defaults.
-5. Provider scoring considers health, latency, context headroom, token limits, cache hints, and recent failures.
+4. Routing modes expose stable virtual model ids like `auto`, `eco`, `premium`, or custom names.
+5. Client profiles can choose their own default routing mode before the final scoring step.
+6. Provider scoring considers health, latency, context headroom, token limits, cache hints, and recent failures.
 
 For OpenClaw specifically, both one-agent and many-agent traffic can use the same endpoint. FoundryGate can distinguish delegated traffic through request headers such as `x-openclaw-source` when they are present.
 

@@ -33,6 +33,7 @@ FoundryGate bootstrap complete.
 
 Next steps:
 1. Edit $env_file and set at least one provider API key.
-2. Run ./scripts/foundrygate-doctor to verify the local setup.
-3. Start FoundryGate with python -m foundrygate or use the systemd helper flow.
+2. Run ./scripts/foundrygate-config-wizard --purpose general > config.yaml to generate a first config.
+3. Run ./scripts/foundrygate-doctor to verify the local setup.
+4. Start FoundryGate with python -m foundrygate or use the systemd helper flow.
 EOF
