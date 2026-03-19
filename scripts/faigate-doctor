@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-env_file="${FAIGATE_ENV_FILE:-$repo_root/.env}"
-config_file="${FAIGATE_CONFIG_FILE:-$repo_root/config.yaml}"
-python_bin="${FAIGATE_PYTHON:-python3}"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/faigate-service-lib.sh"
+env_file="$(faigate_env_file)"
+config_file="$(faigate_config_file)"
+python_bin="$(faigate_python_bin)"
 status=0
 
 export FAIGATE_ENV_FILE="$env_file"
@@ -35,13 +35,7 @@ else
   fail "missing env file: $env_file"
 fi
 
-db_path="/var/lib/faigate/faigate.db"
-if [ -f "$env_file" ]; then
-  env_db_path="$(awk -F= '/^[[:space:]]*FAIGATE_DB_PATH=/{sub(/^[[:space:]]+/, "", $2); print $2}' "$env_file" | tail -n1)"
-  if [ -n "$env_db_path" ]; then
-    db_path="$env_db_path"
-  fi
-fi
+db_path="$(faigate_db_path)"
 
 db_dir="$(dirname "$db_path")"
 if [ -d "$db_dir" ] && [ -w "$db_dir" ]; then
@@ -98,16 +92,16 @@ for item in catalog.get("items", []):
 PY
 
 if command -v curl >/dev/null 2>&1; then
-  if curl -fsS -m 2 http://127.0.0.1:8090/health >/dev/null 2>&1; then
+  if curl -fsS -m 2 "$(faigate_health_url)" >/dev/null 2>&1; then
     ok "local /health endpoint is reachable"
   else
-    warn "local /health endpoint is not reachable on 127.0.0.1:8090"
+    warn "local /health endpoint is not reachable on $(faigate_local_host):$(faigate_port)"
   fi
 
-  if curl -fsS -m 2 http://127.0.0.1:8090/v1/models >/dev/null 2>&1; then
+  if curl -fsS -m 2 "$(faigate_models_url)" >/dev/null 2>&1; then
     ok "local /v1/models endpoint is reachable"
   else
-    warn "local /v1/models endpoint is not reachable on 127.0.0.1:8090"
+    warn "local /v1/models endpoint is not reachable on $(faigate_local_host):$(faigate_port)"
   fi
 else
   warn "curl is not available; skipping local endpoint checks"

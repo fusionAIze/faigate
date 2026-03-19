@@ -74,12 +74,42 @@ curl -fsS http://127.0.0.1:8090/v1/models
 Then use the onboarding helpers to move from “the server starts” to “real clients are ready”:
 
 ```bash
+./scripts/faigate-menu
 ./scripts/faigate-config-wizard --help
 ./scripts/faigate-config-wizard --purpose general --client generic > config.yaml
 ./scripts/faigate-onboarding-report
 ./scripts/faigate-provider-discovery
 ./scripts/faigate-provider-discovery --json --offer-track free
 ./scripts/faigate-onboarding-validate
+```
+
+`./scripts/faigate-menu` now also gives you one Gate-native shell entrypoint for API keys, HTTP settings, routing modes, client quickstarts, client-scoped wizard flows, validation helpers, service control, and update checks.
+
+Inside `Configure`, the control center now follows a clearer split:
+
+- `Current Config` for a concise Gate snapshot
+- `Guided Setup` for full or client-scoped wizard flows
+- `Direct Settings` for API keys, bind settings, and routing defaults
+
+The main menu and the service/config submenus now also show compact runtime snapshots plus short inline tips, so the shell UX stays orienting even before you drill into a helper.
+
+If you want the client quickstarts or the current profile matrix without stepping through the full menu, use:
+
+```bash
+./scripts/faigate-client-integrations
+./scripts/faigate-client-integrations --matrix
+./scripts/faigate-client-integrations --json --client openclaw
+./scripts/faigate-config-overview
+./scripts/faigate-config-overview --json
+```
+
+For service operations, the control-center flow now matches the standalone helpers more closely:
+
+```bash
+./scripts/faigate-status
+./scripts/faigate-logs --lines 80
+./scripts/faigate-logs --follow
+./scripts/faigate-restart --timeout 15
 ```
 
 To review and selectively adopt multiple candidates during first setup or a later update:
@@ -120,6 +150,7 @@ If you already have an active Python virtualenv, check which binary you are call
 ```bash
 which -a faigate
 /opt/homebrew/bin/faigate --version
+/opt/homebrew/bin/faigate-menu --help
 ```
 
 ## How It Works

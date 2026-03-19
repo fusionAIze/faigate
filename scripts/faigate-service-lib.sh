@@ -1,12 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+faigate_script_dir() {
+  cd "$(dirname "${BASH_SOURCE[0]}")" && pwd
+}
+
 faigate_repo_root() {
-  cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd
+  cd "$(faigate_script_dir)/.." && pwd
 }
 
 faigate_platform() {
   uname -s
+}
+
+faigate_python_bin() {
+  if [ -n "${FAIGATE_PYTHON:-}" ]; then
+    printf '%s\n' "$FAIGATE_PYTHON"
+  elif [ -x "$(faigate_repo_root)/.venv/bin/python" ]; then
+    printf '%s\n' "$(faigate_repo_root)/.venv/bin/python"
+  else
+    printf '%s\n' "python3"
+  fi
 }
 
 faigate_mac_label() {
@@ -43,6 +57,257 @@ faigate_mac_python() {
 
 faigate_mac_config_path() {
   printf '%s/config.yaml\n' "$(faigate_mac_config_dir)"
+}
+
+faigate_config_file() {
+  if [ -n "${FAIGATE_CONFIG_FILE:-}" ]; then
+    printf '%s\n' "$FAIGATE_CONFIG_FILE"
+  else
+    printf '%s/config.yaml\n' "$(faigate_repo_root)"
+  fi
+}
+
+faigate_env_file() {
+  if [ -n "${FAIGATE_ENV_FILE:-}" ]; then
+    printf '%s\n' "$FAIGATE_ENV_FILE"
+  else
+    printf '%s/.env\n' "$(faigate_repo_root)"
+  fi
+}
+
+faigate_example_env_file() {
+  printf '%s/.env.example\n' "$(faigate_repo_root)"
+}
+
+faigate_env_value() {
+  local key="$1"
+  local env_file
+  env_file="$(faigate_env_file)"
+  if [ ! -f "$env_file" ]; then
+    return 1
+  fi
+  awk -F= -v key="$key" '
+    $1 ~ "^[[:space:]]*" key "[[:space:]]*$" {
+      sub(/^[[:space:]]+/, "", $2)
+      gsub(/^"|"$/, "", $2)
+      print $2
+    }
+  ' "$env_file" | tail -n 1
+}
+
+faigate_yaml_value() {
+  local dotted_key="$1"
+  local default="${2:-}"
+  local config_file python_bin
+  config_file="$(faigate_config_file)"
+  python_bin="$(faigate_python_bin)"
+  if [ ! -f "$config_file" ]; then
+    printf '%s\n' "$default"
+    return 0
+  fi
+
+  FAIGATE_YAML_FILE="$config_file" \
+    FAIGATE_YAML_KEY="$dotted_key" \
+    FAIGATE_YAML_DEFAULT="$default" \
+    "$python_bin" - <<'PY'
+import os
+from pathlib import Path
+
+import yaml
+
+config_path = Path(os.environ["FAIGATE_YAML_FILE"])
+dotted_key = os.environ["FAIGATE_YAML_KEY"]
+default = os.environ.get("FAIGATE_YAML_DEFAULT", "")
+
+if not config_path.exists():
+    print(default)
+    raise SystemExit(0)
+
+with config_path.open(encoding="utf-8") as handle:
+    raw = yaml.safe_load(handle) or {}
+
+value = raw
+for segment in dotted_key.split("."):
+    if not isinstance(value, dict) or segment not in value:
+        print(default)
+        raise SystemExit(0)
+    value = value[segment]
+
+if value is None:
+    print(default)
+elif isinstance(value, bool):
+    print("true" if value else "false")
+else:
+    print(value)
+PY
+}
+
+faigate_host() {
+  printf '%s\n' "${FAIGATE_HOST:-$(faigate_yaml_value server.host "127.0.0.1")}"
+}
+
+faigate_local_host() {
+  local host
+  host="$(faigate_host)"
+  case "$host" in
+    0.0.0.0|"::"|"[::]"|"::0")
+      printf '%s\n' "127.0.0.1"
+      ;;
+    *)
+      printf '%s\n' "$host"
+      ;;
+  esac
+}
+
+faigate_port() {
+  if [ -n "${FAIGATE_PORT:-}" ]; then
+    printf '%s\n' "$FAIGATE_PORT"
+    return 0
+  fi
+  local env_port
+  env_port="$(faigate_env_value FAIGATE_PORT 2>/dev/null || true)"
+  if [ -n "$env_port" ]; then
+    printf '%s\n' "$env_port"
+  else
+    printf '%s\n' "$(faigate_yaml_value server.port "8090")"
+  fi
+}
+
+faigate_log_level() {
+  printf '%s\n' "$(faigate_yaml_value server.log_level "info")"
+}
+
+faigate_db_path() {
+  if [ -n "${FAIGATE_DB_PATH:-}" ]; then
+    printf '%s\n' "$FAIGATE_DB_PATH"
+    return 0
+  fi
+  local env_db
+  env_db="$(faigate_env_value FAIGATE_DB_PATH 2>/dev/null || true)"
+  if [ -n "$env_db" ]; then
+    printf '%s\n' "$env_db"
+  elif [ "$(faigate_platform)" = "Darwin" ] && [ -n "${FAIGATE_MAC_CONFIG_DIR:-}" ]; then
+    faigate_mac_db_path
+  else
+    printf '%s\n' "$(faigate_repo_root)/faigate.db"
+  fi
+}
+
+faigate_health_url() {
+  printf 'http://%s:%s/health\n' "$(faigate_local_host)" "$(faigate_port)"
+}
+
+faigate_models_url() {
+  printf 'http://%s:%s/v1/models\n' "$(faigate_local_host)" "$(faigate_port)"
+}
+
+faigate_update_url() {
+  printf 'http://%s:%s/api/update\n' "$(faigate_local_host)" "$(faigate_port)"
+}
+
+faigate_service_manager() {
+  case "$(faigate_platform)" in
+    Darwin)
+      printf '%s\n' "launchd"
+      ;;
+    *)
+      printf '%s\n' "systemd"
+      ;;
+  esac
+}
+
+faigate_service_target() {
+  case "$(faigate_platform)" in
+    Darwin)
+      printf '%s\n' "$(faigate_mac_label)"
+      ;;
+    *)
+      printf '%s\n' "faigate.service"
+      ;;
+  esac
+}
+
+faigate_logs_stdout_path() {
+  case "$(faigate_platform)" in
+    Darwin)
+      printf '%s/stdout.log\n' "$(faigate_mac_logs_dir)"
+      ;;
+    *)
+      printf '%s\n' "journalctl://faigate.service"
+      ;;
+  esac
+}
+
+faigate_logs_stderr_path() {
+  case "$(faigate_platform)" in
+    Darwin)
+      printf '%s/stderr.log\n' "$(faigate_mac_logs_dir)"
+      ;;
+    *)
+      printf '%s\n' "journalctl://faigate.service"
+      ;;
+  esac
+}
+
+faigate_service_state() {
+  case "$(faigate_platform)" in
+    Darwin)
+      local state_line
+      state_line="$(faigate_launchctl_status 2>/dev/null | awk -F'= ' '/state = / {gsub(/;$/, "", $2); print $2; exit}')"
+      if [ -n "$state_line" ]; then
+        printf '%s\n' "$state_line"
+      elif [ -f "$(faigate_mac_plist_path)" ]; then
+        printf '%s\n' "configured"
+      else
+        printf '%s\n' "not loaded"
+      fi
+      ;;
+    *)
+      systemctl is-active faigate.service 2>/dev/null || printf '%s\n' "inactive"
+      ;;
+  esac
+}
+
+faigate_service_enabled_state() {
+  case "$(faigate_platform)" in
+    Darwin)
+      if [ -f "$(faigate_mac_plist_path)" ]; then
+        printf '%s\n' "configured"
+      else
+        printf '%s\n' "absent"
+      fi
+      ;;
+    *)
+      systemctl is-enabled faigate.service 2>/dev/null || printf '%s\n' "disabled"
+      ;;
+  esac
+}
+
+faigate_is_healthy() {
+  curl -fsS -m 2 "$(faigate_health_url)" >/dev/null 2>&1
+}
+
+faigate_wait_for_health() {
+  local timeout_seconds="${1:-15}"
+  local attempt=0
+  while [ "$attempt" -lt "$timeout_seconds" ]; do
+    if faigate_is_healthy; then
+      return 0
+    fi
+    sleep 1
+    attempt=$((attempt + 1))
+  done
+  return 1
+}
+
+faigate_mask_secret() {
+  local value="${1:-}"
+  local len="${#value}"
+  if [ "$len" -le 6 ]; then
+    printf '%s\n' "${value:-not set}"
+  else
+    printf '%s***%s\n' "${value:0:3}" "${value: -3}"
+  fi
 }
 
 faigate_bin_dir() {

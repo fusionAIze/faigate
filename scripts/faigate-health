@@ -1,3 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
-curl -fsS -m 2 http://127.0.0.1:8090/health | head -c 1200; echo
+
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/faigate-service-lib.sh"
+
+curl -fsS -m 2 "$(faigate_health_url)" | head -c 1200
+echo

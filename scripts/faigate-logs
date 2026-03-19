@@ -3,13 +3,58 @@ set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/faigate-service-lib.sh"
 
+usage() {
+  cat <<'EOF'
+Usage:
+  ./scripts/faigate-logs [--follow] [--lines N]
+
+Show recent fusionAIze Gate logs or follow them live.
+
+Options:
+  --follow     Tail logs continuously
+  --lines N    Number of recent lines to print before exiting (default: 80)
+EOF
+}
+
+follow="0"
+lines="80"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --follow)
+      follow="1"
+      shift
+      ;;
+    --lines)
+      lines="${2:-80}"
+      shift 2
+      ;;
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    *)
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
 case "$(faigate_platform)" in
   Darwin)
     mkdir -p "$(faigate_mac_logs_dir)"
     touch "$(faigate_mac_logs_dir)/stdout.log" "$(faigate_mac_logs_dir)/stderr.log"
-    tail -f "$(faigate_mac_logs_dir)/stdout.log" "$(faigate_mac_logs_dir)/stderr.log"
+    if [ "$follow" = "1" ]; then
+      tail -f "$(faigate_mac_logs_dir)/stdout.log" "$(faigate_mac_logs_dir)/stderr.log"
+    else
+      tail -n "$lines" "$(faigate_mac_logs_dir)/stdout.log" "$(faigate_mac_logs_dir)/stderr.log"
+    fi
     ;;
   *)
-    sudo journalctl -u faigate.service -f -o cat
+    if [ "$follow" = "1" ]; then
+      sudo journalctl -u faigate.service -f -o cat
+    else
+      sudo journalctl -u faigate.service -n "$lines" -o cat
+    fi
     ;;
 esac

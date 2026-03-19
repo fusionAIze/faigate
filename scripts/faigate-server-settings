@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/faigate-service-lib.sh"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/faigate-ui-lib.sh"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  ./scripts/faigate-server-settings
+
+Interactive helper to update server.host, server.port, and server.log_level
+in the current config.yaml. A timestamped backup is created automatically.
+
+Env resolution:
+  FAIGATE_CONFIG_FILE   config path (defaults to repo config.yaml or packaged override)
+  FAIGATE_PYTHON        python interpreter used for YAML updates
+EOF
+}
+
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+  usage
+  exit 0
+fi
+
+config_file="$(faigate_config_file)"
+python_bin="$(faigate_python_bin)"
+backup_file="${config_file}.$(date +%Y%m%d%H%M%S).bak"
+
+if [ ! -f "$config_file" ]; then
+  faigate_ui_error "Config not found: $config_file"
+  exit 1
+fi
+
+current_host="$(faigate_host)"
+current_port="$(faigate_port)"
+current_log_level="$(faigate_log_level)"
+
+faigate_ui_header "fusionAIze Gate HTTP Settings" "$config_file"
+faigate_ui_info "Press Enter to keep the current value. Type :c to cancel or :q to quit."
+printf "\n"
+
+printf "  %-18s [%s]: " "Host" "$current_host"
+read -r new_host
+case "$new_host" in
+  :q) exit 0 ;;
+  :c) faigate_ui_warn "Cancelled."; exit 0 ;;
+esac
+new_host="${new_host:-$current_host}"
+
+printf "  %-18s [%s]: " "Port" "$current_port"
+read -r new_port
+case "$new_port" in
+  :q) exit 0 ;;
+  :c) faigate_ui_warn "Cancelled."; exit 0 ;;
+esac
+new_port="${new_port:-$current_port}"
+
+printf "  %-18s [%s]: " "Log level" "$current_log_level"
+read -r new_log_level
+case "$new_log_level" in
+  :q) exit 0 ;;
+  :c) faigate_ui_warn "Cancelled."; exit 0 ;;
+esac
+new_log_level="${new_log_level:-$current_log_level}"
+
+if ! [[ "$new_port" =~ ^[0-9]+$ ]] || [ "$new_port" -lt 1 ] || [ "$new_port" -gt 65535 ]; then
+  faigate_ui_error "Port must be an integer between 1 and 65535."
+  exit 2
+fi
+
+cp "$config_file" "$backup_file"
+
+FAIGATE_SERVER_CONFIG="$config_file" \
+FAIGATE_SERVER_HOST="$new_host" \
+FAIGATE_SERVER_PORT="$new_port" \
+FAIGATE_SERVER_LOG_LEVEL="$new_log_level" \
+"$python_bin" - <<'PY'
+from pathlib import Path
+import os
+
+import yaml
+
+config_path = Path(os.environ["FAIGATE_SERVER_CONFIG"])
+with config_path.open(encoding="utf-8") as handle:
+    raw = yaml.safe_load(handle) or {}
+
+server = raw.setdefault("server", {})
+server["host"] = os.environ["FAIGATE_SERVER_HOST"]
+server["port"] = int(os.environ["FAIGATE_SERVER_PORT"])
+server["log_level"] = os.environ["FAIGATE_SERVER_LOG_LEVEL"]
+
+with config_path.open("w", encoding="utf-8") as handle:
+    yaml.safe_dump(raw, handle, sort_keys=False, allow_unicode=False)
+PY
+
+faigate_ui_success "Updated HTTP settings in $config_file"
+faigate_ui_info "Backup written to $backup_file"

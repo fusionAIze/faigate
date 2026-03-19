@@ -91,8 +91,9 @@ The runtime-control helpers now auto-detect Linux vs macOS:
 | Script | What it does |
 | --- | --- |
 | `faigate-install` | install service + helper links |
-| `faigate-start` / `faigate-stop` / `faigate-restart` | basic service control |
-| `faigate-status` / `faigate-logs` / `faigate-health` | operator visibility |
+| `faigate-start` / `faigate-stop` / `faigate-restart` | service control with platform detection, plus restart verification |
+| `faigate-status` / `faigate-logs` / `faigate-health` | operator visibility, service-manager context, and recent/tailing logs |
+| `faigate-config-overview` | current config snapshot for bind, providers, modes, and profiles |
 | `faigate-bootstrap` | local bootstrap convenience flow |
 | `faigate-doctor` | validate env and config readiness |
 | `faigate-onboarding-report` | summarize rollout readiness |
@@ -105,7 +106,10 @@ Examples:
 
 ```bash
 ./scripts/faigate-install
+./scripts/faigate-config-overview
 ./scripts/faigate-status
+./scripts/faigate-logs --lines 80
+./scripts/faigate-restart --timeout 15
 ./scripts/faigate-health
 ./scripts/faigate-update-check
 ```

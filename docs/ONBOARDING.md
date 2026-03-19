@@ -20,12 +20,25 @@ The safest onboarding order is:
 Run the generic helpers before changing config:
 
 ```bash
+./scripts/faigate-menu
 ./scripts/faigate-bootstrap
 ./scripts/faigate-config-wizard --purpose general --client generic > config.yaml
 $EDITOR .env
 ./scripts/faigate-doctor
 ./scripts/faigate-onboarding-report
 ```
+
+If you prefer a guided shell flow over remembering individual helper names, start with `./scripts/faigate-menu`. It wraps the wizard, API-key editing, HTTP settings, routing-mode editing, client quickstarts, validation helpers, service control, and update checks behind one consistent control-center layout.
+
+The `Configure` section now splits cleanly into:
+
+- `Current Config`
+- `Guided Setup`
+- `Direct Settings`
+
+That keeps the Gate-native flow closer to the later Grid orchestration pattern without hiding the low-level settings when you need them.
+
+The main menu and the service/config submenus also show small runtime snapshots and inline tips now, so operators get a quick sense of the current bind, health, provider count, and default routing posture before choosing the next action.
 
 `faigate-doctor` now also checks whether provider env placeholders referenced in `config.yaml` are actually present in `.env`.
 
@@ -90,6 +103,15 @@ It also prints a client matrix:
 - whether they come from presets or custom config
 - how they match traffic
 - which routing hints they actually apply
+
+If you want that client view without the full onboarding report, use:
+
+```bash
+./scripts/faigate-client-integrations
+./scripts/faigate-client-integrations --matrix
+./scripts/faigate-client-integrations --json --client n8n
+./scripts/faigate-config-overview
+```
 
 ### 1. Add one provider
 

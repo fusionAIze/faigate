@@ -1,7 +1,48 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/faigate-service-lib.sh"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+source "${script_dir}/faigate-service-lib.sh"
+source "${script_dir}/faigate-ui-lib.sh"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  ./scripts/faigate-restart [--no-verify] [--timeout N]
+
+Restart fusionAIze Gate through the detected service manager and, by default,
+wait for the local health endpoint to respond again.
+EOF
+}
+
+verify="1"
+timeout_seconds="15"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --no-verify)
+      verify="0"
+      shift
+      ;;
+    --timeout)
+      timeout_seconds="${2:-15}"
+      shift 2
+      ;;
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    *)
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+faigate_ui_header "fusionAIze Gate Restart" "Restarting through $(faigate_service_manager)"
+faigate_ui_info "Target: $(faigate_service_target)"
+faigate_ui_info "Bind: $(faigate_host):$(faigate_port)"
 
 case "$(faigate_platform)" in
   Darwin)
@@ -11,3 +52,14 @@ case "$(faigate_platform)" in
     sudo systemctl restart faigate.service
     ;;
 esac
+
+faigate_ui_success "Restart command completed."
+
+if [ "$verify" = "1" ]; then
+  if faigate_wait_for_health "$timeout_seconds"; then
+    faigate_ui_success "Health endpoint is responding again at $(faigate_health_url)."
+  else
+    faigate_ui_warn "Health endpoint did not recover within ${timeout_seconds}s."
+    exit 1
+  fi
+fi

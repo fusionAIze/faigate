@@ -1,0 +1,586 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+source "${script_dir}/faigate-service-lib.sh"
+source "${script_dir}/faigate-ui-lib.sh"
+
+config_file="$(faigate_config_file)"
+env_file="$(faigate_env_file)"
+db_path="$(faigate_db_path)"
+python_bin="$(faigate_python_bin)"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  ./scripts/faigate-menu
+
+Interactive control center for fusionAIze Gate.
+
+Env resolution:
+  FAIGATE_CONFIG_FILE   config path
+  FAIGATE_ENV_FILE      env path
+  FAIGATE_PYTHON        python interpreter used by helper scripts
+EOF
+}
+
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+  usage
+  exit 0
+fi
+
+run_and_pause() {
+  local command_rc=0
+  echo ""
+  "$@" || command_rc=$?
+  echo ""
+  if [ "$command_rc" -ne 0 ]; then
+    faigate_ui_warn "Command exited with status ${command_rc}."
+  fi
+  faigate_ui_pause
+  return 0
+}
+
+menu_snapshot() {
+  FAIGATE_MENU_CONFIG="$config_file" "$python_bin" - <<'PY'
+from pathlib import Path
+import os
+
+import yaml
+
+config_path = Path(os.environ["FAIGATE_MENU_CONFIG"])
+raw = {}
+if config_path.exists():
+    with config_path.open(encoding="utf-8") as handle:
+        raw = yaml.safe_load(handle) or {}
+
+providers = raw.get("providers") or {}
+fallback_chain = raw.get("fallback_chain") or []
+routing = raw.get("routing_modes") or {}
+client_profiles = raw.get("client_profiles") or {}
+profiles = (client_profiles.get("profiles") or {}) if isinstance(client_profiles, dict) else {}
+
+print(f"providers={len(providers)}")
+print(f"fallbacks={len(fallback_chain)}")
+print(f"default_mode={routing.get('default', 'auto')}")
+print(f"default_profile={client_profiles.get('default', 'generic') if isinstance(client_profiles, dict) else 'generic'}")
+print(f"profiles={len(profiles)}")
+PY
+}
+
+render_main_snapshot() {
+  local state health_state bind snapshot_output line providers_count fallback_count default_mode default_profile profile_count
+  state="$(faigate_service_state)"
+  if faigate_is_healthy; then
+    health_state="healthy"
+  else
+    health_state="unreachable"
+  fi
+  bind="$(faigate_host):$(faigate_port)"
+  snapshot_output="$(menu_snapshot)"
+  providers_count="0"
+  fallback_count="0"
+  default_mode="auto"
+  default_profile="generic"
+  profile_count="0"
+  while IFS= read -r line; do
+    case "$line" in
+      providers=*) providers_count="${line#providers=}" ;;
+      fallbacks=*) fallback_count="${line#fallbacks=}" ;;
+      default_mode=*) default_mode="${line#default_mode=}" ;;
+      default_profile=*) default_profile="${line#default_profile=}" ;;
+      profiles=*) profile_count="${line#profiles=}" ;;
+    esac
+  done <<EOF
+$snapshot_output
+EOF
+
+  printf "  %bRuntime snapshot%b\n" "$FAIGATE_UI_BOLD" "$FAIGATE_UI_RESET"
+  printf "  %-18s %s\n" "Service" "$state"
+  printf "  %-18s %s\n" "Health" "$health_state"
+  printf "  %-18s %s\n" "Bind" "$bind"
+  printf "  %-18s %s\n" "Providers" "$providers_count configured"
+  printf "  %-18s %s\n" "Fallbacks" "$fallback_count targets"
+  printf "  %-18s %s\n" "Default mode" "$default_mode"
+  printf "  %-18s %s\n" "Client default" "$default_profile (${profile_count} profiles)"
+  printf "\n"
+}
+
+show_status_overview() {
+  local version host port log_level health_state
+  version="$("$python_bin" -m faigate --version 2>/dev/null || echo "faigate unknown")"
+  host="$(faigate_host)"
+  port="$(faigate_port)"
+  log_level="$(faigate_log_level)"
+  if curl -fsS -m 2 "$(faigate_health_url)" >/dev/null 2>&1; then
+    health_state="healthy"
+  else
+    health_state="unreachable"
+  fi
+
+  faigate_ui_header "fusionAIze Gate Status" "Standalone control center"
+  printf "  %-18s %s\n" "Version" "$version"
+  printf "  %-18s %s\n" "Config" "$config_file"
+  printf "  %-18s %s\n" "Env" "$env_file"
+  printf "  %-18s %s\n" "Database" "$db_path"
+  printf "  %-18s %s\n" "Bind" "${host}:${port}"
+  printf "  %-18s %s\n" "Log level" "$log_level"
+  printf "  %-18s %s\n" "Health" "$health_state"
+}
+
+show_models() {
+  local models_url
+  models_url="$(faigate_models_url)"
+  if ! curl -fsS -m 2 "$models_url" >/dev/null 2>&1; then
+    faigate_ui_error "Model list is not reachable at ${models_url}."
+    return 1
+  fi
+
+  curl -fsS -m 2 "$models_url" | "$python_bin" - <<'PY'
+import json
+import sys
+
+data = json.load(sys.stdin)
+for item in data.get("data", []):
+    print(item.get("id", ""))
+PY
+}
+
+run_config_wizard() {
+  local purpose_in purpose client selection apply_mode backup_suffix
+  local -a cmd_args
+
+  faigate_ui_header "fusionAIze Gate Config Wizard" "Providers, routing modes, client profiles"
+  printf "  %bPurpose%b  %s\n" "$FAIGATE_UI_BOLD" "$FAIGATE_UI_RESET" "(1=general  2=coding  3=quality  4=free)"
+  printf "  q) Quit\n"
+  printf "  c) Cancel\n"
+  printf "  ▸ [general]: "
+  read -r purpose_in
+  case "${purpose_in:-1}" in
+    q|Q) exit 0 ;;
+    c|C) return 0 ;;
+    1|general|"") purpose="general" ;;
+    2|coding) purpose="coding" ;;
+    3|quality) purpose="quality" ;;
+    4|free) purpose="free" ;;
+    *) purpose="general" ;;
+  esac
+
+  echo ""
+  printf "  %bClient profile%b  %s\n" "$FAIGATE_UI_BOLD" "$FAIGATE_UI_RESET" "(generic | openclaw | n8n | cli | opencode)"
+  printf "  q) Quit\n"
+  printf "  c) Cancel\n"
+  printf "  ▸ [generic]: "
+  read -r client
+  case "${client:-generic}" in
+    q|Q) exit 0 ;;
+    c|C) return 0 ;;
+    ""|generic|openclaw|n8n|cli|opencode) client="${client:-generic}" ;;
+    *) client="generic" ;;
+  esac
+
+  echo ""
+  faigate_ui_info "Fetching provider candidates for purpose=${purpose} client=${client}..."
+  echo ""
+  FAIGATE_PYTHON="$python_bin" FAIGATE_ENV_FILE="$env_file" \
+    bash "${script_dir}/faigate-config-wizard" \
+      --env-file "$env_file" \
+      --purpose "$purpose" \
+      --client "$client" \
+      --current-config "$config_file" \
+      --list-candidates || true
+
+  echo ""
+  printf "  %bSelect providers%b  %s\n" "$FAIGATE_UI_BOLD" "$FAIGATE_UI_RESET" "(comma-separated IDs, 'all', Enter = recommendations)"
+  printf "  q) Quit\n"
+  printf "  c) Cancel\n"
+  printf "  ▸ Selection: "
+  read -r selection
+  case "$selection" in
+    q|Q) exit 0 ;;
+    c|C) return 0 ;;
+  esac
+
+  echo ""
+  printf "  %bApply mode%b\n" "$FAIGATE_UI_BOLD"
+  printf "    1)  Dry-run only    Preview changes, no writes\n"
+  printf "    2)  Write config    Update config.yaml (backup created automatically)\n"
+  printf "    c)  Cancel\n"
+  printf "    q)  Quit\n"
+  printf "  ▸ [1]: "
+  read -r apply_mode
+  case "${apply_mode:-1}" in
+    q|Q) exit 0 ;;
+    c|C) return 0 ;;
+  esac
+
+  cmd_args=(--env-file "$env_file" --purpose "$purpose" --client "$client")
+  if [ -f "$config_file" ]; then
+    cmd_args+=(--current-config "$config_file" --merge-existing)
+    if [ "${apply_mode:-1}" = "2" ]; then
+      cmd_args+=(--apply recommended_add,recommended_replace,recommended_mode_changes)
+    fi
+  fi
+  if [ -n "$selection" ] && [ "$selection" != "all" ]; then
+    cmd_args+=(--select "$selection")
+  fi
+
+  if [ "${apply_mode:-1}" = "2" ]; then
+    backup_suffix=".before-wizard-$(date +%Y%m%d%H%M%S)"
+    cmd_args+=(--write "$config_file" --write-backup --backup-suffix "$backup_suffix")
+    run_and_pause env FAIGATE_PYTHON="$python_bin" FAIGATE_ENV_FILE="$env_file" \
+      bash "${script_dir}/faigate-config-wizard" "${cmd_args[@]}"
+    printf "  Restart fusionAIze Gate to apply changes? [y/N]: "
+    read -r restart_choice
+    if [[ "${restart_choice:-N}" =~ ^[Yy]$ ]]; then
+      run_and_pause bash "${script_dir}/faigate-restart"
+    fi
+  else
+    cmd_args+=(--dry-run-summary)
+    run_and_pause env FAIGATE_PYTHON="$python_bin" FAIGATE_ENV_FILE="$env_file" \
+      bash "${script_dir}/faigate-config-wizard" "${cmd_args[@]}"
+  fi
+}
+
+run_client_wizard() {
+  local client="$1"
+  local purpose="${2:-general}"
+  local selection apply_mode backup_suffix
+  local -a cmd_args
+
+  faigate_ui_header "fusionAIze Gate Client Wizard" "Scoped to client profile: ${client}"
+  faigate_ui_info "Fetching provider candidates for purpose=${purpose} client=${client}..."
+  echo ""
+  FAIGATE_PYTHON="$python_bin" FAIGATE_ENV_FILE="$env_file" \
+    bash "${script_dir}/faigate-config-wizard" \
+      --env-file "$env_file" \
+      --purpose "$purpose" \
+      --client "$client" \
+      --current-config "$config_file" \
+      --list-candidates || true
+
+  echo ""
+  printf "  %bSelect providers%b  %s\n" "$FAIGATE_UI_BOLD" "$FAIGATE_UI_RESET" "(comma-separated IDs, 'all', Enter = recommendations)"
+  printf "  q) Quit\n"
+  printf "  c) Cancel\n"
+  printf "  ▸ Selection: "
+  read -r selection
+  case "$selection" in
+    q|Q) exit 0 ;;
+    c|C) return 0 ;;
+  esac
+
+  echo ""
+  printf "  %bApply mode%b\n" "$FAIGATE_UI_BOLD"
+  printf "    1)  Dry-run only    Preview changes, no writes\n"
+  printf "    2)  Write config    Update config.yaml (backup created automatically)\n"
+  printf "    c)  Cancel\n"
+  printf "    q)  Quit\n"
+  printf "  ▸ [1]: "
+  read -r apply_mode
+  case "${apply_mode:-1}" in
+    q|Q) exit 0 ;;
+    c|C) return 0 ;;
+  esac
+
+  cmd_args=(
+    --env-file "$env_file"
+    --purpose "$purpose"
+    --client "$client"
+    --current-config "$config_file"
+    --merge-existing
+  )
+  if [ "${apply_mode:-1}" = "2" ]; then
+    cmd_args+=(--apply recommended_add,recommended_replace,recommended_mode_changes)
+    cmd_args+=(--select-profiles "$client")
+  fi
+  if [ -n "$selection" ] && [ "$selection" != "all" ]; then
+    cmd_args+=(--select "$selection")
+  fi
+
+  if [ "${apply_mode:-1}" = "2" ]; then
+    backup_suffix=".client-${client}-$(date +%Y%m%d%H%M%S)"
+    cmd_args+=(--write "$config_file" --write-backup --backup-suffix "$backup_suffix")
+    run_and_pause env FAIGATE_PYTHON="$python_bin" FAIGATE_ENV_FILE="$env_file" \
+      bash "${script_dir}/faigate-config-wizard" "${cmd_args[@]}"
+  else
+    cmd_args+=(--dry-run-summary)
+    run_and_pause env FAIGATE_PYTHON="$python_bin" FAIGATE_ENV_FILE="$env_file" \
+      bash "${script_dir}/faigate-config-wizard" "${cmd_args[@]}"
+  fi
+}
+
+status_menu() {
+  while true; do
+    show_status_overview
+    echo ""
+    faigate_ui_tip "Use Service Status when you want the raw manager output and bound listener details."
+    echo ""
+    printf "    1)  Service Status   Detailed service/runtime status\n"
+    printf "    2)  Health Check     Query /health\n"
+    printf "    3)  Models           List exposed model ids\n"
+    printf "\n"
+    printf "    c)  Cancel\n"
+    printf "    q)  Quit\n\n"
+    printf "  ▸ Choice: "
+    read -r choice
+    case "$choice" in
+      1) run_and_pause bash "${script_dir}/faigate-status" ;;
+      2) run_and_pause bash "${script_dir}/faigate-health" ;;
+      3) run_and_pause show_models ;;
+      c|C|"") return 0 ;;
+      q|Q) exit 0 ;;
+      *) faigate_ui_warn "Invalid choice."; faigate_ui_pause ;;
+    esac
+  done
+}
+
+configure_menu() {
+  while true; do
+    faigate_ui_header "fusionAIze Gate Configure" "Config, providers, and local gateway settings"
+    render_main_snapshot
+    faigate_ui_tip "Use Guided Setup for provider/client recommendations. Use Direct Settings when you already know the exact values to change."
+    echo ""
+    printf "    1)  Current Config   Snapshot of bind settings, providers, modes, and profiles\n"
+    printf "    2)  Guided Setup     Wizard-led provider and client-profile flows\n"
+    printf "    3)  Direct Settings  API keys, HTTP settings, and routing defaults\n"
+    printf "\n"
+    printf "    c)  Cancel\n"
+    printf "    q)  Quit\n\n"
+    printf "  ▸ Choice: "
+    read -r choice
+    case "$choice" in
+      1) run_and_pause bash "${script_dir}/faigate-config-overview" ;;
+      2) configure_guided_menu ;;
+      3) configure_direct_menu ;;
+      c|C|"") return 0 ;;
+      q|Q) exit 0 ;;
+      *) faigate_ui_warn "Invalid choice."; faigate_ui_pause ;;
+    esac
+  done
+}
+
+configure_guided_menu() {
+  while true; do
+    faigate_ui_header "fusionAIze Gate Guided Setup" "Wizard-led flows similar to the later Grid orchestration model"
+    faigate_ui_tip "Start with Full Config Wizard when bootstrapping Gate itself. Use the client-scoped wizards when only one client needs a tuned default."
+    echo ""
+    printf "    1)  Full Config Wizard   Providers, routing modes, and client profiles\n"
+    printf "    2)  OpenClaw Wizard      Client-scoped wizard for OpenClaw\n"
+    printf "    3)  n8n Wizard           Client-scoped wizard for n8n\n"
+    printf "    4)  opencode Wizard      Client-scoped wizard for opencode\n"
+    printf "    5)  CLI Wizard           Client-scoped wizard for cli callers\n"
+    printf "\n"
+    printf "    c)  Cancel\n"
+    printf "    q)  Quit\n\n"
+    printf "  ▸ Choice: "
+    read -r choice
+    case "$choice" in
+      1) run_config_wizard ;;
+      2) run_client_wizard "openclaw" "general" ;;
+      3) run_client_wizard "n8n" "free" ;;
+      4) run_client_wizard "opencode" "coding" ;;
+      5) run_client_wizard "cli" "general" ;;
+      c|C|"") return 0 ;;
+      q|Q) exit 0 ;;
+      *) faigate_ui_warn "Invalid choice."; faigate_ui_pause ;;
+    esac
+  done
+}
+
+configure_direct_menu() {
+  while true; do
+    faigate_ui_header "fusionAIze Gate Direct Settings" "Edit concrete Gate settings without going through the wizard"
+    faigate_ui_tip "Direct Settings are best for small, deliberate edits after the wizard already created a reasonable baseline."
+    echo ""
+    printf "    1)  API Keys         Update provider keys in the env file\n"
+    printf "    2)  HTTP Settings    Host, port, and log level in config.yaml\n"
+    printf "    3)  Routing Modes    Global default mode and client profile modes\n"
+    printf "\n"
+    printf "    c)  Cancel\n"
+    printf "    q)  Quit\n\n"
+    printf "  ▸ Choice: "
+    read -r choice
+    case "$choice" in
+      1) run_and_pause bash "${script_dir}/faigate-api-keys" ;;
+      2) run_and_pause bash "${script_dir}/faigate-server-settings" ;;
+      3) run_and_pause bash "${script_dir}/faigate-routing-settings" ;;
+      c|C|"") return 0 ;;
+      q|Q) exit 0 ;;
+      *) faigate_ui_warn "Invalid choice."; faigate_ui_pause ;;
+    esac
+  done
+}
+
+explore_menu() {
+  while true; do
+    faigate_ui_header "fusionAIze Gate Explore" "Providers, discovery links, and exposed models"
+    faigate_ui_tip "Start with text discovery for a quick scan. Use the JSON export when another tool or UI will consume the results."
+    echo ""
+    printf "    1)  Provider Discovery   Browse provider links and offer tracks\n"
+    printf "    2)  Provider Discovery   JSON export\n"
+    printf "    3)  Models               List exposed model ids\n"
+    printf "    4)  Health Check         Query /health\n"
+    printf "\n"
+    printf "    c)  Cancel\n"
+    printf "    q)  Quit\n\n"
+    printf "  ▸ Choice: "
+    read -r choice
+    case "$choice" in
+      1) run_and_pause bash "${script_dir}/faigate-provider-discovery" --text ;;
+      2) run_and_pause bash "${script_dir}/faigate-provider-discovery" --json ;;
+      3) run_and_pause show_models ;;
+      4) run_and_pause bash "${script_dir}/faigate-health" ;;
+      c|C|"") return 0 ;;
+      q|Q) exit 0 ;;
+      *) faigate_ui_warn "Invalid choice."; faigate_ui_pause ;;
+    esac
+  done
+}
+
+clients_menu() {
+  while true; do
+    faigate_ui_header "fusionAIze Gate Clients" "Client quickstarts, matrix, and client-scoped wizard flows"
+    faigate_ui_tip "Quickstarts explain the current Gate shape for each client. The client wizards are the fastest path when one client needs a different routing posture."
+    echo ""
+    printf "    1)  Quickstarts        Show all client quickstarts\n"
+    printf "    2)  Client Matrix      Show active client profiles and match intent\n"
+    printf "    3)  OpenClaw Wizard    Run a client-scoped wizard for OpenClaw\n"
+    printf "    4)  n8n Wizard         Run a client-scoped wizard for n8n\n"
+    printf "    5)  opencode Wizard    Run a client-scoped wizard for opencode\n"
+    printf "    6)  CLI Wizard         Run a client-scoped wizard for cli callers\n"
+    printf "\n"
+    printf "    c)  Cancel\n"
+    printf "    q)  Quit\n\n"
+    printf "  ▸ Choice: "
+    read -r choice
+    case "$choice" in
+      1) run_and_pause bash "${script_dir}/faigate-client-integrations" ;;
+      2) run_and_pause bash "${script_dir}/faigate-client-integrations" --matrix ;;
+      3) run_client_wizard "openclaw" "general" ;;
+      4) run_client_wizard "n8n" "free" ;;
+      5) run_client_wizard "opencode" "coding" ;;
+      6) run_client_wizard "cli" "general" ;;
+      c|C|"") return 0 ;;
+      q|Q) exit 0 ;;
+      *) faigate_ui_warn "Invalid choice."; faigate_ui_pause ;;
+    esac
+  done
+}
+
+validate_menu() {
+  while true; do
+    faigate_ui_header "fusionAIze Gate Validate" "Operational validation helpers"
+    faigate_ui_tip "Doctor is best for fast local checks. Onboarding Report is better when you want a fuller operator handoff view."
+    echo ""
+    printf "    1)  Doctor               Validate config, env, and local endpoints\n"
+    printf "    2)  Onboarding Report    Human-readable rollout summary\n"
+    printf "    3)  Onboarding Validate  Structured blockers and warnings\n"
+    printf "\n"
+    printf "    c)  Cancel\n"
+    printf "    q)  Quit\n\n"
+    printf "  ▸ Choice: "
+    read -r choice
+    case "$choice" in
+      1) run_and_pause bash "${script_dir}/faigate-doctor" ;;
+      2) run_and_pause bash "${script_dir}/faigate-onboarding-report" ;;
+      3) run_and_pause bash "${script_dir}/faigate-onboarding-validate" ;;
+      c|C|"") return 0 ;;
+      q|Q) exit 0 ;;
+      *) faigate_ui_warn "Invalid choice."; faigate_ui_pause ;;
+    esac
+  done
+}
+
+control_menu() {
+  while true; do
+    faigate_ui_header "fusionAIze Gate Control" "Start, stop, restart, status, and logs"
+    render_main_snapshot
+    faigate_ui_tip "Use Service Overview before restart work, and prefer Recent Logs before jumping into a live tail."
+    echo ""
+    printf "    1)  Service Overview   Manager, paths, bind target, and raw status\n"
+    printf "    2)  Start              Start the service through the active manager\n"
+    printf "    3)  Stop               Stop the service through the active manager\n"
+    printf "    4)  Restart + Verify   Restart and wait for /health to recover\n"
+    printf "    5)  Recent Logs        Print the latest service logs and return\n"
+    printf "    6)  Tail Logs          Follow service logs live\n"
+    printf "    7)  Health Check       Query /health directly\n"
+    printf "\n"
+    printf "    c)  Cancel\n"
+    printf "    q)  Quit\n\n"
+    printf "  ▸ Choice: "
+    read -r choice
+    case "$choice" in
+      1) run_and_pause bash "${script_dir}/faigate-status" ;;
+      2) run_and_pause bash "${script_dir}/faigate-start" ;;
+      3) run_and_pause bash "${script_dir}/faigate-stop" ;;
+      4) run_and_pause bash "${script_dir}/faigate-restart" ;;
+      5) run_and_pause bash "${script_dir}/faigate-logs" --lines 80 ;;
+      6) run_and_pause bash "${script_dir}/faigate-logs" --follow ;;
+      7) run_and_pause bash "${script_dir}/faigate-health" ;;
+      c|C|"") return 0 ;;
+      q|Q) exit 0 ;;
+      *) faigate_ui_warn "Invalid choice."; faigate_ui_pause ;;
+    esac
+  done
+}
+
+update_menu() {
+  while true; do
+    faigate_ui_header "fusionAIze Gate Update" "Release checks and guarded auto-update flows"
+    faigate_ui_tip "Check Updates is read-only. Apply Auto-update should stay the last step after status, health, and log review all look clean."
+    echo ""
+    printf "    1)  Check Updates        Query /api/update\n"
+    printf "    2)  Auto-update Status   Eligibility and guardrails\n"
+    printf "    3)  Apply Auto-update    Run the guarded apply path\n"
+    printf "\n"
+    printf "    c)  Cancel\n"
+    printf "    q)  Quit\n\n"
+    printf "  ▸ Choice: "
+    read -r choice
+    case "$choice" in
+      1) run_and_pause bash "${script_dir}/faigate-update-check" ;;
+      2) run_and_pause bash "${script_dir}/faigate-auto-update" ;;
+      3)
+        printf "  Apply auto-update now? [y/N]: "
+        read -r confirm
+        if [[ "${confirm:-N}" =~ ^[Yy]$ ]]; then
+          run_and_pause bash "${script_dir}/faigate-auto-update" --apply
+        fi
+        ;;
+      c|C|"") return 0 ;;
+      q|Q) exit 0 ;;
+      *) faigate_ui_warn "Invalid choice."; faigate_ui_pause ;;
+    esac
+  done
+}
+
+while true; do
+  faigate_ui_header "fusionAIze Gate Control Center" "Standalone operations menu"
+  render_main_snapshot
+  faigate_ui_tip "A good default path is Configure -> Guided Setup -> Validate -> Control."
+  echo ""
+  printf "    1)  Status       Version, paths, service state, and models\n"
+  printf "    2)  Configure    Wizard, API keys, HTTP settings, routing modes\n"
+  printf "    3)  Clients      Quickstarts, matrix, and client-scoped wizard flows\n"
+  printf "    4)  Explore      Provider discovery and exposed models\n"
+  printf "    5)  Validate     Doctor, onboarding report, validation\n"
+  printf "    6)  Control      Start, stop, restart, status, logs\n"
+  printf "    7)  Update       Release checks and auto-update flows\n"
+  printf "\n"
+  printf "    q)  Quit\n\n"
+  printf "  ▸ Choice: "
+  read -r choice
+  case "$choice" in
+    1) status_menu ;;
+    2) configure_menu ;;
+    3) clients_menu ;;
+    4) explore_menu ;;
+    5) validate_menu ;;
+    6) control_menu ;;
+    7) update_menu ;;
+    q|Q) exit 0 ;;
+    *) faigate_ui_warn "Invalid choice."; faigate_ui_pause ;;
+  esac
+done

@@ -3,6 +3,18 @@ set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/faigate-service-lib.sh"
 
+case "${1:-}" in
+  --help|-h)
+    cat <<'EOF'
+Usage:
+  ./scripts/faigate-start
+
+Start the fusionAIze Gate service through the detected service manager.
+EOF
+    exit 0
+    ;;
+esac
+
 case "$(faigate_platform)" in
   Darwin)
     faigate_launchctl_start

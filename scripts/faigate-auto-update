@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-api_url="${FAIGATE_UPDATE_API_URL:-http://127.0.0.1:8090/api/update?force=true}"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/faigate-service-lib.sh"
+
+api_url="${FAIGATE_UPDATE_API_URL:-$(faigate_update_url)?force=true}"
 mode="${1:-}"
 python_bin="${FAIGATE_PYTHON:-python3}"
 operator_action="auto-update-check"

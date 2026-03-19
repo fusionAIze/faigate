@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
+
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/faigate-service-lib.sh"
+
 curl -fsS \
   -H 'X-faigate-Client: operator' \
   -H 'X-faigate-Operator-Action: update-check' \
-  "http://127.0.0.1:8090/api/update" | head -c 1600
+  "$(faigate_update_url)" | head -c 1600
 echo

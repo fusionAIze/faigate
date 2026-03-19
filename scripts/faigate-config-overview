@@ -1,0 +1,162 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/faigate-service-lib.sh"
+
+config_file="$(faigate_config_file)"
+env_file="$(faigate_env_file)"
+python_bin="$(faigate_python_bin)"
+mode="text"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  ./scripts/faigate-config-overview [--json|--text]
+
+Show the current fusionAIze Gate config snapshot: server bind settings,
+providers, fallback chain, routing modes, client profiles, and model shortcuts.
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --json)
+      mode="json"
+      shift
+      ;;
+    --text)
+      mode="text"
+      shift
+      ;;
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    *)
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+FAIGATE_OVERVIEW_CONFIG="$config_file" \
+FAIGATE_OVERVIEW_ENV="$env_file" \
+FAIGATE_OVERVIEW_MODE="$mode" \
+"$python_bin" - <<'PY'
+import json
+import os
+from pathlib import Path
+
+import yaml
+
+config_path = Path(os.environ["FAIGATE_OVERVIEW_CONFIG"])
+env_path = Path(os.environ["FAIGATE_OVERVIEW_ENV"])
+raw = {}
+if config_path.exists():
+    with config_path.open(encoding="utf-8") as handle:
+        raw = yaml.safe_load(handle) or {}
+
+server = raw.get("server") or {}
+providers = raw.get("providers") or {}
+fallback_chain = raw.get("fallback_chain") or []
+routing = raw.get("routing_modes") or {}
+client_profiles = raw.get("client_profiles") or {}
+shortcuts = ((raw.get("model_shortcuts") or {}).get("shortcuts") or {})
+
+payload = {
+    "config": str(config_path),
+    "env": str(env_path),
+    "server": {
+        "host": server.get("host", "127.0.0.1"),
+        "port": server.get("port", 8090),
+        "log_level": server.get("log_level", "info"),
+    },
+    "providers": [
+        {
+            "name": name,
+            "backend": spec.get("backend", "openai-compat"),
+            "model": spec.get("model", ""),
+            "tier": spec.get("tier", ""),
+            "contract": spec.get("contract", "generic"),
+        }
+        for name, spec in sorted(providers.items())
+        if isinstance(spec, dict)
+    ],
+    "fallback_chain": list(fallback_chain),
+    "routing_modes": {
+        "default": routing.get("default", "auto"),
+        "modes": sorted(str(name) for name in (routing.get("modes") or {}).keys()),
+    },
+    "client_profiles": [
+        {
+            "name": name,
+            "routing_mode": (
+                profile.get("routing_mode", "") if isinstance(profile, dict) else ""
+            ),
+            "prefer_tiers": (
+                list(profile.get("prefer_tiers") or []) if isinstance(profile, dict) else []
+            ),
+        }
+        for name, profile in sorted((client_profiles.get("profiles") or {}).items())
+    ],
+    "shortcuts": [
+        {
+            "name": name,
+            "target": spec.get("target", "") if isinstance(spec, dict) else "",
+            "aliases": list(spec.get("aliases") or []) if isinstance(spec, dict) else [],
+        }
+        for name, spec in sorted(shortcuts.items())
+    ],
+}
+
+if os.environ["FAIGATE_OVERVIEW_MODE"] == "json":
+    print(json.dumps(payload, indent=2, sort_keys=True))
+else:
+    print("fusionAIze Gate Config Overview")
+    print("")
+    print(f"Config: {payload['config']}")
+    print(f"Env   : {payload['env']}")
+    print(
+        f"Bind  : {payload['server']['host']}:{payload['server']['port']} "
+        f"(log={payload['server']['log_level']})"
+    )
+    print("")
+    print("Providers")
+    if payload["providers"]:
+        for item in payload["providers"]:
+            print(
+                f"- {item['name']}: {item['model']} "
+                f"[{item['backend']} / {item['tier'] or 'no-tier'} / {item['contract']}]"
+            )
+    else:
+        print("- none configured")
+    print("")
+    print("Fallback chain")
+    if payload["fallback_chain"]:
+        for name in payload["fallback_chain"]:
+            print(f"- {name}")
+    else:
+        print("- none")
+    print("")
+    print("Routing modes")
+    print(f"- default: {payload['routing_modes']['default']}")
+    if payload["routing_modes"]["modes"]:
+        print(f"- available: {', '.join(payload['routing_modes']['modes'])}")
+    print("")
+    print("Client profiles")
+    if payload["client_profiles"]:
+        for item in payload["client_profiles"]:
+            mode = item["routing_mode"] or "inherit"
+            tiers = f" prefer={','.join(item['prefer_tiers'])}" if item["prefer_tiers"] else ""
+            print(f"- {item['name']}: mode={mode}{tiers}")
+    else:
+        print("- none configured")
+    print("")
+    print("Model shortcuts")
+    if payload["shortcuts"]:
+        for item in payload["shortcuts"]:
+            suffix = f" aliases={','.join(item['aliases'])}" if item["aliases"] else ""
+            print(f"- {item['name']} -> {item['target']}{suffix}")
+    else:
+        print("- none configured")
+PY

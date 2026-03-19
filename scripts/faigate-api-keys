@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/faigate-service-lib.sh"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/faigate-ui-lib.sh"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  ./scripts/faigate-api-keys
+
+Interactive helper to update provider API keys in the current env file.
+
+Env resolution:
+  FAIGATE_ENV_FILE   env file path (defaults to repo .env or packaged override)
+EOF
+}
+
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+  usage
+  exit 0
+fi
+
+repo_root="$(faigate_repo_root)"
+env_file="$(faigate_env_file)"
+example_file="$(faigate_example_env_file)"
+
+mkdir -p "$(dirname "$env_file")"
+if [ ! -f "$env_file" ]; then
+  if [ -f "$example_file" ]; then
+    cp "$example_file" "$env_file"
+  else
+    : >"$env_file"
+  fi
+fi
+chmod 600 "$env_file" 2>/dev/null || true
+
+tmp_file="$(mktemp)"
+cleanup() {
+  rm -f "$tmp_file"
+}
+trap cleanup EXIT
+
+set_value() {
+  local key="$1"
+  local value="$2"
+  grep -v "^${key}=" "$env_file" >"$tmp_file" 2>/dev/null || true
+  printf '%s=%s\n' "$key" "$value" >>"$tmp_file"
+  mv "$tmp_file" "$env_file"
+  : >"$tmp_file"
+}
+
+prompt_value() {
+  local key="$1"
+  local label="$2"
+  local silent="${3:-yes}"
+  local current value
+  current="$(faigate_env_value "$key" 2>/dev/null || true)"
+  printf "  %-28s [%s]: " "$label" "$(faigate_mask_secret "$current")"
+  if [ "$silent" = "yes" ]; then
+    read -r -s value
+    echo ""
+  else
+    read -r value
+  fi
+  case "$value" in
+    :q) exit 0 ;;
+    :c) faigate_ui_warn "Cancelled."; exit 0 ;;
+  esac
+  if [ -n "$value" ]; then
+    set_value "$key" "$value"
+  fi
+}
+
+faigate_ui_header "fusionAIze Gate API Keys" "$env_file"
+faigate_ui_info "Press Enter to keep the current value. Type :c to cancel or :q to quit."
+printf "\n"
+
+printf "  %bLLM Providers%b\n" "$FAIGATE_UI_BOLD" "$FAIGATE_UI_RESET"
+prompt_value "ANTHROPIC_API_KEY" "ANTHROPIC_API_KEY"
+prompt_value "OPENAI_API_KEY" "OPENAI_API_KEY"
+prompt_value "GEMINI_API_KEY" "GEMINI_API_KEY"
+prompt_value "DEEPSEEK_API_KEY" "DEEPSEEK_API_KEY"
+prompt_value "OPENROUTER_API_KEY" "OPENROUTER_API_KEY"
+prompt_value "KILOCODE_API_KEY" "KILOCODE_API_KEY"
+prompt_value "BLACKBOX_API_KEY" "BLACKBOX_API_KEY"
+
+printf "\n"
+printf "  %bOptional Overrides%b\n" "$FAIGATE_UI_BOLD" "$FAIGATE_UI_RESET"
+prompt_value "OPENAI_BASE_URL" "OPENAI_BASE_URL" "no"
+prompt_value "ANTHROPIC_BASE_URL" "ANTHROPIC_BASE_URL" "no"
+prompt_value "GEMINI_BASE_URL" "GEMINI_BASE_URL" "no"
+prompt_value "DEEPSEEK_BASE_URL" "DEEPSEEK_BASE_URL" "no"
+prompt_value "OPENROUTER_BASE_URL" "OPENROUTER_BASE_URL" "no"
+
+printf "\n"
+faigate_ui_success "API key env updated: $env_file"

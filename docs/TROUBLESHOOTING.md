@@ -176,7 +176,7 @@ Use:
 
 ```bash
 faigate-status
-faigate-logs
+faigate-logs --lines 80
 faigate-health
 ```
 

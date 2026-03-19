@@ -6,6 +6,21 @@ The format is intentionally lightweight and human-readable. Group entries by rel
 
 ## Unreleased
 
+### Added
+
+- Added a first `faigate-menu` control center with a shared terminal UI, the new fusionAIze Gate header, and consistent `q`/`c` navigation across status, configure, explore, validate, control, and update menus
+- Added `faigate-api-keys` and `faigate-server-settings` so API keys, host, port, and log-level changes have a Gate-native interactive path instead of living only in external orchestration layers
+- Added `faigate-routing-settings` so the global default routing mode and client-profile routing defaults can be reviewed and adjusted from the same Gate-native control flow
+- Added `faigate-client-integrations` plus a `Clients` section in `faigate-menu` so OpenClaw, n8n, opencode, and generic CLI quickstarts can be reviewed and driven through client-scoped wizard flows
+- Added `faigate-config-overview` plus a clearer `Current Config` / `Guided Setup` / `Direct Settings` split inside `faigate-menu` so configuration flows now map more cleanly to the later Grid-style orchestration model
+
+### Changed
+
+- Aligned helper scripts such as `faigate-health`, `faigate-status`, `faigate-update-check`, `faigate-auto-update`, and `faigate-doctor` around shared config/env/port resolution so repo, packaged, and later Grid-driven flows can behave consistently
+- Extended install and Homebrew helper exposure so the new menu/config helpers can ship through the same operator-facing paths as the existing scripts
+- Expanded `faigate-status`, `faigate-logs`, and `faigate-restart` so service control now carries clearer service-manager context, recent-vs-live log flows, and restart verification instead of only raw process-manager commands
+- Polished `faigate-menu` with compact runtime/config snapshots in the main and control/config submenus plus short inline tips so the shell UX stays self-orienting between steps
+
 ## v1.4.0 - 2026-03-19
 
 ### Changed
