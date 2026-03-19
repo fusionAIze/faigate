@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+config_file="${FAIGATE_CONFIG_FILE:-$repo_root/config.yaml}"
+python_bin="${FAIGATE_PYTHON:-python3}"
+mode="text"
+link_source=""
+offer_track=""
+disclosed_only="0"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --json)
+      mode="json"
+      shift
+      ;;
+    --text)
+      mode="text"
+      shift
+      ;;
+    --link-source)
+      link_source="${2:-}"
+      shift 2
+      ;;
+    --offer-track)
+      offer_track="${2:-}"
+      shift 2
+      ;;
+    --disclosed-only)
+      disclosed_only="1"
+      shift
+      ;;
+    *)
+      echo "usage: faigate-provider-discovery [--json|--text] [--link-source official|operator_override] [--offer-track TRACK] [--disclosed-only]" >&2
+      exit 2
+      ;;
+  esac
+done
+
+export FAIGATE_DISCOVERY_CONFIG="$config_file"
+export FAIGATE_DISCOVERY_MODE="$mode"
+export FAIGATE_DISCOVERY_LINK_SOURCE="$link_source"
+export FAIGATE_DISCOVERY_OFFER_TRACK="$offer_track"
+export FAIGATE_DISCOVERY_DISCLOSED_ONLY="$disclosed_only"
+
+"$python_bin" - <<'PY'
+import json
+import os
+
+from faigate.config import load_config
+from faigate.provider_catalog import build_provider_discovery_view
+
+view = build_provider_discovery_view(
+    load_config(os.environ["FAIGATE_DISCOVERY_CONFIG"]),
+    link_source=os.environ.get("FAIGATE_DISCOVERY_LINK_SOURCE") or None,
+    disclosed_only=os.environ.get("FAIGATE_DISCOVERY_DISCLOSED_ONLY") == "1",
+    offer_track=os.environ.get("FAIGATE_DISCOVERY_OFFER_TRACK") or None,
+)
+
+if os.environ["FAIGATE_DISCOVERY_MODE"] == "json":
+    print(json.dumps(view, indent=2, sort_keys=True))
+else:
+    policy = view.get("recommendation_policy", {})
+    filters = view.get("filters", {})
+    print("fusionAIze Gate Provider Discovery")
+    print("")
+    print(
+        "Policy: provider links affect ranking = "
+        f"{policy.get('provider_links_affect_ranking', False)}"
+    )
+    if policy.get("disclosure"):
+        print(f"Disclosure: {policy['disclosure']}")
+    if any(filters.values()):
+        print(
+            "Filters: "
+            f"link_source={filters.get('link_source') or 'any'}, "
+            f"offer_track={filters.get('offer_track') or 'any'}, "
+            f"disclosed_only={filters.get('disclosed_only', False)}"
+        )
+    for item in view.get("providers", []):
+        label = "disclosed link" if item.get("disclosure_required") else "official link"
+        print("")
+        print(
+            f"- {item['provider']}: {item['provider_type']} / "
+            f"{item['offer_track']} / {item['evidence_level']}"
+        )
+        print(f"  {label}: {item['resolved_url']}")
+        if item.get("operator_env_var"):
+            print(f"  env override: {item['operator_env_var']}")
+PY

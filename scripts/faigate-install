@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/faigate-service-lib.sh"
+
+repo_root="$(faigate_repo_root)"
+helpers=(
+  faigate-bootstrap
+  faigate-config-wizard
+  faigate-doctor
+  faigate-onboarding-report
+  faigate-onboarding-validate
+  faigate-update-check
+  faigate-auto-update
+  faigate-install
+  faigate-start
+  faigate-stop
+  faigate-restart
+  faigate-status
+  faigate-logs
+  faigate-health
+  faigate-update
+  faigate-uninstall
+)
+
+case "$(faigate_platform)" in
+  Darwin)
+    mkdir -p "$(faigate_mac_config_dir)" "$(faigate_mac_logs_dir)"
+    if [ ! -f "$(faigate_mac_config_path)" ]; then
+      cp "$repo_root/config.yaml" "$(faigate_mac_config_path)"
+      echo "copied config template to: $(faigate_mac_config_path)"
+    fi
+    if [ ! -f "$(faigate_mac_config_dir)/faigate.env" ]; then
+      cp "$repo_root/.env.example" "$(faigate_mac_config_dir)/faigate.env"
+      echo "copied env template to: $(faigate_mac_config_dir)/faigate.env"
+    fi
+    faigate_render_mac_plist
+    faigate_install_helper_links "${helpers[@]}"
+    faigate_launchctl_start
+    faigate_launchctl_status | sed -n "1,120p"
+    ;;
+  *)
+    if ! id -u faigate >/dev/null 2>&1; then
+      sudo useradd --system --home /opt/faigate --shell /usr/sbin/nologin faigate
+    fi
+
+    sudo install -d -o faigate -g faigate -m 755 /var/lib/faigate
+    sudo install -m 644 "$repo_root/faigate.service" /etc/systemd/system/faigate.service
+
+    for helper in "${helpers[@]}"; do
+      sudo ln -sf "$repo_root/scripts/$helper" "/usr/local/bin/$helper"
+    done
+
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now faigate.service
+    sudo systemctl status faigate.service --no-pager -l | sed -n "1,120p"
+    ;;
+esac

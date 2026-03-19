@@ -1,6 +1,6 @@
-# FoundryGate API Reference
+# fusionAIze Gate API Reference
 
-FoundryGate keeps the client-facing surface intentionally small: OpenAI-compatible paths for chat and image workloads, plus a compact operator API for health, routing introspection, and updates.
+fusionAIze Gate keeps the client-facing surface intentionally small: OpenAI-compatible paths for chat and image workloads, plus a compact operator API for health, routing introspection, and updates.
 
 ## Core OpenAI-Compatible Endpoints
 
@@ -8,7 +8,7 @@ FoundryGate keeps the client-facing surface intentionally small: OpenAI-compatib
 
 Returns the virtual `auto` model, any configured routing modes and model shortcuts, plus one entry for every provider that actually loaded at startup.
 
-This is also the source of truth for OpenClaw-side model ids under a `foundrygate` provider entry.
+This is also the source of truth for OpenClaw-side model ids under a `faigate` provider entry.
 
 ```bash
 curl -fsS http://127.0.0.1:8090/v1/models
@@ -41,8 +41,8 @@ curl -fsS http://127.0.0.1:8090/v1/chat/completions \
 Routes image-generation requests to providers with `capabilities.image_generation: true`.
 
 - validates `prompt`, `n`, and `size` before any provider call
-- supports image-policy hints via `metadata.image_policy` or `X-FoundryGate-Image-Policy`
-- works well with OpenClaw when `imageModel.primary` is `foundrygate/auto` or one explicit `foundrygate/<provider-id>`
+- supports image-policy hints via `metadata.image_policy` or `X-faigate-Image-Policy`
+- works well with OpenClaw when `imageModel.primary` is `faigate/auto` or one explicit `faigate/<provider-id>`
 
 ```bash
 curl -fsS http://127.0.0.1:8090/v1/images/generations \
@@ -61,7 +61,7 @@ Routes image-editing requests to providers with `capabilities.image_editing: tru
 - expects `multipart/form-data`
 - currently supports one required `image` and one optional `mask`
 - rejects uploads above `security.max_upload_bytes`
-- accepts image-policy hints via `image_policy`, `metadata.image_policy`, or `X-FoundryGate-Image-Policy`
+- accepts image-policy hints via `image_policy`, `metadata.image_policy`, or `X-faigate-Image-Policy`
 - requires at least one loaded provider with `capabilities.image_editing: true`
 
 ```bash
@@ -106,8 +106,8 @@ curl -fsS http://127.0.0.1:8090/api/provider-catalog
 For local operator use, the same discovery block is also available via:
 
 ```bash
-./scripts/foundrygate-provider-discovery
-./scripts/foundrygate-provider-discovery --json
+./scripts/faigate-provider-discovery
+./scripts/faigate-provider-discovery --json
 ```
 
 ### `GET /api/provider-discovery`
@@ -117,8 +117,8 @@ Returns the compact discovery-link view with the same link-neutral recommendatio
 ```bash
 curl -fsS 'http://127.0.0.1:8090/api/provider-discovery?offer_track=free'
 curl -fsS 'http://127.0.0.1:8090/api/provider-discovery?link_source=operator_override&disclosed_only=true'
-./scripts/foundrygate-provider-discovery --json --offer-track free
-./scripts/foundrygate-provider-discovery --link-source operator_override --disclosed-only
+./scripts/faigate-provider-discovery --json --offer-track free
+./scripts/faigate-provider-discovery --link-source operator_override --disclosed-only
 ```
 
 ### `GET /api/stats`
@@ -203,10 +203,10 @@ open http://127.0.0.1:8090/dashboard
 
 Non-streaming chat completions include:
 
-- `X-FoundryGate-Provider`
-- `X-FoundryGate-Mode` when a virtual routing mode was active
-- `X-FoundryGate-Shortcut` when a model shortcut was used
-- `X-FoundryGate-Layer`
-- `X-FoundryGate-Rule`
+- `X-faigate-Provider`
+- `X-faigate-Mode` when a virtual routing mode was active
+- `X-faigate-Shortcut` when a model shortcut was used
+- `X-faigate-Layer`
+- `X-faigate-Rule`
 
 These are intentionally bounded and sanitized before they leave the gateway.

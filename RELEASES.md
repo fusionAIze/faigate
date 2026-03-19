@@ -1,4 +1,4 @@
-# FoundryGate Releases
+# fusionAIze Gate Releases
 
 This repo does not require a heavy release process. Use lightweight tags plus GitHub Releases, with release automation building the Python package and container image from tags.
 
@@ -16,14 +16,14 @@ This repo does not require a heavy release process. Use lightweight tags plus Gi
 8. Confirm that README plus the relevant docs pages still match the shipped runtime behavior.
 9. If packaging or Docker changed shortly before the release, run the publish dry run first.
 10. For hardening-heavy releases, keep the API functional tests green alongside unit and config coverage.
-11. If the Homebrew formula changed, bump [`Formula/foundrygate.rb`](./Formula/foundrygate.rb) to the new release tag and update its `sha256`.
+11. If the Homebrew formula changed, bump [`Formula/faigate.rb`](./Formula/faigate.rb) to the new release tag and update its `sha256`.
 
 ## Example
 
 ```bash
 git checkout main
 git pull --ff-only origin main
-git tag -a v1.3.0 -m "FoundryGate v1.3.0"
+git tag -a v1.3.0 -m "fusionAIze Gate v1.3.0"
 git push origin v1.3.0
 ```
 
@@ -53,17 +53,17 @@ The repo also includes [publish-dry-run](./.github/workflows/publish-dry-run.yml
 
 ## Current Release Baseline
 
-- `v0.3.0` is the first FoundryGate-branded release.
+- `v0.3.0` is the first fusionAIze Gate-branded release.
 - `v0.4.0` establishes the hardened routing baseline: request hooks, multi-dimensional scoring, route introspection, and the refined operator dashboard.
 - `v0.5.0` establishes the operator distribution baseline: image-provider contracts, Docker and GHCR packaging, PyPI workflow support, onboarding helpers, repo community standards, and cached release update checks.
 - `v0.6.0` establishes the modality-expansion baseline: image route previews, provider capability coverage, shared image request validation, and image policy presets.
 - `v0.7.0` establishes the operations-polish baseline: update alerts, operator events, rollout guardrails, scoped update checks, maintenance windows, and post-update verification hints.
 - `v0.8.0` establishes the onboarding baseline: repeatable provider/client rollout helpers, starter templates, delegated-traffic examples, env validation, and shareable onboarding reports.
 - `v0.9.0` is the pre-`v1.0` hardening baseline: conservative response headers, bounded request surfaces, stronger functional API coverage, and a full documentation pass over operator-facing behavior.
-- `v1.0.0` establishes the stable baseline: trust-boundary validation for upstream base URLs, sanitized provider-error responses, a documented security review, and the separate `@foundrygate/cli` npm package for CLI-facing workflows.
+- `v1.0.0` establishes the stable baseline: trust-boundary validation for upstream base URLs, sanitized provider-error responses, a documented security review, and the separate `@faigate/cli` npm package for CLI-facing workflows.
 - `v1.1.0` deepens post-1.0 adoption: wider AI-native starter coverage, tighter policy semantics, richer client highlights in stats/dashboard, and cleaner onboarding guidance for popular agent frameworks.
 - `v1.2.0` establishes the workstation and packaging baseline: Linux/macOS/Windows workstation guidance, macOS-aware runtime helpers, Windows startup examples, explicit config-path support for packaged installs, and a project-owned Homebrew formula path.
-- `v1.2.1` is the first packaging follow-up on top of that baseline: the Homebrew formula now prefers `python@3.12` for a cleaner macOS install path and the docs now explicitly cover unqualified `brew install foundrygate` after tapping the project-owned tap.
+- `v1.2.1` is the first packaging follow-up on top of that baseline: the Homebrew formula now prefers `python@3.12` for a cleaner macOS install path and the docs now explicitly cover unqualified `brew install faigate` after tapping the project-owned tap.
 - `v1.2.2` hardens the macOS packaging path further: the Homebrew formula now builds `pydantic-core` from source with explicit header padding, validates the wrapped binary in its formula test, and documents how virtualenvs can shadow the Brew-installed CLI.
 - `v1.2.3` finishes the immediate Brew runtime stabilization pass: the Brew-managed wrapper now invokes the correct Python module entrypoint and the formula also builds `watchfiles` from source to avoid the next macOS linkage fixup failure.
 - `v1.3.0` establishes the guided setup and catalog-assisted discovery baseline: routing modes and shortcuts are first-class, the config wizard can suggest, diff, apply, and back up multi-provider changes, provider-catalog drift alerts are richer, and discovery views stay explicitly performance-led and link-neutral.
@@ -75,7 +75,7 @@ The repo also includes [publish-dry-run](./.github/workflows/publish-dry-run.yml
 - `v0.6.0`: modality-aware image routing becomes an explicit release line with provider inventory and image-policy guidance.
 - `v0.7.0`: helper-driven update controls become a first-class release line with scoped rollout gates and verification hooks.
 - `v0.8.0`: many-provider and many-client onboarding becomes copy/pasteable and validation-backed through reports, starters, and doctor checks.
-- `v1.0.0`: keep GitHub Releases, Docker, and PyPI, and add the separate npm CLI package under `packages/foundrygate-cli`.
+- `v1.0.0`: keep GitHub Releases, Docker, and PyPI, and add the separate npm CLI package under `packages/faigate-cli`.
 - `v1.2.0`: add the project-owned Homebrew packaging path for macOS workstations while keeping Docker, GitHub Releases, Python artifacts, and the separate npm CLI package.
 - `v1.2.1`: harden the Homebrew path with a more stable Python baseline and clearer tap/install guidance for macOS users.
 - `v1.2.2`: finish the first macOS packaging hardening pass by targeting the `pydantic-core` linkage warning directly and tightening the wrapper-level install checks.
@@ -84,21 +84,21 @@ The repo also includes [publish-dry-run](./.github/workflows/publish-dry-run.yml
 
 The npm package stays separate from the Python gateway core. It is meant for CLI-facing integrations, not for rewriting the service runtime.
 
-`v1.2.0` started the project-owned Homebrew path through [`Formula/foundrygate.rb`](./Formula/foundrygate.rb), intended for a dedicated tap or direct tap-by-URL workflow on macOS.
+`v1.2.0` started the project-owned Homebrew path through [`Formula/faigate.rb`](./Formula/faigate.rb), intended for a dedicated tap or direct tap-by-URL workflow on macOS.
 
 ## Scheduled Deployment Examples
 
-FoundryGate now includes a conservative helper-driven update path for controlled environments. The recommended examples live in:
+fusionAIze Gate now includes a conservative helper-driven update path for controlled environments. The recommended examples live in:
 
-- [docs/examples/foundrygate-auto-update.service](./docs/examples/foundrygate-auto-update.service)
-- [docs/examples/foundrygate-auto-update.timer](./docs/examples/foundrygate-auto-update.timer)
-- [docs/examples/foundrygate-auto-update.cron](./docs/examples/foundrygate-auto-update.cron)
+- [docs/examples/faigate-auto-update.service](./docs/examples/faigate-auto-update.service)
+- [docs/examples/faigate-auto-update.timer](./docs/examples/faigate-auto-update.timer)
+- [docs/examples/faigate-auto-update.cron](./docs/examples/faigate-auto-update.cron)
 
 Use these only after you have already validated the manual path:
 
 ```bash
-./scripts/foundrygate-update-check
-./scripts/foundrygate-auto-update
+./scripts/faigate-update-check
+./scripts/faigate-auto-update
 ```
 
 Keep `allow_major: false` unless you are intentionally allowing major-version rollouts through the scheduled helper.

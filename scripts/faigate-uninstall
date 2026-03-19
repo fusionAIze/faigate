@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/faigate-service-lib.sh"
+
+helpers=(
+  faigate-install
+  faigate-bootstrap
+  faigate-config-wizard
+  faigate-doctor
+  faigate-onboarding-report
+  faigate-onboarding-validate
+  faigate-start
+  faigate-stop
+  faigate-restart
+  faigate-status
+  faigate-logs
+  faigate-health
+  faigate-update
+  faigate-auto-update
+  faigate-uninstall
+)
+
+case "$(faigate_platform)" in
+  Darwin)
+    faigate_launchctl_stop
+    rm -f "$(faigate_mac_plist_path)"
+    faigate_remove_helper_links "${helpers[@]}"
+    echo "removed: $(faigate_mac_plist_path)"
+    ;;
+  *)
+    sudo systemctl disable --now faigate.service || true
+    sudo rm -f /etc/systemd/system/faigate.service
+    for helper in "${helpers[@]}"; do
+      sudo rm -f "/usr/local/bin/$helper"
+    done
+    sudo systemctl daemon-reload
+    echo "removed: /etc/systemd/system/faigate.service"
+    echo "removed helper links from: /usr/local/bin"
+    ;;
+esac

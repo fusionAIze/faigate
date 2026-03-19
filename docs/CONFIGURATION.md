@@ -1,6 +1,6 @@
-# FoundryGate Configuration
+# fusionAIze Gate Configuration
 
-FoundryGate is configured through `config.yaml` plus environment variables loaded from `.env`.
+fusionAIze Gate is configured through `config.yaml` plus environment variables loaded from `.env`.
 
 ## Start Here
 
@@ -10,18 +10,18 @@ FoundryGate is configured through `config.yaml` plus environment variables loade
 
 ## Core Environment Variables
 
-### `FOUNDRYGATE_DB_PATH`
+### `FAIGATE_DB_PATH`
 
 Use this for the SQLite metrics database. The default service path is:
 
 ```text
-/var/lib/foundrygate/foundrygate.db
+/var/lib/faigate/faigate.db
 ```
 
 For local non-root runs, point it somewhere writable outside the repo checkout:
 
 ```bash
-export FOUNDRYGATE_DB_PATH="$HOME/.local/state/foundrygate/foundrygate.db"
+export FAIGATE_DB_PATH="$HOME/.local/state/faigate/faigate.db"
 ```
 
 ### Stock Provider API Keys
@@ -74,8 +74,8 @@ These settings drive the bounded JSON, upload, and routing-header behavior that 
 
 This does not rewrite `config.yaml` automatically. It powers:
 
-- `foundrygate-doctor`
-- `foundrygate-onboarding-report`
+- `faigate-doctor`
+- `faigate-onboarding-report`
 - `GET /api/provider-catalog`
 
 The catalog now carries a little more structure than just one recommended model:
@@ -93,8 +93,8 @@ Provider-discovery links can also be layered onto the catalog without touching `
 Pattern:
 
 ```bash
-export FOUNDRYGATE_PROVIDER_LINK_OPENROUTER_FALLBACK_URL="https://go.example.com/openrouter"
-export FOUNDRYGATE_PROVIDER_LINK_KILOCODE_URL="https://go.example.com/kilo"
+export FAIGATE_PROVIDER_LINK_OPENROUTER_FALLBACK_URL="https://go.example.com/openrouter"
+export FAIGATE_PROVIDER_LINK_KILOCODE_URL="https://go.example.com/kilo"
 ```
 
 These env vars are operator-controlled full URLs. They are intended for disclosed signup or discovery links and keep link configuration out of normal client config. If unset, the catalog falls back to the provider's official signup or landing URL.
@@ -107,17 +107,17 @@ The guardrail is strict:
 
 The first CLI surfaces for this are the existing operator helpers:
 
-- `foundrygate-onboarding-report`
-- `foundrygate-doctor`
-- `foundrygate-provider-discovery`
+- `faigate-onboarding-report`
+- `faigate-doctor`
+- `faigate-provider-discovery`
 
 They show the resolved link together with the link-neutral policy state, so later browser or control-center work can build on the same rule set.
 
 The compact discovery helper can also filter those links without changing the catalog itself:
 
 ```bash
-./scripts/foundrygate-provider-discovery --offer-track free
-./scripts/foundrygate-provider-discovery --json --link-source operator_override --disclosed-only
+./scripts/faigate-provider-discovery --offer-track free
+./scripts/faigate-provider-discovery --json --link-source operator_override --disclosed-only
 curl -fsS 'http://127.0.0.1:8090/api/provider-discovery?offer_track=byok'
 ```
 
@@ -132,20 +132,20 @@ For fast-moving offers, the current preferred review inputs are:
 The config wizard can use this catalog metadata during first setup and later updates:
 
 ```bash
-./scripts/foundrygate-config-wizard --help
-./scripts/foundrygate-config-wizard --purpose general --client generic --list-candidates
-./scripts/foundrygate-config-wizard --current-config config.yaml --purpose general --client generic
-./scripts/foundrygate-config-wizard --purpose free --client n8n \
+./scripts/faigate-config-wizard --help
+./scripts/faigate-config-wizard --purpose general --client generic --list-candidates
+./scripts/faigate-config-wizard --current-config config.yaml --purpose general --client generic
+./scripts/faigate-config-wizard --purpose free --client n8n \
   --select kilocode,blackbox-free,gemini-flash-lite > config.yaml
-./scripts/foundrygate-config-wizard --current-config config.yaml --merge-existing \
+./scripts/faigate-config-wizard --current-config config.yaml --merge-existing \
   --select openrouter-fallback --write config.yaml
-./scripts/foundrygate-config-wizard --current-config config.yaml --purpose free --client n8n \
+./scripts/faigate-config-wizard --current-config config.yaml --purpose free --client n8n \
   --apply recommended_add,recommended_replace,recommended_mode_changes \
   --select kilocode,openrouter-fallback --select-profiles n8n --write config.yaml
-./scripts/foundrygate-config-wizard --current-config config.yaml --purpose free --client n8n \
+./scripts/faigate-config-wizard --current-config config.yaml --purpose free --client n8n \
   --apply recommended_add,recommended_replace,recommended_mode_changes \
   --select kilocode,openrouter-fallback --select-profiles n8n --dry-run-summary
-./scripts/foundrygate-config-wizard --current-config config.yaml --purpose free --client n8n \
+./scripts/faigate-config-wizard --current-config config.yaml --purpose free --client n8n \
   --apply recommended_add,recommended_replace,recommended_mode_changes \
   --select kilocode,openrouter-fallback --select-profiles n8n \
   --write config.yaml --write-backup --backup-suffix .before-wizard
@@ -156,7 +156,7 @@ That gives operators one purpose-aware candidate list, config-aware update sugge
 If you want the shortest reminder of the whole flow, run:
 
 ```bash
-./scripts/foundrygate-config-wizard --help
+./scripts/faigate-config-wizard --help
 ```
 
 ## Provider Fields
@@ -220,14 +220,14 @@ Useful `image` metadata:
 - `supported_sizes`
 - `policy_tags`
 
-If OpenClaw should route image traffic through FoundryGate, pair this with:
+If OpenClaw should route image traffic through fusionAIze Gate, pair this with:
 
-- `imageModel.primary: "foundrygate/auto"` for automatic image-provider selection
-- or `imageModel.primary: "foundrygate/<provider-id>"` for one fixed image backend
+- `imageModel.primary: "faigate/auto"` for automatic image-provider selection
+- or `imageModel.primary: "faigate/<provider-id>"` for one fixed image backend
 
 ## Client Profiles And Request Hooks
 
-FoundryGate supports two lightweight extension seams:
+fusionAIze Gate supports two lightweight extension seams:
 
 - `routing_modes`
   - virtual model ids such as `auto`, `eco`, `premium`, `free`, or custom names
@@ -244,11 +244,11 @@ Use the onboarding docs and starter examples when introducing a new client inste
 
 ## Config Wizard
 
-For a first local config, let FoundryGate suggest one from the API keys already present in your env file:
+For a first local config, let fusionAIze Gate suggest one from the API keys already present in your env file:
 
 ```bash
-./scripts/foundrygate-config-wizard --help
-./scripts/foundrygate-config-wizard --purpose general > config.yaml
+./scripts/faigate-config-wizard --help
+./scripts/faigate-config-wizard --purpose general > config.yaml
 ```
 
 Supported starting purposes:
@@ -304,9 +304,9 @@ The repo ships ready-to-copy examples under [`docs/examples`](./examples):
 Use these before rolling out a new provider or client:
 
 ```bash
-./scripts/foundrygate-doctor
-./scripts/foundrygate-onboarding-report
-./scripts/foundrygate-onboarding-validate
+./scripts/faigate-doctor
+./scripts/faigate-onboarding-report
+./scripts/faigate-onboarding-validate
 ```
 
 These helpers catch missing env placeholders, rollout blockers, provider capability gaps, and profile issues before live traffic hits the gateway.

@@ -3,11 +3,11 @@
 import sqlite3
 from pathlib import Path
 
-from foundrygate.metrics import MetricsStore
+from faigate.metrics import MetricsStore
 
 
 def test_metrics_store_persists_trace_fields(tmp_path):
-    db_path = tmp_path / "foundrygate.db"
+    db_path = tmp_path / "faigate.db"
     metrics = MetricsStore(str(db_path))
     metrics.init()
 

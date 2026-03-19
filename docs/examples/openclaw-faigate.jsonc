@@ -1,0 +1,61 @@
+// Example OpenClaw provider block for fusionAIze Gate.
+// Merge this into ~/.openclaw/openclaw.json.
+//
+// Important:
+// - The ids listed under providers.faigate.models must match
+//   GET /v1/models from fusionAIze Gate.
+// - Use faigate/auto for normal chat routing and, if desired, also for
+//   imageModel so fusionAIze Gate can choose among image-capable providers.
+{
+  "models": {
+    "mode": "merge",
+    "providers": {
+      "faigate": {
+        "baseUrl": "http://127.0.0.1:8090/v1",
+        "apiKey": "local",
+        "auth": "api-key",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "auto",
+            "name": "fusionAIze Gate Auto-Router",
+            "contextWindow": 128000,
+            "maxTokens": 8000
+          },
+          {
+            "id": "local-worker",
+            "name": "Local Worker (via fusionAIze Gate)",
+            "contextWindow": 128000,
+            "maxTokens": 8000
+          },
+          {
+            "id": "image-provider",
+            "name": "Image Provider (via fusionAIze Gate)",
+            "contextWindow": 128000,
+            "maxTokens": 8000
+          }
+        ]
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "faigate/auto",
+        "fallbacks": []
+      },
+      "imageModel": {
+        "primary": "faigate/auto",
+        "fallbacks": []
+      },
+      "models": {
+        "faigate/auto": { "alias": "auto" },
+        "faigate/local-worker": { "alias": "local" },
+        "faigate/image-provider": { "alias": "img" }
+      },
+      "subagents": {
+        "model": "faigate/auto"
+      }
+    }
+  }
+}

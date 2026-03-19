@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+curl -fsS \
+  -H 'X-faigate-Client: operator' \
+  -H 'X-faigate-Operator-Action: update-check' \
+  "http://127.0.0.1:8090/api/update" | head -c 1600
+echo

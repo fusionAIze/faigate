@@ -6,7 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from foundrygate.onboarding import (
+from faigate.onboarding import (
     build_onboarding_report,
     build_onboarding_validation,
     collect_provider_env_requirements,
@@ -47,7 +47,7 @@ request_hooks:
   hooks: []
 update_check:
   enabled: true
-  repository: "typelicious/FoundryGate"
+  repository: "fusionAIze/faigate"
 auto_update:
   enabled: false
 """.strip(),
@@ -118,10 +118,10 @@ auto_update:
     assert "local-worker: local-worker / openai-compat / local / ready" in text
     assert "- stage 1 primary: local-worker" in text
     assert "Integration quickstarts" in text
-    assert "header: X-FoundryGate-Client: codex" in text
+    assert "header: X-faigate-Client: codex" in text
 
     markdown = render_onboarding_report_markdown(report)
-    assert "# FoundryGate Onboarding Report" in markdown
+    assert "# fusionAIze Gate Onboarding Report" in markdown
     assert "## Provider Rollout" in markdown
     assert "`local-worker`" in markdown
 
@@ -234,7 +234,7 @@ def test_onboarding_report_includes_provider_discovery_links(tmp_path: Path, mon
     env_file = tmp_path / ".env"
     env_file.write_text("OPENROUTER_API_KEY=or-demo\n", encoding="utf-8")
     monkeypatch.setenv(
-        "FOUNDRYGATE_PROVIDER_LINK_OPENROUTER_FALLBACK_URL",
+        "FAIGATE_PROVIDER_LINK_OPENROUTER_FALLBACK_URL",
         "https://go.example.test/openrouter",
     )
 
@@ -366,11 +366,11 @@ auto_update:
     )
 
     repo_root = Path(__file__).resolve().parent.parent
-    script = repo_root / "scripts" / "foundrygate-onboarding-report"
+    script = repo_root / "scripts" / "faigate-onboarding-report"
     env = os.environ.copy()
-    env["FOUNDRYGATE_CONFIG_FILE"] = str(config_file)
-    env["FOUNDRYGATE_ENV_FILE"] = str(env_file)
-    env["FOUNDRYGATE_PYTHON"] = sys.executable
+    env["FAIGATE_CONFIG_FILE"] = str(config_file)
+    env["FAIGATE_ENV_FILE"] = str(env_file)
+    env["FAIGATE_PYTHON"] = sys.executable
     env["PYTHONPATH"] = str(repo_root)
 
     completed = subprocess.run(
@@ -389,7 +389,7 @@ auto_update:
 
 def test_provider_discovery_helper_supports_json_output(tmp_path: Path, monkeypatch):
     monkeypatch.setenv(
-        "FOUNDRYGATE_PROVIDER_LINK_OPENROUTER_FALLBACK_URL",
+        "FAIGATE_PROVIDER_LINK_OPENROUTER_FALLBACK_URL",
         "https://go.example.test/openrouter",
     )
 
@@ -424,10 +424,10 @@ auto_update:
     )
 
     repo_root = Path(__file__).resolve().parent.parent
-    script = repo_root / "scripts" / "foundrygate-provider-discovery"
+    script = repo_root / "scripts" / "faigate-provider-discovery"
     env = os.environ.copy()
-    env["FOUNDRYGATE_CONFIG_FILE"] = str(config_file)
-    env["FOUNDRYGATE_PYTHON"] = sys.executable
+    env["FAIGATE_CONFIG_FILE"] = str(config_file)
+    env["FAIGATE_PYTHON"] = sys.executable
     env["PYTHONPATH"] = str(repo_root)
 
     completed = subprocess.run(
@@ -447,7 +447,7 @@ auto_update:
 
 def test_provider_discovery_helper_supports_filters(tmp_path: Path, monkeypatch):
     monkeypatch.setenv(
-        "FOUNDRYGATE_PROVIDER_LINK_OPENROUTER_FALLBACK_URL",
+        "FAIGATE_PROVIDER_LINK_OPENROUTER_FALLBACK_URL",
         "https://go.example.test/openrouter",
     )
 
@@ -487,10 +487,10 @@ auto_update:
     )
 
     repo_root = Path(__file__).resolve().parent.parent
-    script = repo_root / "scripts" / "foundrygate-provider-discovery"
+    script = repo_root / "scripts" / "faigate-provider-discovery"
     env = os.environ.copy()
-    env["FOUNDRYGATE_CONFIG_FILE"] = str(config_file)
-    env["FOUNDRYGATE_PYTHON"] = sys.executable
+    env["FAIGATE_CONFIG_FILE"] = str(config_file)
+    env["FAIGATE_PYTHON"] = sys.executable
     env["PYTHONPATH"] = str(repo_root)
 
     completed = subprocess.run(

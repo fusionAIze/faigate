@@ -1,0 +1,32 @@
+[Unit]
+Description=fusionAIze Gate – Local AI Gateway for OpenClaw and other clients
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=faigate
+Group=faigate
+WorkingDirectory=/opt/faigate
+EnvironmentFile=/opt/faigate/.env
+Environment=FAIGATE_DB_PATH=/var/lib/faigate/faigate.db
+ExecStart=/opt/faigate/venv/bin/uvicorn \
+    faigate.main:app \
+    --host 127.0.0.1 \
+    --port 8090 \
+    --workers 1 \
+    --log-level info
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/faigate
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

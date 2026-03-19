@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from foundrygate.config import load_config
-from foundrygate.provider_catalog import (
+from faigate.config import load_config
+from faigate.provider_catalog import (
     build_provider_catalog_report,
     build_provider_discovery_view,
 )
@@ -161,7 +161,7 @@ metrics:
 
 def test_provider_catalog_report_exposes_discovery_policy_and_links(tmp_path: Path, monkeypatch):
     monkeypatch.setenv(
-        "FOUNDRYGATE_PROVIDER_LINK_OPENROUTER_FALLBACK_URL",
+        "FAIGATE_PROVIDER_LINK_OPENROUTER_FALLBACK_URL",
         "https://go.example.test/openrouter",
     )
     cfg = load_config(
@@ -231,7 +231,7 @@ def test_provider_discovery_view_supports_link_source_and_offer_track_filters(
     tmp_path: Path, monkeypatch
 ):
     monkeypatch.setenv(
-        "FOUNDRYGATE_PROVIDER_LINK_OPENROUTER_FALLBACK_URL",
+        "FAIGATE_PROVIDER_LINK_OPENROUTER_FALLBACK_URL",
         "https://go.example.test/openrouter",
     )
     cfg = load_config(

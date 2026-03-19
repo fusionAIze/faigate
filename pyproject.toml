@@ -3,13 +3,13 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "foundrygate"
+name = "faigate"
 version = "1.3.0"
 description = "Local OpenAI-compatible routing gateway for OpenClaw and other AI-native clients."
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
-keywords = ["foundrygate", "openclaw", "llm", "router", "gateway", "proxy", "multi-provider"]
+keywords = ["faigate", "openclaw", "llm", "router", "gateway", "proxy", "multi-provider"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -41,17 +41,17 @@ dev = [
 ]
 
 [project.scripts]
-foundrygate = "foundrygate.main:main"
-foundrygate-stats = "foundrygate.cli:main"
+faigate = "faigate.main:main"
+faigate-stats = "faigate.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/typelicious/FoundryGate"
-Repository = "https://github.com/typelicious/FoundryGate"
-Issues = "https://github.com/typelicious/FoundryGate/issues"
-Documentation = "https://github.com/typelicious/FoundryGate#readme"
+Homepage = "https://github.com/fusionAIze/faigate"
+Repository = "https://github.com/fusionAIze/faigate"
+Issues = "https://github.com/fusionAIze/faigate/issues"
+Documentation = "https://github.com/fusionAIze/faigate#readme"
 
 [tool.setuptools.packages.find]
-include = ["foundrygate*"]
+include = ["faigate*"]
 
 [tool.ruff]
 line-length = 100

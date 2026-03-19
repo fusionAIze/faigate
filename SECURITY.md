@@ -2,7 +2,7 @@
 
 ## Supported Versions
 
-FoundryGate is currently maintained on the latest `main` branch and the most recent tagged release line.
+fusionAIze Gate is currently maintained on the latest `main` branch and the most recent tagged release line.
 
 | Version | Supported |
 | --- | --- |
@@ -35,7 +35,7 @@ Please report issues such as:
 - unsafe file-path handling or writable-path assumptions
 - auth or secret-handling mistakes
 - dependency vulnerabilities with practical impact
-- trust-boundary issues between FoundryGate and upstream or local providers
+- trust-boundary issues between fusionAIze Gate and upstream or local providers
 
 For the `v1.0.0` release gate, the reviewed findings and residual risks are summarized in [docs/SECURITY-REVIEW-v1.0.0.md](./docs/SECURITY-REVIEW-v1.0.0.md).
 
@@ -43,10 +43,10 @@ For the `v1.0.0` release gate, the reviewed findings and residual risks are summ
 
 To reduce risk in deployments:
 
-- keep `FOUNDRYGATE_DB_PATH` outside the repo checkout
+- keep `FAIGATE_DB_PATH` outside the repo checkout
 - avoid committing `.env`, database files, SQLite files, logs, or SSH material
 - run with the provided `systemd` hardening or an equivalent container/runtime policy
 - keep provider API keys scoped to the minimum set of enabled providers
 - keep the default response-security headers enabled unless you have an explicit reverse-proxy reason not to
 - tune `security.max_json_body_bytes` and `security.max_upload_bytes` to the smallest values that still fit your workloads
-- treat `x-foundrygate-*` and `x-openclaw-*` headers as trusted only at the edge you control
+- treat `x-faigate-*` and `x-openclaw-*` headers as trusted only at the edge you control

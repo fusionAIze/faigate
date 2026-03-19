@@ -2,7 +2,7 @@
 
 ## Default model
 
-FoundryGate uses a protected `main` branch and short-lived working branches.
+fusionAIze Gate uses a protected `main` branch and short-lived working branches.
 
 The default flow is:
 

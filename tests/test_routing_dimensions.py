@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from foundrygate.config import ConfigError, load_config
-from foundrygate.router import Router
+from faigate.config import ConfigError, load_config
+from faigate.router import Router
 
 
 def _write_config(tmp_path: Path, body: str) -> Path:
@@ -78,7 +78,7 @@ metrics:
         requested_max_tokens=512,
         client_profile="generic",
         profile_hints=cfg.client_profiles["profiles"]["generic"],
-        headers={"x-foundrygate-cache": "prefer-cache"},
+        headers={"x-faigate-cache": "prefer-cache"},
     )
 
     assert decision.layer == "profile"
@@ -317,7 +317,7 @@ metrics:
         requested_max_tokens=512,
         client_profile="generic",
         profile_hints=cfg.client_profiles["profiles"]["generic"],
-        headers={"x-foundrygate-cache": "prefer-cache"},
+        headers={"x-faigate-cache": "prefer-cache"},
         provider_health={
             "local-fit": {"healthy": True, "avg_latency_ms": 120, "consecutive_failures": 0},
             "cloud-roomy": {"healthy": True, "avg_latency_ms": 110, "consecutive_failures": 0},

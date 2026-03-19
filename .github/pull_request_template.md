@@ -8,7 +8,7 @@
 
 ## How verified
 
-- [ ] `python3 -m compileall foundrygate tests`
+- [ ] `python3 -m compileall faigate tests`
 - [ ] `pytest -q`
 - [ ] `ruff check .`
 - [ ] `ruff format --check .`

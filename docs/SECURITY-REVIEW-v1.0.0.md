@@ -1,4 +1,4 @@
-# FoundryGate v1.0.0 Security Review
+# fusionAIze Gate v1.0.0 Security Review
 
 ## Scope
 
@@ -45,7 +45,7 @@ Status: reviewed against the current shipped surface.
 
 - the release CI covers Ruff, CodeQL, Python tests, packaging, and artifact checks
 - the runtime keeps conservative defaults for cache control and response headers
-- database output stays out of the repo checkout through `FOUNDRYGATE_DB_PATH`
+- database output stays out of the repo checkout through `FAIGATE_DB_PATH`
 
 Residual risk:
 
@@ -61,7 +61,7 @@ Status: tightened in config validation.
 
 Residual risk:
 
-- FoundryGate is still a gateway, not an auth or service-mesh product; upstream TLS trust and network placement remain operator responsibilities
+- fusionAIze Gate is still a gateway, not an auth or service-mesh product; upstream TLS trust and network placement remain operator responsibilities
 
 ### 5. Auth, secrets, and writable paths
 

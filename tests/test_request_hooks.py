@@ -37,21 +37,21 @@ _httpx.TimeoutException = Exception
 _httpx.ConnectError = Exception
 sys.modules["httpx"] = _httpx
 
-import foundrygate.hooks as hook_module
-import foundrygate.main as main_module
-from foundrygate.config import ConfigError, load_config
-from foundrygate.hooks import (
+import faigate.hooks as hook_module
+import faigate.main as main_module
+from faigate.config import ConfigError, load_config
+from faigate.hooks import (
     HookExecutionError,
     RequestHookContext,
     RequestHookResult,
     apply_request_hooks,
 )
-from foundrygate.main import (
+from faigate.main import (
     _invalid_request_response,
     _request_hook_error_response,
     _resolve_route_preview,
 )
-from foundrygate.router import Router
+from faigate.router import Router
 
 
 def _write_config(tmp_path: Path, body: str) -> Path:
@@ -205,7 +205,7 @@ class TestRequestHookRouting:
                 "model": "auto",
                 "messages": [{"role": "user", "content": "inspect the route"}],
             },
-            {"x-foundrygate-prefer-provider": "local-worker"},
+            {"x-faigate-prefer-provider": "local-worker"},
         )
 
         assert model_requested == "auto"
@@ -235,8 +235,8 @@ class TestRequestHookRouting:
                 "messages": [{"role": "user", "content": "keep this on the local worker"}],
             },
             {
-                "x-foundrygate-locality": "local-only",
-                "x-foundrygate-profile": "local-only",
+                "x-faigate-locality": "local-only",
+                "x-faigate-profile": "local-only",
             },
         )
 

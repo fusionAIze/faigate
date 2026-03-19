@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/faigate-service-lib.sh"
+
+case "$(faigate_platform)" in
+  Darwin)
+    faigate_launchctl_start
+    ;;
+  *)
+    sudo systemctl start faigate.service
+    ;;
+esac

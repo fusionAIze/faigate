@@ -5,7 +5,7 @@ import sys
 
 import pytest
 
-import foundrygate.main as main_module
+import faigate.main as main_module
 
 
 def test_main_uses_explicit_config_arg(monkeypatch):
@@ -15,7 +15,7 @@ def test_main_uses_explicit_config_arg(monkeypatch):
         class _Cfg:
             server = {"host": "127.0.0.1", "port": 9011, "log_level": "warning"}
 
-        captured["config_env"] = main_module.os.environ.get("FOUNDRYGATE_CONFIG_FILE")
+        captured["config_env"] = main_module.os.environ.get("FAIGATE_CONFIG_FILE")
         return _Cfg()
 
     def _fake_uvicorn_run(app, **kwargs):
@@ -28,13 +28,13 @@ def test_main_uses_explicit_config_arg(monkeypatch):
     monkeypatch.setattr(
         main_module.argparse.ArgumentParser,
         "parse_args",
-        lambda self: type("Args", (), {"config": "/tmp/foundrygate-config.yaml"})(),
+        lambda self: type("Args", (), {"config": "/tmp/faigate-config.yaml"})(),
     )
 
     main_module.main()
 
-    assert captured["config_env"] == "/tmp/foundrygate-config.yaml"
-    assert captured["app"] == "foundrygate.main:app"
+    assert captured["config_env"] == "/tmp/faigate-config.yaml"
+    assert captured["app"] == "faigate.main:app"
     assert captured["kwargs"] == {
         "host": "127.0.0.1",
         "port": 9011,
@@ -61,10 +61,10 @@ def test_main_supports_version_flag(monkeypatch, capsys):
 
 
 def test_main_module_executes_main(monkeypatch, capsys):
-    monkeypatch.setattr(sys, "argv", ["foundrygate", "--version"])
+    monkeypatch.setattr(sys, "argv", ["faigate", "--version"])
 
     with pytest.raises(SystemExit) as exc:
-        runpy.run_module("foundrygate.main", run_name="__main__")
+        runpy.run_module("faigate.main", run_name="__main__")
 
     assert exc.value.code == 0
-    assert "foundrygate" in capsys.readouterr().out
+    assert "faigate" in capsys.readouterr().out

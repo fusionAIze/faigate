@@ -1,24 +1,24 @@
-// OpenClaw Integration – FoundryGate
+// OpenClaw Integration – fusionAIze Gate
 // =========================================
 //
 // Add this block to your ~/.openclaw/openclaw.json.
 //
 // Important:
-// - Under "providers.foundrygate.models", the ids must match GET /v1/models from
-//   FoundryGate. Those ids are FoundryGate provider ids, not raw upstream ids.
+// - Under "providers.faigate.models", the ids must match GET /v1/models from
+//   fusionAIze Gate. Those ids are fusionAIze Gate provider ids, not raw upstream ids.
 // - "auto" is always available.
-// - Only keep provider ids here that your current FoundryGate config actually loads.
+// - Only keep provider ids here that your current fusionAIze Gate config actually loads.
 //
-// Option A: FoundryGate as your primary provider (recommended)
+// Option A: fusionAIze Gate as your primary provider (recommended)
 // ---------------------------------------------------------
-// FoundryGate handles routing, fallback, and model selection.
+// fusionAIze Gate handles routing, fallback, and model selection.
 // OpenClaw only needs to talk to one provider entry.
 
 {
   "models": {
     "mode": "merge",
     "providers": {
-      "foundrygate": {
+      "faigate": {
         "baseUrl": "http://127.0.0.1:8090/v1",
         "apiKey": "local",
         "auth": "api-key",
@@ -26,49 +26,49 @@
         "models": [
           {
             "id": "auto",
-            "name": "FoundryGate Auto-Router",
+            "name": "fusionAIze Gate Auto-Router",
             "contextWindow": 128000,
             "maxTokens": 8000
           },
           {
             "id": "deepseek-chat",
-            "name": "DeepSeek Chat (via FoundryGate)",
+            "name": "DeepSeek Chat (via fusionAIze Gate)",
             "contextWindow": 128000,
             "maxTokens": 8000
           },
           {
             "id": "deepseek-reasoner",
-            "name": "DeepSeek Reasoner (via FoundryGate)",
+            "name": "DeepSeek Reasoner (via fusionAIze Gate)",
             "contextWindow": 128000,
             "maxTokens": 8000
           },
           {
             "id": "gemini-flash-lite",
-            "name": "Gemini Flash-Lite (via FoundryGate)",
+            "name": "Gemini Flash-Lite (via fusionAIze Gate)",
             "contextWindow": 1000000,
             "maxTokens": 8000
           },
           {
             "id": "gemini-flash",
-            "name": "Gemini Flash (via FoundryGate)",
+            "name": "Gemini Flash (via fusionAIze Gate)",
             "contextWindow": 1000000,
             "maxTokens": 8000
           },
           {
             "id": "local-worker",
-            "name": "Local Worker (via FoundryGate)",
+            "name": "Local Worker (via fusionAIze Gate)",
             "contextWindow": 128000,
             "maxTokens": 8000
           },
           {
             "id": "image-provider",
-            "name": "Image Provider (via FoundryGate)",
+            "name": "Image Provider (via fusionAIze Gate)",
             "contextWindow": 128000,
             "maxTokens": 8000
           },
           {
             "id": "openrouter-fallback",
-            "name": "OpenRouter Fallback (via FoundryGate)",
+            "name": "OpenRouter Fallback (via fusionAIze Gate)",
             "contextWindow": 128000,
             "maxTokens": 8000
           }
@@ -79,53 +79,53 @@
   "agents": {
     "defaults": {
       "model": {
-        "primary": "foundrygate/auto",
+        "primary": "faigate/auto",
         "fallbacks": []
       },
       "models": {
-        "foundrygate/auto": { "alias": "auto" },
-        "foundrygate/deepseek-chat": { "alias": "ds" },
-        "foundrygate/deepseek-reasoner": { "alias": "r1" },
-        "foundrygate/gemini-flash-lite": { "alias": "lite" },
-        "foundrygate/gemini-flash": { "alias": "flash" },
-        "foundrygate/local-worker": { "alias": "local" },
-        "foundrygate/image-provider": { "alias": "img" },
-        "foundrygate/openrouter-fallback": { "alias": "or" }
+        "faigate/auto": { "alias": "auto" },
+        "faigate/deepseek-chat": { "alias": "ds" },
+        "faigate/deepseek-reasoner": { "alias": "r1" },
+        "faigate/gemini-flash-lite": { "alias": "lite" },
+        "faigate/gemini-flash": { "alias": "flash" },
+        "faigate/local-worker": { "alias": "local" },
+        "faigate/image-provider": { "alias": "img" },
+        "faigate/openrouter-fallback": { "alias": "or" }
       },
       "imageModel": {
-        // Use foundrygate/auto when FoundryGate should choose among
-        // image-capable providers. Pin to foundrygate/image-provider only when
+        // Use faigate/auto when fusionAIze Gate should choose among
+        // image-capable providers. Pin to faigate/image-provider only when
         // OpenClaw should always use one explicit image backend.
-        "primary": "foundrygate/auto",
+        "primary": "faigate/auto",
         "fallbacks": []
       },
       "contextTokens": 200000,
       "heartbeat": {
         "every": "12h",
-        "model": "foundrygate/gemini-flash-lite",
+        "model": "faigate/gemini-flash-lite",
         "suppressToolErrorWarnings": true
       },
       "subagents": {
-        "model": "foundrygate/auto",
+        "model": "faigate/auto",
         "maxConcurrent": 10
       }
     }
   }
 }
 
-// Option B: FoundryGate alongside direct providers
+// Option B: fusionAIze Gate alongside direct providers
 // ---------------------------------------------
-// Use FoundryGate for auto-routing while keeping direct providers
+// Use fusionAIze Gate for auto-routing while keeping direct providers
 // available for manual overrides.
 
 // Add this to "models.providers":
-//   "foundrygate": { ... same as above ... }
+//   "faigate": { ... same as above ... }
 //
 // Then set "agents.defaults.model":
-//   "primary": "foundrygate/auto",
+//   "primary": "faigate/auto",
 //   "fallbacks": ["deepseek/deepseek-chat", "google/gemini-2.5-flash"]
 //
-// Recommended FoundryGate-side settings for OpenClaw:
+// Recommended fusionAIze Gate-side settings for OpenClaw:
 // - keep provider ids stable and readable because OpenClaw will reference them
 // - enable client_profiles.presets: ["openclaw"]
 // - use contract: local-worker for local OpenAI-compatible workers

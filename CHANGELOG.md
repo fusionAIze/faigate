@@ -1,6 +1,6 @@
-# FoundryGate Changelog
+# fusionAIze Gate Changelog
 
-All notable changes to FoundryGate should be documented here.
+All notable changes to fusionAIze Gate should be documented here.
 
 The format is intentionally lightweight and human-readable. Group entries by release and focus on user-visible behavior, operational changes, and compatibility notes.
 
@@ -10,7 +10,7 @@ The format is intentionally lightweight and human-readable. Group entries by rel
 
 ### Added
 
-- Added a first `foundrygate-config-wizard` helper that suggests an initial `config.yaml` from the API keys already present in `.env`
+- Added a first `faigate-config-wizard` helper that suggests an initial `config.yaml` from the API keys already present in `.env`
 - Added first-class `routing_modes` and `model_shortcuts` config blocks so virtual model ids such as `auto`, `eco`, `premium`, `free`, or custom names can participate in routing
 - Added wizard candidate listing and conservative config merging so operators can select multiple provider candidates during first setup or later catalog-driven updates
 - Added config-aware wizard update suggestions so existing installs can see `recommended_add`, `recommended_replace`, and `recommended_keep` groups before applying provider changes
@@ -18,19 +18,19 @@ The format is intentionally lightweight and human-readable. Group entries by rel
 - Added an `apply suggestions` wizard flow so selected provider and client-mode recommendations can be merged into an existing config without manual copy/paste
 - Added a wizard dry-run change summary so operators can preview added providers, model replacements, fallback changes, and client-mode changes before writing config updates
 - Added optional wizard write-backup snapshots so config updates can keep a local pre-change copy before overwriting `config.yaml`
-- Added a built-in `foundrygate-config-wizard --help` flow so first setup, catalog review, update suggestions, dry-run previews, and backup-aware writes are all discoverable directly from the CLI
+- Added a built-in `faigate-config-wizard --help` flow so first setup, catalog review, update suggestions, dry-run previews, and backup-aware writes are all discoverable directly from the CLI
 - Added optional provider-catalog discovery metadata and env-backed signup-link overrides so future CLI or control-center surfaces can show disclosed provider links without mixing link configuration into normal config files
 - Added first CLI surfacing of disclosed provider discovery links in onboarding and doctor outputs, always alongside a link-neutral recommendation policy signal
-- Added `foundrygate-provider-discovery` for one compact text/JSON discovery view that later browser or control-center work can consume
+- Added `faigate-provider-discovery` for one compact text/JSON discovery view that later browser or control-center work can consume
 - Added discovery-link filters for CLI and API views so operators can narrow provider links by `offer_track`, `link_source`, or `disclosed_only`
 
 ### Changed
 
 - `client_profiles` can now choose a default `routing_mode`, letting one client keep the global mode while another uses a different or custom mode by default
 - `GET /v1/models`, route previews, and runtime response headers now expose configured routing modes and resolved shortcut/mode metadata
-- `foundrygate-doctor`, onboarding reports, and the provider-catalog API now surface curated model-drift, source-confidence, volatility, and catalog-freshness alerts for configured providers
+- `faigate-doctor`, onboarding reports, and the provider-catalog API now surface curated model-drift, source-confidence, volatility, and catalog-freshness alerts for configured providers
 - Provider catalog entries now distinguish direct providers from aggregators and wallet routers, track auth modes such as `api_key`, `byok`, and `wallet_x402`, and keep community watchlists explicitly secondary to official sources
-- `foundrygate-config-wizard` can now filter candidates by purpose and client, accept multi-select provider input, and merge selected providers back into an existing config instead of forcing a full rewrite
+- `faigate-config-wizard` can now filter candidates by purpose and client, accept multi-select provider input, and merge selected providers back into an existing config instead of forcing a full rewrite
 - Tightened the roadmap and user-facing docs around `v1.3.0` so guided setup, catalog-assisted updates, and future recommendation-link work stay transparent and clearly separated from ranking logic
 - Provider discovery metadata now carries an explicit link-neutral recommendation policy so provider-link configuration can never be mistaken for a ranking signal
 
@@ -39,16 +39,16 @@ The format is intentionally lightweight and human-readable. Group entries by rel
 ### Changed
 
 - Hardened the Homebrew formula so native Python extensions such as `pydantic-core` and `watchfiles` are built from source with extra Mach-O header padding on macOS instead of relying on the vendored wheel layout
-- Strengthened the formula test so it validates the wrapped `foundrygate --version` entrypoint instead of only importing the package inside `libexec`
-- Fixed the Python service entrypoint so `python -m foundrygate.main` and the Brew-managed wrapper both execute the runtime correctly
-- Clarified in the README, workstation guide, and troubleshooting docs that active Python virtualenvs can shadow the Brew-installed `foundrygate` binary
+- Strengthened the formula test so it validates the wrapped `faigate --version` entrypoint instead of only importing the package inside `libexec`
+- Fixed the Python service entrypoint so `python -m faigate.main` and the Brew-managed wrapper both execute the runtime correctly
+- Clarified in the README, workstation guide, and troubleshooting docs that active Python virtualenvs can shadow the Brew-installed `faigate` binary
 
 ## v1.2.1 - 2026-03-19
 
 ### Changed
 
 - Switched the Homebrew formula baseline from `python@3.13` to `python@3.12` to reduce macOS packaging friction around vendored native Python wheels
-- Clarified in the README and workstation docs that `brew install foundrygate` resolves cleanly after tapping `typelicious/foundrygate`, while the fully qualified install path remains the safest first-run example
+- Clarified in the README and workstation docs that `brew install faigate` resolves cleanly after tapping `fusionAIze/faigate`, while the fully qualified install path remains the safest first-run example
 
 ## v1.2.0 - 2026-03-19
 
@@ -57,9 +57,9 @@ The format is intentionally lightweight and human-readable. Group entries by rel
 - Added a workstation operations guide for Linux, macOS, and Windows runtime layouts
 - Added a macOS `launchd` LaunchAgent example for local workstation installs
 - Added Windows PowerShell and Task Scheduler starter examples for local workstation installs
-- Added platform-aware runtime helper scripts so macOS can use the same `foundrygate-install` / `start` / `stop` / `status` flow style as Linux
+- Added platform-aware runtime helper scripts so macOS can use the same `faigate-install` / `start` / `stop` / `status` flow style as Linux
 - Added a project-owned Homebrew formula plus `brew services` guidance for packaged macOS workstation installs
-- Added explicit `FOUNDRYGATE_CONFIG_FILE` config discovery and `foundrygate --config` / `--version` support so service wrappers and packaged installs can point to config outside the repo
+- Added explicit `FAIGATE_CONFIG_FILE` config discovery and `faigate --config` / `--version` support so service wrappers and packaged installs can point to config outside the repo
 - Added a helper-level onboarding smoke test for explicit config/env/python wiring
 
 ### Changed
@@ -88,7 +88,7 @@ The format is intentionally lightweight and human-readable. Group entries by rel
 - Added dashboard CSP hashes plus stricter response-security defaults for the no-build operator UI
 - Added stronger provider base URL validation so non-local upstreams must use `https`
 - Added reduced leakage of upstream provider failure details in client-facing error payloads
-- Added a separate npm CLI package under `packages/foundrygate-cli` for basic health, model, update, and route-preview checks
+- Added a separate npm CLI package under `packages/faigate-cli` for basic health, model, update, and route-preview checks
 - Added a documented `v1.0.0` security review with mitigations and residual-risk notes
 - Added functional API coverage for upstream error sanitization on top of the earlier dashboard and request-boundary hardening tests
 - Streamlined the root README into a shorter landing page and moved deeper API, configuration, and operations detail into dedicated docs pages
@@ -105,16 +105,16 @@ The format is intentionally lightweight and human-readable. Group entries by rel
 
 ### Added
 
-- Added `foundrygate-onboarding-report` plus a testable onboarding report module for many-provider and many-client readiness checks
-- Added `foundrygate-onboarding-validate` so onboarding blockers can fail fast in local setup and CI-style validation flows
+- Added `faigate-onboarding-report` plus a testable onboarding report module for many-provider and many-client readiness checks
+- Added `faigate-onboarding-validate` so onboarding blockers can fail fast in local setup and CI-style validation flows
 - Added built-in OpenClaw, n8n, and CLI quickstart examples to the onboarding report and integration docs so client onboarding can stay copy/paste friendly
 - Added staged provider-rollout reporting and fallback/image readiness warnings so many-provider onboarding is easier to phase safely
 - Added a client matrix to the onboarding report so profile match rules and routing intent are visible before traffic goes live
 - Added starter example files for OpenClaw, n8n, and CLI clients under `docs/examples/` so onboarding can begin from copy/pasteable templates
 - Added starter provider snippets for cloud, local-worker, and image-provider setups under `docs/examples/`
 - Added matching provider `.env` starter files for cloud, local-worker, and image-provider onboarding flows
-- Added provider env placeholder checks to `foundrygate-doctor` so missing `.env` values are surfaced before rollout
-- Added `--markdown` output to `foundrygate-onboarding-report` so onboarding state can be pasted into issues, PRs, or hand-off notes
+- Added provider env placeholder checks to `faigate-doctor` so missing `.env` values are surfaced before rollout
+- Added `--markdown` output to `faigate-onboarding-report` so onboarding state can be pasted into issues, PRs, or hand-off notes
 - Added delegated OpenClaw request and generic AI-native app profile starters to round out the `v0.8.x` onboarding path
 
 ## v0.7.0 - 2026-03-12
@@ -122,7 +122,7 @@ The format is intentionally lightweight and human-readable. Group entries by rel
 ### Added
 
 - Added stronger update-alert metadata to `GET /api/update`, including update type, alert level, and recommended action for operators and dashboard consumers
-- Added an opt-in `auto_update` policy block plus `foundrygate-auto-update` so controlled deployments can gate helper-driven updates without enabling silent self-updates
+- Added an opt-in `auto_update` policy block plus `faigate-auto-update` so controlled deployments can gate helper-driven updates without enabling silent self-updates
 - Added `GET /api/operator-events` plus operator-event metrics for update checks and helper-driven auto-update attempts
 - Added dashboard cards and tables for operator-side update checks and apply attempts
 - Added provider-health rollout guardrails so helper-driven auto-updates can block when gateway health is already degraded
@@ -150,8 +150,8 @@ The format is intentionally lightweight and human-readable. Group entries by rel
 - Added `contract: image-provider` plus OpenAI-compatible `POST /v1/images/generations` and `POST /v1/images/edits` paths for image-capable providers
 - Added a shipped Dockerfile and tag-driven release-artifacts workflow for Python distributions, GHCR images, and optional PyPI publishing
 - Added public community-health and security baseline files: Code of Conduct, Security Policy, issue templates, PR template, Dependabot, and CodeQL
-- Added generic onboarding helpers (`foundrygate-bootstrap`, `foundrygate-doctor`) and a publish-dry-run workflow for GHCR and Python package validation
-- Added cached release update checks via `GET /api/update`, the dashboard, and `foundrygate-update-check`
+- Added generic onboarding helpers (`faigate-bootstrap`, `faigate-doctor`) and a publish-dry-run workflow for GHCR and Python package validation
+- Added cached release update checks via `GET /api/update`, the dashboard, and `faigate-update-check`
 
 ## v0.4.0 - 2026-03-12
 
@@ -170,8 +170,8 @@ The format is intentionally lightweight and human-readable. Group entries by rel
 
 ### Changed
 
-- Rebranded the public documentation around the FoundryGate product name
-- Completed the technical rename from earlier runtime identifiers to `foundrygate`
+- Rebranded the public documentation around the fusionAIze Gate product name
+- Completed the technical rename from earlier runtime identifiers to `faigate`
 - Added validated provider capability metadata with normalized local/cloud and streaming defaults
 - Added an optional policy layer for capability-aware provider selection on `auto` requests
 - Added an explicit `local-worker` provider contract for network-local OpenAI-compatible runtimes
@@ -181,7 +181,7 @@ The format is intentionally lightweight and human-readable. Group entries by rel
 - Added startup and `/health` probing for `contract: local-worker` providers via `GET /models`
 - Added built-in `client_profiles` presets for `openclaw`, `n8n`, and `cli`
 - Added a repository `AGENTS.md` and a documented Git workflow for `main`, `feature/*`, `review/*`, and `hotfix/*`
-- Aligned release guidance around semantic-style `x.y.z` versioning with `v0.3.0` as the first FoundryGate-branded release
+- Aligned release guidance around semantic-style `x.y.z` versioning with `v0.3.0` as the first fusionAIze Gate-branded release
 
 ### Docs
 

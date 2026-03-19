@@ -1,8 +1,8 @@
-# FoundryGate Onboarding
+# fusionAIze Gate Onboarding
 
 ## Goal
 
-FoundryGate should be understandable and usable for a deployment with many providers and many clients.
+fusionAIze Gate should be understandable and usable for a deployment with many providers and many clients.
 
 The safest onboarding order is:
 
@@ -20,16 +20,16 @@ The safest onboarding order is:
 Run the generic helpers before changing config:
 
 ```bash
-./scripts/foundrygate-bootstrap
-./scripts/foundrygate-config-wizard --purpose general --client generic > config.yaml
+./scripts/faigate-bootstrap
+./scripts/faigate-config-wizard --purpose general --client generic > config.yaml
 $EDITOR .env
-./scripts/foundrygate-doctor
-./scripts/foundrygate-onboarding-report
+./scripts/faigate-doctor
+./scripts/faigate-onboarding-report
 ```
 
-`foundrygate-doctor` now also checks whether provider env placeholders referenced in `config.yaml` are actually present in `.env`.
+`faigate-doctor` now also checks whether provider env placeholders referenced in `config.yaml` are actually present in `.env`.
 
-`foundrygate-config-wizard` gives you a first pass at:
+`faigate-config-wizard` gives you a first pass at:
 
 - detected provider blocks from the API keys already present in `.env`
 - stock routing modes such as `auto`, `eco`, `premium`, and `free`
@@ -41,30 +41,30 @@ $EDITOR .env
 Useful flows:
 
 ```bash
-./scripts/foundrygate-config-wizard --help
-./scripts/foundrygate-config-wizard --purpose coding --client opencode --list-candidates
-./scripts/foundrygate-config-wizard --current-config config.yaml --purpose coding --client opencode
-./scripts/foundrygate-config-wizard --purpose coding --client opencode \
+./scripts/faigate-config-wizard --help
+./scripts/faigate-config-wizard --purpose coding --client opencode --list-candidates
+./scripts/faigate-config-wizard --current-config config.yaml --purpose coding --client opencode
+./scripts/faigate-config-wizard --purpose coding --client opencode \
   --select deepseek-chat,deepseek-reasoner,anthropic-claude > config.yaml
-./scripts/foundrygate-config-wizard --current-config config.yaml --merge-existing \
+./scripts/faigate-config-wizard --current-config config.yaml --merge-existing \
   --select openrouter-fallback,kilocode --write config.yaml
-./scripts/foundrygate-config-wizard --current-config config.yaml --purpose coding --client opencode \
+./scripts/faigate-config-wizard --current-config config.yaml --purpose coding --client opencode \
   --apply recommended_add,recommended_replace,recommended_mode_changes \
   --select kilocode,openrouter-fallback --select-profiles opencode --write config.yaml
-./scripts/foundrygate-config-wizard --current-config config.yaml --purpose coding --client opencode \
+./scripts/faigate-config-wizard --current-config config.yaml --purpose coding --client opencode \
   --apply recommended_add,recommended_replace,recommended_mode_changes \
   --select kilocode,openrouter-fallback --select-profiles opencode --dry-run-summary
-./scripts/foundrygate-config-wizard --current-config config.yaml --purpose coding --client opencode \
+./scripts/faigate-config-wizard --current-config config.yaml --purpose coding --client opencode \
   --apply recommended_add,recommended_replace,recommended_mode_changes \
   --select kilocode,openrouter-fallback --select-profiles opencode \
   --write config.yaml --write-backup --backup-suffix .before-wizard
 ```
 
-If you only need a compact refresher for the flags and example flows, `./scripts/foundrygate-config-wizard --help` now prints the whole first-setup / update / dry-run / backup path directly in the CLI.
+If you only need a compact refresher for the flags and example flows, `./scripts/faigate-config-wizard --help` now prints the whole first-setup / update / dry-run / backup path directly in the CLI.
 
 When a current config is present, the suggestion output now also flags client-profile mode deltas such as `recommended_mode_changes`, so you can see when `n8n`, `openclaw`, or `opencode` probably want a different default mode for the selected purpose.
 
-`foundrygate-onboarding-report` now includes concrete OpenClaw, n8n, and CLI quickstart hints plus a staged provider-rollout view. Use it after every provider or client change to keep the deployment understandable for the next operator as well.
+`faigate-onboarding-report` now includes concrete OpenClaw, n8n, and CLI quickstart hints plus a staged provider-rollout view. Use it after every provider or client change to keep the deployment understandable for the next operator as well.
 
 It now also includes provider-catalog alerts for:
 
@@ -78,9 +78,9 @@ The same catalog can now also carry optional provider-discovery links for CLI or
 
 Today that means:
 
-- `foundrygate-onboarding-report` can show the resolved provider discovery URL
-- `foundrygate-doctor` can print the same disclosed link for configured providers
-- `foundrygate-provider-discovery` can give one compact text or JSON view for later automation or browser work
+- `faigate-onboarding-report` can show the resolved provider discovery URL
+- `faigate-doctor` can print the same disclosed link for configured providers
+- `faigate-provider-discovery` can give one compact text or JSON view for later automation or browser work
 - that discovery helper can now also filter by `offer_track`, `link_source`, or `disclosed_only`
 - both surfaces also print the link-neutral policy state alongside the links
 
@@ -109,7 +109,7 @@ Starter snippets:
 - [examples/provider-kilocode.env.example](./examples/provider-kilocode.env.example)
 - [examples/provider-blackbox.yaml](./examples/provider-blackbox.yaml)
 - [examples/provider-blackbox.env.example](./examples/provider-blackbox.env.example)
-- [examples/foundrygate-multi-provider-stack.yaml](./examples/foundrygate-multi-provider-stack.yaml)
+- [examples/faigate-multi-provider-stack.yaml](./examples/faigate-multi-provider-stack.yaml)
 
 ### 2. Verify provider health
 
@@ -127,15 +127,15 @@ Starter snippets:
 
 Repeat the same path before introducing more routing complexity.
 
-If you want a fuller multi-provider starting point instead of enabling one block at a time, use [examples/foundrygate-multi-provider-stack.yaml](./examples/foundrygate-multi-provider-stack.yaml) as a copy source and then trim it down to the providers that are actually available in your environment.
+If you want a fuller multi-provider starting point instead of enabling one block at a time, use [examples/faigate-multi-provider-stack.yaml](./examples/faigate-multi-provider-stack.yaml) as a copy source and then trim it down to the providers that are actually available in your environment.
 
 For many-provider rollouts, run the onboarding report after every provider change:
 
 ```bash
-./scripts/foundrygate-onboarding-report
-./scripts/foundrygate-onboarding-report --markdown
-./scripts/foundrygate-onboarding-report --json
-./scripts/foundrygate-onboarding-validate
+./scripts/faigate-onboarding-report
+./scripts/faigate-onboarding-report --markdown
+./scripts/faigate-onboarding-report --json
+./scripts/faigate-onboarding-validate
 ```
 
 The rollout section is intentionally staged:
@@ -157,8 +157,8 @@ Prefer the standard OpenAI-compatible entry point.
 Examples:
 
 - `x-openclaw-source`
-- `X-FoundryGate-Client: n8n`
-- `X-FoundryGate-Client: codex`
+- `X-faigate-Client: n8n`
+- `X-faigate-Client: codex`
 
 Keep these tags short and stable. The runtime now bounds routing-header values before they reach traces, client matrices, and rollout decisions.
 
@@ -172,7 +172,7 @@ Start with:
 
 Then tighten it only if the default is not good enough.
 
-When the client set grows, use the client matrix from `foundrygate-onboarding-report` to catch profiles that only work through explicit overrides and still have no real match rule.
+When the client set grows, use the client matrix from `faigate-onboarding-report` to catch profiles that only work through explicit overrides and still have no real match rule.
 
 ### 3a. Start from one of the built-in quickstarts
 
@@ -181,20 +181,20 @@ OpenClaw:
 ```json
 {
   "baseUrl": "http://127.0.0.1:8090/v1",
-  "primary": "foundrygate/auto"
+  "primary": "faigate/auto"
 }
 ```
 
-Starter file: [examples/openclaw-foundrygate.jsonc](./examples/openclaw-foundrygate.jsonc)
+Starter file: [examples/openclaw-faigate.jsonc](./examples/openclaw-faigate.jsonc)
 
-Fuller deployment example: [examples/openclaw-foundrygate-full.jsonc](./examples/openclaw-foundrygate-full.jsonc)
+Fuller deployment example: [examples/openclaw-faigate-full.jsonc](./examples/openclaw-faigate-full.jsonc)
 Full reference block: [../openclaw-integration.jsonc](../openclaw-integration.jsonc)
 
 Important:
 
-- the model ids under `providers.foundrygate.models` must match `GET /v1/models`
-- use `imageModel.primary: "foundrygate/auto"` if FoundryGate should pick the image backend
-- use `imageModel.primary: "foundrygate/<provider-id>"` only when the image path should be pinned
+- the model ids under `providers.faigate.models` must match `GET /v1/models`
+- use `imageModel.primary: "faigate/auto"` if fusionAIze Gate should pick the image backend
+- use `imageModel.primary: "faigate/<provider-id>"` only when the image path should be pinned
 
 Delegated / many-agent example:
 
@@ -205,7 +205,7 @@ n8n:
 ```text
 Base URL: http://127.0.0.1:8090/v1
 Model: auto
-Header: X-FoundryGate-Client: n8n
+Header: X-faigate-Client: n8n
 ```
 
 CLI:
@@ -217,35 +217,35 @@ export OPENAI_API_KEY=local
 
 Starter files:
 
-- [examples/n8n-foundrygate-http-request.json](./examples/n8n-foundrygate-http-request.json)
-- [examples/cli-foundrygate-env.sh](./examples/cli-foundrygate-env.sh)
-- [examples/opencode-foundrygate.json](./examples/opencode-foundrygate.json)
+- [examples/n8n-faigate-http-request.json](./examples/n8n-faigate-http-request.json)
+- [examples/cli-faigate-env.sh](./examples/cli-faigate-env.sh)
+- [examples/opencode-faigate.json](./examples/opencode-faigate.json)
 - [examples/client-ai-native-app-profile.yaml](./examples/client-ai-native-app-profile.yaml)
-- [examples/swe-af-foundrygate.env.example](./examples/swe-af-foundrygate.env.example)
-- [examples/paperclip-foundrygate.env.example](./examples/paperclip-foundrygate.env.example)
-- [examples/ship-faster-foundrygate.env.example](./examples/ship-faster-foundrygate.env.example)
-- [examples/langchain-foundrygate.env.example](./examples/langchain-foundrygate.env.example)
-- [examples/langgraph-foundrygate.env.example](./examples/langgraph-foundrygate.env.example)
-- [examples/agno-foundrygate.env.example](./examples/agno-foundrygate.env.example)
-- [examples/semantic-kernel-foundrygate.env.example](./examples/semantic-kernel-foundrygate.env.example)
-- [examples/haystack-foundrygate.env.example](./examples/haystack-foundrygate.env.example)
-- [examples/mastra-foundrygate.env.example](./examples/mastra-foundrygate.env.example)
-- [examples/google-adk-foundrygate.env.example](./examples/google-adk-foundrygate.env.example)
-- [examples/autogen-foundrygate.env.example](./examples/autogen-foundrygate.env.example)
-- [examples/llamaindex-foundrygate.env.example](./examples/llamaindex-foundrygate.env.example)
-- [examples/crewai-foundrygate.env.example](./examples/crewai-foundrygate.env.example)
-- [examples/pydanticai-foundrygate.env.example](./examples/pydanticai-foundrygate.env.example)
-- [examples/camel-foundrygate.env.example](./examples/camel-foundrygate.env.example)
+- [examples/swe-af-faigate.env.example](./examples/swe-af-faigate.env.example)
+- [examples/paperclip-faigate.env.example](./examples/paperclip-faigate.env.example)
+- [examples/ship-faster-faigate.env.example](./examples/ship-faster-faigate.env.example)
+- [examples/langchain-faigate.env.example](./examples/langchain-faigate.env.example)
+- [examples/langgraph-faigate.env.example](./examples/langgraph-faigate.env.example)
+- [examples/agno-faigate.env.example](./examples/agno-faigate.env.example)
+- [examples/semantic-kernel-faigate.env.example](./examples/semantic-kernel-faigate.env.example)
+- [examples/haystack-faigate.env.example](./examples/haystack-faigate.env.example)
+- [examples/mastra-faigate.env.example](./examples/mastra-faigate.env.example)
+- [examples/google-adk-faigate.env.example](./examples/google-adk-faigate.env.example)
+- [examples/autogen-faigate.env.example](./examples/autogen-faigate.env.example)
+- [examples/llamaindex-faigate.env.example](./examples/llamaindex-faigate.env.example)
+- [examples/crewai-faigate.env.example](./examples/crewai-faigate.env.example)
+- [examples/pydanticai-faigate.env.example](./examples/pydanticai-faigate.env.example)
+- [examples/camel-faigate.env.example](./examples/camel-faigate.env.example)
 
 ### 3b. First-wave framework starters
 
 The first post-`1.0` framework wave keeps every client on the same OpenAI-compatible entry point and varies only the stable client tag:
 
-- `SWE-AF` -> `X-FoundryGate-Client: swe-af`
-- `paperclip` -> `X-FoundryGate-Client: paperclip`
-- `ship-faster` -> `X-FoundryGate-Client: ship-faster`
-- `LangChain` -> `X-FoundryGate-Client: langchain`
-- `LangGraph` -> `X-FoundryGate-Client: langgraph`
+- `SWE-AF` -> `X-faigate-Client: swe-af`
+- `paperclip` -> `X-faigate-Client: paperclip`
+- `ship-faster` -> `X-faigate-Client: ship-faster`
+- `LangChain` -> `X-faigate-Client: langchain`
+- `LangGraph` -> `X-faigate-Client: langgraph`
 
 Use the starter env files above first, then add explicit profile rules only if one framework needs different locality, provider, or cost behavior.
 
@@ -253,11 +253,11 @@ Use the starter env files above first, then add explicit profile rules only if o
 
 The second post-`1.0` starter wave extends the same pattern to:
 
-- `Agno` -> `X-FoundryGate-Client: agno`
-- `Semantic Kernel` -> `X-FoundryGate-Client: semantic-kernel`
-- `Haystack` -> `X-FoundryGate-Client: haystack`
-- `Mastra` -> `X-FoundryGate-Client: mastra`
-- `Google ADK` -> `X-FoundryGate-Client: google-adk`
+- `Agno` -> `X-faigate-Client: agno`
+- `Semantic Kernel` -> `X-faigate-Client: semantic-kernel`
+- `Haystack` -> `X-faigate-Client: haystack`
+- `Mastra` -> `X-faigate-Client: mastra`
+- `Google ADK` -> `X-faigate-Client: google-adk`
 
 Keep these on the shared OpenAI-compatible path first. The right time to split them into more specialized profiles is after traces and stats show a real difference in locality, fallback, or cost behavior.
 
@@ -265,11 +265,11 @@ Keep these on the shared OpenAI-compatible path first. The right time to split t
 
 The third post-`1.0` starter wave closes the biggest remaining framework gaps from the matrix:
 
-- `AutoGen` -> `X-FoundryGate-Client: autogen`
-- `LlamaIndex` -> `X-FoundryGate-Client: llamaindex`
-- `CrewAI` -> `X-FoundryGate-Client: crewai`
-- `PydanticAI` -> `X-FoundryGate-Client: pydanticai`
-- `CAMEL` -> `X-FoundryGate-Client: camel`
+- `AutoGen` -> `X-faigate-Client: autogen`
+- `LlamaIndex` -> `X-faigate-Client: llamaindex`
+- `CrewAI` -> `X-faigate-Client: crewai`
+- `PydanticAI` -> `X-faigate-Client: pydanticai`
+- `CAMEL` -> `X-faigate-Client: camel`
 
 Treat these the same way as the earlier waves: stay on the shared OpenAI-compatible endpoint first, then split profiles only when traces and route previews show a real need.
 
@@ -277,9 +277,9 @@ Treat these the same way as the earlier waves: stay on the shared OpenAI-compati
 
 Keep hooks opt-in and narrow. Good uses are:
 
-- `X-FoundryGate-Prefer-Provider` for one explicit provider preference
-- `X-FoundryGate-Locality: local-only` for private or worker-local traffic
-- `X-FoundryGate-Profile` for a one-request profile override
+- `X-faigate-Prefer-Provider` for one explicit provider preference
+- `X-faigate-Locality: local-only` for private or worker-local traffic
+- `X-faigate-Profile` for a one-request profile override
 
 ### 5. Validate with route introspection
 
@@ -304,42 +304,42 @@ Recommended rollout:
 
 Current state:
 
-- manual updates via Git or `foundrygate-update`
-- cached release update checks via `GET /api/update` and `foundrygate-update-check`
-- optional eligibility reporting and helper-driven apply flow via `foundrygate-auto-update`
+- manual updates via Git or `faigate-update`
+- cached release update checks via `GET /api/update` and `faigate-update-check`
+- optional eligibility reporting and helper-driven apply flow via `faigate-auto-update`
 - tag-driven release artifacts for Python distributions and container images
 - publish dry-run workflow for Python packaging and GHCR container builds
 
 Planned state:
 
-- scheduled use of `foundrygate-auto-update --apply` in controlled environments
+- scheduled use of `faigate-auto-update --apply` in controlled environments
 
-This remains opt-in. FoundryGate does not self-schedule or mutate the checkout over HTTP.
+This remains opt-in. fusionAIze Gate does not self-schedule or mutate the checkout over HTTP.
 
 ### Controlled scheduling examples
 
 Use scheduling only after you are comfortable with the manual path:
 
 ```bash
-./scripts/foundrygate-update-check
-./scripts/foundrygate-auto-update
+./scripts/faigate-update-check
+./scripts/faigate-auto-update
 ```
 
 Recommended `systemd` path:
 
-1. review [examples/foundrygate-auto-update.service](./examples/foundrygate-auto-update.service)
-2. review [examples/foundrygate-auto-update.timer](./examples/foundrygate-auto-update.timer)
+1. review [examples/faigate-auto-update.service](./examples/faigate-auto-update.service)
+2. review [examples/faigate-auto-update.timer](./examples/faigate-auto-update.timer)
 3. install them under `/etc/systemd/system/`
 4. enable the timer only after `auto_update.enabled: true` is set deliberately
 
 Minimal flow:
 
 ```bash
-sudo install -m 644 docs/examples/foundrygate-auto-update.service /etc/systemd/system/foundrygate-auto-update.service
-sudo install -m 644 docs/examples/foundrygate-auto-update.timer /etc/systemd/system/foundrygate-auto-update.timer
+sudo install -m 644 docs/examples/faigate-auto-update.service /etc/systemd/system/faigate-auto-update.service
+sudo install -m 644 docs/examples/faigate-auto-update.timer /etc/systemd/system/faigate-auto-update.timer
 sudo systemctl daemon-reload
-sudo systemctl enable --now foundrygate-auto-update.timer
-sudo systemctl list-timers foundrygate-auto-update.timer
+sudo systemctl enable --now faigate-auto-update.timer
+sudo systemctl list-timers faigate-auto-update.timer
 ```
 
-Cron remains possible for simpler hosts. The example is in [examples/foundrygate-auto-update.cron](./examples/foundrygate-auto-update.cron), but `systemd` timers are usually the safer default because they provide visibility and persistence.
+Cron remains possible for simpler hosts. The example is in [examples/faigate-auto-update.cron](./examples/faigate-auto-update.cron), but `systemd` timers are usually the safer default because they provide visibility and persistence.

@@ -1,12 +1,12 @@
-# Contributing to FoundryGate
+# Contributing to fusionAIze Gate
 
 Thanks for your interest. Contributions are welcome.
 
 ## Development Setup
 
 ```bash
-git clone https://github.com/typelicious/FoundryGate.git foundrygate
-cd foundrygate
+git clone https://github.com/fusionAIze/faigate.git faigate
+cd faigate
 python3 -m venv venv && source venv/bin/activate
 pip install -e ".[dev]"
 ```
@@ -81,4 +81,4 @@ See [docs/process/git-workflow.md](./docs/process/git-workflow.md) for the full 
 
 ## Skill Updates
 
-The skill lives in `skills/foundrygate/SKILL.md`. If you update slash commands or add new endpoints, update the skill too.
+The skill lives in `skills/faigate/SKILL.md`. If you update slash commands or add new endpoints, update the skill too.

@@ -1,0 +1,20 @@
+{
+  "method": "POST",
+  "url": "http://127.0.0.1:8090/v1/chat/completions",
+  "sendHeaders": true,
+  "headerParameters": {
+    "parameters": [
+      {
+        "name": "Content-Type",
+        "value": "application/json"
+      },
+      {
+        "name": "X-faigate-Client",
+        "value": "n8n"
+      }
+    ]
+  },
+  "sendBody": true,
+  "specifyBody": "json",
+  "jsonBody": "{\n  \"model\": \"auto\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"Summarize the latest workflow failures in one paragraph.\"\n    }\n  ],\n  \"max_tokens\": 256\n}"
+}

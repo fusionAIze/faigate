@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# update code from repo + restart service
+#
+# Git operations run as the faigate service user (owner of /opt/faigate).
+# systemd operations require sudo.
+#
+# Usage:
+#   faigate-update          # normal update from any user with sudo rights
+#   sudo -u faigate bash -c '/opt/faigate/scripts/faigate-update'  # explicit
+
+FAIGATE_DIR=/opt/faigate
+SERVICE_USER=faigate
+
+# ── Git update ────────────────────────────────────────────────────────────────
+# Run as the service user so .git/ metadata stays owned correctly.
+if [ "$(id -un)" != "$SERVICE_USER" ] && command -v sudo >/dev/null 2>&1; then
+  GIT_CMD="sudo -u $SERVICE_USER"
+else
+  GIT_CMD=""
+fi
+
+$GIT_CMD git -C "$FAIGATE_DIR" fetch --all --prune
+$GIT_CMD git -C "$FAIGATE_DIR" reset --hard origin/main
+$GIT_CMD git -C "$FAIGATE_DIR" clean -fd
+
+# ── venv deps (optional) ──────────────────────────────────────────────────────
+if [ -f "$FAIGATE_DIR/venv/bin/pip" ]; then
+  $GIT_CMD "$FAIGATE_DIR/venv/bin/pip" install -U pip >/dev/null
+  if [ -f "$FAIGATE_DIR/requirements.txt" ]; then
+    $GIT_CMD "$FAIGATE_DIR/venv/bin/pip" install -r "$FAIGATE_DIR/requirements.txt"
+  fi
+fi
+
+# ── systemd ───────────────────────────────────────────────────────────────────
+sudo install -m 644 "$FAIGATE_DIR/faigate.service" /etc/systemd/system/faigate.service
+sudo systemctl daemon-reload
+sudo systemctl restart faigate.service
+
+# ── health check ──────────────────────────────────────────────────────────────
+for attempt in 1 2 3 4 5; do
+  if "$FAIGATE_DIR/scripts/faigate-health"; then
+    exit 0
+  fi
+  sleep 2
+done
+
+echo "health check failed after 5 attempts" >&2
+exit 1

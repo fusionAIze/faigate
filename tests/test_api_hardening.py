@@ -16,13 +16,13 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 sys.modules["httpx"] = httpx
 
-sys.modules.pop("foundrygate.providers", None)
-sys.modules.pop("foundrygate.updates", None)
-sys.modules.pop("foundrygate.main", None)
+sys.modules.pop("faigate.providers", None)
+sys.modules.pop("faigate.updates", None)
+sys.modules.pop("faigate.main", None)
 
-import foundrygate.main as main_module  # noqa: E402
-from foundrygate.config import load_config  # noqa: E402
-from foundrygate.router import Router  # noqa: E402
+import faigate.main as main_module  # noqa: E402
+from faigate.config import load_config  # noqa: E402
+from faigate.router import Router  # noqa: E402
 
 importlib.reload(main_module)
 
@@ -74,7 +74,7 @@ class _ProviderStub:
                 }
             ],
             "usage": {"prompt_tokens": 10, "completion_tokens": 5},
-            "_foundrygate": {"latency_ms": 12},
+            "_faigate": {"latency_ms": 12},
         }
 
 
@@ -231,7 +231,7 @@ def test_stats_includes_client_highlights(api_client):
 
 def test_provider_discovery_endpoint_supports_filters(api_client, monkeypatch, tmp_path):
     monkeypatch.setenv(
-        "FOUNDRYGATE_PROVIDER_LINK_OPENROUTER_FALLBACK_URL",
+        "FAIGATE_PROVIDER_LINK_OPENROUTER_FALLBACK_URL",
         "https://go.example.test/openrouter",
     )
     cfg = load_config(
@@ -284,7 +284,7 @@ def test_route_preview_rejects_large_json_payload(api_client):
 def test_route_preview_sanitizes_header_values(api_client):
     response = api_client.post(
         "/api/route",
-        headers={"X-FoundryGate-Client": "CLI-AGENT-WITH-VERY-LONG-NAME"},
+        headers={"X-faigate-Client": "CLI-AGENT-WITH-VERY-LONG-NAME"},
         json={
             "model": "auto",
             "messages": [{"role": "user", "content": "route this safely"}],
@@ -293,7 +293,7 @@ def test_route_preview_sanitizes_header_values(api_client):
 
     assert response.status_code == 200
     body = response.json()
-    assert body["routing_headers"]["x-foundrygate-client"] == "CLI-AGENT-WI"
+    assert body["routing_headers"]["x-faigate-client"] == "CLI-AGENT-WI"
     assert body["client_tag"] == "cli-agent-wi"
 
 
@@ -318,7 +318,7 @@ def test_chat_completions_returns_security_headers(api_client):
     )
 
     assert response.status_code == 200
-    assert response.headers["x-foundrygate-provider"] == "cloud-default"
+    assert response.headers["x-faigate-provider"] == "cloud-default"
     assert response.headers["cache-control"] == "no-store"
     assert response.headers["x-content-type-options"] == "nosniff"
 

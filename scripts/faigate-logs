@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/faigate-service-lib.sh"
+
+case "$(faigate_platform)" in
+  Darwin)
+    mkdir -p "$(faigate_mac_logs_dir)"
+    touch "$(faigate_mac_logs_dir)/stdout.log" "$(faigate_mac_logs_dir)/stderr.log"
+    tail -f "$(faigate_mac_logs_dir)/stdout.log" "$(faigate_mac_logs_dir)/stderr.log"
+    ;;
+  *)
+    sudo journalctl -u faigate.service -f -o cat
+    ;;
+esac

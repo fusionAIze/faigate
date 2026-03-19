@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from foundrygate.updates import (
+from faigate.updates import (
     UpdateChecker,
     alert_level_for_update,
     allowed_update_types_for_ring,
@@ -293,16 +293,16 @@ async def test_update_checker_reports_latest_release():
     checker = UpdateChecker(
         current_version="0.4.0",
         enabled=True,
-        repository="typelicious/FoundryGate",
+        repository="fusionAIze/faigate",
         auto_update={
             "enabled": True,
             "allow_major": False,
             "provider_scope": {"allow_providers": ["deepseek-chat"], "deny_providers": []},
             "verification": {
                 "enabled": True,
-                "command": "foundrygate-health",
+                "command": "faigate-health",
                 "timeout_seconds": 30,
-                "rollback_command": "sudo systemctl restart foundrygate.service",
+                "rollback_command": "sudo systemctl restart faigate.service",
             },
         },
     )
@@ -311,7 +311,7 @@ async def test_update_checker_reports_latest_release():
             200,
             {
                 "tag_name": "v0.5.0",
-                "html_url": "https://github.com/typelicious/FoundryGate/releases/tag/v0.5.0",
+                "html_url": "https://github.com/fusionAIze/faigate/releases/tag/v0.5.0",
             },
         )
     )
@@ -334,9 +334,9 @@ async def test_update_checker_reports_latest_release():
     }
     assert status.auto_update["verification"] == {
         "enabled": True,
-        "command": "foundrygate-health",
+        "command": "faigate-health",
         "timeout_seconds": 30,
-        "rollback_command": "sudo systemctl restart foundrygate.service",
+        "rollback_command": "sudo systemctl restart faigate.service",
     }
     assert status.release_url.endswith("/v0.5.0")
 
@@ -346,7 +346,7 @@ async def test_update_checker_uses_cache_until_forced():
     checker = UpdateChecker(
         current_version="0.4.0",
         enabled=True,
-        repository="typelicious/FoundryGate",
+        repository="fusionAIze/faigate",
         check_interval_seconds=3600,
     )
     fake_client = _FakeClient(
@@ -354,7 +354,7 @@ async def test_update_checker_uses_cache_until_forced():
             200,
             {
                 "tag_name": "v0.4.0",
-                "html_url": "https://github.com/typelicious/FoundryGate/releases/tag/v0.4.0",
+                "html_url": "https://github.com/fusionAIze/faigate/releases/tag/v0.4.0",
             },
         )
     )
@@ -374,7 +374,7 @@ async def test_update_checker_handles_remote_errors():
     checker = UpdateChecker(
         current_version="0.4.0",
         enabled=True,
-        repository="typelicious/FoundryGate",
+        repository="fusionAIze/faigate",
     )
     checker._client = _FakeClient(RuntimeError("network unavailable"))
 
@@ -394,7 +394,7 @@ async def test_major_updates_are_blocked_when_auto_update_disallows_them():
     checker = UpdateChecker(
         current_version="0.6.0",
         enabled=True,
-        repository="typelicious/FoundryGate",
+        repository="fusionAIze/faigate",
         auto_update={"enabled": True, "allow_major": False},
     )
     checker._client = _FakeClient(
@@ -402,7 +402,7 @@ async def test_major_updates_are_blocked_when_auto_update_disallows_them():
             200,
             {
                 "tag_name": "v1.0.0",
-                "html_url": "https://github.com/typelicious/FoundryGate/releases/tag/v1.0.0",
+                "html_url": "https://github.com/fusionAIze/faigate/releases/tag/v1.0.0",
             },
         )
     )
@@ -420,7 +420,7 @@ async def test_stable_rollout_ring_blocks_minor_updates():
     checker = UpdateChecker(
         current_version="0.6.0",
         enabled=True,
-        repository="typelicious/FoundryGate",
+        repository="fusionAIze/faigate",
         auto_update={"enabled": True, "rollout_ring": "stable", "allow_major": False},
     )
     checker._client = _FakeClient(
@@ -428,7 +428,7 @@ async def test_stable_rollout_ring_blocks_minor_updates():
             200,
             {
                 "tag_name": "v0.7.0",
-                "html_url": "https://github.com/typelicious/FoundryGate/releases/tag/v0.7.0",
+                "html_url": "https://github.com/fusionAIze/faigate/releases/tag/v0.7.0",
             },
         )
     )
@@ -446,7 +446,7 @@ async def test_preview_release_channel_reads_latest_preview_release():
     checker = UpdateChecker(
         current_version="0.6.0",
         enabled=True,
-        repository="typelicious/FoundryGate",
+        repository="fusionAIze/faigate",
         release_channel="preview",
         auto_update={"enabled": True, "rollout_ring": "canary", "allow_major": False},
     )
@@ -457,12 +457,12 @@ async def test_preview_release_channel_reads_latest_preview_release():
                 {
                     "tag_name": "v0.7.0-rc1",
                     "draft": False,
-                    "html_url": "https://github.com/typelicious/FoundryGate/releases/tag/v0.7.0-rc1",
+                    "html_url": "https://github.com/fusionAIze/faigate/releases/tag/v0.7.0-rc1",
                 },
                 {
                     "tag_name": "v0.6.2",
                     "draft": False,
-                    "html_url": "https://github.com/typelicious/FoundryGate/releases/tag/v0.6.2",
+                    "html_url": "https://github.com/fusionAIze/faigate/releases/tag/v0.6.2",
                 },
             ],
         )
@@ -479,7 +479,7 @@ async def test_min_release_age_blocks_auto_update_until_release_has_aged():
     checker = UpdateChecker(
         current_version="0.6.0",
         enabled=True,
-        repository="typelicious/FoundryGate",
+        repository="fusionAIze/faigate",
         auto_update={
             "enabled": True,
             "rollout_ring": "early",
@@ -492,7 +492,7 @@ async def test_min_release_age_blocks_auto_update_until_release_has_aged():
             200,
             {
                 "tag_name": "v0.6.1",
-                "html_url": "https://github.com/typelicious/FoundryGate/releases/tag/v0.6.1",
+                "html_url": "https://github.com/fusionAIze/faigate/releases/tag/v0.6.1",
                 "published_at": (datetime.now(timezone.utc) - timedelta(hours=1))
                 .isoformat()
                 .replace("+00:00", "Z"),
@@ -513,7 +513,7 @@ async def test_auto_update_disabled_status_is_reported_cleanly():
     checker = UpdateChecker(
         current_version="0.6.0",
         enabled=False,
-        repository="typelicious/FoundryGate",
+        repository="fusionAIze/faigate",
         auto_update={"enabled": False},
     )
 

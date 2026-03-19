@@ -41,7 +41,7 @@ _httpx.TimeoutException = Exception
 _httpx.ConnectError = Exception
 sys.modules["httpx"] = _httpx
 
-from foundrygate.providers import ProviderBackend  # noqa: E402
+from faigate.providers import ProviderBackend  # noqa: E402
 
 
 def _make_google_backend() -> ProviderBackend:
@@ -264,8 +264,8 @@ class TestImageGeneration:
         assert captured["json"]["size"] == "1024x1024"
         assert captured["json"]["response_format"] == "b64_json"
         assert captured["json"]["user"] == "tester"
-        assert result["_foundrygate"]["provider"] == "image-cloud"
-        assert result["_foundrygate"]["modality"] == "image_generation"
+        assert result["_faigate"]["provider"] == "image-cloud"
+        assert result["_faigate"]["modality"] == "image_generation"
 
     @pytest.mark.asyncio
     async def test_openai_image_editing_posts_to_edits_endpoint(self):
@@ -326,5 +326,5 @@ class TestImageGeneration:
         assert captured["files"][0][1][0] == "input.png"
         assert captured["files"][1][0] == "mask"
         assert captured["files"][1][1][0] == "mask.png"
-        assert result["_foundrygate"]["provider"] == "image-cloud"
-        assert result["_foundrygate"]["modality"] == "image_editing"
+        assert result["_faigate"]["provider"] == "image-cloud"
+        assert result["_faigate"]["modality"] == "image_editing"

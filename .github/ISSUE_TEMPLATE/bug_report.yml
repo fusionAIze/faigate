@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a reproducible problem in FoundryGate
+description: Report a reproducible problem in fusionAIze Gate
 title: "[Bug]: "
 labels: ["bug"]
 body:
@@ -16,7 +16,7 @@ body:
       label: Reproduction
       description: Include request payloads, config snippets, logs, or curl commands where relevant.
       placeholder: |
-        1. Start FoundryGate with ...
+        1. Start fusionAIze Gate with ...
         2. Send this request ...
         3. Observe ...
     validations:

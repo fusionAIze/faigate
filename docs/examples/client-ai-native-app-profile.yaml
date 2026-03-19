@@ -14,8 +14,8 @@ client_profiles:
     - profile: app-ops
       match:
         header_contains:
-          x-foundrygate-client: ["elementify", "ops-app"]
+          x-faigate-client: ["elementify", "ops-app"]
     - profile: app-private
       match:
         header_contains:
-          x-foundrygate-profile: ["private", "local-only"]
+          x-faigate-profile: ["private", "local-only"]

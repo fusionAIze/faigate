@@ -37,8 +37,8 @@ _httpx.TimeoutException = Exception
 _httpx.ConnectError = Exception
 sys.modules["httpx"] = _httpx
 
-from foundrygate.config import ConfigError, load_config
-from foundrygate.router import Router
+from faigate.config import ConfigError, load_config
+from faigate.router import Router
 
 
 def _write_config(tmp_path: Path, body: str) -> Path:
@@ -76,7 +76,7 @@ routing_policies:
     - name: local-only-profile
       match:
         header_contains:
-          x-foundrygate-profile: ["local-only"]
+          x-faigate-profile: ["local-only"]
       select:
         capability_values:
           local: true
@@ -93,7 +93,7 @@ metrics:
         decision = await router.route(
             [{"role": "user", "content": "hello"}],
             model_requested="auto",
-            headers={"x-foundrygate-profile": "local-only"},
+            headers={"x-faigate-profile": "local-only"},
         )
 
         assert decision.layer == "policy"
@@ -252,7 +252,7 @@ metrics:
             client_profile="openclaw",
             model_requested="auto",
             system_prompt="",
-            headers={"x-foundrygate-client": "codex"},
+            headers={"x-faigate-client": "codex"},
             has_tools=False,
             total_tokens=20,
             last_user_message="hello",
@@ -263,7 +263,7 @@ metrics:
                 {
                     "any": [
                         {"client_profile": ["cli"]},
-                        {"header_contains": {"x-foundrygate-client": ["codex"]}},
+                        {"header_contains": {"x-faigate-client": ["codex"]}},
                     ]
                 },
                 ctx,

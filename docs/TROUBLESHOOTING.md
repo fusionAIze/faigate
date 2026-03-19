@@ -1,4 +1,4 @@
-# FoundryGate Troubleshooting
+# fusionAIze Gate Troubleshooting
 
 ## Health endpoint fails
 
@@ -53,7 +53,7 @@ request_hooks:
 
 ## Request is rejected as too large
 
-FoundryGate now enforces explicit request-size limits before provider calls.
+fusionAIze Gate now enforces explicit request-size limits before provider calls.
 
 Check:
 
@@ -75,7 +75,7 @@ security:
 
 ## Local worker stays unhealthy
 
-For `contract: local-worker`, FoundryGate probes `GET /models`.
+For `contract: local-worker`, fusionAIze Gate probes `GET /models`.
 
 Common causes:
 
@@ -143,7 +143,7 @@ That header is the current signal used for OpenClaw sub-agent differentiation in
 
 ## OpenClaw says the model does not exist
 
-This usually means the OpenClaw-side provider ids do not match FoundryGate's loaded provider ids.
+This usually means the OpenClaw-side provider ids do not match fusionAIze Gate's loaded provider ids.
 
 Check:
 
@@ -151,12 +151,12 @@ Check:
 curl -fsS http://127.0.0.1:8090/v1/models
 ```
 
-Then update the ids under `models.providers.foundrygate.models` in `~/.openclaw/openclaw.json` so they match exactly.
+Then update the ids under `models.providers.faigate.models` in `~/.openclaw/openclaw.json` so they match exactly.
 
 Remember:
 
 - `auto` is always valid
-- the other ids come from FoundryGate provider names
+- the other ids come from fusionAIze Gate provider names
 - they are not automatically the raw upstream model ids
 
 ## Database path is wrong or unwritable
@@ -164,8 +164,8 @@ Remember:
 Use an absolute path outside the repo checkout:
 
 ```bash
-mkdir -p "$HOME/.local/state/foundrygate"
-printf 'FOUNDRYGATE_DB_PATH=%s\n' "$HOME/.local/state/foundrygate/foundrygate.db"
+mkdir -p "$HOME/.local/state/faigate"
+printf 'FAIGATE_DB_PATH=%s\n' "$HOME/.local/state/faigate/faigate.db"
 ```
 
 ## Update went wrong
@@ -175,34 +175,34 @@ Current update path is manual or helper-script driven.
 Use:
 
 ```bash
-foundrygate-status
-foundrygate-logs
-foundrygate-health
+faigate-status
+faigate-logs
+faigate-health
 ```
 
-If you use `foundrygate-update`, remember that it is meant for deployment checkouts and removes local untracked changes.
+If you use `faigate-update`, remember that it is meant for deployment checkouts and removes local untracked changes.
 
-## Homebrew install warns about `pydantic_core` linkage or `foundrygate --version` looks wrong
+## Homebrew install warns about `pydantic_core` linkage or `faigate --version` looks wrong
 
 Separate the two failure modes first:
 
 - a Homebrew linkage warning during install is a packaging problem
-- an empty or unexpected `foundrygate --version` can simply mean an active virtualenv is shadowing the Brew binary
+- an empty or unexpected `faigate --version` can simply mean an active virtualenv is shadowing the Brew binary
 
 Check which executable is first on `PATH`:
 
 ```bash
-which -a foundrygate
-/opt/homebrew/bin/foundrygate --version
+which -a faigate
+/opt/homebrew/bin/faigate --version
 ```
 
-If the Brew binary works but plain `foundrygate` does not, leave the service running and fix your shell path or deactivate the virtualenv before testing the Homebrew install again.
+If the Brew binary works but plain `faigate` does not, leave the service running and fix your shell path or deactivate the virtualenv before testing the Homebrew install again.
 
 If Homebrew still warns about `pydantic_core`, update the tap and reinstall:
 
 ```bash
 brew update
-brew reinstall typelicious/foundrygate/foundrygate
+brew reinstall fusionAIze/faigate/faigate
 ```
 
 ## Update checks fail or show unavailable
@@ -212,8 +212,8 @@ Check the cached runtime view first:
 ```bash
 curl -fsS http://127.0.0.1:8090/api/update
 curl -fsS http://127.0.0.1:8090/api/operator-events
-./scripts/foundrygate-update-check
-./scripts/foundrygate-auto-update
+./scripts/faigate-update-check
+./scripts/faigate-auto-update
 ```
 
 Common causes:
@@ -228,7 +228,7 @@ If needed, reduce the problem to config:
 ```yaml
 update_check:
   enabled: true
-  repository: "typelicious/FoundryGate"
+  repository: "fusionAIze/faigate"
   api_base: "https://api.github.com"
   timeout_seconds: 5
   check_interval_seconds: 21600
@@ -240,7 +240,7 @@ Use `force=true` when you need an immediate refresh instead of the cached result
 curl -fsS 'http://127.0.0.1:8090/api/update?force=true'
 ```
 
-If `foundrygate-auto-update --apply` refuses to run, inspect the `auto_update` block in the JSON response. Common blockers are:
+If `faigate-auto-update --apply` refuses to run, inspect the `auto_update` block in the JSON response. Common blockers are:
 
 - `auto_update.enabled: false`
 - the latest release is a major upgrade while `allow_major: false`

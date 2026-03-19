@@ -1,6 +1,6 @@
-# FoundryGate AI-Native Client Matrix
+# fusionAIze Gate AI-Native Client Matrix
 
-This page tracks the post-`v1.0` client-expansion line for FoundryGate.
+This page tracks the post-`v1.0` client-expansion line for fusionAIze Gate.
 
 The goal is not to add endless one-off integrations. The goal is to identify which AI-native clients and agent frameworks are worth first-class starter templates, which ones only need a compatibility note, and which ones should wait until there is a real operator need.
 
@@ -19,11 +19,11 @@ We de-prioritize frameworks that:
 
 - require deep custom runtime embedding instead of a clean HTTP integration
 - are closer to full app platforms than reusable client frameworks
-- would force FoundryGate into plugin/API surface commitments too early
+- would force fusionAIze Gate into plugin/API surface commitments too early
 
 ## Priority Matrix
 
-| Project | Stars | Last push | Fit for FoundryGate | Initial action |
+| Project | Stars | Last push | Fit for fusionAIze Gate | Initial action |
 | --- | ---: | --- | --- | --- |
 | [langchain-ai/langchain](https://github.com/langchain-ai/langchain) | 129,607 | 2026-03-15 | Very high | Template |
 | [microsoft/autogen](https://github.com/microsoft/autogen) | 55,647 | 2026-03-14 | Very high | Template |
@@ -48,7 +48,7 @@ These projects are important signals, but they are not the best first template t
 | Project | Stars | Why not first-wave |
 | --- | ---: | --- |
 | [langgenius/dify](https://github.com/langgenius/dify) | 132,912 | More platform/application surface than client-template surface |
-| [OpenHands/OpenHands](https://github.com/OpenHands/OpenHands) | 69,161 | Strong dev-agent platform, but less “generic starter template” friendly for the first FoundryGate slice |
+| [OpenHands/OpenHands](https://github.com/OpenHands/OpenHands) | 69,161 | Strong dev-agent platform, but less “generic starter template” friendly for the first fusionAIze Gate slice |
 | [BlockRunAI/ClawRouter](https://github.com/BlockRunAI/ClawRouter) | 5,522 | Best treated as competitive/reference input, not as a target integration |
 
 ## First-Wave Template Set For `v1.1.0`
@@ -64,7 +64,7 @@ This is the recommended minimum useful template wave:
 7. `LlamaIndex`
 8. `CrewAI`
 
-That set gives FoundryGate:
+That set gives fusionAIze Gate:
 
 - the three user-requested integrations
 - strong coverage of the most recognizable agent ecosystems
@@ -99,11 +99,11 @@ We should keep watching for:
 
 - modality expansion patterns
 - clearer comparison/positioning language
-- routing-signal ideas worth formalizing better in FoundryGate
+- routing-signal ideas worth formalizing better in fusionAIze Gate
 - operator-experience improvements that fit the no-build dashboard
 
 We should not blindly copy:
 
 - product claims we cannot verify
-- hosted-account assumptions that do not fit FoundryGate's local-first shape
+- hosted-account assumptions that do not fit fusionAIze Gate's local-first shape
 - features that would bloat the gateway core instead of strengthening it

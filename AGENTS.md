@@ -1,10 +1,10 @@
-# AGENTS.md — FoundryGate
+# AGENTS.md — fusionAIze Gate
 
 ## Project identity
 
-This repository hosts `FoundryGate`, a public Apache-2.0-licensed local-first AI gateway.
+This repository hosts `fusionAIze Gate`, a public Apache-2.0-licensed local-first AI gateway.
 
-FoundryGate provides:
+fusionAIze Gate provides:
 
 1. one OpenAI-compatible local endpoint,
 2. routing across multiple upstream providers,
@@ -13,7 +13,7 @@ FoundryGate provides:
 
 ## Naming status
 
-The product, runtime, and GitHub repository use `FoundryGate` identifiers.
+The product, runtime, and GitHub repository use `fusionAIze Gate` identifiers.
 
 ## Product priority
 
@@ -45,7 +45,7 @@ If a tool can speak an OpenAI-compatible endpoint cleanly, use that before addin
 
 ## Supported interaction surfaces
 
-FoundryGate should support these surfaces over time:
+fusionAIze Gate should support these surfaces over time:
 
 ### Current
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from foundrygate.wizard import (
+from faigate.wizard import (
     apply_update_suggestions,
     build_config_change_summary,
     build_initial_config,
@@ -282,7 +282,7 @@ client_profiles:
 
 def test_config_wizard_help_lists_primary_flows():
     result = subprocess.run(
-        ["bash", "scripts/foundrygate-config-wizard", "--help"],
+        ["bash", "scripts/faigate-config-wizard", "--help"],
         capture_output=True,
         text=True,
         check=False,

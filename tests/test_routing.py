@@ -1,4 +1,4 @@
-"""Tests for FoundryGate routing engine and cost calculation."""
+"""Tests for fusionAIze Gate routing engine and cost calculation."""
 
 # ruff: noqa: E402
 
@@ -37,9 +37,9 @@ _httpx.TimeoutException = Exception
 _httpx.ConnectError = Exception
 sys.modules["httpx"] = _httpx
 
-from foundrygate.config import load_config
-from foundrygate.metrics import calc_cost
-from foundrygate.router import Router
+from faigate.config import load_config
+from faigate.metrics import calc_cost
+from faigate.router import Router
 
 
 @pytest.fixture
@@ -297,7 +297,7 @@ class TestNoneContentHandling:
     """Regression tests for TypeError: sequence item N: expected str, NoneType.
 
     The OpenAI spec allows content=null on tool/assistant messages.
-    FoundryGate must not crash when these arrive in the messages array.
+    fusionAIze Gate must not crash when these arrive in the messages array.
     """
 
     @pytest.mark.asyncio

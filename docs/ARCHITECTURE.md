@@ -1,8 +1,8 @@
-# FoundryGate Architecture
+# fusionAIze Gate Architecture
 
 ## Purpose
 
-FoundryGate is a local-first AI gateway plane.
+fusionAIze Gate is a local-first AI gateway plane.
 
 Its job is to sit between many clients and many model backends while keeping one stable operational surface:
 
@@ -54,7 +54,7 @@ In practice, the layers split into two categories:
 
 The hard layers should carry governance, routing intent, and deterministic behavior. The soft layers should only add provider preference or narrow the candidate set when no harder layer has already made the decision.
 
-Before a candidate is accepted, FoundryGate also scores and validates route fit against provider metadata such as context window, input/output token limits, cache hints, locality, health, latency, and recent failure state.
+Before a candidate is accepted, fusionAIze Gate also scores and validates route fit against provider metadata such as context window, input/output token limits, cache hints, locality, health, latency, and recent failure state.
 
 ## Provider layer
 
@@ -84,10 +84,10 @@ The public entry point stays OpenAI-compatible, but callers can still be disting
 Current caller-aware signals:
 
 - `x-openclaw-source`
-- `x-foundrygate-client`
-- `x-foundrygate-profile`
-- `x-foundrygate-prefer-provider`
-- `x-foundrygate-locality`
+- `x-faigate-client`
+- `x-faigate-profile`
+- `x-faigate-prefer-provider`
+- `x-faigate-locality`
 
 This is enough to support:
 
@@ -129,7 +129,7 @@ The operational surface now also applies conservative response headers by defaul
 
 The longer-term design target is to outperform simpler router designs by making routing multi-dimensional instead of mostly keyword- or model-name-driven.
 
-The dimensions FoundryGate should eventually combine include:
+The dimensions fusionAIze Gate should eventually combine include:
 
 - provider capabilities
 - latency and health

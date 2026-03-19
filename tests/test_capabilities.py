@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from foundrygate.config import ConfigError, load_config
+from faigate.config import ConfigError, load_config
 
 
 def _write_config(tmp_path: Path, provider_block: str) -> Path:

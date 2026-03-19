@@ -1,14 +1,14 @@
-# FoundryGate Integrations
+# fusionAIze Gate Integrations
 
 ## Current integration model
 
-FoundryGate works best when clients use the same OpenAI-compatible base URL and let the gateway handle routing and failover.
+fusionAIze Gate works best when clients use the same OpenAI-compatible base URL and let the gateway handle routing and failover.
 
 That keeps integrations shallow and makes routing policy reusable across tools.
 
 ## OpenClaw
 
-OpenClaw is a first-class target for FoundryGate.
+OpenClaw is a first-class target for fusionAIze Gate.
 
 Current coverage:
 
@@ -16,50 +16,50 @@ Current coverage:
 - many-agent or delegated traffic when `x-openclaw-source` is present
 - direct model aliases via the OpenClaw-side config
 - caller-aware defaults through the `openclaw` client preset or explicit profile rules
-- image generation and image editing through the same FoundryGate provider entry
+- image generation and image editing through the same fusionAIze Gate provider entry
 
 Use:
 
 - [openclaw-integration.jsonc](../openclaw-integration.jsonc)
-- [examples/openclaw-foundrygate.jsonc](./examples/openclaw-foundrygate.jsonc)
-- [examples/openclaw-foundrygate-full.jsonc](./examples/openclaw-foundrygate-full.jsonc)
+- [examples/openclaw-faigate.jsonc](./examples/openclaw-faigate.jsonc)
+- [examples/openclaw-faigate-full.jsonc](./examples/openclaw-faigate-full.jsonc)
 - `client_profiles.presets: ["openclaw"]` for a standard starting point
 
 Important rule:
 
-- the model ids under `models.providers.foundrygate.models` in OpenClaw must match the provider ids returned by `GET /v1/models` from FoundryGate
+- the model ids under `models.providers.faigate.models` in OpenClaw must match the provider ids returned by `GET /v1/models` from fusionAIze Gate
 - that means OpenClaw should use ids such as `auto`, `deepseek-chat`, `local-worker`, or `image-provider`
-- it should not guess raw upstream ids unless FoundryGate itself exposes those exact provider ids
+- it should not guess raw upstream ids unless fusionAIze Gate itself exposes those exact provider ids
 
 Minimal direction:
 
 ```json
 {
   "baseUrl": "http://127.0.0.1:8090/v1",
-  "primary": "foundrygate/auto"
+  "primary": "faigate/auto"
 }
 ```
 
-For a smaller starter snippet without the full alias block, use [examples/openclaw-foundrygate.jsonc](./examples/openclaw-foundrygate.jsonc).
+For a smaller starter snippet without the full alias block, use [examples/openclaw-faigate.jsonc](./examples/openclaw-faigate.jsonc).
 
 Recommended OpenClaw defaults:
 
-- `model.primary: "foundrygate/auto"`
-- `imageModel.primary: "foundrygate/auto"` when FoundryGate should choose among image-capable providers
-- `subagents.model: "foundrygate/auto"` when delegated traffic should stay inside the same routing plane
+- `model.primary: "faigate/auto"`
+- `imageModel.primary: "faigate/auto"` when fusionAIze Gate should choose among image-capable providers
+- `subagents.model: "faigate/auto"` when delegated traffic should stay inside the same routing plane
 
 Use an explicit image provider only when OpenClaw should pin image traffic:
 
 ```json
 {
   "imageModel": {
-    "primary": "foundrygate/image-provider",
+    "primary": "faigate/image-provider",
     "fallbacks": []
   }
 }
 ```
 
-FoundryGate-side config that helps OpenClaw most:
+fusionAIze Gate-side config that helps OpenClaw most:
 
 - readable, stable provider ids because those become OpenClaw model ids
 - `client_profiles.presets: ["openclaw"]`
@@ -81,12 +81,12 @@ Validate OpenClaw wiring in this order:
 
 ## n8n
 
-n8n can use FoundryGate as a stable local model gateway.
+n8n can use fusionAIze Gate as a stable local model gateway.
 
 Recommended pattern:
 
 - send requests to the OpenAI-compatible endpoint
-- set `X-FoundryGate-Client: n8n`
+- set `X-faigate-Client: n8n`
 - enable the `n8n` client preset or an explicit `n8n` profile
 - optionally enable `request_hooks` if a workflow should prefer one provider or stay local-only
 
@@ -101,10 +101,10 @@ Minimal direction:
 ```text
 Base URL: http://127.0.0.1:8090/v1
 Model: auto
-Header: X-FoundryGate-Client: n8n
+Header: X-faigate-Client: n8n
 ```
 
-For an importable HTTP Request node example, use [examples/n8n-foundrygate-http-request.json](./examples/n8n-foundrygate-http-request.json).
+For an importable HTTP Request node example, use [examples/n8n-faigate-http-request.json](./examples/n8n-faigate-http-request.json).
 
 ## CLI clients
 
@@ -119,13 +119,13 @@ Examples:
 
 Recommended pattern:
 
-- point the client to FoundryGate
-- set `X-FoundryGate-Client: codex`, `claude`, `kilocode`, or another stable client tag
+- point the client to fusionAIze Gate
+- set `X-faigate-Client: codex`, `claude`, `kilocode`, or another stable client tag
 - use the built-in `cli` preset or a tighter custom profile
 - optionally enable request hooks for per-request locality or provider hints:
-  - `X-FoundryGate-Prefer-Provider`
-  - `X-FoundryGate-Locality`
-  - `X-FoundryGate-Profile`
+  - `X-faigate-Prefer-Provider`
+  - `X-faigate-Locality`
+  - `X-faigate-Profile`
 
 Minimal direction:
 
@@ -134,21 +134,21 @@ export OPENAI_BASE_URL=http://127.0.0.1:8090/v1
 export OPENAI_API_KEY=local
 ```
 
-For a reusable shell starter, use [examples/cli-foundrygate-env.sh](./examples/cli-foundrygate-env.sh).
+For a reusable shell starter, use [examples/cli-faigate-env.sh](./examples/cli-faigate-env.sh).
 
 As with other clients, prefer token-like client tags over long free-form values so the bounded header surface remains readable in traces and operator views.
 
-If you want a small Node-facing helper instead of shell aliases, the separate npm package lives in [packages/foundrygate-cli](../packages/foundrygate-cli).
+If you want a small Node-facing helper instead of shell aliases, the separate npm package lives in [packages/faigate-cli](../packages/faigate-cli).
 
 ### opencode
 
-`opencode` can use FoundryGate as a custom OpenAI-compatible provider through its `provider` config.
+`opencode` can use fusionAIze Gate as a custom OpenAI-compatible provider through its `provider` config.
 
-- starter: [examples/opencode-foundrygate.json](./examples/opencode-foundrygate.json)
-- recommended header: `X-FoundryGate-Client: opencode`
-- recommended model: pick one of the FoundryGate model ids exposed by `GET /v1/models`, usually `auto`
+- starter: [examples/opencode-faigate.json](./examples/opencode-faigate.json)
+- recommended header: `X-faigate-Client: opencode`
+- recommended model: pick one of the fusionAIze Gate model ids exposed by `GET /v1/models`, usually `auto`
 
-The current opencode docs recommend `@ai-sdk/openai-compatible` for custom OpenAI-compatible providers and a custom `provider.<id>.options.baseURL` value for the gateway endpoint. This FoundryGate starter follows that pattern and keeps the provider-local model ids aligned with `GET /v1/models`.
+The current opencode docs recommend `@ai-sdk/openai-compatible` for custom OpenAI-compatible providers and a custom `provider.<id>.options.baseURL` value for the gateway endpoint. This fusionAIze Gate starter follows that pattern and keeps the provider-local model ids aligned with `GET /v1/models`.
 
 ## AI-native app clients
 
@@ -156,7 +156,7 @@ For future app-specific clients, keep the same OpenAI-compatible base URL and ad
 
 Recommended pattern:
 
-- set `X-FoundryGate-Client: your-app`
+- set `X-faigate-Client: your-app`
 - create one explicit app profile
 - only split into `ops`, `private`, or `local-only` profiles when real routing differences emerge
 
@@ -166,36 +166,36 @@ Starter snippet:
 
 ## First-wave agent and framework starters
 
-The first post-`1.0` expansion wave focuses on clients that can already use FoundryGate cleanly through the common OpenAI-compatible path.
+The first post-`1.0` expansion wave focuses on clients that can already use fusionAIze Gate cleanly through the common OpenAI-compatible path.
 
 ### SWE-AF
 
-- starter: [examples/swe-af-foundrygate.env.example](./examples/swe-af-foundrygate.env.example)
-- recommended header: `X-FoundryGate-Client: swe-af`
+- starter: [examples/swe-af-faigate.env.example](./examples/swe-af-faigate.env.example)
+- recommended header: `X-faigate-Client: swe-af`
 - recommended profile name: `swe-af`
 
 ### paperclip
 
-- starter: [examples/paperclip-foundrygate.env.example](./examples/paperclip-foundrygate.env.example)
-- recommended header: `X-FoundryGate-Client: paperclip`
+- starter: [examples/paperclip-faigate.env.example](./examples/paperclip-faigate.env.example)
+- recommended header: `X-faigate-Client: paperclip`
 - recommended profile name: `paperclip`
 
 ### ship-faster
 
-- starter: [examples/ship-faster-foundrygate.env.example](./examples/ship-faster-foundrygate.env.example)
-- recommended header: `X-FoundryGate-Client: ship-faster`
+- starter: [examples/ship-faster-faigate.env.example](./examples/ship-faster-faigate.env.example)
+- recommended header: `X-faigate-Client: ship-faster`
 - recommended profile name: `ship-faster`
 
 ### LangChain
 
-- starter: [examples/langchain-foundrygate.env.example](./examples/langchain-foundrygate.env.example)
-- recommended header: `X-FoundryGate-Client: langchain`
+- starter: [examples/langchain-faigate.env.example](./examples/langchain-faigate.env.example)
+- recommended header: `X-faigate-Client: langchain`
 - recommended profile name: `langchain`
 
 ### LangGraph
 
-- starter: [examples/langgraph-foundrygate.env.example](./examples/langgraph-foundrygate.env.example)
-- recommended header: `X-FoundryGate-Client: langgraph`
+- starter: [examples/langgraph-faigate.env.example](./examples/langgraph-faigate.env.example)
+- recommended header: `X-faigate-Client: langgraph`
 - recommended profile name: `langgraph`
 
 These starters are intentionally small:
@@ -207,36 +207,36 @@ These starters are intentionally small:
 
 ## Second-wave framework starters
 
-The second wave keeps the same integration discipline while extending FoundryGate coverage into more active agent ecosystems.
+The second wave keeps the same integration discipline while extending fusionAIze Gate coverage into more active agent ecosystems.
 
 ### Agno
 
-- starter: [examples/agno-foundrygate.env.example](./examples/agno-foundrygate.env.example)
-- recommended header: `X-FoundryGate-Client: agno`
+- starter: [examples/agno-faigate.env.example](./examples/agno-faigate.env.example)
+- recommended header: `X-faigate-Client: agno`
 - recommended profile name: `agno`
 
 ### Semantic Kernel
 
-- starter: [examples/semantic-kernel-foundrygate.env.example](./examples/semantic-kernel-foundrygate.env.example)
-- recommended header: `X-FoundryGate-Client: semantic-kernel`
+- starter: [examples/semantic-kernel-faigate.env.example](./examples/semantic-kernel-faigate.env.example)
+- recommended header: `X-faigate-Client: semantic-kernel`
 - recommended profile name: `semantic-kernel`
 
 ### Haystack
 
-- starter: [examples/haystack-foundrygate.env.example](./examples/haystack-foundrygate.env.example)
-- recommended header: `X-FoundryGate-Client: haystack`
+- starter: [examples/haystack-faigate.env.example](./examples/haystack-faigate.env.example)
+- recommended header: `X-faigate-Client: haystack`
 - recommended profile name: `haystack`
 
 ### Mastra
 
-- starter: [examples/mastra-foundrygate.env.example](./examples/mastra-foundrygate.env.example)
-- recommended header: `X-FoundryGate-Client: mastra`
+- starter: [examples/mastra-faigate.env.example](./examples/mastra-faigate.env.example)
+- recommended header: `X-faigate-Client: mastra`
 - recommended profile name: `mastra`
 
 ### Google ADK
 
-- starter: [examples/google-adk-foundrygate.env.example](./examples/google-adk-foundrygate.env.example)
-- recommended header: `X-FoundryGate-Client: google-adk`
+- starter: [examples/google-adk-faigate.env.example](./examples/google-adk-faigate.env.example)
+- recommended header: `X-faigate-Client: google-adk`
 - recommended profile name: `google-adk`
 
 ## Third-wave framework starters
@@ -245,32 +245,32 @@ The third wave rounds out the most visible remaining framework set from the AI-n
 
 ### AutoGen
 
-- starter: [examples/autogen-foundrygate.env.example](./examples/autogen-foundrygate.env.example)
-- recommended header: `X-FoundryGate-Client: autogen`
+- starter: [examples/autogen-faigate.env.example](./examples/autogen-faigate.env.example)
+- recommended header: `X-faigate-Client: autogen`
 - recommended profile name: `autogen`
 
 ### LlamaIndex
 
-- starter: [examples/llamaindex-foundrygate.env.example](./examples/llamaindex-foundrygate.env.example)
-- recommended header: `X-FoundryGate-Client: llamaindex`
+- starter: [examples/llamaindex-faigate.env.example](./examples/llamaindex-faigate.env.example)
+- recommended header: `X-faigate-Client: llamaindex`
 - recommended profile name: `llamaindex`
 
 ### CrewAI
 
-- starter: [examples/crewai-foundrygate.env.example](./examples/crewai-foundrygate.env.example)
-- recommended header: `X-FoundryGate-Client: crewai`
+- starter: [examples/crewai-faigate.env.example](./examples/crewai-faigate.env.example)
+- recommended header: `X-faigate-Client: crewai`
 - recommended profile name: `crewai`
 
 ### PydanticAI
 
-- starter: [examples/pydanticai-foundrygate.env.example](./examples/pydanticai-foundrygate.env.example)
-- recommended header: `X-FoundryGate-Client: pydanticai`
+- starter: [examples/pydanticai-faigate.env.example](./examples/pydanticai-faigate.env.example)
+- recommended header: `X-faigate-Client: pydanticai`
 - recommended profile name: `pydanticai`
 
 ### CAMEL
 
-- starter: [examples/camel-foundrygate.env.example](./examples/camel-foundrygate.env.example)
-- recommended header: `X-FoundryGate-Client: camel`
+- starter: [examples/camel-faigate.env.example](./examples/camel-faigate.env.example)
+- recommended header: `X-faigate-Client: camel`
 - recommended profile name: `camel`
 
 ## Provider onboarding
@@ -295,7 +295,7 @@ Starter snippets:
 - [examples/provider-kilocode.env.example](./examples/provider-kilocode.env.example)
 - [examples/provider-blackbox.yaml](./examples/provider-blackbox.yaml)
 - [examples/provider-blackbox.env.example](./examples/provider-blackbox.env.example)
-- [examples/foundrygate-multi-provider-stack.yaml](./examples/foundrygate-multi-provider-stack.yaml)
+- [examples/faigate-multi-provider-stack.yaml](./examples/faigate-multi-provider-stack.yaml)
 
 ## Client onboarding
 

@@ -1,15 +1,15 @@
-# FoundryGate Publishing
+# fusionAIze Gate Publishing
 
 ## Goal
 
 Keep release publishing boring and repeatable.
 
-FoundryGate currently ships through:
+fusionAIze Gate currently ships through:
 
 - Git tags and GitHub Releases
 - Python distributions (`sdist` and `wheel`)
 - a GHCR container image
-- a separate npm CLI package in [packages/foundrygate-cli](../packages/foundrygate-cli)
+- a separate npm CLI package in [packages/faigate-cli](../packages/faigate-cli)
 
 PyPI remains opt-in and only publishes when trusted publishing is configured and `PYPI_PUBLISH=true` is set at the repository level.
 
@@ -33,7 +33,7 @@ The repo includes [publish-dry-run](../.github/workflows/publish-dry-run.yml):
 python -m pip install --upgrade build twine
 python -m build
 python -m twine check dist/*
-docker build -t foundrygate:dry-run .
+docker build -t faigate:dry-run .
 ```
 
 ## Real Release Path
@@ -71,7 +71,7 @@ If you want scheduled update application:
 - use `provider_scope.allow_providers` / `deny_providers` if rollout health should only consider a subset of providers
 - enable `verification` if helper-driven updates must pass a post-update health or smoke check before the rollout is considered clean
 - add `maintenance_window` if scheduled updates should only run in explicit local maintenance hours
-- prefer the reviewed examples in [examples/foundrygate-auto-update.service](./examples/foundrygate-auto-update.service) and [examples/foundrygate-auto-update.timer](./examples/foundrygate-auto-update.timer)
-- use the cron example in [examples/foundrygate-auto-update.cron](./examples/foundrygate-auto-update.cron) only when `systemd` timers are not practical
+- prefer the reviewed examples in [examples/faigate-auto-update.service](./examples/faigate-auto-update.service) and [examples/faigate-auto-update.timer](./examples/faigate-auto-update.timer)
+- use the cron example in [examples/faigate-auto-update.cron](./examples/faigate-auto-update.cron) only when `systemd` timers are not practical
 
 The helper still calls the normal update command. It does not bypass your service restart, health checks, or update guardrails.

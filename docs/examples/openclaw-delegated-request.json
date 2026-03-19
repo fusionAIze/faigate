@@ -1,7 +1,7 @@
 {
   "headers": {
     "x-openclaw-source": "delegate:planner",
-    "x-foundrygate-client": "openclaw"
+    "x-faigate-client": "openclaw"
   },
   "body": {
     "model": "auto",

@@ -1,4 +1,4 @@
-# FoundryGate – Routing Configuration
+# fusionAIze Gate – Routing Configuration
 # Layered routing: static → heuristic → llm-classify
 #
 # Provider reference: https://docs.openclaw.ai/concepts/model-providers
@@ -743,7 +743,7 @@ routing_policies:
     # - name: prefer-local-worker
     #   match:
     #     header_contains:
-    #       x-foundrygate-profile: ["local-only", "private"]
+    #       x-faigate-profile: ["local-only", "private"]
     #   select:
     #     capability_values:
     #       local: true
@@ -782,18 +782,18 @@ client_profiles:
     # - profile: n8n
     #   match:
     #     header_contains:
-    #       x-foundrygate-client: ["n8n"]
+    #       x-faigate-client: ["n8n"]
     # - profile: local-only
     #   match:
     #     header_contains:
-    #       x-foundrygate-profile: ["local-only", "private"]
+    #       x-faigate-profile: ["local-only", "private"]
 
 
 # ── Request Hooks (optional) ──────────────────────────────────────────────
 # Built-in hooks:
-#   prefer-provider-header  -> x-foundrygate-prefer-provider
-#   locality-header         -> x-foundrygate-locality: local-only | cloud-only
-#   profile-override-header -> x-foundrygate-profile
+#   prefer-provider-header  -> x-faigate-prefer-provider
+#   locality-header         -> x-faigate-locality: local-only | cloud-only
+#   profile-override-header -> x-faigate-profile
 #
 # Hook hints run after policy/static/heuristic rules and before client-profile
 # defaults. Keep them opt-in and request-scoped.
@@ -953,7 +953,7 @@ health:
 # ── Release Update Checks ───────────────────────────────────────────────────
 update_check:
   enabled: true
-  repository: "typelicious/FoundryGate"
+  repository: "fusionAIze/faigate"
   api_base: "https://api.github.com"
   timeout_seconds: 5
   check_interval_seconds: 21600
@@ -974,7 +974,7 @@ auto_update:
     deny_providers: ["openrouter-fallback"]
   verification:
     enabled: false
-    command: "foundrygate-health"
+    command: "faigate-health"
     timeout_seconds: 30
     rollback_command: ""
   maintenance_window:
@@ -983,7 +983,7 @@ auto_update:
     days: ["sat", "sun"]
     start_hour: 2
     end_hour: 5
-  apply_command: "foundrygate-update"
+  apply_command: "faigate-update"
 
 
 # ── Prompt Caching ─────────────────────────────────────────────────────────
@@ -1001,11 +1001,11 @@ prompt_caching:
 
 
 # ── Logging & Metriken ─────────────────────────────────────────────────────
-# DB path: resolved via FOUNDRYGATE_DB_PATH env var (recommended: /var/lib/foundrygate/foundrygate.db)
-# Fallback: ~/.local/share/foundrygate/foundrygate.db
-# NEVER set to ./foundrygate.db – repo safety guardrail rejects it.
+# DB path: resolved via FAIGATE_DB_PATH env var (recommended: /var/lib/faigate/faigate.db)
+# Fallback: ~/.local/share/faigate/faigate.db
+# NEVER set to ./faigate.db – repo safety guardrail rejects it.
 metrics:
   enabled: true
-  db_path: "${FOUNDRYGATE_DB_PATH:-/var/lib/foundrygate/foundrygate.db}"
+  db_path: "${FAIGATE_DB_PATH:-/var/lib/faigate/faigate.db}"
   log_requests: true
   log_routing_decisions: true

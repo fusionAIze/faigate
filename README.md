@@ -1,35 +1,35 @@
-# FoundryGate
+# fusionAIze Gate
 
-[![repo-safety](https://github.com/typelicious/FoundryGate/actions/workflows/repo-safety.yml/badge.svg)](https://github.com/typelicious/FoundryGate/actions/workflows/repo-safety.yml)
-[![CI](https://github.com/typelicious/FoundryGate/actions/workflows/ci.yml/badge.svg)](https://github.com/typelicious/FoundryGate/actions/workflows/ci.yml)
-[![CodeQL](https://github.com/typelicious/FoundryGate/actions/workflows/codeql.yml/badge.svg)](https://github.com/typelicious/FoundryGate/actions/workflows/codeql.yml)
-[![Release](https://img.shields.io/github/v/release/typelicious/FoundryGate?display_name=tag)](https://github.com/typelicious/FoundryGate/releases)
+[![repo-safety](https://github.com/fusionAIze/faigate/actions/workflows/repo-safety.yml/badge.svg)](https://github.com/fusionAIze/faigate/actions/workflows/repo-safety.yml)
+[![CI](https://github.com/fusionAIze/faigate/actions/workflows/ci.yml/badge.svg)](https://github.com/fusionAIze/faigate/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/fusionAIze/faigate/actions/workflows/codeql.yml/badge.svg)](https://github.com/fusionAIze/faigate/actions/workflows/codeql.yml)
+[![Release](https://img.shields.io/github/v/release/fusionAIze/faigate?display_name=tag)](https://github.com/fusionAIze/faigate/releases)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](./LICENSE)
 [![OpenAI-compatible](https://img.shields.io/badge/OpenAI-compatible-0ea5e9.svg)](./docs/API.md)
 [![OpenClaw-friendly](https://img.shields.io/badge/OpenClaw-friendly-111827.svg)](https://openclaw.ai/)
 [![Workstations](https://img.shields.io/badge/workstations-linux%20%7C%20macOS%20%7C%20windows-0f766e.svg)](./docs/WORKSTATIONS.md)
-[![Homebrew](https://img.shields.io/badge/homebrew-formula-fbbf24?logo=homebrew&logoColor=black)](./Formula/foundrygate.rb)
+[![Homebrew](https://img.shields.io/badge/homebrew-formula-fbbf24?logo=homebrew&logoColor=black)](./Formula/faigate.rb)
 [![Docker](https://img.shields.io/badge/docker-ready-2496ED?logo=docker&logoColor=white)](./Dockerfile)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](./pyproject.toml)
 
 Local OpenAI-compatible AI gateway for 🦞 [OpenClaw](https://openclaw.ai/) and other AI-native clients.
 
-FoundryGate gives OpenClaw, n8n, CLI tools, and custom apps one local endpoint and routes each request to the best configured provider or local worker. It keeps routing, fallback, onboarding, and operator visibility under your control instead of scattering provider logic across every client.
+fusionAIze Gate gives OpenClaw, n8n, CLI tools, and custom apps one local endpoint and routes each request to the best configured provider or local worker. It keeps routing, fallback, onboarding, and operator visibility under your control instead of scattering provider logic across every client.
 
 Runs locally on Linux, macOS, and Windows, with first-class workstation guidance for `systemd`, `launchd`, Task Scheduler, and Homebrew-driven macOS installs.
 
 ## Quick Navigation
 
 - [Quickstart](#quickstart)
-- [Why FoundryGate](#why-foundrygate)
+- [Why fusionAIze Gate](#why-fusionaize-gate)
 - [How It Works](#how-it-works)
 - [API Surface](#api-surface)
-- [How FoundryGate Compares](#how-foundrygate-compares)
+- [How fusionAIze Gate Compares](#how-fusionaize-gate-compares)
 - [Deployment](#deployment)
 - [More Resources](#more-resources)
 - [Community And Security](#community-and-security)
 
-## Why FoundryGate
+## Why fusionAIze Gate
 
 - Single local endpoint for many upstreams: cloud providers, proxy providers, and local workers can sit behind the same base URL.
 - OpenAI-compatible runtime: chat completions, model discovery, image generation, and image editing use familiar OpenAI-style paths.
@@ -52,16 +52,16 @@ Platform quick starts:
 - Windows workstation: use the source checkout flow below, then the PowerShell and Task Scheduler examples in [docs/WORKSTATIONS.md](./docs/WORKSTATIONS.md).
 
 ```bash
-git clone https://github.com/typelicious/FoundryGate.git foundrygate
-cd foundrygate
+git clone https://github.com/fusionAIze/faigate.git faigate
+cd faigate
 cp .env.example .env
-./scripts/foundrygate-bootstrap
+./scripts/faigate-bootstrap
 $EDITOR .env
-./scripts/foundrygate-doctor
+./scripts/faigate-doctor
 python3 -m venv .venv
 . .venv/bin/activate
 pip install -r requirements.txt
-python -m foundrygate
+python -m faigate
 ```
 
 In another terminal:
@@ -74,30 +74,30 @@ curl -fsS http://127.0.0.1:8090/v1/models
 Then use the onboarding helpers to move from “the server starts” to “real clients are ready”:
 
 ```bash
-./scripts/foundrygate-config-wizard --help
-./scripts/foundrygate-config-wizard --purpose general --client generic > config.yaml
-./scripts/foundrygate-onboarding-report
-./scripts/foundrygate-provider-discovery
-./scripts/foundrygate-provider-discovery --json --offer-track free
-./scripts/foundrygate-onboarding-validate
+./scripts/faigate-config-wizard --help
+./scripts/faigate-config-wizard --purpose general --client generic > config.yaml
+./scripts/faigate-onboarding-report
+./scripts/faigate-provider-discovery
+./scripts/faigate-provider-discovery --json --offer-track free
+./scripts/faigate-onboarding-validate
 ```
 
 To review and selectively adopt multiple candidates during first setup or a later update:
 
 ```bash
-./scripts/foundrygate-config-wizard --purpose free --client n8n --list-candidates
-./scripts/foundrygate-config-wizard --current-config config.yaml --purpose free --client n8n
-./scripts/foundrygate-config-wizard --purpose free --client n8n \
+./scripts/faigate-config-wizard --purpose free --client n8n --list-candidates
+./scripts/faigate-config-wizard --current-config config.yaml --purpose free --client n8n
+./scripts/faigate-config-wizard --purpose free --client n8n \
   --select kilocode,blackbox-free,gemini-flash-lite > config.yaml
-./scripts/foundrygate-config-wizard --current-config config.yaml --merge-existing \
+./scripts/faigate-config-wizard --current-config config.yaml --merge-existing \
   --select openrouter-fallback,anthropic-claude --write config.yaml
-./scripts/foundrygate-config-wizard --current-config config.yaml --purpose free --client n8n \
+./scripts/faigate-config-wizard --current-config config.yaml --purpose free --client n8n \
   --apply recommended_add,recommended_replace,recommended_mode_changes \
   --select kilocode,openrouter-fallback --select-profiles n8n --write config.yaml
-./scripts/foundrygate-config-wizard --current-config config.yaml --purpose free --client n8n \
+./scripts/faigate-config-wizard --current-config config.yaml --purpose free --client n8n \
   --apply recommended_add,recommended_replace,recommended_mode_changes \
   --select kilocode,openrouter-fallback --select-profiles n8n --dry-run-summary
-./scripts/foundrygate-config-wizard --current-config config.yaml --purpose free --client n8n \
+./scripts/faigate-config-wizard --current-config config.yaml --purpose free --client n8n \
   --apply recommended_add,recommended_replace,recommended_mode_changes \
   --select kilocode,openrouter-fallback --select-profiles n8n \
   --write config.yaml --write-backup --backup-suffix .before-wizard
@@ -108,18 +108,18 @@ If you prefer a packaged or service-driven install, jump to [Deployment](#deploy
 Minimal Homebrew flow on macOS:
 
 ```bash
-brew tap typelicious/foundrygate https://github.com/typelicious/FoundryGate
-brew install typelicious/foundrygate/foundrygate
+brew tap fusionAIze/faigate https://github.com/fusionAIze/faigate
+brew install fusionAIze/faigate/faigate
 # or, after the tap is present:
-brew install foundrygate
-brew services start typelicious/foundrygate/foundrygate
+brew install faigate
+brew services start fusionAIze/faigate/faigate
 ```
 
 If you already have an active Python virtualenv, check which binary you are calling before testing the Brew install:
 
 ```bash
-which -a foundrygate
-/opt/homebrew/bin/foundrygate --version
+which -a faigate
+/opt/homebrew/bin/faigate --version
 ```
 
 ## How It Works
@@ -153,11 +153,11 @@ Routing is layered on purpose:
 5. Client profiles can choose their own default routing mode before the final scoring step.
 6. Provider scoring considers health, latency, context headroom, token limits, cache hints, and recent failures.
 
-For OpenClaw specifically, both one-agent and many-agent traffic can use the same endpoint. FoundryGate can distinguish delegated traffic through request headers such as `x-openclaw-source` when they are present.
+For OpenClaw specifically, both one-agent and many-agent traffic can use the same endpoint. fusionAIze Gate can distinguish delegated traffic through request headers such as `x-openclaw-source` when they are present.
 
 ## API Surface
 
-FoundryGate keeps the primary surface compact and OpenAI-compatible. The full endpoint reference lives in [docs/API.md](./docs/API.md).
+fusionAIze Gate keeps the primary surface compact and OpenAI-compatible. The full endpoint reference lives in [docs/API.md](./docs/API.md).
 
 | Endpoint | Purpose |
 | --- | --- |
@@ -186,11 +186,11 @@ curl -fsS http://127.0.0.1:8090/v1/chat/completions \
   }'
 ```
 
-## How FoundryGate Compares
+## How fusionAIze Gate Compares
 
 The useful comparison is not “router vs router”, but how much routing and operator burden each approach leaves with you.
 
-| Capability | Direct provider wiring | Hosted remote router | FoundryGate |
+| Capability | Direct provider wiring | Hosted remote router | fusionAIze Gate |
 | --- | --- | --- | --- |
 | One local endpoint for many clients | No | Varies | Yes |
 | Local workers and cloud providers in one route set | Manual | Varies | Yes |
@@ -199,19 +199,19 @@ The useful comparison is not “router vs router”, but how much routing and op
 | Can stay fully under local operator control | Yes | Varies | Yes |
 | Copy/paste onboarding for OpenClaw, n8n, and CLI tools | Manual | Varies | Yes |
 
-FoundryGate is a local-first gateway. That means you can keep traffic, fallback policy, rollout controls, and provider selection logic close to the clients that actually depend on them.
+fusionAIze Gate is a local-first gateway. That means you can keep traffic, fallback policy, rollout controls, and provider selection logic close to the clients that actually depend on them.
 
 ## Deployment
 
-FoundryGate can stay small in development and still scale into a more repeatable operator setup:
+fusionAIze Gate can stay small in development and still scale into a more repeatable operator setup:
 
 - Local Python run: quickest path for development and testing.
 - `systemd` on Linux: recommended for long-running generic host installs.
 - Workstation runtimes: macOS `launchd`, Linux `systemd`, and Windows task-scheduler style installs are documented separately.
-- Homebrew path: a project-owned tap formula now lives under [`Formula/foundrygate.rb`](./Formula/foundrygate.rb) for macOS-oriented installs and `brew services`.
+- Homebrew path: a project-owned tap formula now lives under [`Formula/faigate.rb`](./Formula/faigate.rb) for macOS-oriented installs and `brew services`.
 - Docker and GHCR path: tagged releases build container artifacts through the release workflow.
 - Python package path: release workflows build `sdist` and `wheel`.
-- Separate npm CLI package: `packages/foundrygate-cli` gives CLI-facing environments a small Node entry point without changing the Python service runtime.
+- Separate npm CLI package: `packages/faigate-cli` gives CLI-facing environments a small Node entry point without changing the Python service runtime.
 
 Start here for the deeper deployment details:
 
@@ -228,14 +228,14 @@ Start here for the deeper deployment details:
 - [Configuration reference](./docs/CONFIGURATION.md)
 - [Operations guide](./docs/OPERATIONS.md)
 - [Workstations guide](./docs/WORKSTATIONS.md)
-- [Homebrew formula](./Formula/foundrygate.rb)
+- [Homebrew formula](./Formula/faigate.rb)
 - [Integrations](./docs/INTEGRATIONS.md)
 - [Onboarding](./docs/ONBOARDING.md)
 - [Examples](./docs/examples)
-- [macOS LaunchAgent example](./docs/examples/com.typelicious.foundrygate.plist)
+- [macOS LaunchAgent example](./docs/examples/com.fusionaize.faigate.plist)
 - [OpenClaw integration starter](./openclaw-integration.jsonc)
-- [Full OpenClaw example](./docs/examples/openclaw-foundrygate-full.jsonc)
-- [Multi-provider stack example](./docs/examples/foundrygate-multi-provider-stack.yaml)
+- [Full OpenClaw example](./docs/examples/openclaw-faigate-full.jsonc)
+- [Multi-provider stack example](./docs/examples/faigate-multi-provider-stack.yaml)
 - [First-wave AI-native starters](./docs/AI-NATIVE-MATRIX.md#first-wave-template-set-for-v110)
 - [Second-wave AI-native starters](./docs/AI-NATIVE-MATRIX.md#second-wave-template-set)
 - [Third-wave AI-native starters](./docs/AI-NATIVE-MATRIX.md#third-wave-template-set)
@@ -252,10 +252,10 @@ Start here for the deeper deployment details:
 - [Code of conduct](./CODE_OF_CONDUCT.md)
 - [Repo safety and CI](./.github/workflows)
 
-FoundryGate ships with repo-safety checks for `.ssh/`, `*.db*`, `*.sqlite*`, and `*.log`, plus CodeQL, Dependabot, secret scanning, and documented release review steps.
+fusionAIze Gate ships with repo-safety checks for `.ssh/`, `*.db*`, `*.sqlite*`, and `*.log`, plus CodeQL, Dependabot, secret scanning, and documented release review steps.
 
 ## License
 
 Apache-2.0. See [LICENSE](./LICENSE).
 
-⭐ If FoundryGate saves you time or money, feel free to star the repo. ❤️
+⭐ If fusionAIze Gate saves you time or money, feel free to star the repo. ❤️

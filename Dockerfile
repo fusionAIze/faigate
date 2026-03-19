@@ -3,14 +3,14 @@ FROM python:3.12-slim
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    FOUNDRYGATE_DB_PATH=/var/lib/foundrygate/foundrygate.db
+    FAIGATE_DB_PATH=/var/lib/faigate/faigate.db
 
 WORKDIR /app
 
-RUN addgroup --system foundrygate \
-    && adduser --system --ingroup foundrygate --home /app foundrygate \
-    && mkdir -p /var/lib/foundrygate \
-    && chown -R foundrygate:foundrygate /app /var/lib/foundrygate
+RUN addgroup --system faigate \
+    && adduser --system --ingroup faigate --home /app faigate \
+    && mkdir -p /var/lib/faigate \
+    && chown -R faigate:faigate /app /var/lib/faigate
 
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
@@ -18,8 +18,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 RUN pip install --no-cache-dir .
 
-USER foundrygate
+USER faigate
 
 EXPOSE 8090
 
-CMD ["python", "-m", "foundrygate"]
+CMD ["python", "-m", "faigate"]

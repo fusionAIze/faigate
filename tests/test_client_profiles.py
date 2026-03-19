@@ -37,9 +37,9 @@ _httpx.TimeoutException = Exception
 _httpx.ConnectError = Exception
 sys.modules["httpx"] = _httpx
 
-from foundrygate.config import ConfigError, load_config
-from foundrygate.main import _resolve_client_profile
-from foundrygate.router import Router
+from faigate.config import ConfigError, load_config
+from faigate.main import _resolve_client_profile
+from faigate.router import Router
 
 
 def _write_config(tmp_path: Path, body: str) -> Path:
@@ -74,7 +74,7 @@ client_profiles:
     - profile: n8n
       match:
         header_contains:
-          x-foundrygate-client: ["n8n"]
+          x-faigate-client: ["n8n"]
 fallback_chain: []
 metrics:
   enabled: false
@@ -84,7 +84,7 @@ metrics:
 
         profile_name, hints = _resolve_client_profile(
             cfg,
-            {"x-foundrygate-client": "n8n-workflow"},
+            {"x-faigate-client": "n8n-workflow"},
         )
 
         assert profile_name == "n8n"
@@ -111,7 +111,7 @@ client_profiles:
   rules:
     - profile: missing
       match:
-        header_present: ["x-foundrygate-client"]
+        header_present: ["x-faigate-client"]
 fallback_chain: []
 metrics:
   enabled: false
@@ -231,7 +231,7 @@ client_profiles:
     - profile: n8n
       match:
         header_contains:
-          x-foundrygate-client: ["n8n"]
+          x-faigate-client: ["n8n"]
 static_rules:
   enabled: false
   rules: []
@@ -248,7 +248,7 @@ metrics:
         router = Router(cfg)
         profile_name, hints = _resolve_client_profile(
             cfg,
-            {"x-foundrygate-client": "n8n"},
+            {"x-faigate-client": "n8n"},
         )
 
         decision = await router.route(
@@ -256,7 +256,7 @@ metrics:
             model_requested="auto",
             client_profile=profile_name,
             profile_hints=hints,
-            headers={"x-foundrygate-client": "n8n"},
+            headers={"x-faigate-client": "n8n"},
         )
 
         assert decision.layer == "profile"
@@ -307,7 +307,7 @@ metrics:
         router = Router(cfg)
         profile_name, hints = _resolve_client_profile(
             cfg,
-            {"x-foundrygate-client": "codex-cli"},
+            {"x-faigate-client": "codex-cli"},
         )
 
         decision = await router.route(
@@ -315,7 +315,7 @@ metrics:
             model_requested="auto",
             client_profile=profile_name,
             profile_hints=hints,
-            headers={"x-foundrygate-client": "codex-cli"},
+            headers={"x-faigate-client": "codex-cli"},
         )
 
         assert profile_name == "cli"

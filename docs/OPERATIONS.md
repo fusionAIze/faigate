@@ -1,4 +1,4 @@
-# FoundryGate Operations
+# fusionAIze Gate Operations
 
 This page keeps the deployment, helper-script, and update-control details out of the root README while staying copy/paste friendly for operators.
 
@@ -12,7 +12,7 @@ Good for development and early validation:
 python3 -m venv .venv
 . .venv/bin/activate
 pip install -r requirements.txt
-python -m foundrygate
+python -m faigate
 ```
 
 ### `systemd` On Generic Linux
@@ -20,16 +20,16 @@ python -m foundrygate
 The repo ships a service file:
 
 ```text
-/etc/systemd/system/foundrygate.service
+/etc/systemd/system/faigate.service
 ```
 
 Recommended persistent state path:
 
 ```text
-/var/lib/foundrygate/foundrygate.db
+/var/lib/faigate/faigate.db
 ```
 
-That path is wired through `FOUNDRYGATE_DB_PATH`.
+That path is wired through `FAIGATE_DB_PATH`.
 
 ### Workstation Runtime Installs
 
@@ -45,25 +45,25 @@ See [WORKSTATIONS.md](./WORKSTATIONS.md) for the path layout and OS-specific run
 
 ### Homebrew On macOS
 
-For macOS workstations, FoundryGate now also ships a project-owned formula under [`Formula/foundrygate.rb`](../Formula/foundrygate.rb).
+For macOS workstations, fusionAIze Gate now also ships a project-owned formula under [`Formula/faigate.rb`](../Formula/faigate.rb).
 
 Typical flow:
 
 ```bash
-brew tap typelicious/foundrygate https://github.com/typelicious/FoundryGate
-brew install typelicious/foundrygate/foundrygate
-brew services start typelicious/foundrygate/foundrygate
+brew tap fusionAIze/faigate https://github.com/fusionAIze/faigate
+brew install fusionAIze/faigate/faigate
+brew services start fusionAIze/faigate/faigate
 ```
 
-That path keeps config under `$(brew --prefix)/etc/foundrygate`, state under `$(brew --prefix)/var/lib/foundrygate`, and logs under `$(brew --prefix)/var/log/foundrygate`.
+That path keeps config under `$(brew --prefix)/etc/faigate`, state under `$(brew --prefix)/var/lib/faigate`, and logs under `$(brew --prefix)/var/log/faigate`.
 
 ### Docker / GHCR
 
 Tagged releases build container artifacts through the release workflow. For local validation you can build from the repo root:
 
 ```bash
-docker build -t foundrygate:local .
-docker run --rm -p 8090:8090 --env-file .env foundrygate:local
+docker build -t faigate:local .
+docker run --rm -p 8090:8090 --env-file .env faigate:local
 ```
 
 ### Python Package And npm CLI
@@ -73,14 +73,14 @@ Release workflows build Python `sdist` and `wheel` artifacts.
 For CLI-facing environments, the repo also includes a separate package:
 
 ```text
-packages/foundrygate-cli
+packages/faigate-cli
 ```
 
 That package is intentionally separate from the Python gateway runtime.
 
 ## Helper Scripts
 
-FoundryGate ships optional wrappers around `systemd`, `journalctl`, `curl`, onboarding checks, and release-update flows.
+fusionAIze Gate ships optional wrappers around `systemd`, `journalctl`, `curl`, onboarding checks, and release-update flows.
 
 The runtime-control helpers now auto-detect Linux vs macOS:
 
@@ -90,29 +90,29 @@ The runtime-control helpers now auto-detect Linux vs macOS:
 
 | Script | What it does |
 | --- | --- |
-| `foundrygate-install` | install service + helper links |
-| `foundrygate-start` / `foundrygate-stop` / `foundrygate-restart` | basic service control |
-| `foundrygate-status` / `foundrygate-logs` / `foundrygate-health` | operator visibility |
-| `foundrygate-bootstrap` | local bootstrap convenience flow |
-| `foundrygate-doctor` | validate env and config readiness |
-| `foundrygate-onboarding-report` | summarize rollout readiness |
-| `foundrygate-onboarding-validate` | fail fast on onboarding blockers |
-| `foundrygate-update-check` | release-status and guardrail check |
-| `foundrygate-auto-update` | helper-driven, opt-in update apply flow |
-| `foundrygate-update` / `foundrygate-uninstall` | lifecycle helpers |
+| `faigate-install` | install service + helper links |
+| `faigate-start` / `faigate-stop` / `faigate-restart` | basic service control |
+| `faigate-status` / `faigate-logs` / `faigate-health` | operator visibility |
+| `faigate-bootstrap` | local bootstrap convenience flow |
+| `faigate-doctor` | validate env and config readiness |
+| `faigate-onboarding-report` | summarize rollout readiness |
+| `faigate-onboarding-validate` | fail fast on onboarding blockers |
+| `faigate-update-check` | release-status and guardrail check |
+| `faigate-auto-update` | helper-driven, opt-in update apply flow |
+| `faigate-update` / `faigate-uninstall` | lifecycle helpers |
 
 Examples:
 
 ```bash
-./scripts/foundrygate-install
-./scripts/foundrygate-status
-./scripts/foundrygate-health
-./scripts/foundrygate-update-check
+./scripts/faigate-install
+./scripts/faigate-status
+./scripts/faigate-health
+./scripts/faigate-update-check
 ```
 
 ## Update Checks And Auto-Update
 
-FoundryGate supports explicit operator-side update control without turning the service into a self-mutating daemon.
+fusionAIze Gate supports explicit operator-side update control without turning the service into a self-mutating daemon.
 
 API surfaces:
 
@@ -139,12 +139,12 @@ Major upgrades stay blockable through config, and helper-driven apply flows rema
 
 The repo ships example schedules under [`docs/examples`](./examples):
 
-- `foundrygate-auto-update.service`
-- `foundrygate-auto-update.timer`
-- `foundrygate-auto-update.cron`
-- `com.typelicious.foundrygate.plist`
-- `foundrygate-start.ps1`
-- `foundrygate-task-scheduler.xml`
+- `faigate-auto-update.service`
+- `faigate-auto-update.timer`
+- `faigate-auto-update.cron`
+- `com.fusionaize.faigate.plist`
+- `faigate-start.ps1`
+- `faigate-task-scheduler.xml`
 
 Use them only after the manual update path is already validated.
 
@@ -153,9 +153,9 @@ Use them only after the manual update path is already validated.
 Start with:
 
 - [`docs/TROUBLESHOOTING.md`](./TROUBLESHOOTING.md)
-- `./scripts/foundrygate-health`
-- `./scripts/foundrygate-status`
-- `./scripts/foundrygate-logs`
+- `./scripts/faigate-health`
+- `./scripts/faigate-status`
+- `./scripts/faigate-logs`
 
 The most common rollout issues are:
 

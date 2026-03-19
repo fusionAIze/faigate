@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+config_file="${FAIGATE_CONFIG_FILE:-$repo_root/config.yaml}"
+env_file="${FAIGATE_ENV_FILE:-$repo_root/.env}"
+mode="${1:-text}"
+python_bin="${FAIGATE_PYTHON:-python3}"
+
+export FAIGATE_ONBOARDING_CONFIG="$config_file"
+export FAIGATE_ONBOARDING_ENV="$env_file"
+export FAIGATE_ONBOARDING_MODE="$mode"
+
+"$python_bin" - <<'PY'
+import json
+import os
+import sys
+
+from faigate.onboarding import (
+    build_onboarding_report,
+    build_onboarding_validation,
+    render_onboarding_validation,
+)
+
+report = build_onboarding_report(
+    config_path=os.environ["FAIGATE_ONBOARDING_CONFIG"],
+    env_file=os.environ["FAIGATE_ONBOARDING_ENV"],
+)
+validation = build_onboarding_validation(report)
+
+if os.environ["FAIGATE_ONBOARDING_MODE"] == "--json":
+    print(json.dumps(validation, indent=2, sort_keys=True))
+else:
+    print(render_onboarding_validation(validation), end="")
+
+sys.exit(0 if validation["ok"] else 1)
+PY

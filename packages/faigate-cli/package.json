@@ -1,0 +1,30 @@
+{
+  "name": "@faigate/cli",
+  "version": "1.3.0",
+  "description": "Small npm CLI for checking and previewing a fusionAIze Gate gateway.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "files": [
+    "bin",
+    "README.md"
+  ],
+  "bin": {
+    "faigate-cli": "./bin/faigate.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "faigate",
+    "cli",
+    "openai-compatible",
+    "gateway",
+    "router"
+  ],
+  "homepage": "https://github.com/fusionAIze/faigate",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fusionAIze/faigate.git",
+    "directory": "packages/faigate-cli"
+  }
+}

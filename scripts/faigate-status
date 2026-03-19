@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/faigate-service-lib.sh"
+
+case "$(faigate_platform)" in
+  Darwin)
+    faigate_launchctl_status
+    echo
+    lsof -nP -iTCP:8090 -sTCP:LISTEN || true
+    ;;
+  *)
+    sudo systemctl status faigate.service --no-pager -l
+    echo
+    sudo ss -ltnp | grep -E "127\\.0\\.0\\.1:8090\\b" || true
+    ;;
+esac

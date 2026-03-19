@@ -1,0 +1,12 @@
+[Unit]
+Description=Run the fusionAIze Gate auto-update helper on a schedule
+Documentation=https://github.com/fusionAIze/faigate
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+RandomizedDelaySec=15m
+Persistent=true
+Unit=faigate-auto-update.service
+
+[Install]
+WantedBy=timers.target

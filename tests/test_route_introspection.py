@@ -39,9 +39,9 @@ _httpx.TimeoutException = Exception
 _httpx.ConnectError = Exception
 sys.modules["httpx"] = _httpx
 
-import foundrygate.main as main_module
-from foundrygate.config import load_config
-from foundrygate.main import (
+import faigate.main as main_module
+from faigate.config import load_config
+from faigate.main import (
     _extract_image_edit_request_fields,
     _normalize_image_request_body,
     _refresh_local_worker_probes,
@@ -53,7 +53,7 @@ from foundrygate.main import (
     provider_catalog,
     provider_inventory,
 )
-from foundrygate.router import Router
+from faigate.router import Router
 
 
 def _write_config(tmp_path: Path, body: str) -> Path:
@@ -200,7 +200,7 @@ client_profiles:
     - profile: local-only
       match:
         header_contains:
-          x-foundrygate-profile: ["local-only"]
+          x-faigate-profile: ["local-only"]
 routing_modes:
   enabled: true
   default: auto
@@ -339,7 +339,7 @@ async def test_preview_uses_client_profile_default_mode_on_auto(preview_config):
         payload,
     ) = await _resolve_route_preview(
         {"model": "auto", "messages": [{"role": "user", "content": "hello"}]},
-        {"x-foundrygate-profile": "local-only"},
+        {"x-faigate-profile": "local-only"},
     )
 
     assert model_requested == "auto"
@@ -439,7 +439,7 @@ class TestRoutePreview:
                 "model": "auto",
                 "messages": [{"role": "user", "content": "hello from local-only traffic"}],
             },
-            {"x-foundrygate-profile": "local-only"},
+            {"x-faigate-profile": "local-only"},
         )
 
         assert model_requested == "auto"
@@ -615,11 +615,11 @@ class TestRoutePreview:
                     "size": "1024x1024",
                     "metadata": {"image_policy": "quality"},
                 },
-                headers={"x-foundrygate-image-policy": "cost"},
+                headers={"x-faigate-image-policy": "cost"},
             )
         )
 
-        assert response["routing_headers"]["x-foundrygate-image-policy"] == "cost"
+        assert response["routing_headers"]["x-faigate-image-policy"] == "cost"
         assert response["decision"]["provider"] == "image-cloud"
 
     def test_extract_image_edit_request_fields_requires_prompt(self):
