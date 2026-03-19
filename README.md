@@ -39,6 +39,7 @@ Runs locally on Linux, macOS, and Windows, with first-class workstation guidance
 - Copy/paste onboarding: OpenClaw, n8n, CLI, delegated-agent traffic, provider templates, and env starter files ship with the repo.
 - Curated provider-catalog checks catch stale model choices, volatile free-tier picks, and source-confidence gaps before local configs quietly age out.
 - Provider discovery can stay transparent: catalog entries can expose official or operator-configured signup links, while recommendation ranking stays payout-blind and performance-led.
+- The onboarding report and doctor CLI can surface those links with disclosure, so operators can share a signup path without turning discovery into biased ranking.
 
 ## Quickstart
 

@@ -105,6 +105,13 @@ The guardrail is strict:
 - operator-configured discovery links are only shown after a recommendation or candidate row already exists
 - CLI and API output should disclose that a shown link may include affiliate attribution
 
+The first CLI surfaces for this are the existing operator helpers:
+
+- `foundrygate-onboarding-report`
+- `foundrygate-doctor`
+
+They show the resolved link together with the payout-blind policy state, so later browser or control-center work can build on the same rule set.
+
 For fast-moving offers, the current preferred review inputs are:
 
 - official provider docs first

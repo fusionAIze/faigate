@@ -82,6 +82,19 @@ if catalog["alert_count"] == 0:
 else:
     for alert in catalog["alerts"]:
         print(f"[warn] provider catalog: {alert['message']}")
+
+policy = catalog.get("recommendation_policy", {})
+print(
+    "[ok] provider discovery policy: payout affects ranking = "
+    f"{policy.get('affiliate_payout_affects_ranking', False)}"
+)
+for item in catalog.get("items", []):
+    discovery = item.get("discovery") or {}
+    resolved = discovery.get("resolved_url")
+    if not resolved:
+        continue
+    label = "disclosed link" if discovery.get("disclosure_required") else "official link"
+    print(f"[ok] provider discovery: {item['provider']} -> {label} -> {resolved}")
 PY
 
 if command -v curl >/dev/null 2>&1; then
