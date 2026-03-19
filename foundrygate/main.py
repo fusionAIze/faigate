@@ -232,6 +232,140 @@ def _resolve_client_tag(headers: dict[str, str], client_profile: str) -> str:
     return client_profile
 
 
+def _merge_select_hints(*selects: dict[str, Any]) -> dict[str, Any]:
+    """Merge policy-like hint mappings without losing list/dict values."""
+    merged: dict[str, Any] = {
+        "allow_providers": [],
+        "deny_providers": [],
+        "prefer_providers": [],
+        "prefer_tiers": [],
+        "require_capabilities": [],
+        "capability_values": {},
+        "routing_mode": "",
+    }
+
+    for select in selects:
+        if not select:
+            continue
+
+        routing_mode = str(select.get("routing_mode", "") or "").strip()
+        if routing_mode:
+            merged["routing_mode"] = routing_mode
+
+        for key in (
+            "allow_providers",
+            "deny_providers",
+            "prefer_providers",
+            "prefer_tiers",
+            "require_capabilities",
+        ):
+            values = select.get(key, [])
+            if isinstance(values, str):
+                values = [values]
+            elif not isinstance(values, list):
+                continue
+            for value in values:
+                if value not in merged[key]:
+                    merged[key].append(value)
+
+        raw_capability_values = select.get("capability_values", {})
+        if not isinstance(raw_capability_values, dict):
+            continue
+        for capability, values in raw_capability_values.items():
+            normalized_values = values if isinstance(values, list) else [values]
+            merged["capability_values"].setdefault(capability, [])
+            for value in normalized_values:
+                if value not in merged["capability_values"][capability]:
+                    merged["capability_values"][capability].append(value)
+
+    return merged
+
+
+def _find_routing_mode(config: Config, mode_name: str) -> tuple[str, dict[str, Any]] | None:
+    """Return one configured routing mode by name or alias."""
+    modes_cfg = config.routing_modes
+    if not modes_cfg.get("enabled"):
+        return None
+
+    normalized = str(mode_name or "").strip().lower()
+    if not normalized:
+        return None
+
+    for name, spec in modes_cfg.get("modes", {}).items():
+        names = [name.lower(), *(alias.lower() for alias in spec.get("aliases", []))]
+        if normalized in names:
+            return name, spec
+    return None
+
+
+def _find_model_shortcut(config: Config, shortcut_name: str) -> tuple[str, dict[str, Any]] | None:
+    """Return one configured model shortcut by name or alias."""
+    shortcuts_cfg = config.model_shortcuts
+    if not shortcuts_cfg.get("enabled"):
+        return None
+
+    normalized = str(shortcut_name or "").strip().lower()
+    if not normalized:
+        return None
+
+    for name, spec in shortcuts_cfg.get("shortcuts", {}).items():
+        names = [name.lower(), *(alias.lower() for alias in spec.get("aliases", []))]
+        if normalized in names:
+            return name, spec
+    return None
+
+
+def _resolve_requested_model(
+    config: Config,
+    model_requested: str,
+    *,
+    profile_hints: dict[str, Any] | None = None,
+) -> tuple[str, str | None, str | None, str | None, dict[str, Any]]:
+    """Resolve virtual modes and shortcuts into provider or routing hints.
+
+    Returns:
+      effective_model_requested,
+      direct_provider_name,
+      resolved_mode_name,
+      resolved_shortcut_name,
+      merged_mode_hints
+    """
+    normalized = str(model_requested or "auto").strip().lower() or "auto"
+
+    if normalized != "auto" and normalized in _providers:
+        return normalized, normalized, None, None, {}
+
+    shortcut = _find_model_shortcut(config, normalized)
+    if shortcut:
+        shortcut_name, shortcut_spec = shortcut
+        return (
+            shortcut_spec["target"],
+            shortcut_spec["target"],
+            None,
+            shortcut_name,
+            {},
+        )
+
+    requested_mode = None
+    if normalized == "auto":
+        profile_mode = str((profile_hints or {}).get("routing_mode", "") or "").strip()
+        if profile_mode:
+            requested_mode = profile_mode
+        else:
+            default_mode = str(config.routing_modes.get("default", "auto") or "auto").strip()
+            if default_mode != "auto":
+                requested_mode = default_mode
+    else:
+        requested_mode = normalized
+
+    mode = _find_routing_mode(config, requested_mode or "")
+    if mode:
+        mode_name, mode_spec = mode
+        return "auto", None, mode_name, None, dict(mode_spec.get("select", {}))
+
+    return normalized, None, None, None, {}
+
+
 def _build_attempt_order(
     primary_provider: str,
     *,
@@ -495,11 +629,21 @@ async def _apply_request_hooks(
 
 async def _resolve_route_preview(
     body: dict[str, Any], headers: dict[str, str]
-) -> tuple[RoutingDecision, str, str, list[str], str, AppliedHooks, dict[str, Any]]:
+) -> tuple[
+    RoutingDecision,
+    str,
+    str,
+    list[str],
+    str,
+    str | None,
+    str | None,
+    AppliedHooks,
+    dict[str, Any],
+]:
     """Resolve one request into a routing decision without calling a provider."""
     body, hook_state = await _apply_request_hooks(body, headers)
     messages = body.get("messages", [])
-    model_requested = body.get("model", "auto")
+    model_requested = str(body.get("model", "auto"))
     tools = body.get("tools")
     max_tokens = body.get("max_tokens") if isinstance(body.get("max_tokens"), int) else None
 
@@ -510,23 +654,44 @@ async def _resolve_route_preview(
     )
     client_tag = _resolve_client_tag(headers, client_profile)
 
-    if model_requested != "auto" and model_requested in _providers:
+    (
+        effective_model_requested,
+        direct_provider_name,
+        resolved_mode,
+        resolved_shortcut,
+        mode_hints,
+    ) = _resolve_requested_model(
+        _config,
+        model_requested,
+        profile_hints=profile_hints,
+    )
+    merged_hints = _merge_select_hints(profile_hints, mode_hints)
+    if resolved_mode:
+        body = {**body, "model": "auto"}
+    elif resolved_shortcut and direct_provider_name:
+        body = {**body, "model": direct_provider_name}
+
+    if direct_provider_name:
         decision = RoutingDecision(
-            provider_name=model_requested,
+            provider_name=direct_provider_name,
             layer="direct",
-            rule_name="explicit-model",
+            rule_name="explicit-shortcut" if resolved_shortcut else "explicit-model",
             confidence=1.0,
-            reason=f"Directly requested provider: {model_requested}",
+            reason=(
+                f"Model shortcut '{resolved_shortcut}' resolved to provider: {direct_provider_name}"
+                if resolved_shortcut
+                else f"Directly requested provider: {direct_provider_name}"
+            ),
         )
     else:
         health_map = {name: p.health.to_dict() for name, p in _providers.items()}
         decision = await _router.route(
             messages,
-            model_requested=model_requested,
+            model_requested=effective_model_requested,
             has_tools=bool(tools),
             requested_max_tokens=max_tokens,
             client_profile=client_profile,
-            profile_hints=profile_hints,
+            profile_hints=merged_hints,
             hook_hints=hook_state.routing_hints,
             applied_hooks=hook_state.applied_hooks,
             headers=_merge_routing_context_headers(headers, body),
@@ -539,6 +704,8 @@ async def _resolve_route_preview(
         client_tag,
         _build_attempt_order(decision.provider_name),
         model_requested,
+        resolved_mode,
+        resolved_shortcut,
         hook_state,
         body,
     )
@@ -710,7 +877,17 @@ async def _read_uploaded_file(
 
 async def _resolve_image_route_preview(
     body: dict[str, Any], headers: dict[str, str], *, capability: str = "image_generation"
-) -> tuple[RoutingDecision, str, str, list[str], str, AppliedHooks, dict[str, Any]]:
+) -> tuple[
+    RoutingDecision,
+    str,
+    str,
+    list[str],
+    str,
+    str | None,
+    str | None,
+    AppliedHooks,
+    dict[str, Any],
+]:
     """Resolve one image-generation request without calling a provider."""
     body, hook_state = await _apply_request_hooks(body, headers)
     body = _normalize_image_request_body(body, capability=capability)
@@ -725,18 +902,40 @@ async def _resolve_image_route_preview(
     )
     client_tag = _resolve_client_tag(headers, client_profile)
 
-    if model_requested != "auto":
-        provider = _providers.get(model_requested)
+    (
+        effective_model_requested,
+        direct_provider_name,
+        resolved_mode,
+        resolved_shortcut,
+        mode_hints,
+    ) = _resolve_requested_model(
+        _config,
+        model_requested,
+        profile_hints=profile_hints,
+    )
+    merged_hints = _merge_select_hints(profile_hints, mode_hints)
+    if resolved_mode:
+        body = {**body, "model": "auto"}
+    elif resolved_shortcut and direct_provider_name:
+        body = {**body, "model": direct_provider_name}
+
+    if direct_provider_name:
+        provider = _providers.get(direct_provider_name)
         if not provider:
-            raise ValueError(f"Unknown image provider '{model_requested}'")
+            raise ValueError(f"Unknown image provider '{direct_provider_name}'")
         if not provider.capabilities.get(capability):
-            raise ValueError(f"Provider '{model_requested}' does not support {capability}")
+            raise ValueError(f"Provider '{direct_provider_name}' does not support {capability}")
         decision = RoutingDecision(
-            provider_name=model_requested,
+            provider_name=direct_provider_name,
             layer="direct",
             rule_name=f"explicit-{capability}-model",
             confidence=1.0,
-            reason=f"Directly requested image provider: {model_requested}",
+            reason=(
+                f"Model shortcut '{resolved_shortcut}' resolved to image provider:"
+                f" {direct_provider_name}"
+                if resolved_shortcut
+                else f"Directly requested image provider: {direct_provider_name}"
+            ),
             details={"required_capability": capability},
         )
     else:
@@ -745,9 +944,9 @@ async def _resolve_image_route_preview(
             request_text=prompt,
             requested_outputs=body.get("n") if isinstance(body.get("n"), int) else 1,
             requested_size=str(body.get("size") or ""),
-            model_requested=model_requested,
+            model_requested=effective_model_requested,
             client_profile=client_profile,
-            profile_hints=profile_hints,
+            profile_hints=merged_hints,
             hook_hints=hook_state.routing_hints,
             applied_hooks=hook_state.applied_hooks,
             headers=headers,
@@ -765,6 +964,8 @@ async def _resolve_image_route_preview(
             required_capabilities=[capability],
         ),
         model_requested,
+        resolved_mode,
+        resolved_shortcut,
         hook_state,
         body,
     )
@@ -910,6 +1111,33 @@ async def list_models():
             "description": "Auto-routed to optimal provider",
         }
     )
+    if _config.routing_modes.get("enabled"):
+        for name, spec in _config.routing_modes.get("modes", {}).items():
+            models.append(
+                {
+                    "id": name,
+                    "object": "model",
+                    "owned_by": "foundrygate",
+                    "description": spec.get("description") or "Virtual routing mode",
+                    "mode": True,
+                    "aliases": spec.get("aliases", []),
+                    "best_for": spec.get("best_for", ""),
+                    "savings": spec.get("savings", ""),
+                }
+            )
+    if _config.model_shortcuts.get("enabled"):
+        for name, spec in _config.model_shortcuts.get("shortcuts", {}).items():
+            models.append(
+                {
+                    "id": name,
+                    "object": "model",
+                    "owned_by": "foundrygate",
+                    "description": spec.get("description") or f"Shortcut to {spec['target']}",
+                    "shortcut": True,
+                    "target": spec["target"],
+                    "aliases": spec.get("aliases", []),
+                }
+            )
     for name, p in _providers.items():
         models.append(
             {
@@ -1091,6 +1319,8 @@ async def preview_route(request: Request):
             client_tag,
             attempt_order,
             model_requested,
+            resolved_mode,
+            resolved_shortcut,
             hook_state,
             effective_body,
         ) = await _resolve_route_preview(body, headers)
@@ -1099,6 +1329,8 @@ async def preview_route(request: Request):
 
     return {
         "requested_model": model_requested,
+        "resolved_mode": resolved_mode,
+        "resolved_shortcut": resolved_shortcut,
         "resolved_profile": client_profile,
         "client_tag": client_tag,
         "routing_headers": headers,
@@ -1144,6 +1376,8 @@ async def preview_image_route(request: Request):
             client_tag,
             attempt_order,
             model_requested,
+            resolved_mode,
+            resolved_shortcut,
             hook_state,
             effective_body,
         ) = await _resolve_image_route_preview(preview_body, headers, capability=capability)
@@ -1154,6 +1388,8 @@ async def preview_image_route(request: Request):
 
     return {
         "requested_model": model_requested,
+        "resolved_mode": resolved_mode,
+        "resolved_shortcut": resolved_shortcut,
         "resolved_profile": client_profile,
         "client_tag": client_tag,
         "routing_headers": headers,
@@ -1193,6 +1429,8 @@ async def image_generations(request: Request):
             client_tag,
             attempt_order,
             model_requested,
+            resolved_mode,
+            resolved_shortcut,
             hook_state,
             effective_body,
         ) = await _resolve_image_route_preview(body, headers)
@@ -1236,6 +1474,10 @@ async def image_generations(request: Request):
             resp = JSONResponse(result)
             resp.headers["X-FoundryGate-Provider"] = provider_name
             resp.headers["X-FoundryGate-Profile"] = client_profile
+            if resolved_mode:
+                resp.headers["X-FoundryGate-Mode"] = resolved_mode
+            if resolved_shortcut:
+                resp.headers["X-FoundryGate-Shortcut"] = resolved_shortcut
             resp.headers["X-FoundryGate-Layer"] = decision.layer
             resp.headers["X-FoundryGate-Rule"] = decision.rule_name
             resp.headers["X-FoundryGate-Hooks"] = ",".join(hook_state.applied_hooks)
@@ -1313,6 +1555,8 @@ async def image_edits(request: Request):
             client_tag,
             attempt_order,
             model_requested,
+            resolved_mode,
+            resolved_shortcut,
             hook_state,
             effective_body,
         ) = await _resolve_image_route_preview(body, headers, capability="image_editing")
@@ -1360,6 +1604,10 @@ async def image_edits(request: Request):
             resp = JSONResponse(result)
             resp.headers["X-FoundryGate-Provider"] = provider_name
             resp.headers["X-FoundryGate-Profile"] = client_profile
+            if resolved_mode:
+                resp.headers["X-FoundryGate-Mode"] = resolved_mode
+            if resolved_shortcut:
+                resp.headers["X-FoundryGate-Shortcut"] = resolved_shortcut
             resp.headers["X-FoundryGate-Layer"] = decision.layer
             resp.headers["X-FoundryGate-Rule"] = decision.rule_name
             resp.headers["X-FoundryGate-Hooks"] = ",".join(hook_state.applied_hooks)
@@ -1433,6 +1681,8 @@ async def chat_completions(request: Request):
             client_tag,
             attempt_order,
             model_requested,
+            resolved_mode,
+            resolved_shortcut,
             hook_state,
             effective_body,
         ) = await _resolve_route_preview(body, headers)
@@ -1519,6 +1769,10 @@ async def chat_completions(request: Request):
             resp = JSONResponse(result)
             resp.headers["X-FoundryGate-Provider"] = provider_name
             resp.headers["X-FoundryGate-Profile"] = client_profile
+            if resolved_mode:
+                resp.headers["X-FoundryGate-Mode"] = resolved_mode
+            if resolved_shortcut:
+                resp.headers["X-FoundryGate-Shortcut"] = resolved_shortcut
             resp.headers["X-FoundryGate-Layer"] = decision.layer
             resp.headers["X-FoundryGate-Rule"] = decision.rule_name
             resp.headers["X-FoundryGate-Hooks"] = ",".join(hook_state.applied_hooks)

@@ -6,6 +6,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/foundrygate-service-lib.sh
 helpers=(
   foundrygate-install
   foundrygate-bootstrap
+  foundrygate-config-wizard
   foundrygate-doctor
   foundrygate-onboarding-report
   foundrygate-onboarding-validate

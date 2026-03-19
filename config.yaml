@@ -658,6 +658,60 @@ fallback_chain:
   - openrouter-fallback
 
 
+# ── Routing Modes (optional) ──────────────────────────────────────────────
+# Virtual model ids such as `auto`, `eco`, `premium`, or custom names.
+# They do not pin one provider directly; instead they add routing preferences
+# before the normal policy/static/heuristic/profile layers continue.
+#
+# default:
+#   which mode should apply when requests ask for `auto`
+#   or omit the model override entirely
+#
+# select:
+#   same selector keys as routing_policies.select
+routing_modes:
+  enabled: false
+  default: auto
+  modes:
+    auto:
+      description: "Balanced (default)"
+      best_for: "General use"
+      savings: "Balanced"
+      aliases: []
+      select:
+        prefer_tiers: ["default", "reasoning", "mid"]
+    eco:
+      description: "Cheapest possible"
+      best_for: "Maximum savings"
+      savings: "Aggressive savings"
+      aliases: []
+      select:
+        prefer_tiers: ["cheap", "fallback", "default"]
+    premium:
+      description: "Best quality"
+      best_for: "Mission-critical work"
+      savings: "Lowest savings"
+      aliases: []
+      select:
+        prefer_providers: ["deepseek-reasoner", "gemini-flash"]
+
+
+# ── Model Shortcuts (optional) ────────────────────────────────────────────
+# Explicit shortcut ids that map directly to one configured provider.
+# Use these for compact aliases such as `r1`, `flash`, or app-specific pins.
+model_shortcuts:
+  enabled: false
+  shortcuts:
+    r1:
+      target: deepseek-reasoner
+      aliases: ["reasoner", "think"]
+      description: "DeepSeek reasoning path"
+    flash:
+      target: gemini-flash
+      aliases: ["gemini"]
+      description: "Gemini Flash"
+
+
 # ── Layer 0: Policy-Auswahl (optional) ────────────────────────────────────
 # Diese Schicht läuft vor den statischen und heuristischen Regeln.
 # Gedacht für client-, governance- oder netzwerkbezogene Auswahl, ohne
@@ -693,6 +747,7 @@ routing_policies:
 #   header_contains : any listed substring match activates the profile rule
 #
 # profile hints use the same selector keys as routing_policies.select.
+# routing_mode can additionally point to one named routing mode.
 client_profiles:
   enabled: false
   default: generic
@@ -700,8 +755,10 @@ client_profiles:
   profiles:
     generic: {}
     openclaw:
+      routing_mode: auto
       prefer_tiers: ["default", "reasoning"]
     n8n:
+      routing_mode: eco
       prefer_tiers: ["cheap", "default"]
     local-only:
       capability_values:

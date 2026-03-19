@@ -174,6 +174,8 @@ def _describe_client_match(match: dict[str, Any]) -> str:
 def _summarize_profile_hints(profile: dict[str, Any]) -> list[str]:
     """Return compact routing-intent text for one client profile."""
     hints: list[str] = []
+    if profile.get("routing_mode"):
+        hints.append("routing mode: " + str(profile["routing_mode"]))
     if profile.get("prefer_tiers"):
         hints.append("prefer tiers: " + ", ".join(profile["prefer_tiers"]))
     if profile.get("prefer_providers"):

@@ -140,6 +140,94 @@ def test_update_check_defaults_include_stable_release_channel():
     assert cfg.update_check["release_channel"] == "stable"
 
 
+def test_routing_modes_and_model_shortcuts_are_exposed(tmp_path):
+    path = tmp_path / "config.yaml"
+    path.write_text(
+        """
+server:
+  host: "127.0.0.1"
+  port: 8090
+providers:
+  cloud-default:
+    backend: openai-compat
+    base_url: "https://api.example.com/v1"
+    api_key: "secret"
+    model: "chat-model"
+routing_modes:
+  enabled: true
+  default: premium
+  modes:
+    premium:
+      aliases: ["quality"]
+      description: "Best quality"
+      select:
+        prefer_providers: ["cloud-default"]
+model_shortcuts:
+  enabled: true
+  shortcuts:
+    fast:
+      target: cloud-default
+      aliases: ["chat"]
+client_profiles:
+  enabled: true
+  default: generic
+  profiles:
+    generic: {}
+    app:
+      routing_mode: premium
+  rules: []
+fallback_chain: []
+metrics:
+  enabled: false
+"""
+    )
+
+    cfg = load_config(path)
+    assert cfg.routing_modes["enabled"] is True
+    assert cfg.routing_modes["default"] == "premium"
+    assert cfg.routing_modes["modes"]["premium"]["aliases"] == ["quality"]
+    assert cfg.model_shortcuts["shortcuts"]["fast"]["target"] == "cloud-default"
+    assert cfg.client_profiles["profiles"]["app"]["routing_mode"] == "premium"
+
+
+def test_client_profile_rejects_unknown_routing_mode(tmp_path):
+    path = tmp_path / "config.yaml"
+    path.write_text(
+        """
+server:
+  host: "127.0.0.1"
+  port: 8090
+providers:
+  cloud-default:
+    backend: openai-compat
+    base_url: "https://api.example.com/v1"
+    api_key: "secret"
+    model: "chat-model"
+routing_modes:
+  enabled: true
+  default: auto
+  modes:
+    premium:
+      select:
+        prefer_providers: ["cloud-default"]
+client_profiles:
+  enabled: true
+  default: generic
+  profiles:
+    generic: {}
+    app:
+      routing_mode: missing
+  rules: []
+fallback_chain: []
+metrics:
+  enabled: false
+"""
+    )
+
+    with pytest.raises(ConfigError, match="unknown routing_mode 'missing'"):
+        load_config(path)
+
+
 def test_security_defaults_are_exposed():
     cfg = load_config(Path(__file__).parent.parent / "config.yaml")
     assert cfg.security == {

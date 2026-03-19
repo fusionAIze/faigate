@@ -6,7 +6,7 @@ FoundryGate keeps the client-facing surface intentionally small: OpenAI-compatib
 
 ### `GET /v1/models`
 
-Returns the virtual `auto` model plus one entry for every provider that actually loaded at startup.
+Returns the virtual `auto` model, any configured routing modes and model shortcuts, plus one entry for every provider that actually loaded at startup.
 
 This is also the source of truth for OpenClaw-side model ids under a `foundrygate` provider entry.
 
@@ -19,7 +19,9 @@ curl -fsS http://127.0.0.1:8090/v1/models
 Routes OpenAI-style chat requests.
 
 - `model: "auto"` runs the normal routing flow
+- `model: "eco"` / `model: "premium"` / other configured routing modes apply virtual mode preferences first
 - `model: "<provider-id>"` routes directly to a loaded provider
+- `model: "<shortcut-id>"` routes directly through one configured model shortcut
 - request size is bounded by `security.max_json_body_bytes`
 
 ```bash
@@ -135,7 +137,7 @@ curl -fsS 'http://127.0.0.1:8090/api/operator-events?limit=20'
 
 ### `POST /api/route`
 
-Dry-runs chat routing and returns the selected provider, routing layer, decision reason, profile resolution, and attempt order.
+Dry-runs chat routing and returns the selected provider, routing layer, decision reason, resolved mode, resolved shortcut, profile resolution, and attempt order.
 
 ```bash
 curl -fsS http://127.0.0.1:8090/api/route \
@@ -176,6 +178,8 @@ open http://127.0.0.1:8090/dashboard
 Non-streaming chat completions include:
 
 - `X-FoundryGate-Provider`
+- `X-FoundryGate-Mode` when a virtual routing mode was active
+- `X-FoundryGate-Shortcut` when a model shortcut was used
 - `X-FoundryGate-Layer`
 - `X-FoundryGate-Rule`
 

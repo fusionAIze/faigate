@@ -48,6 +48,7 @@ from foundrygate.main import (
     _resolve_image_route_preview,
     _resolve_route_preview,
     health,
+    list_models,
     preview_image_route,
     provider_inventory,
 )
@@ -187,8 +188,10 @@ client_profiles:
   enabled: true
   default: generic
   profiles:
-    generic: {}
+    generic:
+      routing_mode: auto
     local-only:
+      routing_mode: eco
       capability_values:
         local: true
       prefer_tiers: ["local"]
@@ -197,6 +200,34 @@ client_profiles:
       match:
         header_contains:
           x-foundrygate-profile: ["local-only"]
+routing_modes:
+  enabled: true
+  default: auto
+  modes:
+    auto:
+      description: "Balanced"
+      select:
+        prefer_tiers: ["default", "local"]
+    eco:
+      aliases: ["cheap"]
+      description: "Cheapest possible"
+      select:
+        prefer_providers: ["local-worker", "cloud-default"]
+        prefer_tiers: ["local", "default"]
+    premium:
+      aliases: ["quality"]
+      description: "Best quality"
+      select:
+        prefer_providers: ["cloud-default"]
+model_shortcuts:
+  enabled: true
+  shortcuts:
+    local:
+      target: local-worker
+      aliases: ["llama"]
+    img:
+      target: image-large
+      aliases: ["image"]
 fallback_chain:
   - cloud-default
 metrics:
@@ -266,6 +297,119 @@ metrics:
     return cfg
 
 
+@pytest.mark.asyncio
+async def test_preview_resolves_explicit_routing_mode(preview_config):
+    (
+        decision,
+        profile_name,
+        client_tag,
+        attempt_order,
+        model_requested,
+        resolved_mode,
+        resolved_shortcut,
+        _hook_state,
+        payload,
+    ) = await _resolve_route_preview(
+        {"model": "premium", "messages": [{"role": "user", "content": "hello"}]},
+        {},
+    )
+
+    assert model_requested == "premium"
+    assert resolved_mode == "premium"
+    assert resolved_shortcut is None
+    assert profile_name == "generic"
+    assert client_tag == "generic"
+    assert decision.provider_name == "cloud-default"
+    assert payload["model"] == "auto"
+    assert attempt_order[0] == "cloud-default"
+
+
+@pytest.mark.asyncio
+async def test_preview_uses_client_profile_default_mode_on_auto(preview_config):
+    (
+        decision,
+        profile_name,
+        _client_tag,
+        _attempt_order,
+        model_requested,
+        resolved_mode,
+        resolved_shortcut,
+        _hook_state,
+        payload,
+    ) = await _resolve_route_preview(
+        {"model": "auto", "messages": [{"role": "user", "content": "hello"}]},
+        {"x-foundrygate-profile": "local-only"},
+    )
+
+    assert model_requested == "auto"
+    assert profile_name == "local-only"
+    assert resolved_mode == "eco"
+    assert resolved_shortcut is None
+    assert decision.provider_name == "local-worker"
+    assert payload["model"] == "auto"
+
+
+@pytest.mark.asyncio
+async def test_preview_resolves_model_shortcut(preview_config):
+    (
+        decision,
+        _profile_name,
+        _client_tag,
+        _attempt_order,
+        model_requested,
+        resolved_mode,
+        resolved_shortcut,
+        _hook_state,
+        payload,
+    ) = await _resolve_route_preview(
+        {"model": "local", "messages": [{"role": "user", "content": "hello"}]},
+        {},
+    )
+
+    assert model_requested == "local"
+    assert resolved_mode is None
+    assert resolved_shortcut == "local"
+    assert decision.provider_name == "local-worker"
+    assert payload["model"] == "local-worker"
+
+
+@pytest.mark.asyncio
+async def test_image_preview_resolves_shortcut(preview_config):
+    (
+        decision,
+        _profile_name,
+        _client_tag,
+        _attempt_order,
+        model_requested,
+        resolved_mode,
+        resolved_shortcut,
+        _hook_state,
+        payload,
+    ) = await _resolve_image_route_preview(
+        {"model": "img", "prompt": "make a cat", "size": "1024x1024"},
+        {},
+        capability="image_generation",
+    )
+
+    assert model_requested == "img"
+    assert resolved_mode is None
+    assert resolved_shortcut == "img"
+    assert decision.provider_name == "image-large"
+    assert payload["model"] == "image-large"
+
+
+@pytest.mark.asyncio
+async def test_list_models_includes_modes_and_shortcuts(preview_config):
+    payload = await list_models()
+    model_ids = {row["id"] for row in payload["data"]}
+
+    assert "auto" in model_ids
+    assert "eco" in model_ids
+    assert "premium" in model_ids
+    assert "local" in model_ids
+    assert "img" in model_ids
+
+
 class TestRoutePreview:
     @pytest.mark.asyncio
     async def test_preview_resolves_profile_and_attempt_order(self, preview_config):
@@ -275,6 +419,8 @@ class TestRoutePreview:
             client_tag,
             attempt_order,
             model_requested,
+            _resolved_mode,
+            _resolved_shortcut,
             hook_state,
             effective_body,
         ) = await _resolve_route_preview(
@@ -302,6 +448,8 @@ class TestRoutePreview:
             client_tag,
             attempt_order,
             model_requested,
+            _resolved_mode,
+            _resolved_shortcut,
             hook_state,
             effective_body,
         ) = await _resolve_route_preview(
@@ -329,6 +477,8 @@ class TestRoutePreview:
             client_tag,
             attempt_order,
             model_requested,
+            _resolved_mode,
+            _resolved_shortcut,
             hook_state,
             effective_body,
         ) = await _resolve_image_route_preview(
@@ -357,6 +507,8 @@ class TestRoutePreview:
             client_tag,
             attempt_order,
             model_requested,
+            _resolved_mode,
+            _resolved_shortcut,
             hook_state,
             effective_body,
         ) = await _resolve_image_route_preview(
