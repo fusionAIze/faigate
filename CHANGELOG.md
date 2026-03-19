@@ -6,6 +6,8 @@ The format is intentionally lightweight and human-readable. Group entries by rel
 
 ## Unreleased
 
+## v1.2.2 - 2026-03-19
+
 ### Changed
 
 - Hardened the Homebrew formula so `pydantic-core` is built from source with extra Mach-O header padding on macOS instead of relying on the vendored wheel layout
