@@ -15,6 +15,7 @@ The format is intentionally lightweight and human-readable. Group entries by rel
 - Added wizard `recommended_mode_changes` suggestions so existing client profiles can be nudged toward the current purpose-aware routing defaults without silently rewriting them
 - Added an `apply suggestions` wizard flow so selected provider and client-mode recommendations can be merged into an existing config without manual copy/paste
 - Added a wizard dry-run change summary so operators can preview added providers, model replacements, fallback changes, and client-mode changes before writing config updates
+- Added optional wizard write-backup snapshots so config updates can keep a local pre-change copy before overwriting `config.yaml`
 
 ### Changed
 

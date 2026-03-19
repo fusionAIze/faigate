@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -636,6 +637,32 @@ def build_config_change_summary(
         "replaced_models": replaced_models,
         "changed_profile_modes": changed_profile_modes,
         "fallback_additions": fallback_additions,
+    }
+
+
+def write_output_file(
+    *,
+    output_path: str | Path,
+    rendered: str,
+    write_backup: bool = False,
+    backup_suffix: str = ".bak",
+) -> dict[str, str | bool]:
+    """Write one rendered payload to disk, optionally snapshotting the previous file."""
+    path = Path(output_path)
+    backup_path = ""
+
+    if write_backup and path.exists():
+        if not backup_suffix:
+            raise ValueError("backup_suffix must not be empty when write_backup is enabled")
+        backup_path = str(path.parent / f"{path.name}{backup_suffix}")
+        shutil.copy2(path, backup_path)
+
+    payload = rendered if rendered.endswith("\n") else rendered + "\n"
+    path.write_text(payload, encoding="utf-8")
+    return {
+        "output_path": str(path),
+        "backup_created": bool(backup_path),
+        "backup_path": backup_path,
     }
 
 

@@ -11,6 +11,7 @@ from foundrygate.wizard import (
     list_provider_candidates,
     merge_initial_config,
     render_initial_config_yaml,
+    write_output_file,
 )
 
 
@@ -384,3 +385,20 @@ fallback_chain:
         }
     ]
     assert summary["fallback_additions"] == ["kilocode"]
+
+
+def test_write_output_file_can_create_backup_snapshot(tmp_path: Path):
+    output_path = tmp_path / "config.yaml"
+    output_path.write_text("old: config\n", encoding="utf-8")
+
+    result = write_output_file(
+        output_path=output_path,
+        rendered="new: config\n",
+        write_backup=True,
+        backup_suffix=".before-wizard",
+    )
+
+    assert output_path.read_text(encoding="utf-8") == "new: config\n"
+    assert result["backup_created"] is True
+    assert result["backup_path"].endswith(".before-wizard")
+    assert Path(result["backup_path"]).read_text(encoding="utf-8") == "old: config\n"
