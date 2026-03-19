@@ -113,6 +113,14 @@ The first CLI surfaces for this are the existing operator helpers:
 
 They show the resolved link together with the link-neutral policy state, so later browser or control-center work can build on the same rule set.
 
+The compact discovery helper can also filter those links without changing the catalog itself:
+
+```bash
+./scripts/foundrygate-provider-discovery --offer-track free
+./scripts/foundrygate-provider-discovery --json --link-source operator_override --disclosed-only
+curl -fsS 'http://127.0.0.1:8090/api/provider-discovery?offer_track=byok'
+```
+
 For fast-moving offers, the current preferred review inputs are:
 
 - official provider docs first

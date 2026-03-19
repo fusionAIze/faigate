@@ -413,15 +413,29 @@ def build_provider_catalog_report(config: Config) -> dict[str, Any]:
     }
 
 
-def build_provider_discovery_view(config: Config) -> dict[str, Any]:
+def build_provider_discovery_view(
+    config: Config,
+    *,
+    link_source: str | None = None,
+    disclosed_only: bool = False,
+    offer_track: str | None = None,
+) -> dict[str, Any]:
     """Return a compact, disclosure-first provider discovery view."""
     report = build_provider_catalog_report(config)
     providers: list[dict[str, Any]] = []
+    normalized_link_source = str(link_source or "").strip().lower() or None
+    normalized_offer_track = str(offer_track or "").strip().lower() or None
 
     for item in report.get("items", []):
         discovery = item.get("discovery") or {}
         resolved_url = str(discovery.get("resolved_url", "") or "").strip()
         if not resolved_url:
+            continue
+        if normalized_link_source and discovery.get("link_source") != normalized_link_source:
+            continue
+        if disclosed_only and not discovery.get("disclosure_required", False):
+            continue
+        if normalized_offer_track and item.get("offer_track") != normalized_offer_track:
             continue
         providers.append(
             {
@@ -441,5 +455,10 @@ def build_provider_discovery_view(config: Config) -> dict[str, Any]:
 
     return {
         "recommendation_policy": report.get("recommendation_policy", {}),
+        "filters": {
+            "link_source": normalized_link_source,
+            "disclosed_only": disclosed_only,
+            "offer_track": normalized_offer_track,
+        },
         "providers": providers,
     }

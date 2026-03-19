@@ -20,6 +20,7 @@ The format is intentionally lightweight and human-readable. Group entries by rel
 - Added optional provider-catalog discovery metadata and env-backed signup-link overrides so future CLI or control-center surfaces can show disclosed provider links without mixing link configuration into normal config files
 - Added first CLI surfacing of disclosed provider discovery links in onboarding and doctor outputs, always alongside a link-neutral recommendation policy signal
 - Added `foundrygate-provider-discovery` for one compact text/JSON discovery view that later browser or control-center work can consume
+- Added discovery-link filters for CLI and API views so operators can narrow provider links by `offer_track`, `link_source`, or `disclosed_only`
 
 ### Changed
 

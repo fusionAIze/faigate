@@ -27,7 +27,7 @@ from . import __version__
 from .config import Config, load_config
 from .hooks import AppliedHooks, HookExecutionError, RequestHookContext, apply_request_hooks
 from .metrics import MetricsStore, calc_cost
-from .provider_catalog import build_provider_catalog_report
+from .provider_catalog import build_provider_catalog_report, build_provider_discovery_view
 from .providers import ProviderBackend, ProviderError
 from .router import Router, RoutingDecision
 from .updates import (
@@ -1103,6 +1103,21 @@ async def provider_inventory(
 async def provider_catalog():
     """Return curated provider-catalog drift and freshness alerts."""
     return build_provider_catalog_report(_config)
+
+
+@app.get("/api/provider-discovery")
+async def provider_discovery(
+    link_source: str | None = None,
+    disclosed_only: bool = False,
+    offer_track: str | None = None,
+):
+    """Return compact provider-discovery links with optional filters."""
+    return build_provider_discovery_view(
+        _config,
+        link_source=link_source,
+        disclosed_only=disclosed_only,
+        offer_track=offer_track,
+    )
 
 
 @app.get("/v1/models")

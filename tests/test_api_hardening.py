@@ -229,6 +229,45 @@ def test_stats_includes_client_highlights(api_client):
     assert body["client_highlights"]["slowest_client"]["client_tag"] == "batch-jobs"
 
 
+def test_provider_discovery_endpoint_supports_filters(api_client, monkeypatch, tmp_path):
+    monkeypatch.setenv(
+        "FOUNDRYGATE_PROVIDER_LINK_OPENROUTER_FALLBACK_URL",
+        "https://go.example.test/openrouter",
+    )
+    cfg = load_config(
+        _write_config(
+            tmp_path,
+            """
+server:
+  host: "127.0.0.1"
+  port: 8090
+providers:
+  openrouter-fallback:
+    backend: openai-compat
+    base_url: "https://openrouter.ai/api/v1"
+    api_key: "secret"
+    model: "openrouter/auto"
+fallback_chain:
+  - openrouter-fallback
+metrics:
+  enabled: false
+""",
+        )
+    )
+    monkeypatch.setattr(main_module, "_config", cfg, raising=False)
+
+    response = api_client.get(
+        "/api/provider-discovery",
+        params={"link_source": "operator_override", "disclosed_only": "true"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["filters"]["link_source"] == "operator_override"
+    assert body["filters"]["disclosed_only"] is True
+    assert [item["provider"] for item in body["providers"]] == ["openrouter-fallback"]
+
+
 def test_route_preview_rejects_large_json_payload(api_client):
     response = api_client.post(
         "/api/route",

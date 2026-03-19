@@ -225,3 +225,50 @@ metrics:
     provider_names = [item["provider"] for item in view["providers"]]
     assert provider_names == ["deepseek-chat", "openrouter-fallback"]
     assert view["providers"][0]["resolved_url"].startswith("https://")
+
+
+def test_provider_discovery_view_supports_link_source_and_offer_track_filters(
+    tmp_path: Path, monkeypatch
+):
+    monkeypatch.setenv(
+        "FOUNDRYGATE_PROVIDER_LINK_OPENROUTER_FALLBACK_URL",
+        "https://go.example.test/openrouter",
+    )
+    cfg = load_config(
+        _write_config(
+            tmp_path,
+            """
+server:
+  host: "127.0.0.1"
+  port: 8090
+providers:
+  deepseek-chat:
+    backend: openai-compat
+    base_url: "https://api.deepseek.com/v1"
+    api_key: "secret"
+    model: "deepseek-chat"
+  openrouter-fallback:
+    backend: openai-compat
+    base_url: "https://openrouter.ai/api/v1"
+    api_key: "secret"
+    model: "openrouter/auto"
+  kilocode:
+    backend: openai-compat
+    base_url: "https://api.kilo.ai/api/gateway/v1"
+    api_key: "secret"
+    model: "z-ai/glm-5:free"
+fallback_chain: []
+metrics:
+  enabled: false
+""",
+        )
+    )
+
+    operator_view = build_provider_discovery_view(cfg, link_source="operator_override")
+    disclosed_view = build_provider_discovery_view(cfg, disclosed_only=True)
+    free_view = build_provider_discovery_view(cfg, offer_track="free")
+
+    assert operator_view["filters"]["link_source"] == "operator_override"
+    assert [item["provider"] for item in operator_view["providers"]] == ["openrouter-fallback"]
+    assert [item["provider"] for item in disclosed_view["providers"]] == ["openrouter-fallback"]
+    assert [item["provider"] for item in free_view["providers"]] == ["kilocode"]

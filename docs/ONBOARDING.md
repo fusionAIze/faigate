@@ -81,6 +81,7 @@ Today that means:
 - `foundrygate-onboarding-report` can show the resolved provider discovery URL
 - `foundrygate-doctor` can print the same disclosed link for configured providers
 - `foundrygate-provider-discovery` can give one compact text or JSON view for later automation or browser work
+- that discovery helper can now also filter by `offer_track`, `link_source`, or `disclosed_only`
 - both surfaces also print the link-neutral policy state alongside the links
 
 It also prints a client matrix:

@@ -110,6 +110,17 @@ For local operator use, the same discovery block is also available via:
 ./scripts/foundrygate-provider-discovery --json
 ```
 
+### `GET /api/provider-discovery`
+
+Returns the compact discovery-link view with the same link-neutral recommendation policy block, plus optional filters for `link_source`, `offer_track`, and `disclosed_only`.
+
+```bash
+curl -fsS 'http://127.0.0.1:8090/api/provider-discovery?offer_track=free'
+curl -fsS 'http://127.0.0.1:8090/api/provider-discovery?link_source=operator_override&disclosed_only=true'
+./scripts/foundrygate-provider-discovery --json --offer-track free
+./scripts/foundrygate-provider-discovery --link-source operator_override --disclosed-only
+```
+
 ### `GET /api/stats`
 
 Returns aggregate request counters, token usage, per-client breakdowns, aggregate client totals, client highlight summaries, cost data, and operator-action summaries.
