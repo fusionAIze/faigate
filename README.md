@@ -82,6 +82,8 @@ Minimal Homebrew flow on macOS:
 ```bash
 brew tap typelicious/foundrygate https://github.com/typelicious/FoundryGate
 brew install typelicious/foundrygate/foundrygate
+# or, after the tap is present:
+brew install foundrygate
 brew services start typelicious/foundrygate/foundrygate
 ```
 

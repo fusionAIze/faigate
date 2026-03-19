@@ -6,6 +6,11 @@ The format is intentionally lightweight and human-readable. Group entries by rel
 
 ## Unreleased
 
+### Changed
+
+- Switched the Homebrew formula baseline from `python@3.13` to `python@3.12` to reduce macOS packaging friction around vendored native Python wheels
+- Clarified in the README and workstation docs that `brew install foundrygate` resolves cleanly after tapping `typelicious/foundrygate`, while the fully qualified install path remains the safest first-run example
+
 ## v1.2.0 - 2026-03-19
 
 ### Added

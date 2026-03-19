@@ -6,10 +6,10 @@ class Foundrygate < Formula
   license "Apache-2.0"
   head "https://github.com/typelicious/FoundryGate.git", branch: "main"
 
-  depends_on "python@3.13"
+  depends_on "python@3.12"
 
   def install
-    python = Formula["python@3.13"].opt_bin/"python3.13"
+    python = Formula["python@3.12"].opt_bin/"python3.12"
 
     system python, "-m", "venv", libexec
     system libexec/"bin/pip", "install", "--upgrade", "pip", "setuptools", "wheel"

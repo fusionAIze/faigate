@@ -103,6 +103,8 @@ Typical flow:
 ```bash
 brew tap typelicious/foundrygate https://github.com/typelicious/FoundryGate
 brew install typelicious/foundrygate/foundrygate
+# or, after the tap is present and the name stays unique:
+brew install foundrygate
 $EDITOR "$(brew --prefix)/etc/foundrygate/config.yaml"
 $EDITOR "$(brew --prefix)/etc/foundrygate/foundrygate.env"
 brew services start typelicious/foundrygate/foundrygate
@@ -116,6 +118,8 @@ Useful paths for the formula-driven install:
 - logs: `$(brew --prefix)/var/log/foundrygate/`
 
 The formula is intentionally project-owned rather than targeted at `homebrew/core`. That keeps the Python-service packaging flexible and lets `brew services` manage the local `launchd` path cleanly.
+
+The fully qualified install path is the safest first-run example. Once the tap is added, `brew install foundrygate` also resolves cleanly as long as no conflicting formula name is introduced by another tap.
 
 ## Windows
 
