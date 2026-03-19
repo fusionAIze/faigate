@@ -1,4 +1,4 @@
-class Foundrygate < Formula
+class Faigate < Formula
   desc "Local OpenAI-compatible AI gateway for OpenClaw and other AI-native clients"
   homepage "https://github.com/fusionAIze/faigate"
   url "https://github.com/fusionAIze/faigate/archive/refs/tags/v1.3.0.tar.gz"
