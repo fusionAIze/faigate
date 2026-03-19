@@ -39,13 +39,13 @@ Recommended minimal slices:
 1. wizard candidate selection, update suggestions, dry-run summaries, and backup-aware writes
 2. provider-catalog source metadata, offer-track volatility flags, and freshness alerts
 3. wizard and CLI usage polish so the guided flow is self-explanatory from `--help`
-4. optional provider recommendation-link metadata with explicit disclosure, but still no ranking changes based on affiliate payout
+4. optional provider recommendation-link metadata with explicit disclosure, but still no ranking changes based on provider-link metadata
 
 Guardrails for any recommendation-link work in this line:
 
-- recommendation ranking must never use affiliate payout as an input and must stay performance-led, preferring fit, quality, health, capability, and cost behavior
-- affiliate or partner metadata should stay operator-owned and secret-backed, not embedded in user-editable client configs
-- docs and CLI output should disclose clearly when a shown signup link may include an affiliate attribution
+- recommendation ranking must never use provider-link metadata as an input and must stay performance-led, preferring fit, quality, health, capability, and cost behavior
+- provider-link metadata should stay operator-owned and secret-backed, not embedded in user-editable client configs
+- docs and CLI output should disclose clearly when a shown signup link is informational only
 - the first slice should be metadata and display only; managed short links, browser control-center surfaces, and richer landing-page flows can come later
 
 ## `v1.2.0`: workstation operations baseline
@@ -522,15 +522,15 @@ This is necessary because FoundryGate is evolving quickly and the docs can drift
 
 ## Provider discovery and recommendation links
 
-FoundryGate should be able to help operators and end users discover suitable providers, but it should not turn recommendation output into a payout-optimized marketplace.
+FoundryGate should be able to help operators and end users discover suitable providers, but it should not turn recommendation output into a monetized marketplace.
 
 That means the future recommendation-link line should stay deliberately staged:
 
 ### First slices that make sense soon
 
-- add optional provider-catalog fields for signup URLs, affiliate parameter shapes, disclosure labels, and source ownership
+- add optional provider-catalog fields for signup URLs, disclosure labels, and source ownership
 - surface those links in CLI or later browser-based control-center output only when they are available and disclosed
-- allow operator-managed secret or env-backed affiliate identifiers rather than baking them into normal client-visible config
+- allow operator-managed secret or env-backed provider-link overrides rather than baking them into normal client-visible config
 
 ### Later slices that make sense after that
 
@@ -538,7 +538,7 @@ That means the future recommendation-link line should stay deliberately staged:
 - richer provider discovery views in a small browser control center
 - trust/performance signals derived from historical provider behavior, so recommendations can explain quality and reliability more concretely
 
-The non-negotiable rule is simple: recommendation quality must stay fully independent from monetization metadata, and signup links may only follow from a recommendation rather than shaping it.
+The non-negotiable rule is simple: recommendation quality must stay fully independent from provider-link metadata, and signup links may only follow from a recommendation rather than shaping it.
 
 ## Assumptions
 

@@ -15,8 +15,8 @@ _COMMUNITY_WATCHLIST = {
 }
 
 _DISCOVERY_DISCLOSURE = (
-    "Provider recommendations stay performance-led. Signup or discovery links may include "
-    "operator-configured affiliate attribution, but payout never affects ranking."
+    "Provider recommendations stay performance-led. Shown signup or discovery links are "
+    "informational only and do not affect ranking."
 )
 
 _CATALOG: dict[str, dict[str, Any]] = {
@@ -398,7 +398,7 @@ def build_provider_catalog_report(config: Config) -> dict[str, Any]:
         "total_providers": len(config.providers),
         "alert_count": len(alerts),
         "recommendation_policy": {
-            "affiliate_payout_affects_ranking": False,
+            "provider_links_affect_ranking": False,
             "ranking_basis": [
                 "fit",
                 "quality",

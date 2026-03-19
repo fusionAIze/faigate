@@ -74,14 +74,14 @@ It now also includes provider-catalog alerts for:
 - volatile free-/BYOK-/marketplace-backed offer tracks
 - mixed/community-backed catalog entries that deserve faster review
 
-The same catalog can now also carry optional provider-discovery links for CLI or later browser surfaces. Those links can be operator-configured through env vars, but they are deliberately downstream of the recommendation itself: ranking stays performance-led and payout-blind.
+The same catalog can now also carry optional provider-discovery links for CLI or later browser surfaces. Those links can be operator-configured through env vars, but they are deliberately downstream of the recommendation itself: ranking stays performance-led and link-neutral.
 
 Today that means:
 
 - `foundrygate-onboarding-report` can show the resolved provider discovery URL
 - `foundrygate-doctor` can print the same disclosed link for configured providers
 - `foundrygate-provider-discovery` can give one compact text or JSON view for later automation or browser work
-- both surfaces also print the payout-blind policy state alongside the links
+- both surfaces also print the link-neutral policy state alongside the links
 
 It also prints a client matrix:
 

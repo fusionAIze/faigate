@@ -97,13 +97,13 @@ export FOUNDRYGATE_PROVIDER_LINK_OPENROUTER_FALLBACK_URL="https://go.example.com
 export FOUNDRYGATE_PROVIDER_LINK_KILOCODE_URL="https://go.example.com/kilo"
 ```
 
-These env vars are operator-controlled full URLs. They are intended for disclosed signup or partner links and keep attribution state out of normal client config. If unset, the catalog falls back to the provider's official signup or landing URL.
+These env vars are operator-controlled full URLs. They are intended for disclosed signup or discovery links and keep link configuration out of normal client config. If unset, the catalog falls back to the provider's official signup or landing URL.
 
 The guardrail is strict:
 
-- recommendation ranking does not use payout as an input
+- recommendation ranking does not use provider-link metadata as an input
 - operator-configured discovery links are only shown after a recommendation or candidate row already exists
-- CLI and API output should disclose that a shown link may include affiliate attribution
+- CLI and API output should disclose that a shown link is informational only
 
 The first CLI surfaces for this are the existing operator helpers:
 
@@ -111,7 +111,7 @@ The first CLI surfaces for this are the existing operator helpers:
 - `foundrygate-doctor`
 - `foundrygate-provider-discovery`
 
-They show the resolved link together with the payout-blind policy state, so later browser or control-center work can build on the same rule set.
+They show the resolved link together with the link-neutral policy state, so later browser or control-center work can build on the same rule set.
 
 For fast-moving offers, the current preferred review inputs are:
 

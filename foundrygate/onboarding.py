@@ -802,8 +802,8 @@ def render_onboarding_report(report: dict[str, Any]) -> str:
         lines.append("- provider discovery:")
         lines.append(
             "  - "
-            + "policy: payout affects ranking = "
-            + f"{policy.get('affiliate_payout_affects_ranking', False)}"
+            + "policy: provider links affect ranking = "
+            + f"{policy.get('provider_links_affect_ranking', False)}"
         )
         for item in discovery_items:
             discovery = item["discovery"]
@@ -938,8 +938,8 @@ def render_onboarding_report_markdown(report: dict[str, Any]) -> str:
         policy = catalog_block.get("recommendation_policy", {})
         lines.append("- Provider discovery:")
         lines.append(
-            "  - Policy: payout affects ranking = "
-            + f"`{policy.get('affiliate_payout_affects_ranking', False)}`"
+            "  - Policy: provider links affect ranking = "
+            + f"`{policy.get('provider_links_affect_ranking', False)}`"
         )
         for item in discovery_items:
             discovery = item["discovery"]

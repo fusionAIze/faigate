@@ -186,7 +186,7 @@ metrics:
 
     report = build_provider_catalog_report(cfg)
 
-    assert report["recommendation_policy"]["affiliate_payout_affects_ranking"] is False
+    assert report["recommendation_policy"]["provider_links_affect_ranking"] is False
     discovery = report["items"][0]["discovery"]
     assert discovery["resolved_url"] == "https://go.example.test/openrouter"
     assert discovery["link_source"] == "operator_override"
@@ -221,7 +221,7 @@ metrics:
 
     view = build_provider_discovery_view(cfg)
 
-    assert view["recommendation_policy"]["affiliate_payout_affects_ranking"] is False
+    assert view["recommendation_policy"]["provider_links_affect_ranking"] is False
     provider_names = [item["provider"] for item in view["providers"]]
     assert provider_names == ["deepseek-chat", "openrouter-fallback"]
     assert view["providers"][0]["resolved_url"].startswith("https://")

@@ -275,10 +275,10 @@ auto_update:
 
     policy = report["provider_catalog"]["recommendation_policy"]
 
-    assert policy["affiliate_payout_affects_ranking"] is False
+    assert policy["provider_links_affect_ranking"] is False
     assert "provider discovery:" in text
     assert "openrouter-fallback: disclosed link -> https://go.example.test/openrouter" in text
-    assert "Policy: payout affects ranking = `False`" in markdown
+    assert "Policy: provider links affect ranking = `False`" in markdown
     assert (
         "`openrouter-fallback`: disclosed link -> `https://go.example.test/openrouter`" in markdown
     )
@@ -440,7 +440,7 @@ auto_update:
     )
 
     view = json.loads(completed.stdout)
-    assert view["recommendation_policy"]["affiliate_payout_affects_ranking"] is False
+    assert view["recommendation_policy"]["provider_links_affect_ranking"] is False
     assert view["providers"][0]["provider"] == "openrouter-fallback"
     assert view["providers"][0]["resolved_url"] == "https://go.example.test/openrouter"
 

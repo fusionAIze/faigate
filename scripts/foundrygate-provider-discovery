@@ -25,8 +25,8 @@ else:
     print("FoundryGate Provider Discovery")
     print("")
     print(
-        "Policy: payout affects ranking = "
-        f"{policy.get('affiliate_payout_affects_ranking', False)}"
+        "Policy: provider links affect ranking = "
+        f"{policy.get('provider_links_affect_ranking', False)}"
     )
     if policy.get("disclosure"):
         print(f"Disclosure: {policy['disclosure']}")

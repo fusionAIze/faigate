@@ -85,8 +85,8 @@ else:
 
 policy = catalog.get("recommendation_policy", {})
 print(
-    "[ok] provider discovery policy: payout affects ranking = "
-    f"{policy.get('affiliate_payout_affects_ranking', False)}"
+    "[ok] provider discovery policy: provider links affect ranking = "
+    f"{policy.get('provider_links_affect_ranking', False)}"
 )
 for item in catalog.get("items", []):
     discovery = item.get("discovery") or {}
