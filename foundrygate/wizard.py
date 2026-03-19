@@ -517,6 +517,68 @@ def build_update_suggestions(
     }
 
 
+def apply_update_suggestions(
+    *,
+    env_file: str | Path | None = None,
+    purpose: str = "general",
+    client: str = "generic",
+    config_path: str | Path,
+    apply_groups: list[str] | None = None,
+    selected_providers: list[str] | None = None,
+    selected_profiles: list[str] | None = None,
+) -> dict[str, Any]:
+    """Apply selected suggestion groups onto one existing config."""
+    groups = set(apply_groups or ["recommended_add", "recommended_replace"])
+    supported = {
+        "recommended_add",
+        "recommended_replace",
+        "recommended_keep",
+        "recommended_mode_changes",
+    }
+    unknown = groups - supported
+    if unknown:
+        raise ValueError("Unsupported suggestion groups: " + ", ".join(sorted(unknown)))
+
+    suggestions = build_update_suggestions(
+        env_file=env_file,
+        purpose=purpose,
+        client=client,
+        config_path=config_path,
+    )
+
+    provider_names: list[str] = []
+    for group_name in ("recommended_add", "recommended_replace", "recommended_keep"):
+        if group_name not in groups:
+            continue
+        provider_names.extend(item["provider"] for item in suggestions[group_name])
+
+    if selected_providers:
+        wanted = set(selected_providers)
+        provider_names = [name for name in provider_names if name in wanted]
+
+    suggestion = build_initial_config(
+        env_file=env_file,
+        purpose=purpose,
+        client=client,
+        selected_providers=_unique_preserve_order(provider_names) or None,
+    )
+    merged = merge_initial_config(config_path=config_path, suggestion=suggestion)
+
+    if "recommended_mode_changes" in groups:
+        profile_names = selected_profiles or [
+            item["profile"] for item in suggestions["recommended_mode_changes"]
+        ]
+        profiles = merged.setdefault("client_profiles", {}).setdefault("profiles", {})
+        for item in suggestions["recommended_mode_changes"]:
+            if item["profile"] not in profile_names:
+                continue
+            profile = dict(profiles.get(item["profile"], {}))
+            profile["routing_mode"] = item["suggested_mode"]
+            profiles[item["profile"]] = profile
+
+    return merged
+
+
 def _resolve_selected_providers(
     available: list[str],
     *,

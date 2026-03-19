@@ -105,6 +105,9 @@ The config wizard can use this catalog metadata during first setup and later upd
   --select kilocode,blackbox-free,gemini-flash-lite > config.yaml
 ./scripts/foundrygate-config-wizard --current-config config.yaml --merge-existing \
   --select openrouter-fallback --write config.yaml
+./scripts/foundrygate-config-wizard --current-config config.yaml --purpose free --client n8n \
+  --apply recommended_add,recommended_replace,recommended_mode_changes \
+  --select kilocode,openrouter-fallback --select-profiles n8n --write config.yaml
 ```
 
 That gives operators one purpose-aware candidate list, config-aware update suggestions (`recommended_add`, `recommended_replace`, `recommended_keep`, `recommended_mode_changes`), the ability to pick multiple providers at once, and a safer merge path for incremental catalog-driven updates.

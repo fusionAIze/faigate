@@ -47,6 +47,9 @@ Useful flows:
   --select deepseek-chat,deepseek-reasoner,anthropic-claude > config.yaml
 ./scripts/foundrygate-config-wizard --current-config config.yaml --merge-existing \
   --select openrouter-fallback,kilocode --write config.yaml
+./scripts/foundrygate-config-wizard --current-config config.yaml --purpose coding --client opencode \
+  --apply recommended_add,recommended_replace,recommended_mode_changes \
+  --select kilocode,openrouter-fallback --select-profiles opencode --write config.yaml
 ```
 
 When a current config is present, the suggestion output now also flags client-profile mode deltas such as `recommended_mode_changes`, so you can see when `n8n`, `openclaw`, or `opencode` probably want a different default mode for the selected purpose.
