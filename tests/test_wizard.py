@@ -16,7 +16,18 @@ from foundrygate.wizard import (
 )
 
 
-def test_detect_wizard_providers_uses_env_file(tmp_path: Path):
+def test_detect_wizard_providers_uses_env_file(tmp_path: Path, monkeypatch):
+    for name in (
+        "DEEPSEEK_API_KEY",
+        "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "OPENROUTER_API_KEY",
+        "GEMINI_API_KEY",
+        "KILOCODE_API_KEY",
+        "BLACKBOX_API_KEY",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
     env_file = tmp_path / ".env"
     env_file.write_text(
         "\n".join(

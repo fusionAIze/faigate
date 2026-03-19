@@ -794,6 +794,26 @@ def render_onboarding_report(report: dict[str, Any]) -> str:
                 + f"{item['provider']}: {item['provider_type']} / {item['offer_track']} / "
                 + f"{item['evidence_level']} / {item['volatility']}"
             )
+    discovery_items = [
+        item
+        for item in tracked_items
+        if (item.get("discovery") or {}).get("resolved_url")
+    ]
+    if discovery_items:
+        policy = catalog_block.get("recommendation_policy", {})
+        lines.append("- provider discovery:")
+        lines.append(
+            "  - "
+            + "policy: payout affects ranking = "
+            + f"{policy.get('affiliate_payout_affects_ranking', False)}"
+        )
+        for item in discovery_items:
+            discovery = item["discovery"]
+            label = "disclosed link" if discovery.get("disclosure_required") else "official link"
+            lines.append(
+                "  - "
+                + f"{item['provider']}: {label} -> {discovery['resolved_url']}"
+            )
     if catalog_block["alerts"]:
         lines.append("- catalog alerts:")
         for alert in catalog_block["alerts"]:
@@ -915,6 +935,25 @@ def render_onboarding_report_markdown(report: dict[str, Any]) -> str:
                 "  - "
                 + f"`{item['provider']}`: {item['provider_type']} / {item['offer_track']} / "
                 + f"{item['evidence_level']} / {item['volatility']}"
+            )
+    discovery_items = [
+        item
+        for item in tracked_items
+        if (item.get("discovery") or {}).get("resolved_url")
+    ]
+    if discovery_items:
+        policy = catalog_block.get("recommendation_policy", {})
+        lines.append("- Provider discovery:")
+        lines.append(
+            "  - Policy: payout affects ranking = "
+            + f"`{policy.get('affiliate_payout_affects_ranking', False)}`"
+        )
+        for item in discovery_items:
+            discovery = item["discovery"]
+            label = "disclosed link" if discovery.get("disclosure_required") else "official link"
+            lines.append(
+                "  - "
+                + f"`{item['provider']}`: {label} -> `{discovery['resolved_url']}`"
             )
     if catalog_block["alerts"]:
         lines.append("- Catalog alerts:")

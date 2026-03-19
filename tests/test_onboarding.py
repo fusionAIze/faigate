@@ -230,6 +230,61 @@ auto_update:
     assert any("curated catalog recommends" in warning for warning in validation["warnings"])
 
 
+def test_onboarding_report_includes_provider_discovery_links(tmp_path: Path, monkeypatch):
+    env_file = tmp_path / ".env"
+    env_file.write_text("OPENROUTER_API_KEY=or-demo\n", encoding="utf-8")
+    monkeypatch.setenv(
+        "FOUNDRYGATE_PROVIDER_LINK_OPENROUTER_FALLBACK_URL",
+        "https://go.example.test/openrouter",
+    )
+
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(
+        """
+fallback_chain:
+  - openrouter-fallback
+providers:
+  openrouter-fallback:
+    backend: openai-compat
+    base_url: "https://openrouter.ai/api/v1"
+    api_key: "${OPENROUTER_API_KEY}"
+    model: "openrouter/auto"
+client_profiles:
+  enabled: true
+  default: generic
+  profiles:
+    generic: {}
+  rules: []
+routing_policies:
+  enabled: false
+  rules: []
+request_hooks:
+  enabled: false
+  hooks: []
+update_check:
+  enabled: false
+auto_update:
+  enabled: false
+""".strip(),
+        encoding="utf-8",
+    )
+
+    report = build_onboarding_report(config_path=config_file, env_file=env_file)
+    text = render_onboarding_report(report)
+    markdown = render_onboarding_report_markdown(report)
+
+    policy = report["provider_catalog"]["recommendation_policy"]
+
+    assert policy["affiliate_payout_affects_ranking"] is False
+    assert "provider discovery:" in text
+    assert "openrouter-fallback: disclosed link -> https://go.example.test/openrouter" in text
+    assert "Policy: payout affects ranking = `False`" in markdown
+    assert (
+        "`openrouter-fallback`: disclosed link -> `https://go.example.test/openrouter`"
+        in markdown
+    )
+
+
 def test_onboarding_validation_passes_for_ready_multi_provider_setup(tmp_path: Path):
     env_file = tmp_path / ".env"
     env_file.write_text("DEEPSEEK_API_KEY=sk-demo\n", encoding="utf-8")
