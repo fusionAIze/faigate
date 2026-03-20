@@ -87,6 +87,14 @@ Then use the onboarding helpers to move from “the server starts” to “real 
 
 The main menu now starts with compact summary cards for gateway, config, providers, and clients so the current local state is readable before you drill into any helper. Once live traffic exists, the new `Dashboard` view gives you the first operator-facing view of requests, success rate, latency, spend, token volume, provider hotspots, client hotspots, and actionable alerts.
 
+The `Client Scenarios` layer now also explains each template in more human terms:
+
+- `budget` posture
+- `best when` guidance
+- `tradeoff` to expect
+
+That keeps the choice closer to real operator intent such as “opencode but cheaper” or “n8n but more reliable” instead of only exposing raw routing-mode names.
+
 Inside `Configure`, the control center now follows a clearer split:
 
 - `Current Config` for a concise Gate snapshot

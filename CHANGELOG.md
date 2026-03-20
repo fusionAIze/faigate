@@ -17,6 +17,8 @@ The format is intentionally lightweight and human-readable. Group entries by rel
 
 - Tightened the onboarding docs and main README around the new provider-source-first UX so first setup now reads more like `Provider Setup -> Provider Probe -> API Keys -> Full Config Wizard -> Client Scenarios -> Validate -> Client Quickstarts`
 - Renamed the old `FOUNDRYGATE STATS` CLI banner to `fusionAIze Gate Stats` so the terminal metrics surfaces stay on-brand
+- Expanded client scenarios with clearer `budget`, `best when`, and `tradeoff` guidance so operators can pick templates by intent instead of only by routing-mode names
+- Expanded the new dashboard with budget, quota, and routing-pressure hints so it now helps answer whether traffic should shift, a cheaper scenario is worth trying, or a provider likely needs more budget
 
 ## v1.5.1 - 2026-03-20
 

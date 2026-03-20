@@ -120,6 +120,16 @@ def _client_highlights(client_totals: list[dict[str, Any]]) -> dict[str, dict[st
     }
 
 
+def _recommended_scenario_for_client(client_profile: str, *, expensive: bool = False) -> str | None:
+    mapping = {
+        "opencode": "opencode-eco" if expensive else "opencode-balanced",
+        "openclaw": "openclaw-balanced",
+        "n8n": "n8n-eco" if expensive else "n8n-reliable",
+        "cli": "cli-free" if expensive else "cli-balanced",
+    }
+    return mapping.get(client_profile)
+
+
 def _stats_from_db(db_path: str) -> dict[str, Any]:
     path = Path(db_path)
     if not path.exists():
@@ -219,12 +229,14 @@ def build_dashboard_report(
     cost_24h = sum(_safe_float(row.get("cost_usd")) for row in hourly)
 
     healthy_provider_names: list[str] = []
+    healthy_provider_tiers: dict[str, str] = {}
     unhealthy_providers: list[dict[str, str]] = []
     if health_payload:
         health_providers = health_payload.get("providers") or {}
         for provider_name, payload in health_providers.items():
             if payload.get("healthy"):
                 healthy_provider_names.append(provider_name)
+                healthy_provider_tiers[provider_name] = str(payload.get("tier") or "")
             else:
                 unhealthy_providers.append(
                     {
@@ -237,6 +249,7 @@ def build_dashboard_report(
 
     alerts: list[dict[str, str]] = []
     hints: list[str] = []
+    decision_support: list[str] = []
 
     if health_payload:
         health_summary = health_payload.get("summary") or {}
@@ -316,6 +329,35 @@ def build_dashboard_report(
             hints.append(
                 f"Most spend currently lands on {top_provider_cost.get('provider')} ({_format_pct(dominant_cost_share)} of total cost)."
             )
+            cheaper_healthy = [
+                name
+                for name, tier in healthy_provider_tiers.items()
+                if tier in {"cheap", "default", "fallback"}
+                and name != str(top_provider_cost.get("provider") or "")
+            ]
+            if cheaper_healthy:
+                decision_support.append(
+                    "Budget hint: consider moving more general traffic toward "
+                    + ", ".join(cheaper_healthy[:3])
+                    + " before increasing spend on the current top-cost provider."
+                )
+
+    rate_limited = [item["provider"] for item in unhealthy_providers if item["category"] == "rate-limited"]
+    quota_exhausted = [
+        item["provider"] for item in unhealthy_providers if item["category"] == "quota-exhausted"
+    ]
+    if rate_limited:
+        decision_support.append(
+            "Rate-limit pressure: "
+            + ", ".join(rate_limited[:3])
+            + " currently look saturated. More budget, lower concurrency, or a stronger secondary path may help."
+        )
+    if quota_exhausted:
+        decision_support.append(
+            "Quota pressure: "
+            + ", ".join(quota_exhausted[:3])
+            + " appear quota-exhausted. Budget or quota changes are likely needed before those paths recover."
+        )
 
     if healthy_provider_names:
         hints.append(
@@ -328,6 +370,22 @@ def build_dashboard_report(
         )
     elif health_payload:
         hints.append("No healthy providers are currently reported by /health.")
+
+    top_cost_client = client_highlights.get("top_cost")
+    if top_cost_client:
+        top_cost_client_name = str(
+            top_cost_client.get("client_tag") or top_cost_client.get("client_profile") or "generic"
+        )
+        top_cost_client_profile = str(top_cost_client.get("client_profile") or "generic")
+        cost_per_request = _safe_float(top_cost_client.get("cost_per_request_usd"))
+        suggested_scenario = _recommended_scenario_for_client(
+            top_cost_client_profile,
+            expensive=cost_per_request >= 0.03,
+        )
+        if suggested_scenario:
+            decision_support.append(
+                f"Client hint: {top_cost_client_name} is the highest-spend client right now. Review {suggested_scenario} if you want a cheaper default posture."
+            )
 
     hints.append(
         "Provider-specific quota reset windows are not available yet; today the dashboard can only infer quota or rate-limit pressure from live errors."
@@ -349,6 +407,7 @@ def build_dashboard_report(
         "hourly": hourly,
         "operator_actions": operator_actions,
         "client_highlights": client_highlights,
+        "decision_support": decision_support,
         "cards": {
             "traffic": {
                 "requests": total_requests,
@@ -440,6 +499,8 @@ def _render_overview(report: dict[str, Any]) -> str:
         )
     elif report["hints"]:
         lines.extend(["", "Operator note", f"  {report['hints'][0]}"])
+    if report["decision_support"]:
+        lines.extend(["", "Decision support", f"  {report['decision_support'][0]}"])
     return "\n".join(lines) + "\n"
 
 
@@ -469,6 +530,11 @@ def _render_providers(report: dict[str, Any]) -> str:
     if report["hints"]:
         lines.append("Operator hints")
         for hint in report["hints"][:3]:
+            lines.append(f"- {hint}")
+    if report["decision_support"]:
+        lines.append("")
+        lines.append("Budget + routing hints")
+        for hint in report["decision_support"][:3]:
             lines.append(f"- {hint}")
     return "\n".join(lines).rstrip() + "\n"
 
@@ -502,6 +568,8 @@ def _render_clients(report: dict[str, Any]) -> str:
             lines.append(
                 f"- Slowest client path right now: {(slowest.get('client_tag') or slowest.get('client_profile'))} at {_format_latency_ms(_safe_float(slowest.get('avg_latency_ms')))} average latency."
             )
+    for hint in report["decision_support"][:2]:
+        lines.append(f"- {hint}")
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -552,6 +620,8 @@ def _render_alerts(report: dict[str, Any]) -> str:
         )
     lines.append("Context")
     for hint in report["hints"][:5]:
+        lines.append(f"- {hint}")
+    for hint in report["decision_support"][:5]:
         lines.append(f"- {hint}")
     return "\n".join(lines).rstrip() + "\n"
 

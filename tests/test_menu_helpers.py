@@ -1038,10 +1038,11 @@ def test_faigate_dashboard_overview_summarizes_live_stats(tmp_path: Path):
                         "providers_unhealthy": 1,
                     },
                     "providers": {
-                        "deepseek-chat": {"healthy": True},
-                        "gemini-flash": {"healthy": True},
+                        "deepseek-chat": {"healthy": True, "tier": "default"},
+                        "gemini-flash": {"healthy": True, "tier": "cheap"},
                         "openrouter-fallback": {
                             "healthy": False,
+                            "tier": "fallback",
                             "last_error": "rate limit",
                         },
                     },
@@ -1102,6 +1103,7 @@ def test_faigate_dashboard_overview_summarizes_live_stats(tmp_path: Path):
                             "success_pct": 97.3,
                             "total_tokens": 44000,
                             "cost_usd": 2.5,
+                            "cost_per_request_usd": 0.041,
                             "avg_latency_ms": 860.0,
                             "providers": "deepseek-chat,openrouter-fallback",
                         }
@@ -1171,6 +1173,7 @@ def test_faigate_dashboard_overview_summarizes_live_stats(tmp_path: Path):
     assert "Top client          opencode" in result.stdout
     assert "Fallback traffic    28 requests" in result.stdout
     assert "Top alert" in result.stdout
+    assert "Decision support" in result.stdout
 
 
 def test_faigate_provider_probe_summarizes_config_env_and_health(tmp_path: Path):

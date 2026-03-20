@@ -40,6 +40,9 @@ _CLIENT_SCENARIOS: dict[str, dict[str, str]] = {
         "routing_mode": "eco",
         "title": "opencode / eco",
         "summary": "Lower-cost coding path with cheaper defaults and fallback coverage.",
+        "best_for": "High-volume coding and refactors where cost matters more than premium polish.",
+        "tradeoff": "May route fewer tasks into the strongest reasoning paths.",
+        "budget_posture": "save",
     },
     "opencode-balanced": {
         "client": "opencode",
@@ -47,6 +50,9 @@ _CLIENT_SCENARIOS: dict[str, dict[str, str]] = {
         "routing_mode": "auto",
         "title": "opencode / balanced",
         "summary": "Balanced coding path that keeps quality and cost in the middle.",
+        "best_for": "Day-to-day coding where you want a stable default without over-optimizing.",
+        "tradeoff": "Not the cheapest and not the strongest quality-first path either.",
+        "budget_posture": "balanced",
     },
     "opencode-quality": {
         "client": "opencode",
@@ -54,6 +60,9 @@ _CLIENT_SCENARIOS: dict[str, dict[str, str]] = {
         "routing_mode": "premium",
         "title": "opencode / quality",
         "summary": "Higher-quality coding defaults for harder reasoning and review tasks.",
+        "best_for": "Harder debugging, architecture work, and review-heavy coding sessions.",
+        "tradeoff": "Usually slower and more expensive than eco or balanced.",
+        "budget_posture": "invest",
     },
     "opencode-free": {
         "client": "opencode",
@@ -61,6 +70,9 @@ _CLIENT_SCENARIOS: dict[str, dict[str, str]] = {
         "routing_mode": "free",
         "title": "opencode / free",
         "summary": "Free-tier-first coding path when zero-cost routing matters most.",
+        "best_for": "Experiments and background coding where budget wins over consistency.",
+        "tradeoff": "Free-tier availability can move quickly and reliability is less predictable.",
+        "budget_posture": "free",
     },
     "openclaw-balanced": {
         "client": "openclaw",
@@ -68,6 +80,9 @@ _CLIENT_SCENARIOS: dict[str, dict[str, str]] = {
         "routing_mode": "auto",
         "title": "openclaw / balanced",
         "summary": "Balanced delegated-agent traffic with stable defaults.",
+        "best_for": "Default OpenClaw agent work when you want a safe everyday posture.",
+        "tradeoff": "Not tuned for either ultra-low-cost or premium-heavy workflows.",
+        "budget_posture": "balanced",
     },
     "openclaw-quality": {
         "client": "openclaw",
@@ -75,6 +90,9 @@ _CLIENT_SCENARIOS: dict[str, dict[str, str]] = {
         "routing_mode": "premium",
         "title": "openclaw / quality",
         "summary": "Quality-first path for heavier agent reasoning and review loops.",
+        "best_for": "Longer reasoning loops and agent tasks where quality matters most.",
+        "tradeoff": "More premium usage and higher latency are both more likely.",
+        "budget_posture": "invest",
     },
     "n8n-eco": {
         "client": "n8n",
@@ -82,6 +100,9 @@ _CLIENT_SCENARIOS: dict[str, dict[str, str]] = {
         "routing_mode": "eco",
         "title": "n8n / eco",
         "summary": "Automation-first path that keeps cost and churn low.",
+        "best_for": "High-volume workflow automation where low unit cost matters most.",
+        "tradeoff": "Can sacrifice some resilience and premium quality headroom.",
+        "budget_posture": "save",
     },
     "n8n-reliable": {
         "client": "n8n",
@@ -89,6 +110,9 @@ _CLIENT_SCENARIOS: dict[str, dict[str, str]] = {
         "routing_mode": "auto",
         "title": "n8n / reliable",
         "summary": "Balanced workflow routing with steadier fallbacks than the eco path.",
+        "best_for": "Important automations where retries and fallback posture matter.",
+        "tradeoff": "Usually a little more expensive than the eco path.",
+        "budget_posture": "balanced",
     },
     "cli-balanced": {
         "client": "cli",
@@ -96,6 +120,9 @@ _CLIENT_SCENARIOS: dict[str, dict[str, str]] = {
         "routing_mode": "auto",
         "title": "cli / balanced",
         "summary": "General shell and coding assistant path with balanced defaults.",
+        "best_for": "Daily CLI work where you want one sensible default and fewer decisions.",
+        "tradeoff": "Not specialized for ultra-cheap or premium-only work.",
+        "budget_posture": "balanced",
     },
     "cli-free": {
         "client": "cli",
@@ -103,6 +130,9 @@ _CLIENT_SCENARIOS: dict[str, dict[str, str]] = {
         "routing_mode": "free",
         "title": "cli / free",
         "summary": "Free-tier-first shell path for low-cost experimentation.",
+        "best_for": "Lightweight experimentation and background CLI tasks.",
+        "tradeoff": "Free providers can rotate, saturate, or disappear faster.",
+        "budget_posture": "free",
     },
 }
 
@@ -1015,6 +1045,9 @@ def list_client_scenarios(
                 "purpose": spec["purpose"],
                 "routing_mode": spec["routing_mode"],
                 "summary": spec["summary"],
+                "best_for": spec.get("best_for", ""),
+                "tradeoff": spec.get("tradeoff", ""),
+                "budget_posture": spec.get("budget_posture", "balanced"),
                 "recommended_providers": preferred,
                 "ready_providers": ready,
                 "configured_providers": configured_hits,
@@ -1034,9 +1067,13 @@ def render_client_scenarios_text(
         lines.append(
             "  "
             + f"client: {item['client']} | purpose: {item['purpose']} | "
-            + f"mode: {item['routing_mode']}"
+            + f"mode: {item['routing_mode']} | budget: {item['budget_posture']}"
         )
         lines.append("  " + f"why: {item['summary']}")
+        if item["best_for"]:
+            lines.append("  " + f"best when: {item['best_for']}")
+        if item["tradeoff"]:
+            lines.append("  " + f"tradeoff: {item['tradeoff']}")
         if item["ready_providers"]:
             lines.append("  " + "ready now: " + ", ".join(item["ready_providers"]))
         elif item["recommended_providers"]:
@@ -1093,6 +1130,7 @@ def apply_client_scenario(
 def render_client_scenario_summary(payload: dict[str, Any]) -> str:
     scenario = payload.get("scenario") or {}
     summary = payload.get("summary") or {}
+    scenario_spec = _CLIENT_SCENARIOS.get(str(scenario.get("id", "")), {})
     lines = [
         "Client scenario summary",
         "",
@@ -1100,6 +1138,10 @@ def render_client_scenario_summary(payload: dict[str, Any]) -> str:
         f"Client  : {scenario.get('client', 'unknown')}",
         f"Purpose : {scenario.get('purpose', 'unknown')}",
         f"Mode    : {scenario.get('routing_mode', 'unknown')}",
+        "",
+        "Operator guidance",
+        "- best when: " + str(scenario_spec.get("best_for", "n/a")),
+        "- tradeoff : " + str(scenario_spec.get("tradeoff", "n/a")),
         "",
         "Change preview",
     ]

@@ -774,6 +774,8 @@ client_profiles:
     assert "anthropic-claude" in payload["config"]["providers"]
     summary = render_client_scenario_summary(payload)
     assert "Scenario: opencode / quality" in summary
+    assert "Operator guidance" in summary
+    assert "best when:" in summary
     assert "Change preview" in summary
 
 
@@ -784,4 +786,7 @@ def test_render_client_scenarios_text_mentions_opencode_free(tmp_path: Path):
     rendered = render_client_scenarios_text(env_file=env_file, config_path=tmp_path / "none.yaml")
 
     assert "opencode / free" in rendered
+    assert "budget: free" in rendered
+    assert "best when:" in rendered
+    assert "tradeoff:" in rendered
     assert "ready now" in rendered or "needs keys for" in rendered
