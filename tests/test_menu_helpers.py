@@ -979,6 +979,8 @@ def test_faigate_api_keys_updates_env_file(tmp_path: Path):
 
     assert "ANTHROPIC_API_KEY=sk-ant-demo" in written
     assert "API key env updated" in result.stdout
+    assert "optional upstream provider overrides" in result.stdout
+    assert "OPENAI_BASE_URL (upstream)" in result.stdout
 
 
 def test_faigate_routing_settings_updates_default_and_profile_modes(tmp_path: Path):
