@@ -7,6 +7,25 @@ env_file="${FAIGATE_ENV_FILE:-$repo_root/.env}"
 mode="${1:-text}"
 python_bin="${FAIGATE_PYTHON:-python3}"
 
+case "$mode" in
+  --help|-h)
+    cat <<'EOF'
+Usage:
+  ./scripts/faigate-onboarding-validate [--json]
+
+Render the current onboarding validation output and exit non-zero when
+blocking issues are present.
+EOF
+    exit 0
+    ;;
+  text|--json)
+    ;;
+  *)
+    echo "usage: faigate-onboarding-validate [--json]" >&2
+    exit 2
+    ;;
+esac
+
 export FAIGATE_ONBOARDING_CONFIG="$config_file"
 export FAIGATE_ONBOARDING_ENV="$env_file"
 export FAIGATE_ONBOARDING_MODE="$mode"

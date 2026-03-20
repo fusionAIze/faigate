@@ -142,8 +142,12 @@ import json
 import os
 
 data = json.loads(os.environ["FAIGATE_MODELS_PAYLOAD"])
-for item in data.get("data", []):
-    print(item.get("id", ""))
+models = [item.get("id", "") for item in data.get("data", []) if item.get("id")]
+
+print(f"Exposed models: {len(models)}")
+for idx, model in enumerate(models, start=1):
+    marker = " (recommended default)" if model == "auto" else ""
+    print(f"{idx:>2}. {model}{marker}")
 PY
 }
 

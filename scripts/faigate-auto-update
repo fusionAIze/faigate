@@ -3,9 +3,36 @@ set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/faigate-service-lib.sh"
 
+usage() {
+  cat <<'EOF'
+Usage:
+  ./scripts/faigate-auto-update [--json|--apply]
+
+Inspect or apply the helper-driven auto-update path against /api/update.
+
+Options:
+  --json   Print the raw JSON payload
+  --apply  Run the configured apply command when the current status is eligible
+EOF
+}
+
 api_url="${FAIGATE_UPDATE_API_URL:-$(faigate_update_url)?force=true}"
 mode="${1:-}"
 python_bin="${FAIGATE_PYTHON:-python3}"
+
+case "$mode" in
+  --help|-h)
+    usage
+    exit 0
+    ;;
+  ""|--json|--apply)
+    ;;
+  *)
+    usage >&2
+    exit 2
+    ;;
+esac
+
 operator_action="auto-update-check"
 if [ "$mode" = "--apply" ]; then
   operator_action="auto-update-apply"

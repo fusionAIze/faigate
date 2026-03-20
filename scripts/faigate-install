@@ -3,6 +3,19 @@ set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/faigate-service-lib.sh"
 
+case "${1:-}" in
+  --help|-h)
+    cat <<'EOF'
+Usage:
+  ./scripts/faigate-install
+
+Install fusionAIze Gate as a managed service and create helper links for the
+current platform.
+EOF
+    exit 0
+    ;;
+esac
+
 repo_root="$(faigate_repo_root)"
 helpers=(
   faigate-menu

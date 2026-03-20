@@ -3,8 +3,86 @@ set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/faigate-service-lib.sh"
 
-curl -fsS \
+usage() {
+  cat <<'EOF'
+Usage:
+  ./scripts/faigate-update-check [--json]
+
+Print a compact read-only snapshot of the current /api/update payload.
+
+Options:
+  --json   Print the raw JSON payload
+EOF
+}
+
+case "${1:-}" in
+  --help|-h)
+    usage
+    exit 0
+    ;;
+  ""|--json)
+    ;;
+  *)
+    usage >&2
+    exit 2
+    ;;
+esac
+
+payload="$(curl -fsS \
   -H 'X-faigate-Client: operator' \
   -H 'X-faigate-Operator-Action: update-check' \
-  "$(faigate_update_url)" | head -c 1600
-echo
+  "$(faigate_update_url)")"
+
+if [ "${1:-}" = "--json" ]; then
+  printf '%s\n' "$payload"
+  exit 0
+fi
+
+local_version="$("${FAIGATE_PYTHON:-$(faigate_python_bin)}" -m faigate --version 2>/dev/null | awk '{print $NF}' | tail -n 1)"
+
+FAIGATE_UPDATE_PAYLOAD="$payload" FAIGATE_LOCAL_VERSION="${local_version:-}" "${FAIGATE_PYTHON:-$(faigate_python_bin)}" - <<'PY'
+import json
+import os
+
+payload = json.loads(os.environ["FAIGATE_UPDATE_PAYLOAD"])
+local_version = (os.environ.get("FAIGATE_LOCAL_VERSION") or "").strip()
+
+current = str(payload.get("current_version") or "unknown")
+latest = str(payload.get("latest_version") or current)
+status = str(payload.get("status") or "unknown")
+channel = str(payload.get("release_channel") or "stable")
+repository = str(payload.get("repository") or "")
+update_type = str(payload.get("update_type") or "unknown")
+recommended = str(payload.get("recommended_action") or "No action recorded")
+auto = payload.get("auto_update") or {}
+
+print(f"Current runtime: {current}")
+print(f"Latest release: {latest}")
+print(f"Release channel: {channel}")
+print(f"Status: {status} ({update_type})")
+print(f"Action: {recommended}")
+if repository:
+    print(f"Repository: {repository}")
+
+if auto.get("enabled"):
+    if auto.get("eligible"):
+        print(f"Auto-update: eligible via {auto.get('apply_command') or 'faigate-update'}")
+    else:
+        print(f"Auto-update: blocked ({auto.get('blocked_reason') or 'blocked'})")
+else:
+    print("Auto-update: disabled")
+
+if repository and repository != "fusionAIze/faigate":
+    print("")
+    print(
+        "Warning: /api/update is reporting a different repository than this helper expects. "
+        "An older gateway process may still own the configured port."
+    )
+
+if local_version and current not in {"", "unknown"} and current != local_version:
+    print("")
+    print(
+        f"Warning: local helper version is {local_version}, but /api/update reports {current}. "
+        "Another runtime may still be serving this address."
+    )
+PY

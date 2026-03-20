@@ -2,6 +2,20 @@
 set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/faigate-service-lib.sh"
+
+case "${1:-}" in
+  --help|-h)
+    cat <<'EOF'
+Usage:
+  ./scripts/faigate-doctor
+
+Run local operator checks for config/env presence, provider env coverage,
+catalog alerts, and reachability of /health and /v1/models.
+EOF
+    exit 0
+    ;;
+esac
+
 env_file="$(faigate_env_file)"
 config_file="$(faigate_config_file)"
 python_bin="$(faigate_python_bin)"

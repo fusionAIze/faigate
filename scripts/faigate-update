@@ -10,6 +10,32 @@ set -euo pipefail
 #   faigate-update          # normal update from any user with sudo rights
 #   sudo -u faigate bash -c '/opt/faigate/scripts/faigate-update'  # explicit
 
+usage() {
+  cat <<'EOF'
+Usage:
+  ./scripts/faigate-update
+
+Update a managed Linux checkout under /opt/faigate and restart the systemd
+service.
+
+This helper is intended for deployment checkouts, not Homebrew installs or
+active development worktrees.
+EOF
+}
+
+case "${1:-}" in
+  --help|-h)
+    usage
+    exit 0
+    ;;
+  "")
+    ;;
+  *)
+    usage >&2
+    exit 2
+    ;;
+esac
+
 FAIGATE_DIR=/opt/faigate
 SERVICE_USER=faigate
 

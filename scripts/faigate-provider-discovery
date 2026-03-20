@@ -11,6 +11,15 @@ disclosed_only="0"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --help|-h)
+      cat <<'EOF'
+Usage:
+  ./scripts/faigate-provider-discovery [--json|--text] [--link-source official|operator_override] [--offer-track TRACK] [--disclosed-only]
+
+Render provider discovery links in text or JSON form with optional filters.
+EOF
+      exit 0
+      ;;
     --json)
       mode="json"
       shift

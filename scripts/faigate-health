@@ -3,5 +3,64 @@ set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/faigate-service-lib.sh"
 
-curl -fsS -m 2 "$(faigate_health_url)" | head -c 1200
-echo
+usage() {
+  cat <<'EOF'
+Usage:
+  ./scripts/faigate-health [--json]
+
+Print a compact snapshot of the local /health response.
+
+Options:
+  --json   Print the raw JSON payload
+EOF
+}
+
+case "${1:-}" in
+  --help|-h)
+    usage
+    exit 0
+    ;;
+  ""|--json)
+    ;;
+  *)
+    usage >&2
+    exit 2
+    ;;
+esac
+
+payload="$(curl -fsS -m 2 "$(faigate_health_url)")"
+
+if [ "${1:-}" = "--json" ]; then
+  printf '%s\n' "$payload"
+  exit 0
+fi
+
+FAIGATE_HEALTH_PAYLOAD="$payload" "${FAIGATE_PYTHON:-$(faigate_python_bin)}" - <<'PY'
+import json
+import os
+
+payload = json.loads(os.environ["FAIGATE_HEALTH_PAYLOAD"])
+summary = payload.get("summary") or {}
+coverage = payload.get("coverage") or {}
+providers = payload.get("providers") or {}
+
+healthy_names = [name for name, item in providers.items() if item.get("healthy")]
+coverage_bits = []
+for name in ("chat", "reasoning", "streaming", "cloud"):
+    item = coverage.get(name) or {}
+    total = item.get("total")
+    healthy = item.get("healthy")
+    if total is not None and healthy is not None:
+        coverage_bits.append(f"{name} {healthy}/{total}")
+
+print(f"Status: {payload.get('status') or 'unknown'}")
+print(
+    "Providers: "
+    f"{summary.get('providers_healthy', 0)}/{summary.get('providers_total', 0)} healthy"
+)
+print(f"Coverage: {', '.join(coverage_bits) if coverage_bits else 'n/a'}")
+if healthy_names:
+    preview = ", ".join(healthy_names[:4])
+    suffix = "" if len(healthy_names) <= 4 else f" +{len(healthy_names) - 4} more"
+    print(f"Healthy providers: {preview}{suffix}")
+PY

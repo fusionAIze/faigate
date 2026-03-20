@@ -76,6 +76,17 @@ else
   health_state="unreachable"
 fi
 
+manager_mismatch_warning=""
+case "$state" in
+  active|started|running|configured)
+    ;;
+  *)
+    if [ "$health_state" = "healthy" ]; then
+      manager_mismatch_warning="Health responds even though the configured service manager reports '${state}'. Another local process may still own $(faigate_host):$(faigate_port)."
+    fi
+    ;;
+esac
+
 faigate_ui_header "fusionAIze Gate Service Status" "Control-plane overview with runtime context"
 printf "  %-18s %s\n" "Manager" "$(faigate_service_manager)"
 printf "  %-18s %s\n" "Target" "$(faigate_service_target)"
@@ -90,6 +101,11 @@ printf "  %-18s %s\n" "Models URL" "$(faigate_models_url)"
 printf "  %-18s %s\n" "Stdout logs" "$(faigate_logs_stdout_path)"
 printf "  %-18s %s\n" "Stderr logs" "$(faigate_logs_stderr_path)"
 printf "  %-18s %s\n" "Health" "$health_state"
+
+if [ -n "$manager_mismatch_warning" ]; then
+  echo ""
+  faigate_ui_warn "$manager_mismatch_warning"
+fi
 
 echo ""
 printf "  %bRaw status%b\n" "$FAIGATE_UI_BOLD" "$FAIGATE_UI_RESET"

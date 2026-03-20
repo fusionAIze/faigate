@@ -3,6 +3,18 @@ set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/faigate-service-lib.sh"
 
+case "${1:-}" in
+  --help|-h)
+    cat <<'EOF'
+Usage:
+  ./scripts/faigate-uninstall
+
+Remove the managed service wiring and helper links for the current platform.
+EOF
+    exit 0
+    ;;
+esac
+
 helpers=(
   faigate-menu
   faigate-api-keys
