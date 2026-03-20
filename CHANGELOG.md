@@ -4,7 +4,7 @@ All notable changes to fusionAIze Gate should be documented here.
 
 The format is intentionally lightweight and human-readable. Group entries by release and focus on user-visible behavior, operational changes, and compatibility notes.
 
-## Unreleased
+## v1.6.0 - 2026-03-20
 
 ### Added
 
@@ -19,6 +19,8 @@ The format is intentionally lightweight and human-readable. Group entries by rel
 - Renamed the old `FOUNDRYGATE STATS` CLI banner to `fusionAIze Gate Stats` so the terminal metrics surfaces stay on-brand
 - Expanded client scenarios with clearer `budget`, `best when`, and `tradeoff` guidance so operators can pick templates by intent instead of only by routing-mode names
 - Expanded the new dashboard with budget, quota, and routing-pressure hints so it now helps answer whether traffic should shift, a cheaper scenario is worth trying, or a provider likely needs more budget
+
+## Unreleased
 
 ## v1.5.1 - 2026-03-20
 
