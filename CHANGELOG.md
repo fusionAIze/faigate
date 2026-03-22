@@ -4,6 +4,15 @@ All notable changes to fusionAIze Gate should be documented here.
 
 The format is intentionally lightweight and human-readable. Group entries by release and focus on user-visible behavior, operational changes, and compatibility notes.
 
+## v1.7.0 - 2026-03-22
+
+### Changed
+
+- Added internal Gate drilldowns for client quickstarts, provider discovery, and dashboard details so operators no longer need to leave the menu just to open one parameterized view
+- Expanded client scenarios into lane-based explanations with explicit quality, reasoning, workhorse, budget, and fallback roles so templates like `opencode / balanced` now explain why `kilocode`, `blackbox-free`, or `openrouter-fallback` are in or out
+- Added family-coverage hints for scenario output so operators can see when a provider family currently has only one quality or balanced slot and would need separate provider entries for richer `Opus / Sonnet / Haiku`-style splits
+- Refined the shell header color segmentation again to match the tighter blue / yellow / blue / green brand grouping across all three wordmark rows
+
 ## v1.6.3 - 2026-03-22
 
 ### Changed
