@@ -23,11 +23,11 @@ This repo does not require a heavy release process. Use lightweight tags plus Gi
 ```bash
 git checkout main
 git pull --ff-only origin main
-git tag -a v1.7.0 -m "fusionAIze Gate v1.7.0"
-git push origin v1.7.0
+git tag -a v1.7.1 -m "fusionAIze Gate v1.7.1"
+git push origin v1.7.1
 ```
 
-Then open GitHub Releases and publish a release for `v1.7.0`.
+Then open GitHub Releases and publish a release for `v1.7.1`.
 
 ## Automation Baseline
 
@@ -76,6 +76,7 @@ The repo also includes [publish-dry-run](./.github/workflows/publish-dry-run.yml
 - `v1.6.2` is the immediate guided-setup recovery follow-up: wizard writes now persist actual runtime config, doctor can flag accidental suggestion payloads in `config.yaml`, and the remaining packaged helper entrypoints keep their executable bits in Brew installs.
 - `v1.6.3` hardens that recovery line: nullish config sections no longer break guided writes, the missing Brew helper wrappers now match the shell UX more closely, and the refreshed three-color wordmark still surfaces the live version inline.
 - `v1.7.0` establishes the internal-drilldown baseline: parameterized client, provider, and dashboard views now open directly inside Gate, and scenario templates explain provider roles and family coverage more explicitly instead of only listing flat recommendation sets.
+- `v1.7.1` is the immediate polish follow-up: the wordmark now renders without accidental spacer gaps in interactive menus, and applying a client scenario cleanly returns control to the caller instead of repainting the same chooser screen.
 
 ## Planned Publishing Path
 

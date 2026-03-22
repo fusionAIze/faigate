@@ -4,6 +4,13 @@ All notable changes to fusionAIze Gate should be documented here.
 
 The format is intentionally lightweight and human-readable. Group entries by release and focus on user-visible behavior, operational changes, and compatibility notes.
 
+## v1.7.1 - 2026-03-22
+
+### Changed
+
+- Tightened the terminal header rendering again so interactive screens no longer insert apparent blank spacer lines between the three wordmark rows
+- Fixed the client-scenario apply flow so choosing `Write config` now returns cleanly to the calling menu after the confirmation step instead of dropping operators straight back into the same scenario list
+
 ## v1.7.0 - 2026-03-22
 
 ### Changed
