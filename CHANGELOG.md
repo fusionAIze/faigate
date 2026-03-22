@@ -4,6 +4,14 @@ All notable changes to fusionAIze Gate should be documented here.
 
 The format is intentionally lightweight and human-readable. Group entries by release and focus on user-visible behavior, operational changes, and compatibility notes.
 
+## v1.6.2 - 2026-03-22
+
+### Changed
+
+- Fixed the config-wizard write path so guided `Write config` flows persist the actual runtime config instead of accidentally writing the `purpose/client/suggestions` summary payload back into `config.yaml`
+- Added an explicit doctor warning when `config.yaml` appears to contain wizard summary keys, which makes accidental miswrites easier to catch before restart and rollout work
+- Restored executable bits for packaged helper scripts such as `faigate-config-wizard`, `faigate-config-overview`, `faigate-provider-discovery`, and the onboarding/client helper scripts so Brew-installed helper entrypoints no longer fail with `Permission denied`
+
 ## v1.6.1 - 2026-03-20
 
 ### Changed
