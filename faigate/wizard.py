@@ -136,6 +136,54 @@ _CLIENT_SCENARIOS: dict[str, dict[str, str]] = {
     },
 }
 
+_PROVIDER_ROLE_TAXONOMY: dict[str, dict[str, str]] = {
+    "anthropic-claude": {
+        "family": "Anthropic",
+        "slot": "quality",
+        "role": "architecture / deep review",
+    },
+    "openai-gpt4o": {
+        "family": "OpenAI",
+        "slot": "balanced",
+        "role": "general premium workhorse",
+    },
+    "deepseek-reasoner": {
+        "family": "DeepSeek",
+        "slot": "reasoning",
+        "role": "hard reasoning / debugging",
+    },
+    "deepseek-chat": {
+        "family": "DeepSeek",
+        "slot": "balanced",
+        "role": "day-to-day coding workhorse",
+    },
+    "gemini-flash": {
+        "family": "Gemini",
+        "slot": "balanced",
+        "role": "fast general coding",
+    },
+    "gemini-flash-lite": {
+        "family": "Gemini",
+        "slot": "cheap",
+        "role": "cheap burst traffic",
+    },
+    "kilocode": {
+        "family": "Kilo",
+        "slot": "free",
+        "role": "free coding coverage",
+    },
+    "blackbox-free": {
+        "family": "BLACKBOX",
+        "slot": "free",
+        "role": "free coding burst lane",
+    },
+    "openrouter-fallback": {
+        "family": "OpenRouter",
+        "slot": "fallback",
+        "role": "marketplace safety net",
+    },
+}
+
 
 _PROVIDER_FACTORIES: dict[str, ProviderFactory] = {
     "deepseek-chat": {
@@ -1021,6 +1069,143 @@ def _scenario_provider_selection(*, purpose: str, client: str) -> list[str]:
     ]
 
 
+def _scenario_provider_selection_for_spec(spec: dict[str, Any]) -> list[str]:
+    purpose = str(spec["purpose"])
+    client = str(spec["client"])
+    routing_mode = str(spec.get("routing_mode") or "auto")
+
+    if client == "opencode":
+        by_mode = {
+            "eco": [
+                "gemini-flash-lite",
+                "kilocode",
+                "blackbox-free",
+                "deepseek-chat",
+                "deepseek-reasoner",
+                "openrouter-fallback",
+            ],
+            "auto": [
+                "deepseek-reasoner",
+                "deepseek-chat",
+                "anthropic-claude",
+                "openai-gpt4o",
+                "gemini-flash",
+                "kilocode",
+                "blackbox-free",
+                "openrouter-fallback",
+            ],
+            "premium": [
+                "anthropic-claude",
+                "openai-gpt4o",
+                "deepseek-reasoner",
+                "deepseek-chat",
+                "gemini-flash",
+                "openrouter-fallback",
+            ],
+            "free": [
+                "kilocode",
+                "blackbox-free",
+                "gemini-flash-lite",
+                "deepseek-chat",
+                "openrouter-fallback",
+            ],
+        }
+        preferred = by_mode.get(routing_mode, by_mode["auto"])
+        return [name for name in preferred if name in _PROVIDER_FACTORIES]
+
+    return _scenario_provider_selection(purpose=purpose, client=client)
+
+
+def _scenario_provider_lanes(provider_names: list[str]) -> list[tuple[str, list[str]]]:
+    lane_order = [
+        ("quality-first", ["anthropic-claude", "openai-gpt4o"]),
+        ("reasoning", ["deepseek-reasoner"]),
+        ("balanced workhorses", ["deepseek-chat", "gemini-flash"]),
+        ("budget / free", ["gemini-flash-lite", "kilocode", "blackbox-free"]),
+        ("fallback safety", ["openrouter-fallback"]),
+    ]
+    lanes: list[tuple[str, list[str]]] = []
+    for lane_name, lane_candidates in lane_order:
+        lane_members = [name for name in lane_candidates if name in provider_names]
+        if lane_members:
+            lanes.append((lane_name, lane_members))
+    return lanes
+
+
+def _scenario_provider_role(provider_name: str) -> str:
+    taxonomy = _PROVIDER_ROLE_TAXONOMY.get(provider_name) or {}
+    return str(taxonomy.get("role") or "")
+
+
+def _scenario_lane_descriptions(provider_names: list[str]) -> list[tuple[str, list[str]]]:
+    detailed_lanes: list[tuple[str, list[str]]] = []
+    for lane_name, lane_members in _scenario_provider_lanes(provider_names):
+        enriched = []
+        for provider_name in lane_members:
+            role = _scenario_provider_role(provider_name)
+            if role:
+                enriched.append(f"{provider_name} ({role})")
+            else:
+                enriched.append(provider_name)
+        detailed_lanes.append((lane_name, enriched))
+    return detailed_lanes
+
+
+def _scenario_family_coverage(provider_names: list[str]) -> list[str]:
+    provider_set = set(provider_names)
+    coverage: list[str] = []
+    if "anthropic-claude" in provider_set:
+        coverage.append("Anthropic: quality lane active; workhorse/fast lane not configured yet")
+    if "openai-gpt4o" in provider_set:
+        coverage.append(
+            "OpenAI: balanced lane active; faster or cheaper family split not configured yet"
+        )
+    if "deepseek-reasoner" in provider_set and "deepseek-chat" in provider_set:
+        coverage.append("DeepSeek: reasoning + workhorse lanes active")
+    if {"kilocode", "blackbox-free"} & provider_set:
+        coverage.append("Free lane: aggregator-backed budget coverage is active")
+    return coverage
+
+
+def _scenario_family_hint(provider_names: list[str]) -> str | None:
+    hints: list[str] = []
+    provider_set = set(provider_names)
+    if "anthropic-claude" in provider_set:
+        hints.append(
+            "Anthropic is currently represented by one quality lane. "
+            "Add separate Sonnet or Haiku-style providers if you want "
+            "dedicated workhorse or fast Anthropic slots."
+        )
+    if "openai-gpt4o" in provider_set:
+        hints.append(
+            "OpenAI is currently represented by one balanced multimodal "
+            "lane. Add more OpenAI family variants if you want sharper "
+            "quality vs speed splits there too."
+        )
+    if hints:
+        return " ".join(hints)
+    return None
+
+
+def _scenario_deemphasized_providers(provider_names: list[str]) -> list[str]:
+    scenario_set = set(provider_names)
+    return [
+        name
+        for name in (
+            "anthropic-claude",
+            "openai-gpt4o",
+            "deepseek-reasoner",
+            "deepseek-chat",
+            "gemini-flash",
+            "gemini-flash-lite",
+            "kilocode",
+            "blackbox-free",
+            "openrouter-fallback",
+        )
+        if name in _PROVIDER_FACTORIES and name not in scenario_set
+    ]
+
+
 def list_client_scenarios(
     *,
     env_file: str | Path | None = None,
@@ -1030,7 +1215,7 @@ def list_client_scenarios(
     detected = set(detect_wizard_providers(env_file=env_file))
     scenarios: list[dict[str, Any]] = []
     for scenario_id, spec in _CLIENT_SCENARIOS.items():
-        preferred = _scenario_provider_selection(purpose=spec["purpose"], client=spec["client"])
+        preferred = _scenario_provider_selection_for_spec(spec)
         ready = [name for name in preferred if name in detected]
         configured_hits = [name for name in preferred if name in configured]
         scenarios.append(
@@ -1047,6 +1232,11 @@ def list_client_scenarios(
                 "recommended_providers": preferred,
                 "ready_providers": ready,
                 "configured_providers": configured_hits,
+                "provider_lanes": _scenario_provider_lanes(preferred),
+                "lane_descriptions": _scenario_lane_descriptions(preferred),
+                "family_coverage": _scenario_family_coverage(preferred),
+                "deemphasized_providers": _scenario_deemphasized_providers(preferred),
+                "family_hint": _scenario_family_hint(preferred),
             }
         )
     return scenarios
@@ -1070,6 +1260,9 @@ def render_client_scenarios_text(
             lines.append("  " + f"best when: {item['best_for']}")
         if item["tradeoff"]:
             lines.append("  " + f"tradeoff: {item['tradeoff']}")
+        if item["lane_descriptions"]:
+            for lane_name, lane_members in item["lane_descriptions"]:
+                lines.append("  " + f"{lane_name}: " + ", ".join(lane_members))
         if item["ready_providers"]:
             lines.append("  " + "ready now: " + ", ".join(item["ready_providers"]))
         elif item["recommended_providers"]:
@@ -1079,10 +1272,27 @@ def render_client_scenarios_text(
                 + ", ".join(item["recommended_providers"][:4])
                 + (" ..." if len(item["recommended_providers"]) > 4 else "")
             )
+        if item["deemphasized_providers"]:
+            lines.append(
+                "  "
+                + "de-emphasized now: "
+                + ", ".join(item["deemphasized_providers"][:4])
+                + (" ..." if len(item["deemphasized_providers"]) > 4 else "")
+            )
+        if item.get("family_hint"):
+            lines.append("  " + f"family note: {item['family_hint']}")
+        if item["family_coverage"]:
+            for coverage_line in item["family_coverage"]:
+                lines.append("  " + f"family coverage: {coverage_line}")
     lines.append("")
     lines.append(
         "Tip: Apply one scenario when you want a client-specific default "
         "without hand-editing profile modes."
+    )
+    lines.append(
+        "Tip: Scenario lanes describe the current configured provider inventory. "
+        "If you want separate Opus / Sonnet / Haiku or similar family lanes, "
+        "add them as distinct providers first."
     )
     return "\n".join(lines) + "\n"
 
@@ -1096,14 +1306,15 @@ def apply_client_scenario(
     if scenario_id not in _CLIENT_SCENARIOS:
         raise ValueError(f"Unsupported client scenario '{scenario_id}'")
     spec = _CLIENT_SCENARIOS[scenario_id]
+    available = detect_wizard_providers(env_file=env_file)
+    selected = [
+        name for name in _scenario_provider_selection_for_spec(spec) if name in set(available)
+    ]
     suggestion = build_initial_config(
         env_file=env_file,
         purpose=spec["purpose"],
         client=spec["client"],
-        selected_providers=_scenario_provider_selection(
-            purpose=spec["purpose"],
-            client=spec["client"],
-        ),
+        selected_providers=selected,
     )
     merged = merge_initial_config(config_path=config_path, suggestion=suggestion)
     profiles = merged.setdefault("client_profiles", {}).setdefault("profiles", {})

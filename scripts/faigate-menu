@@ -701,10 +701,10 @@ configure_direct_menu() {
 explore_menu() {
   while true; do
     faigate_ui_header "fusionAIze Gate Explore" "Providers, discovery links, and exposed models"
-    faigate_ui_tip "Start with Provider Probe when you want a readiness view. Use discovery for link/source browsing after that."
+    faigate_ui_tip "Start with Provider Probe when you want a readiness view. Use Provider Discovery drilldowns after that to inspect one source at a time."
     echo ""
     printf "    1)  Provider Probe       Probe configured sources against config, env, and /health\n"
-    printf "    2)  Provider Discovery   Browse provider links and offer tracks\n"
+    printf "    2)  Provider Discovery   Browse provider links, offer tracks, and one-provider detail views\n"
     printf "    3)  Provider Discovery   JSON export\n"
     printf "    4)  Models               List exposed model ids\n"
     printf "    5)  Health Check         Query /health\n"
@@ -715,7 +715,7 @@ explore_menu() {
     read -r choice
     case "$choice" in
       1) run_and_pause bash "${script_dir}/faigate-provider-probe" ;;
-      2) run_and_pause bash "${script_dir}/faigate-provider-discovery" --text ;;
+      2) run_and_pause bash "${script_dir}/faigate-provider-discovery" --interactive ;;
       3) run_and_pause bash "${script_dir}/faigate-provider-discovery" --json ;;
       4) run_and_pause show_models ;;
       5) run_and_pause bash "${script_dir}/faigate-health" ;;
@@ -730,14 +730,15 @@ dashboard_menu() {
   while true; do
     faigate_ui_header "fusionAIze Gate Dashboard" "Performance, spend, client load, and operator confidence"
     render_summary_cards
-    faigate_ui_tip "Overview is the fastest confidence check. Providers and Clients explain where traffic, failures, and spend really come from."
+    faigate_ui_tip "Overview is the fastest confidence check. Drilldowns help when you want to inspect one provider or one client without leaving Gate."
     echo ""
     printf "    1)  Overview           Global confidence view with traffic, spend, and top drivers\n"
     printf "    2)  Providers          Provider health, failures, latency, and spend\n"
     printf "    3)  Clients            Client-level traffic, cost, and latency\n"
     printf "    4)  Activity           24h activity, daily trend, and operator actions\n"
     printf "    5)  Alerts + Decisions Operator alerts and budget/routing hints\n"
-    printf "    6)  Raw JSON           Full dashboard report for scripts or UIs\n"
+    printf "    6)  Drilldowns         Pick one provider or client and open a focused detail view\n"
+    printf "    7)  Raw JSON           Full dashboard report for scripts or UIs\n"
     printf "\n"
     printf "    c)  Cancel\n"
     printf "    q)  Quit\n\n"
@@ -749,7 +750,8 @@ dashboard_menu() {
       3) run_and_pause bash "${script_dir}/faigate-dashboard" --clients ;;
       4) run_and_pause bash "${script_dir}/faigate-dashboard" --activity ;;
       5) run_and_pause bash "${script_dir}/faigate-dashboard" --alerts ;;
-      6) run_and_pause bash "${script_dir}/faigate-dashboard" --json ;;
+      6) run_and_pause bash "${script_dir}/faigate-dashboard" --interactive ;;
+      7) run_and_pause bash "${script_dir}/faigate-dashboard" --json ;;
       c|C|"") return 0 ;;
       q|Q) exit 0 ;;
       *) faigate_ui_warn "Invalid choice."; faigate_ui_pause ;;
@@ -771,15 +773,16 @@ clients_menu() {
     printf "    1)  Recommended Cards  Compact client recommendations\n"
     printf "    2)  Scenario Templates Apply client-specific templates like opencode/eco\n"
     printf "    3)  Client Matrix      Show active client profiles and match intent\n"
-    printf "    4)  OpenClaw Details   Drill into OpenClaw setup hints\n"
-    printf "    5)  n8n Details        Drill into n8n setup hints\n"
-    printf "    6)  opencode Details   Drill into opencode setup hints\n"
-    printf "    7)  CLI Details        Drill into generic CLI setup hints\n"
-    printf "    8)  All Quickstarts    Show the full client quickstart list\n"
-    printf "    9)  OpenClaw Wizard    Run a client-scoped wizard for OpenClaw\n"
-    printf "   10)  n8n Wizard         Run a client-scoped wizard for n8n\n"
-    printf "   11)  opencode Wizard    Run a client-scoped wizard for opencode\n"
-    printf "   12)  CLI Wizard         Run a client-scoped wizard for cli callers\n"
+    printf "    4)  Client Drilldowns  Browse any client and open one detail view inside Gate\n"
+    printf "    5)  OpenClaw Details   Drill into OpenClaw setup hints\n"
+    printf "    6)  n8n Details        Drill into n8n setup hints\n"
+    printf "    7)  opencode Details   Drill into opencode setup hints\n"
+    printf "    8)  CLI Details        Drill into generic CLI setup hints\n"
+    printf "    9)  All Quickstarts    Show the full client quickstart list\n"
+    printf "   10)  OpenClaw Wizard    Run a client-scoped wizard for OpenClaw\n"
+    printf "   11)  n8n Wizard         Run a client-scoped wizard for n8n\n"
+    printf "   12)  opencode Wizard    Run a client-scoped wizard for opencode\n"
+    printf "   13)  CLI Wizard         Run a client-scoped wizard for cli callers\n"
     printf "\n"
     printf "    c)  Cancel\n"
     printf "    q)  Quit\n\n"
@@ -789,15 +792,16 @@ clients_menu() {
       1) run_and_pause bash "${script_dir}/faigate-client-integrations" --recommended ;;
       2) run_and_pause bash "${script_dir}/faigate-client-scenarios" ;;
       3) run_and_pause bash "${script_dir}/faigate-client-integrations" --matrix ;;
-      4) run_and_pause bash "${script_dir}/faigate-client-integrations" --client openclaw ;;
-      5) run_and_pause bash "${script_dir}/faigate-client-integrations" --client n8n ;;
-      6) run_and_pause bash "${script_dir}/faigate-client-integrations" --client opencode ;;
-      7) run_and_pause bash "${script_dir}/faigate-client-integrations" --client cli ;;
-      8) run_and_pause bash "${script_dir}/faigate-client-integrations" ;;
-      9) run_client_wizard "openclaw" "general" ;;
-      10) run_client_wizard "n8n" "free" ;;
-      11) run_client_wizard "opencode" "coding" ;;
-      12) run_client_wizard "cli" "general" ;;
+      4) run_and_pause bash "${script_dir}/faigate-client-integrations" --interactive ;;
+      5) run_and_pause bash "${script_dir}/faigate-client-integrations" --client openclaw ;;
+      6) run_and_pause bash "${script_dir}/faigate-client-integrations" --client n8n ;;
+      7) run_and_pause bash "${script_dir}/faigate-client-integrations" --client opencode ;;
+      8) run_and_pause bash "${script_dir}/faigate-client-integrations" --client cli ;;
+      9) run_and_pause bash "${script_dir}/faigate-client-integrations" ;;
+      10) run_client_wizard "openclaw" "general" ;;
+      11) run_client_wizard "n8n" "free" ;;
+      12) run_client_wizard "opencode" "coding" ;;
+      13) run_client_wizard "cli" "general" ;;
       c|C|"") return 0 ;;
       q|Q) exit 0 ;;
       *) faigate_ui_warn "Invalid choice."; faigate_ui_pause ;;

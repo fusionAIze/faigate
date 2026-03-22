@@ -628,7 +628,113 @@ def _render_alerts(report: dict[str, Any]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
-def render_dashboard_text(report: dict[str, Any], *, view: str = "overview") -> str:
+def _render_provider_detail(report: dict[str, Any], provider_name: str) -> str:
+    target = provider_name.strip().lower()
+    unhealthy = {item["provider"]: item for item in report["cards"]["health"]["unhealthy"]}
+    row = next(
+        (item for item in report["providers"] if str(item.get("provider") or "").lower() == target),
+        None,
+    )
+    if not row:
+        return (
+            "fusionAIze Gate Dashboard\n\n"
+            f"Provider detail\n\nNo provider row found for '{provider_name}'.\n"
+        )
+
+    provider = str(row.get("provider") or provider_name)
+    status = "live-healthy"
+    if provider in unhealthy:
+        status = unhealthy[provider]["category"]
+
+    requests = _safe_int(row.get("requests"))
+    failures = _safe_int(row.get("failures"))
+    success_pct = 100.0 - (failures * 100.0 / max(1, requests))
+    lines = [
+        "fusionAIze Gate Dashboard",
+        "",
+        f"Provider detail: {provider}",
+        "",
+        f"Status            {status}",
+        f"Requests          {requests}",
+        f"Failures          {failures}",
+        f"Success           {_format_pct(success_pct)}",
+        f"Latency           {_format_latency_ms(_safe_float(row.get('avg_latency_ms')))}",
+        f"Cost              {_format_usd(_safe_float(row.get('cost_usd')))}",
+        f"Tokens            {_format_tokens(_safe_int(row.get('total_tokens')))}",
+        f"Prompt tokens     {_format_tokens(_safe_int(row.get('prompt_tokens')))}",
+        f"Completion tokens {_format_tokens(_safe_int(row.get('completion_tokens')))}",
+    ]
+    if provider in unhealthy:
+        lines.append(f"Live issue        {unhealthy[provider]['detail']}")
+    lines.extend(
+        [
+            "",
+            "Operator hints",
+            "- Compare this provider against Providers view when latency or failure rate starts drifting.",
+            "- If this is expensive and stable, move lighter traffic to cheaper workhorse lanes before adding budget.",
+            "- If this is both slow and expensive, keep it for the hard tasks and shift the rest to a balanced scenario.",
+        ]
+    )
+    return "\n".join(lines) + "\n"
+
+
+def _render_client_detail(report: dict[str, Any], client_name: str) -> str:
+    target = client_name.strip().lower()
+    row = next(
+        (
+            item
+            for item in report["clients"]
+            if str(item.get("client_tag") or item.get("client_profile") or "").lower() == target
+        ),
+        None,
+    )
+    if not row:
+        return (
+            "fusionAIze Gate Dashboard\n\n"
+            f"Client detail\n\nNo client row found for '{client_name}'.\n"
+        )
+
+    name = str(row.get("client_tag") or row.get("client_profile") or client_name)
+    expensive = (
+        _safe_float(row.get("cost_usd")) > 0.5 or _safe_float(row.get("avg_latency_ms")) > 4000
+    )
+    suggested_scenario = _recommended_scenario_for_client(
+        str(row.get("client_profile") or name),
+        expensive=expensive,
+    )
+    lines = [
+        "fusionAIze Gate Dashboard",
+        "",
+        f"Client detail: {name}",
+        "",
+        f"Profile           {row.get('client_profile') or 'generic'}",
+        f"Requests          {_safe_int(row.get('requests'))}",
+        f"Success           {_format_pct(_safe_float(row.get('success_pct') or 0))}",
+        f"Latency           {_format_latency_ms(_safe_float(row.get('avg_latency_ms')))}",
+        f"Cost              {_format_usd(_safe_float(row.get('cost_usd')))}",
+        f"Tokens            {_format_tokens(_safe_int(row.get('total_tokens')))}",
+        f"Providers         {row.get('providers') or 'n/a'}",
+    ]
+    if suggested_scenario:
+        lines.append(f"Suggested scenario {suggested_scenario}")
+    lines.extend(
+        [
+            "",
+            "Decision help",
+            "- Use the suggested scenario when this client needs a cleaner default without hand-editing the profile.",
+            "- If this client is expensive but not mission-critical, trial an eco or free path first.",
+            "- If this client is slow on hard tasks, keep premium paths for it and move lighter traffic elsewhere.",
+        ]
+    )
+    return "\n".join(lines) + "\n"
+
+
+def render_dashboard_text(
+    report: dict[str, Any],
+    *,
+    view: str = "overview",
+    target: str | None = None,
+) -> str:
     """Render one human-readable dashboard view."""
     renderers = {
         "overview": _render_overview,
@@ -637,6 +743,10 @@ def render_dashboard_text(report: dict[str, Any], *, view: str = "overview") -> 
         "activity": _render_activity,
         "alerts": _render_alerts,
     }
+    if view == "provider-detail":
+        return _render_provider_detail(report, target or "")
+    if view == "client-detail":
+        return _render_client_detail(report, target or "")
     return renderers.get(view, _render_overview)(report)
 
 

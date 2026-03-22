@@ -62,20 +62,26 @@ PY
 faigate_ui_logo() {
   local version_text="${1:-}"
   if faigate_ui_has_color; then
-    printf "  %b%s%b%b%s%b%b%s%b\n" \
+    printf "  %b%s%b%b%s%b%b%s%b%s%b%s\n" \
       "$FAIGATE_UI_BRAND_BLUE" "▐▘    ▘    " "$FAIGATE_UI_RESET" \
-      "$FAIGATE_UI_BRAND_YELLOW" "▄▖▄▖      " "$FAIGATE_UI_RESET" \
-      "$FAIGATE_UI_BRAND_GREEN" "▄▖  ▗      " "$FAIGATE_UI_RESET"
-    printf "  %b%s%b%b%s%b%b%s%b\n" \
+      "$FAIGATE_UI_BRAND_YELLOW" "▄▖▄▖" "$FAIGATE_UI_RESET" \
+      "$FAIGATE_UI_BRAND_BLUE" "    " "$FAIGATE_UI_RESET" \
+      "  " \
+      "$FAIGATE_UI_BRAND_GREEN" "▄▖  ▗   " "$FAIGATE_UI_RESET"
+    printf "  %b%s%b%b%s%b%b%s%b%s%b%s\n" \
       "$FAIGATE_UI_BRAND_BLUE" "▜▘▌▌▛▘▌▛▌▛▌" "$FAIGATE_UI_RESET" \
-      "$FAIGATE_UI_BRAND_YELLOW" "▌▌▐ ▀▌" "$FAIGATE_UI_RESET" \
-      "$FAIGATE_UI_BRAND_GREEN" "█▌  ▌ ▀▌▜▘█▌   " "$FAIGATE_UI_RESET"
-    printf "  %b%s%b%b%s%b%b%s%b" \
-      "$FAIGATE_UI_BRAND_BLUE" "▐ ▙▌▄▌▌" "$FAIGATE_UI_RESET" \
-      "$FAIGATE_UI_BRAND_YELLOW" "▙▌▌▌▛▌" "$FAIGATE_UI_RESET" \
-      "$FAIGATE_UI_BRAND_GREEN" "▟▖▙▖▙▖  ▙▌█▌▐▖▙▖  " "$FAIGATE_UI_RESET"
+      "$FAIGATE_UI_BRAND_YELLOW" "▌▌▐ " "$FAIGATE_UI_RESET" \
+      "$FAIGATE_UI_BRAND_BLUE" "▀▌█▌" "$FAIGATE_UI_RESET" \
+      "  " \
+      "$FAIGATE_UI_BRAND_GREEN" "▌ ▀▌▜▘█▌" "$FAIGATE_UI_RESET"
+    printf "  %b%s%b%b%s%b%b%s%b%s%b%s" \
+      "$FAIGATE_UI_BRAND_BLUE" "▐ ▙▌▄▌▌▙▌▌▌" "$FAIGATE_UI_RESET" \
+      "$FAIGATE_UI_BRAND_YELLOW" "▛▌▟▖" "$FAIGATE_UI_RESET" \
+      "$FAIGATE_UI_BRAND_BLUE" "▙▖▙▖" "$FAIGATE_UI_RESET" \
+      "  " \
+      "$FAIGATE_UI_BRAND_GREEN" "▙▌█▌▐▖▙▖" "$FAIGATE_UI_RESET"
     if [ -n "$version_text" ]; then
-      printf "  %b%s%b" "$FAIGATE_UI_DIM" "$version_text" "$FAIGATE_UI_RESET"
+      printf " %b%s%b" "$FAIGATE_UI_DIM" "$version_text" "$FAIGATE_UI_RESET"
     fi
     printf "\n"
   else

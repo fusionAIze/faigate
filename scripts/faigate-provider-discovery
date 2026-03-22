@@ -8,13 +8,15 @@ mode="text"
 link_source=""
 offer_track=""
 disclosed_only="0"
+provider_name=""
+interactive_mode="0"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --help|-h)
       cat <<'EOF'
 Usage:
-  ./scripts/faigate-provider-discovery [--json|--text] [--link-source official|operator_override] [--offer-track TRACK] [--disclosed-only]
+  ./scripts/faigate-provider-discovery [--json|--text] [--link-source official|operator_override] [--offer-track TRACK] [--disclosed-only] [--provider NAME] [--interactive]
 
 Render provider discovery links in text or JSON form with optional filters.
 EOF
@@ -40,8 +42,16 @@ EOF
       disclosed_only="1"
       shift
       ;;
+    --provider)
+      provider_name="${2:-}"
+      shift 2
+      ;;
+    --interactive)
+      interactive_mode="1"
+      shift
+      ;;
     *)
-      echo "usage: faigate-provider-discovery [--json|--text] [--link-source official|operator_override] [--offer-track TRACK] [--disclosed-only]" >&2
+      echo "usage: faigate-provider-discovery [--json|--text] [--link-source official|operator_override] [--offer-track TRACK] [--disclosed-only] [--provider NAME] [--interactive]" >&2
       exit 2
       ;;
   esac
@@ -52,6 +62,7 @@ export FAIGATE_DISCOVERY_MODE="$mode"
 export FAIGATE_DISCOVERY_LINK_SOURCE="$link_source"
 export FAIGATE_DISCOVERY_OFFER_TRACK="$offer_track"
 export FAIGATE_DISCOVERY_DISCLOSED_ONLY="$disclosed_only"
+export FAIGATE_DISCOVERY_PROVIDER="$provider_name"
 
 "$python_bin" - <<'PY'
 import json
@@ -66,6 +77,12 @@ view = build_provider_discovery_view(
     disclosed_only=os.environ.get("FAIGATE_DISCOVERY_DISCLOSED_ONLY") == "1",
     offer_track=os.environ.get("FAIGATE_DISCOVERY_OFFER_TRACK") or None,
 )
+
+provider_name = os.environ.get("FAIGATE_DISCOVERY_PROVIDER", "").strip().lower()
+if provider_name:
+    view["providers"] = [
+        item for item in view.get("providers", []) if item["provider"].lower() == provider_name
+    ]
 
 if os.environ["FAIGATE_DISCOVERY_MODE"] == "json":
     print(json.dumps(view, indent=2, sort_keys=True))
@@ -95,6 +112,107 @@ else:
             f"{item['offer_track']} / {item['evidence_level']}"
         )
         print(f"  {label}: {item['resolved_url']}")
+        if item.get("official_source_url"):
+            print(f"  official source: {item['official_source_url']}")
+        if item.get("signup_url") and item.get("signup_url") != item.get("resolved_url"):
+            print(f"  signup: {item['signup_url']}")
         if item.get("operator_env_var"):
             print(f"  env override: {item['operator_env_var']}")
 PY
+
+if [[ "$interactive_mode" == "1" && -z "$provider_name" && "$mode" == "text" ]]; then
+  echo ""
+  echo "  Discovery filters"
+  printf "    1)  All providers\n"
+  printf "    2)  Free / budget tracks\n"
+  printf "    3)  Disclosed-only links\n"
+  printf "    c)  Cancel\n"
+  printf "    q)  Quit\n"
+  printf "\n  ▸ Filter: "
+  read -r filter_choice
+  case "$filter_choice" in
+    q|Q) exit 0 ;;
+    c|C|"") exit 0 ;;
+    1) ;;
+    2) offer_track="free" ;;
+    3) disclosed_only="1" ;;
+    *) echo "Invalid selection." >&2; exit 2 ;;
+  esac
+
+  provider_entries="$(
+    FAIGATE_DISCOVERY_CONFIG="$config_file" \
+    FAIGATE_DISCOVERY_LINK_SOURCE="$link_source" \
+    FAIGATE_DISCOVERY_OFFER_TRACK="$offer_track" \
+    FAIGATE_DISCOVERY_DISCLOSED_ONLY="$disclosed_only" \
+    "$python_bin" - <<'PY'
+from faigate.config import load_config
+from faigate.provider_catalog import build_provider_discovery_view
+import os
+
+view = build_provider_discovery_view(
+    load_config(os.environ["FAIGATE_DISCOVERY_CONFIG"]),
+    link_source=os.environ.get("FAIGATE_DISCOVERY_LINK_SOURCE") or None,
+    disclosed_only=os.environ.get("FAIGATE_DISCOVERY_DISCLOSED_ONLY") == "1",
+    offer_track=os.environ.get("FAIGATE_DISCOVERY_OFFER_TRACK") or None,
+)
+
+for item in view.get("providers", []):
+    print(f"{item['provider']}\t{item['offer_track']}\t{item['provider_type']}")
+PY
+  )"
+
+  if [[ -n "$provider_entries" ]]; then
+    echo ""
+    echo "  Open provider detail"
+    entry_index=1
+    while IFS= read -r entry; do
+      [ -z "$entry" ] && continue
+      provider_id="${entry%%$'\t'*}"
+      rest="${entry#*$'\t'}"
+      provider_track="${rest%%$'\t'*}"
+      provider_type="${entry##*$'\t'}"
+      printf "   %2d)  %-22s %s / %s\n" "$entry_index" "$provider_id" "$provider_type" "$provider_track"
+      entry_index=$((entry_index + 1))
+    done <<< "$provider_entries"
+    printf "\n    c)  Cancel\n"
+    printf "    q)  Quit\n"
+    printf "\n  ▸ Selection: "
+    read -r provider_selection
+    case "$provider_selection" in
+      q|Q) exit 0 ;;
+      c|C|"") exit 0 ;;
+      *)
+        if [[ "$provider_selection" =~ ^[0-9]+$ ]]; then
+          chosen_entry="$(printf '%s\n' "$provider_entries" | sed -n "${provider_selection}p")"
+          [ -n "$chosen_entry" ] || { echo "Invalid selection." >&2; exit 2; }
+          chosen_provider="${chosen_entry%%$'\t'*}"
+          next_args=(--text --provider "$chosen_provider")
+          if [[ -n "$offer_track" ]]; then
+            next_args+=(--offer-track "$offer_track")
+          fi
+          if [[ "$disclosed_only" == "1" ]]; then
+            next_args+=(--disclosed-only)
+          fi
+          if [[ -n "$link_source" ]]; then
+            next_args+=(--link-source "$link_source")
+          fi
+          exec "$0" "${next_args[@]}"
+        fi
+        chosen_entry="$(printf '%s\n' "$provider_entries" | awk -F '\t' -v target="$provider_selection" '$1 == target {print; exit}')"
+        [ -n "$chosen_entry" ] || { echo "Invalid selection." >&2; exit 2; }
+        chosen_provider="${chosen_entry%%$'\t'*}"
+        next_args=(--text --provider "$chosen_provider")
+        if [[ -n "$offer_track" ]]; then
+          next_args+=(--offer-track "$offer_track")
+        fi
+        if [[ "$disclosed_only" == "1" ]]; then
+          next_args+=(--disclosed-only)
+        fi
+        if [[ -n "$link_source" ]]; then
+          next_args+=(--link-source "$link_source")
+        fi
+        exec "$0" "${next_args[@]}"
+        ;;
+    esac
+  fi
+fi

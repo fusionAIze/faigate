@@ -9,6 +9,7 @@ env_file="$(faigate_env_file)"
 python_bin="$(faigate_python_bin)"
 mode="interactive"
 scenario_id=""
+interactive_choice="0"
 
 usage() {
   cat <<'EOF'
@@ -17,6 +18,7 @@ Usage:
   ./scripts/faigate-client-scenarios --text
   ./scripts/faigate-client-scenarios --json
   ./scripts/faigate-client-scenarios --scenario ID --apply
+  ./scripts/faigate-client-scenarios --interactive
 
 Review or apply named client scenario templates such as:
   opencode-eco
@@ -42,6 +44,11 @@ while [[ $# -gt 0 ]]; do
       ;;
     --apply)
       mode="apply"
+      shift
+      ;;
+    --interactive)
+      mode="interactive"
+      interactive_choice="1"
       shift
       ;;
     --help|-h)
@@ -97,6 +104,21 @@ else:
 PY
 }
 
+list_scenario_ids() {
+  FAIGATE_SCENARIO_CONFIG="$config_file" \
+    FAIGATE_SCENARIO_ENV="$env_file" \
+    "$python_bin" - <<'PY'
+from faigate.wizard import list_client_scenarios
+import os
+
+for item in list_client_scenarios(
+    env_file=os.environ["FAIGATE_SCENARIO_ENV"],
+    config_path=os.environ["FAIGATE_SCENARIO_CONFIG"],
+):
+    print(f"{item['id']}\t{item['title']}\t{item['budget_posture']}")
+PY
+}
+
 apply_scenario() {
   local scenario="$1"
   local write_mode="$2"
@@ -144,15 +166,35 @@ while true; do
   faigate_ui_header "fusionAIze Gate Client Scenarios" "Named templates for client-specific defaults"
   render_scenarios text
   echo ""
-  printf "  %bChoose scenario%b  %s\n" "$FAIGATE_UI_BOLD" "$FAIGATE_UI_RESET" "(enter one scenario ID, Enter cancels)"
+  scenario_entries=()
+  while IFS= read -r entry; do
+    [ -n "$entry" ] && scenario_entries+=("$entry")
+  done <<< "$(list_scenario_ids)"
+
+  printf "  %bChoose scenario%b  %s\n" "$FAIGATE_UI_BOLD" "$FAIGATE_UI_RESET" "(pick a number or enter one scenario ID)"
+  entry_index=1
+  for entry in "${scenario_entries[@]}"; do
+    scenario_key="${entry%%$'\t'*}"
+    entry_rest="${entry#*$'\t'}"
+    scenario_title="${entry_rest%%$'\t'*}"
+    scenario_budget="${entry##*$'\t'}"
+    printf "   %2d)  %-20s %s [%s]\n" "$entry_index" "$scenario_key" "$scenario_title" "$scenario_budget"
+    entry_index=$((entry_index + 1))
+  done
   printf "  q) Quit\n"
   printf "  c) Cancel\n"
-  printf "  ▸ Scenario ID: "
-  read -r scenario_id
-  case "$scenario_id" in
+  printf "  ▸ Selection: "
+  read -r scenario_selection
+  case "$scenario_selection" in
     q|Q) exit 0 ;;
     c|C|"") return 0 2>/dev/null || exit 0 ;;
   esac
+  if [[ "$scenario_selection" =~ ^[0-9]+$ ]] && (( scenario_selection >= 1 && scenario_selection <= ${#scenario_entries[@]} )); then
+    chosen_entry="${scenario_entries[$((scenario_selection - 1))]}"
+    scenario_id="${chosen_entry%%$'\t'*}"
+  else
+    scenario_id="$scenario_selection"
+  fi
   echo ""
   apply_scenario "$scenario_id" "dry"
   echo ""

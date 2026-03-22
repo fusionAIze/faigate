@@ -2,11 +2,14 @@
 set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/faigate-service-lib.sh"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/faigate-ui-lib.sh"
 
 python_bin="$(faigate_python_bin)"
 db_path="$(faigate_db_path)"
 view="overview"
 mode="text"
+target_name=""
+interactive_mode="0"
 
 usage() {
   cat <<'EOF'
@@ -16,6 +19,9 @@ Usage:
   ./scripts/faigate-dashboard --clients
   ./scripts/faigate-dashboard --activity
   ./scripts/faigate-dashboard --alerts
+  ./scripts/faigate-dashboard --provider NAME
+  ./scripts/faigate-dashboard --client NAME
+  ./scripts/faigate-dashboard --interactive
   ./scripts/faigate-dashboard --json
 
 Operator-facing performance dashboard for fusionAIze Gate.
@@ -26,6 +32,9 @@ Views:
   --clients    Client-level traffic, cost, and latency
   --activity   24h activity, recent daily trend, and operator actions
   --alerts     Alerts and decision support
+  --provider   One provider detail view
+  --client     One client detail view
+  --interactive Open an internal dashboard selector
   --json       Raw dashboard report as JSON
 EOF
 }
@@ -52,6 +61,20 @@ while [[ $# -gt 0 ]]; do
       view="alerts"
       shift
       ;;
+    --provider)
+      view="provider-detail"
+      target_name="${2:-}"
+      shift 2
+      ;;
+    --client)
+      view="client-detail"
+      target_name="${2:-}"
+      shift 2
+      ;;
+    --interactive)
+      interactive_mode="1"
+      shift
+      ;;
     --json)
       mode="json"
       shift
@@ -71,23 +94,15 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-health_payload=""
-stats_payload=""
-
-if payload="$(curl -fsS -m 2 "$(faigate_health_url)" 2>/dev/null)"; then
-  health_payload="$payload"
-fi
-
-if payload="$(curl -fsS -m 2 "$(faigate_stats_url)" 2>/dev/null)"; then
-  stats_payload="$payload"
-fi
-
-FAIGATE_DASHBOARD_DB="$db_path" \
-FAIGATE_DASHBOARD_VIEW="$view" \
-FAIGATE_DASHBOARD_MODE="$mode" \
-FAIGATE_DASHBOARD_HEALTH="$health_payload" \
-FAIGATE_DASHBOARD_STATS="$stats_payload" \
-"$python_bin" - <<'PY'
+build_report_json() {
+  local report_mode="${1:-json}"
+  FAIGATE_DASHBOARD_DB="$db_path" \
+  FAIGATE_DASHBOARD_VIEW="$view" \
+  FAIGATE_DASHBOARD_MODE="$report_mode" \
+  FAIGATE_DASHBOARD_TARGET="$target_name" \
+  FAIGATE_DASHBOARD_HEALTH="$health_payload" \
+  FAIGATE_DASHBOARD_STATS="$stats_payload" \
+  "$python_bin" - <<'PY'
 import json
 import os
 
@@ -108,5 +123,122 @@ report = build_dashboard_report(
 if os.environ["FAIGATE_DASHBOARD_MODE"] == "json":
     print(report_as_json(report))
 else:
-    print(render_dashboard_text(report, view=os.environ["FAIGATE_DASHBOARD_VIEW"]), end="")
+    print(
+        render_dashboard_text(
+            report,
+            view=os.environ["FAIGATE_DASHBOARD_VIEW"],
+            target=os.environ.get("FAIGATE_DASHBOARD_TARGET") or None,
+        ),
+        end="",
+    )
 PY
+}
+
+health_payload=""
+stats_payload=""
+
+if payload="$(curl -fsS -m 2 "$(faigate_health_url)" 2>/dev/null)"; then
+  health_payload="$payload"
+fi
+
+if payload="$(curl -fsS -m 2 "$(faigate_stats_url)" 2>/dev/null)"; then
+  stats_payload="$payload"
+fi
+
+if [[ "$interactive_mode" == "1" && "$mode" == "text" && -z "$target_name" ]]; then
+  while true; do
+    faigate_ui_header "fusionAIze Gate Dashboard" "Performance drilldowns for providers, clients, activity, and alerts"
+    build_report_json text
+    report_json="$(build_report_json json)"
+    echo ""
+    printf "    1)  Overview           Global confidence view\n"
+    printf "    2)  Providers          Summary table for provider traffic and spend\n"
+    printf "    3)  Clients            Summary table for client traffic and spend\n"
+    printf "    4)  Provider Detail    Pick one provider and open its detail view\n"
+    printf "    5)  Client Detail      Pick one client and open its detail view\n"
+    printf "    6)  Activity           24h activity and daily trend\n"
+    printf "    7)  Alerts             Alerts and decision support\n"
+    printf "    8)  Raw JSON           Full dashboard report\n"
+    printf "\n"
+    printf "    c)  Cancel\n"
+    printf "    q)  Quit\n\n"
+    printf "  ▸ Choice: "
+    read -r dashboard_choice
+    case "$dashboard_choice" in
+      1) exec "$0" --overview ;;
+      2) exec "$0" --providers ;;
+      3) exec "$0" --clients ;;
+      4)
+        selection="$(
+          FAIGATE_DASHBOARD_REPORT="$report_json" "$python_bin" - <<'PY'
+import json
+import os
+
+report = json.loads(os.environ["FAIGATE_DASHBOARD_REPORT"])
+for index, row in enumerate(report.get("providers") or [], start=1):
+    print(f"{index}\t{row.get('provider') or 'unknown'}")
+PY
+        )"
+        echo ""
+        echo "  Provider detail"
+        while IFS= read -r entry; do
+          [ -z "$entry" ] && continue
+          index="${entry%%$'\t'*}"
+          name="${entry#*$'\t'}"
+          printf "   %2d)  %s\n" "$index" "$name"
+        done <<< "$selection"
+        printf "\n    c)  Cancel\n"
+        printf "    q)  Quit\n\n"
+        printf "  ▸ Selection: "
+        read -r provider_choice
+        case "$provider_choice" in
+          q|Q) exit 0 ;;
+          c|C|"") continue ;;
+        esac
+        chosen_provider="$(printf '%s\n' "$selection" | awk -F '\t' -v target="$provider_choice" '$1 == target || $2 == target {print $2; exit}')"
+        [ -n "$chosen_provider" ] || { faigate_ui_warn "Invalid selection."; faigate_ui_pause; continue; }
+        exec "$0" --provider "$chosen_provider"
+        ;;
+      5)
+        selection="$(
+          FAIGATE_DASHBOARD_REPORT="$report_json" "$python_bin" - <<'PY'
+import json
+import os
+
+report = json.loads(os.environ["FAIGATE_DASHBOARD_REPORT"])
+for index, row in enumerate(report.get("clients") or [], start=1):
+    name = row.get("client_tag") or row.get("client_profile") or "generic"
+    print(f"{index}\t{name}")
+PY
+        )"
+        echo ""
+        echo "  Client detail"
+        while IFS= read -r entry; do
+          [ -z "$entry" ] && continue
+          index="${entry%%$'\t'*}"
+          name="${entry#*$'\t'}"
+          printf "   %2d)  %s\n" "$index" "$name"
+        done <<< "$selection"
+        printf "\n    c)  Cancel\n"
+        printf "    q)  Quit\n\n"
+        printf "  ▸ Selection: "
+        read -r client_choice
+        case "$client_choice" in
+          q|Q) exit 0 ;;
+          c|C|"") continue ;;
+        esac
+        chosen_client="$(printf '%s\n' "$selection" | awk -F '\t' -v target="$client_choice" '$1 == target || $2 == target {print $2; exit}')"
+        [ -n "$chosen_client" ] || { faigate_ui_warn "Invalid selection."; faigate_ui_pause; continue; }
+        exec "$0" --client "$chosen_client"
+        ;;
+      6) exec "$0" --activity ;;
+      7) exec "$0" --alerts ;;
+      8) exec "$0" --json ;;
+      c|C|"") exit 0 ;;
+      q|Q) exit 0 ;;
+      *) faigate_ui_warn "Invalid selection."; faigate_ui_pause ;;
+    esac
+  done
+fi
+
+build_report_json "$mode"

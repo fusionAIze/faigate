@@ -567,6 +567,58 @@ fallback_chain: [deepseek-chat]
     assert "header: X-faigate-Client: opencode" in result.stdout
 
 
+def test_faigate_client_integrations_interactive_drilldown(tmp_path: Path):
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(
+        """
+server:
+  host: "127.0.0.1"
+  port: 8090
+  log_level: "info"
+providers:
+  deepseek-chat:
+    backend: openai-compat
+    api_key: "${DEEPSEEK_API_KEY}"
+    base_url: "https://api.deepseek.com/v1"
+    model: "deepseek-chat"
+    tier: default
+client_profiles:
+  enabled: true
+  default: generic
+  presets: [openclaw, n8n, cli]
+  profiles:
+    generic: {}
+    openclaw: {}
+    n8n: {}
+    cli: {}
+    opencode: {}
+fallback_chain: [deepseek-chat]
+""".strip(),
+        encoding="utf-8",
+    )
+    env_file = tmp_path / ".env"
+    env_file.write_text("DEEPSEEK_API_KEY=test-key\n", encoding="utf-8")
+
+    env = os.environ.copy()
+    env["FAIGATE_CONFIG_FILE"] = str(config_file)
+    env["FAIGATE_ENV_FILE"] = str(env_file)
+    env["FAIGATE_PYTHON"] = sys.executable
+
+    result = subprocess.run(
+        ["bash", "scripts/faigate-client-integrations", "--interactive"],
+        cwd=REPO_ROOT,
+        env=env,
+        input="1\n",
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert "Open client drilldown" in result.stdout
+    assert "1)  opencode" in result.stdout
+    assert "Client drilldown" in result.stdout
+
+
 def test_faigate_config_wizard_text_candidates_are_compact(tmp_path: Path):
     config_file = tmp_path / "config.yaml"
     config_file.write_text(
@@ -1385,6 +1437,137 @@ def test_faigate_client_scenarios_text_lists_opencode_templates(tmp_path: Path):
     assert "Client scenarios" in result.stdout
     assert "opencode / quality" in result.stdout
     assert "ready now:" in result.stdout
+    assert "budget / free: kilocode (free coding coverage)" in result.stdout
+    assert "family note: Anthropic is currently represented by one quality lane." in result.stdout
+    assert "family coverage: Anthropic: quality lane active" in result.stdout
+
+
+def test_faigate_provider_discovery_interactive_opens_provider_detail(tmp_path: Path):
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(
+        """
+server:
+  host: "127.0.0.1"
+  port: 8090
+providers:
+  deepseek-chat:
+    backend: openai-compat
+    api_key: "${DEEPSEEK_API_KEY}"
+    base_url: "https://api.deepseek.com/v1"
+    model: "deepseek-chat"
+    tier: default
+  openrouter-fallback:
+    backend: openai-compat
+    api_key: "${OPENROUTER_API_KEY}"
+    base_url: "https://openrouter.ai/api/v1"
+    model: "openrouter/auto"
+    tier: fallback
+""".strip(),
+        encoding="utf-8",
+    )
+    env = os.environ.copy()
+    env["FAIGATE_CONFIG_FILE"] = str(config_file)
+    env["FAIGATE_PYTHON"] = sys.executable
+    env["PYTHONPATH"] = str(REPO_ROOT)
+
+    result = subprocess.run(
+        ["bash", "scripts/faigate-provider-discovery", "--interactive"],
+        cwd=REPO_ROOT,
+        env=env,
+        input="1\n1\n",
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert "Discovery filters" in result.stdout
+    assert "Open provider detail" in result.stdout
+    assert "official source:" in result.stdout
+    assert "deepseek-chat" in result.stdout
+
+
+def test_faigate_dashboard_interactive_opens_provider_detail(tmp_path: Path):
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(
+        """
+server:
+  host: "127.0.0.1"
+  port: 8090
+providers: {}
+""".strip(),
+        encoding="utf-8",
+    )
+    fake_bin = _write_fake_curl(
+        tmp_path,
+        {
+            "/health": json.dumps(
+                {
+                    "summary": {"providers_total": 1, "providers_unhealthy": 0},
+                    "providers": {"deepseek-chat": {"healthy": True, "tier": "default"}},
+                }
+            ),
+            "/api/stats": json.dumps(
+                {
+                    "totals": {
+                        "total_requests": 42,
+                        "total_failures": 1,
+                        "avg_latency_ms": 850,
+                        "total_prompt_tokens": 12000,
+                        "total_compl_tokens": 4000,
+                        "total_cost_usd": 0.42,
+                    },
+                    "providers": [
+                        {
+                            "provider": "deepseek-chat",
+                            "requests": 42,
+                            "failures": 1,
+                            "avg_latency_ms": 850,
+                            "cost_usd": 0.42,
+                            "total_tokens": 16000,
+                            "prompt_tokens": 12000,
+                            "completion_tokens": 4000,
+                        }
+                    ],
+                    "clients": [
+                        {
+                            "client_tag": "opencode",
+                            "client_profile": "opencode",
+                            "requests": 42,
+                            "success_pct": 97.6,
+                            "avg_latency_ms": 850,
+                            "cost_usd": 0.42,
+                            "total_tokens": 16000,
+                            "providers": "deepseek-chat",
+                        }
+                    ],
+                    "routing": [],
+                    "client_totals": [],
+                    "hourly": [],
+                    "daily": [],
+                    "operator_actions": [],
+                }
+            ),
+        },
+    )
+    env = os.environ.copy()
+    env["FAIGATE_CONFIG_FILE"] = str(config_file)
+    env["FAIGATE_PYTHON"] = sys.executable
+    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+    env["PYTHONPATH"] = str(REPO_ROOT)
+
+    result = subprocess.run(
+        ["bash", "scripts/faigate-dashboard", "--interactive"],
+        cwd=REPO_ROOT,
+        env=env,
+        input="4\n1\n",
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert "Provider Detail" in result.stdout
+    assert "Provider detail: deepseek-chat" in result.stdout
+    assert "Status            live-healthy" in result.stdout
 
 
 def test_faigate_provider_setup_known_text_lists_curated_sources(tmp_path: Path):

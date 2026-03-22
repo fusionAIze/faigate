@@ -10,11 +10,12 @@ mode="text"
 client_name=""
 include_matrix="0"
 recommended_only="0"
+interactive_mode="0"
 
 usage() {
   cat <<'EOF'
 Usage:
-  ./scripts/faigate-client-integrations [--json|--text] [--client NAME] [--matrix] [--recommended]
+  ./scripts/faigate-client-integrations [--json|--text] [--client NAME] [--matrix] [--recommended] [--interactive]
 
 Show client quickstarts and the current client-profile matrix from the active
 fusionAIze Gate config.
@@ -43,6 +44,10 @@ while [[ $# -gt 0 ]]; do
       recommended_only="1"
       shift
       ;;
+    --interactive)
+      interactive_mode="1"
+      shift
+      ;;
     --help|-h)
       usage
       exit 0
@@ -54,12 +59,51 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+client_entries=()
+if [[ "$interactive_mode" == "1" && -z "$client_name" && "$mode" == "text" ]]; then
+  client_entries_output="$(
+    FAIGATE_INTEGRATION_CONFIG="$config_file" \
+    FAIGATE_INTEGRATION_ENV="$env_file" \
+    "$python_bin" - <<'PY'
+from faigate.onboarding import build_onboarding_report
+import os
+
+report = build_onboarding_report(
+    config_path=os.environ["FAIGATE_INTEGRATION_CONFIG"],
+    env_file=os.environ["FAIGATE_INTEGRATION_ENV"],
+)
+
+priority = dict(
+    [
+        ("opencode", 0),
+        ("openclaw", 1),
+        ("n8n", 2),
+        ("cli", 3),
+    ]
+)
+
+def sort_key(item):
+    name, data = item
+    recommended = 0 if data.get("recommended") else 1
+    return (recommended, priority.get(name, 99), name)
+
+for name, data in sorted(report["integrations"].items(), key=sort_key):
+    readiness = "recommended" if data.get("recommended") else "available"
+    print(f"{name}\t{readiness}")
+PY
+  )"
+  while IFS= read -r entry; do
+    [ -n "$entry" ] && client_entries+=("$entry")
+  done <<< "$client_entries_output"
+fi
+
 FAIGATE_INTEGRATION_CONFIG="$config_file" \
 FAIGATE_INTEGRATION_ENV="$env_file" \
 FAIGATE_INTEGRATION_MODE="$mode" \
 FAIGATE_INTEGRATION_CLIENT="$client_name" \
 FAIGATE_INTEGRATION_MATRIX="$include_matrix" \
 FAIGATE_INTEGRATION_RECOMMENDED="$recommended_only" \
+FAIGATE_INTEGRATION_INTERACTIVE="$interactive_mode" \
 "$python_bin" - <<'PY'
 import json
 import os
@@ -145,7 +189,10 @@ else:
         print("Recommended clients now")
         if best_next:
             print(f"  Best next step: {best_next}")
-            print(f"  Drill in with --client {best_next} for copyable setup details.")
+            if os.environ.get("FAIGATE_INTEGRATION_INTERACTIVE") == "1":
+                print("  Use the drilldown selector below for one client at a time.")
+            else:
+                print(f"  Drill in with --client {best_next} for copyable setup details.")
         for name in recommended_names:
             data = all_integrations[name]
             print(f"- {name}")
@@ -159,5 +206,43 @@ else:
             print("")
             print("More available")
             print("  " + ", ".join(remaining_names))
-            print("  Use --client NAME for a detailed drilldown.")
+            if os.environ.get("FAIGATE_INTEGRATION_INTERACTIVE") == "1":
+                print("  Pick one below for a detailed drilldown inside Gate.")
+            else:
+                print("  Use --client NAME for a detailed drilldown.")
 PY
+
+if [[ "$interactive_mode" == "1" && -z "$client_name" && "$mode" == "text" && ${#client_entries[@]} -gt 0 ]]; then
+  echo ""
+  echo "  Open client drilldown"
+  entry_index=1
+  for entry in "${client_entries[@]}"; do
+    client_label="${entry%%$'\t'*}"
+    readiness_label="${entry#*$'\t'}"
+    printf "   %2d)  %-16s %s\n" "$entry_index" "$client_label" "$readiness_label"
+    entry_index=$((entry_index + 1))
+  done
+  echo ""
+  echo "   c)  Cancel"
+  echo "   q)  Quit"
+  echo ""
+  printf "  ▸ Selection: "
+  read -r selection
+  case "$selection" in
+    q|Q)
+      exit 0
+      ;;
+    c|C|"")
+      exit 0
+      ;;
+    *)
+      if [[ "$selection" =~ ^[0-9]+$ ]] && (( selection >= 1 && selection <= ${#client_entries[@]} )); then
+        chosen_entry="${client_entries[$((selection - 1))]}"
+        chosen_client="${chosen_entry%%$'\t'*}"
+        exec "$0" --client "$chosen_client"
+      fi
+      echo "Invalid selection." >&2
+      exit 2
+      ;;
+  esac
+fi
