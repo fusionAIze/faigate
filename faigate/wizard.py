@@ -10,6 +10,7 @@ from typing import Any
 import yaml
 from dotenv import dotenv_values
 
+from .lane_registry import get_canonical_model_routes, get_provider_lane_binding
 from .provider_catalog import get_provider_catalog
 
 ProviderFactory = dict[str, Any]
@@ -532,6 +533,7 @@ def _candidate_row(
     factory = _PROVIDER_FACTORIES[name]
     provider = factory["provider"]
     catalog_entry = catalog.get(name, {})
+    lane = dict(provider.get("lane") or get_provider_lane_binding(name))
     ready_now = bool(env_values.get(factory["env"]))
     already_configured = name in existing
     recommended_now = name in preferred
@@ -563,6 +565,11 @@ def _candidate_row(
         ),
         "discovery_env_var": ((catalog_entry.get("discovery") or {}).get("operator_env_var", "")),
         "notes": catalog_entry.get("notes", ""),
+        "canonical_model": lane.get("canonical_model", ""),
+        "lane_family": lane.get("family", ""),
+        "lane_name": lane.get("name", ""),
+        "route_type": lane.get("route_type", ""),
+        "lane_cluster": lane.get("cluster", ""),
     }
 
 
@@ -668,6 +675,13 @@ def render_candidate_cards_text(
                 "  "
                 + f"model: {row['model']} | tier: {row['tier']} | source: {row['provider_type']}"
             )
+            if row["canonical_model"]:
+                lines.append(
+                    "  "
+                    + "lane: "
+                    + f"{row['canonical_model']} | route: {row['route_type'] or 'n/a'}"
+                    + (f" | cluster: {row['lane_cluster']}" if row["lane_cluster"] else "")
+                )
             if row["notes"]:
                 lines.append("  " + f"why: {row['notes']}")
         lines.append("")
@@ -690,6 +704,13 @@ def render_candidate_cards_text(
                 "  "
                 + f"model: {row['model']} | tier: {row['tier']} | source: {row['provider_type']}"
             )
+            if row["canonical_model"]:
+                lines.append(
+                    "  "
+                    + "lane: "
+                    + f"{row['canonical_model']} | route: {row['route_type'] or 'n/a'}"
+                    + (f" | cluster: {row['lane_cluster']}" if row["lane_cluster"] else "")
+                )
             if row["notes"]:
                 lines.append("  " + f"why: {row['notes']}")
         lines.append("")
@@ -701,6 +722,13 @@ def render_candidate_cards_text(
             availability = "ready now" if row["ready_now"] else f"needs {row['env']}"
             lines.append(f"- {row['provider']}  ({availability})")
             lines.append("  " + f"model: {row['model']} | tier: {row['tier']}")
+            if row["canonical_model"]:
+                lines.append(
+                    "  "
+                    + "lane: "
+                    + f"{row['canonical_model']} | route: {row['route_type'] or 'n/a'}"
+                    + (f" | cluster: {row['lane_cluster']}" if row["lane_cluster"] else "")
+                )
             if row["notes"]:
                 lines.append("  " + f"why: {row['notes']}")
         lines.append("")
@@ -842,7 +870,7 @@ def apply_provider_setup(
         if provider_name not in _PROVIDER_FACTORIES:
             raise ValueError(f"Unsupported known provider '{provider_name}'")
         factory = _PROVIDER_FACTORIES[provider_name]
-        providers[provider_name] = _clone(factory["provider"])
+        providers[provider_name] = _provider_payload_with_lane(provider_name)
         added_providers.append(provider_name)
         key_value = str(provider_item.get("env_value", "") or "")
         if key_value:
@@ -866,6 +894,26 @@ def apply_provider_setup(
             "capabilities": {
                 "cost_tier": str(custom_provider.get("cost_tier", "custom") or "custom"),
                 "latency_tier": str(custom_provider.get("latency_tier", "balanced") or "balanced"),
+            },
+            "lane": {
+                "family": str(custom_provider.get("family", "custom") or "custom"),
+                "name": str(custom_provider.get("lane_name", "custom") or "custom"),
+                "canonical_model": str(custom_provider.get("canonical_model", name) or name),
+                "route_type": "direct",
+                "cluster": str(custom_provider.get("cluster", "custom") or "custom"),
+                "benchmark_cluster": str(
+                    custom_provider.get("benchmark_cluster", "custom") or "custom"
+                ),
+                "quality_tier": str(custom_provider.get("quality_tier", "custom") or "custom"),
+                "reasoning_strength": str(
+                    custom_provider.get("reasoning_strength", "custom") or "custom"
+                ),
+                "context_strength": str(
+                    custom_provider.get("context_strength", "custom") or "custom"
+                ),
+                "tool_strength": str(custom_provider.get("tool_strength", "custom") or "custom"),
+                "same_model_group": str(custom_provider.get("same_model_group", name) or name),
+                "degrade_to": list(custom_provider.get("degrade_to", []) or []),
             },
         }
         providers[name] = provider_payload
@@ -891,6 +939,22 @@ def apply_provider_setup(
                 "network_zone": "local",
                 "cost_tier": "local",
                 "latency_tier": "local",
+            },
+            "lane": {
+                "family": "local",
+                "name": "local",
+                "canonical_model": str(local_worker.get("canonical_model", name) or name),
+                "route_type": "local",
+                "cluster": "local-worker",
+                "benchmark_cluster": "local-worker",
+                "quality_tier": "local",
+                "reasoning_strength": str(
+                    local_worker.get("reasoning_strength", "custom") or "custom"
+                ),
+                "context_strength": str(local_worker.get("context_strength", "custom") or "custom"),
+                "tool_strength": str(local_worker.get("tool_strength", "custom") or "custom"),
+                "same_model_group": str(local_worker.get("same_model_group", name) or name),
+                "degrade_to": list(local_worker.get("degrade_to", []) or []),
             },
         }
         api_env = str(local_worker.get("api_env", "") or "")
@@ -1137,6 +1201,25 @@ def _scenario_provider_role(provider_name: str) -> str:
     return str(taxonomy.get("role") or "")
 
 
+def _provider_route_registry_summary(provider_name: str) -> dict[str, Any]:
+    lane = get_provider_lane_binding(provider_name)
+    canonical_model = str(lane.get("canonical_model") or "")
+    if not canonical_model:
+        return {"canonical_model": "", "known_routes": [], "mirror_providers": []}
+    routes = get_canonical_model_routes(canonical_model)
+    mirror_providers = [
+        str(route.get("provider_name") or "")
+        for route in routes
+        if str(route.get("provider_name") or "")
+        and str(route.get("provider_name") or "") != provider_name
+    ]
+    return {
+        "canonical_model": canonical_model,
+        "known_routes": routes,
+        "mirror_providers": mirror_providers,
+    }
+
+
 def _scenario_lane_descriptions(provider_names: list[str]) -> list[tuple[str, list[str]]]:
     detailed_lanes: list[tuple[str, list[str]]] = []
     for lane_name, lane_members in _scenario_provider_lanes(provider_names):
@@ -1149,6 +1232,36 @@ def _scenario_lane_descriptions(provider_names: list[str]) -> list[tuple[str, li
                 enriched.append(provider_name)
         detailed_lanes.append((lane_name, enriched))
     return detailed_lanes
+
+
+def _scenario_route_mirrors(provider_names: list[str]) -> list[str]:
+    summaries: list[str] = []
+    seen: set[str] = set()
+    for provider_name in provider_names:
+        route_info = _provider_route_registry_summary(provider_name)
+        canonical_model = route_info["canonical_model"]
+        mirror_providers = route_info["mirror_providers"]
+        if not canonical_model or not mirror_providers or canonical_model in seen:
+            continue
+        seen.add(canonical_model)
+        previews = ", ".join(mirror_providers[:3])
+        suffix = "" if len(mirror_providers) <= 3 else f" +{len(mirror_providers) - 3} more"
+        summaries.append(f"{canonical_model}: {previews}{suffix}")
+    return summaries
+
+
+def _scenario_degrade_chains(provider_names: list[str]) -> list[str]:
+    lines: list[str] = []
+    seen: set[str] = set()
+    for provider_name in provider_names:
+        lane = get_provider_lane_binding(provider_name)
+        canonical_model = str(lane.get("canonical_model") or "")
+        degrade_to = [str(item) for item in (lane.get("degrade_to") or []) if str(item)]
+        if not canonical_model or not degrade_to or canonical_model in seen:
+            continue
+        seen.add(canonical_model)
+        lines.append(f"{canonical_model} -> " + " -> ".join(degrade_to[:3]))
+    return lines
 
 
 def _scenario_family_coverage(provider_names: list[str]) -> list[str]:
@@ -1237,6 +1350,8 @@ def list_client_scenarios(
                 "family_coverage": _scenario_family_coverage(preferred),
                 "deemphasized_providers": _scenario_deemphasized_providers(preferred),
                 "family_hint": _scenario_family_hint(preferred),
+                "route_mirrors": _scenario_route_mirrors(preferred),
+                "degrade_chains": _scenario_degrade_chains(preferred),
             }
         )
     return scenarios
@@ -1263,6 +1378,12 @@ def render_client_scenarios_text(
         if item["lane_descriptions"]:
             for lane_name, lane_members in item["lane_descriptions"]:
                 lines.append("  " + f"{lane_name}: " + ", ".join(lane_members))
+        if item.get("route_mirrors"):
+            for mirror_line in item["route_mirrors"]:
+                lines.append("  " + f"known route mirrors: {mirror_line}")
+        if item.get("degrade_chains"):
+            for degrade_line in item["degrade_chains"]:
+                lines.append("  " + f"degrade chain: {degrade_line}")
         if item["ready_providers"]:
             lines.append("  " + "ready now: " + ", ".join(item["ready_providers"]))
         elif item["recommended_providers"]:
@@ -1742,6 +1863,14 @@ def _available_shortcuts(available: list[str]) -> dict[str, dict[str, Any]]:
     return shortcuts
 
 
+def _provider_payload_with_lane(name: str) -> dict[str, Any]:
+    provider = _clone(_PROVIDER_FACTORIES[name]["provider"])
+    lane = get_provider_lane_binding(name)
+    if lane:
+        provider["lane"] = lane
+    return provider
+
+
 def _premium_targets(available: list[str]) -> list[str]:
     return [
         name
@@ -1980,7 +2109,7 @@ def build_initial_config(
         client=client,
         selected_providers=selected_providers,
     )
-    providers = {name: _clone(_PROVIDER_FACTORIES[name]["provider"]) for name in selected}
+    providers = {name: _provider_payload_with_lane(name) for name in selected}
     shortcuts = _available_shortcuts(selected)
     fallback_chain = _preferred_fallback_chain(selected, purpose=purpose)
 

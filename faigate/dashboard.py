@@ -120,6 +120,41 @@ def _client_highlights(client_totals: list[dict[str, Any]]) -> dict[str, dict[st
     }
 
 
+def _inventory_provider_map(inventory_payload: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
+    rows = (inventory_payload or {}).get("providers") or []
+    provider_map: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        name = str(row.get("name") or "").strip()
+        if not name:
+            continue
+        provider_map[name] = row if isinstance(row, dict) else {}
+    return provider_map
+
+
+def _enrich_provider_rows_with_lane(
+    rows: list[dict[str, Any]],
+    provider_map: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    enriched: list[dict[str, Any]] = []
+    for row in rows:
+        provider_name = str(row.get("provider") or "")
+        provider_inventory = dict(provider_map.get(provider_name) or {})
+        lane = dict(provider_inventory.get("lane") or {})
+        enriched.append(
+            {
+                **row,
+                "lane": lane,
+                "canonical_model": str(lane.get("canonical_model") or ""),
+                "lane_family": str(lane.get("family") or ""),
+                "lane_name": str(lane.get("name") or ""),
+                "route_type": str(lane.get("route_type") or ""),
+                "lane_cluster": str(lane.get("cluster") or ""),
+                "route_runtime_state": dict(provider_inventory.get("route_runtime_state") or {}),
+            }
+        )
+    return enriched
+
+
 def _recommended_scenario_for_client(client_profile: str, *, expensive: bool = False) -> str | None:
     mapping = {
         "opencode": "opencode-eco" if expensive else "opencode-balanced",
@@ -169,6 +204,7 @@ def build_dashboard_report(
     db_path: str,
     stats_payload: dict[str, Any] | None = None,
     health_payload: dict[str, Any] | None = None,
+    inventory_payload: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build one operator-facing dashboard report from live or local metrics."""
     stats = stats_payload or _stats_from_db(db_path)
@@ -177,7 +213,10 @@ def build_dashboard_report(
         source_mode = "empty"
 
     totals = stats.get("totals") or {}
-    providers = stats.get("providers") or []
+    inventory_provider_map = _inventory_provider_map(inventory_payload)
+    providers = _enrich_provider_rows_with_lane(
+        stats.get("providers") or [], inventory_provider_map
+    )
     routing = stats.get("routing") or []
     client_totals = stats.get("client_totals") or []
     client_highlights = stats.get("client_highlights") or _client_highlights(client_totals)
@@ -341,6 +380,14 @@ def build_dashboard_report(
                     + ", ".join(cheaper_healthy[:3])
                     + " before increasing spend on the current top-cost provider."
                 )
+        top_lane = str(top_provider_cost.get("canonical_model") or "")
+        top_route = str(top_provider_cost.get("route_type") or "")
+        if top_lane:
+            hints.append(
+                f"Top-cost lane right now: {top_lane}"
+                + (f" via {top_route}" if top_route else "")
+                + "."
+            )
 
     rate_limited = [
         item["provider"] for item in unhealthy_providers if item["category"] == "rate-limited"
@@ -399,6 +446,7 @@ def build_dashboard_report(
             "db_path": db_path,
             "live_health": bool(health_payload),
             "live_stats": bool(stats_payload),
+            "live_inventory": bool(inventory_payload),
         },
         "totals": totals,
         "health": health_payload or {},
@@ -522,6 +570,14 @@ def _render_providers(report: dict[str, Any]) -> str:
         lines.extend(
             [
                 f"- {provider} [{status}]",
+                (
+                    "  lane: "
+                    + row.get("canonical_model")
+                    + (f" | route: {row.get('route_type')}" if row.get("route_type") else "")
+                    + (f" | cluster: {row.get('lane_cluster')}" if row.get("lane_cluster") else "")
+                )
+                if row.get("canonical_model")
+                else "  lane: n/a",
                 f"  requests: {_safe_int(row.get('requests'))} | failures: {_safe_int(row.get('failures'))} | success: {_format_pct(100.0 - (_safe_int(row.get('failures')) * 100.0 / max(1, _safe_int(row.get('requests')))))}",
                 f"  cost: {_format_usd(_safe_float(row.get('cost_usd')))} | latency: {_format_latency_ms(_safe_float(row.get('avg_latency_ms')))} | tokens: {_format_tokens(_safe_int(row.get('total_tokens')))}",
             ]
@@ -663,7 +719,18 @@ def _render_provider_detail(report: dict[str, Any], provider_name: str) -> str:
         f"Tokens            {_format_tokens(_safe_int(row.get('total_tokens')))}",
         f"Prompt tokens     {_format_tokens(_safe_int(row.get('prompt_tokens')))}",
         f"Completion tokens {_format_tokens(_safe_int(row.get('completion_tokens')))}",
+        f"Canonical lane    {row.get('canonical_model') or 'n/a'}",
+        f"Route type        {row.get('route_type') or 'n/a'}",
+        f"Lane cluster      {row.get('lane_cluster') or 'n/a'}",
     ]
+    runtime_state = row.get("route_runtime_state") or {}
+    if runtime_state:
+        lines.extend(
+            [
+                f"Runtime penalty   {_safe_int(runtime_state.get('penalty'))}",
+                f"Last issue type   {runtime_state.get('last_issue_type') or 'n/a'}",
+            ]
+        )
     if provider in unhealthy:
         lines.append(f"Live issue        {unhealthy[provider]['detail']}")
     lines.extend(

@@ -332,3 +332,287 @@ metrics:
     assert ranking[0]["context_score"] >= 4
     assert ranking[0]["input_score"] >= 4
     assert ranking[0]["output_score"] >= 2
+
+
+@pytest.mark.asyncio
+async def test_quality_posture_prefers_same_lane_route_before_cluster_degrade(tmp_path):
+    cfg = load_config(
+        _write_config(
+            tmp_path,
+            """
+server:
+  host: "127.0.0.1"
+  port: 8090
+providers:
+  anthropic-direct:
+    backend: openai-compat
+    base_url: "https://api.example.com/v1"
+    api_key: "secret"
+    model: "claude-opus-4-6"
+    tier: mid
+    lane:
+      family: anthropic
+      name: quality
+      canonical_model: anthropic/opus-4.6
+      route_type: direct
+      cluster: elite-reasoning
+      benchmark_cluster: quality-coding
+      quality_tier: premium
+      reasoning_strength: high
+      same_model_group: anthropic/opus-4.6
+      degrade_to: ["anthropic/sonnet-4.6", "openai/gpt-4o"]
+  anthropic-marketplace:
+    backend: openai-compat
+    base_url: "https://router.example.com/v1"
+    api_key: "secret"
+    model: "claude-opus-4-6"
+    tier: fallback
+    lane:
+      family: anthropic
+      name: quality
+      canonical_model: anthropic/opus-4.6
+      route_type: aggregator
+      cluster: elite-reasoning
+      benchmark_cluster: quality-coding
+      quality_tier: premium
+      reasoning_strength: high
+      same_model_group: anthropic/opus-4.6
+      degrade_to: ["anthropic/sonnet-4.6", "openai/gpt-4o"]
+  openai-alt:
+    backend: openai-compat
+    base_url: "https://api.openai.example/v1"
+    api_key: "secret"
+    model: "gpt-4o"
+    tier: mid
+    lane:
+      family: openai
+      name: balanced
+      canonical_model: openai/gpt-4o
+      route_type: direct
+      cluster: quality-workhorse
+      benchmark_cluster: quality-coding
+      quality_tier: high
+      reasoning_strength: high
+      same_model_group: openai/gpt-4o
+      degrade_to: ["openai/gpt-4o-mini"]
+client_profiles:
+  enabled: true
+  default: generic
+  profiles:
+    generic:
+      routing_mode: premium
+      prefer_tiers: ["mid", "fallback"]
+routing_modes:
+  enabled: true
+  default: auto
+  modes:
+    premium:
+      select:
+        prefer_tiers: ["mid", "reasoning", "fallback"]
+static_rules:
+  enabled: false
+  rules: []
+heuristic_rules:
+  enabled: true
+  rules:
+    - name: quality-default
+      match:
+        fallthrough: true
+      route_to: anthropic-direct
+fallback_chain:
+  - openai-alt
+  - anthropic-marketplace
+metrics:
+  enabled: false
+""",
+        )
+    )
+    router = Router(cfg)
+
+    decision = await router.route(
+        [{"role": "user", "content": "Review this architecture decision in depth."}],
+        model_requested="auto",
+        client_profile="generic",
+        profile_hints=cfg.client_profiles["profiles"]["generic"],
+        provider_health={
+            "anthropic-direct": {"healthy": False, "last_error": "quota exhausted"},
+            "anthropic-marketplace": {"healthy": True, "avg_latency_ms": 600},
+            "openai-alt": {"healthy": True, "avg_latency_ms": 180},
+        },
+    )
+
+    assert decision.provider_name == "anthropic-marketplace"
+    assert decision.details["selection_path"] == "same-lane-route"
+    assert decision.details["canonical_model"] == "anthropic/opus-4.6"
+    ranking = decision.details["fallback_ranking"]
+    assert ranking[0]["provider"] == "anthropic-marketplace"
+    assert ranking[0]["same_model_route"] is True
+    assert ranking[0]["selection_path"] == "same-lane-route"
+
+
+@pytest.mark.asyncio
+async def test_eco_posture_prefers_budget_lane_over_premium_direct_provider(tmp_path):
+    cfg = load_config(
+        _write_config(
+            tmp_path,
+            """
+server:
+  host: "127.0.0.1"
+  port: 8090
+providers:
+  premium-direct:
+    backend: openai-compat
+    base_url: "https://premium.example.com/v1"
+    api_key: "secret"
+    model: "claude-opus-4-6"
+    tier: default
+    lane:
+      family: anthropic
+      name: quality
+      canonical_model: anthropic/opus-4.6
+      route_type: direct
+      cluster: elite-reasoning
+      benchmark_cluster: quality-coding
+      quality_tier: premium
+      reasoning_strength: high
+      same_model_group: anthropic/opus-4.6
+  budget-aggregator:
+    backend: openai-compat
+    base_url: "https://budget.example.com/v1"
+    api_key: "secret"
+    model: "glm-5-free"
+    tier: fallback
+    lane:
+      family: kilo
+      name: free
+      canonical_model: aggregator/kilo-glm5-free
+      route_type: aggregator
+      cluster: budget-general
+      benchmark_cluster: free-coding
+      quality_tier: free
+      reasoning_strength: mid
+      same_model_group: aggregator/kilo-glm5-free
+client_profiles:
+  enabled: true
+  default: generic
+  profiles:
+    generic:
+      routing_mode: eco
+      prefer_tiers: ["default", "fallback"]
+routing_modes:
+  enabled: true
+  default: auto
+  modes:
+    eco:
+      select:
+        prefer_tiers: ["default", "fallback"]
+fallback_chain:
+  - budget-aggregator
+metrics:
+  enabled: false
+""",
+        )
+    )
+    router = Router(cfg)
+
+    decision = await router.route(
+        [{"role": "user", "content": "Refactor this script but keep the answer compact."}],
+        model_requested="auto",
+        client_profile="generic",
+        profile_hints=cfg.client_profiles["profiles"]["generic"],
+        provider_health={
+            "premium-direct": {"healthy": True, "avg_latency_ms": 140},
+            "budget-aggregator": {"healthy": True, "avg_latency_ms": 220},
+        },
+    )
+
+    assert decision.provider_name == "budget-aggregator"
+    ranking = decision.details["candidate_ranking"]
+    assert ranking[0]["provider"] == "budget-aggregator"
+    assert ranking[0]["routing_posture"] == "eco"
+    assert ranking[0]["route_type"] == "aggregator"
+    assert ranking[0]["canonical_model"] == "aggregator/kilo-glm5-free"
+    assert ranking[0]["benchmark_score"] > ranking[1]["benchmark_score"]
+
+
+@pytest.mark.asyncio
+async def test_runtime_route_pressure_penalty_demotes_hot_provider(tmp_path):
+    cfg = load_config(
+        _write_config(
+            tmp_path,
+            """
+server:
+  host: "127.0.0.1"
+  port: 8090
+providers:
+  direct-workhorse:
+    backend: openai-compat
+    base_url: "https://direct.example.com/v1"
+    api_key: "secret"
+    model: "workhorse"
+    tier: default
+    lane:
+      family: custom
+      name: balanced
+      canonical_model: custom/workhorse
+      route_type: direct
+      cluster: balanced-workhorse
+      benchmark_cluster: balanced-coding
+      quality_tier: mid
+      reasoning_strength: mid
+      same_model_group: custom/workhorse
+  stable-alt:
+    backend: openai-compat
+    base_url: "https://alt.example.com/v1"
+    api_key: "secret"
+    model: "workhorse-alt"
+    tier: default
+    lane:
+      family: custom
+      name: balanced
+      canonical_model: custom/workhorse-alt
+      route_type: direct
+      cluster: balanced-workhorse
+      benchmark_cluster: balanced-coding
+      quality_tier: mid
+      reasoning_strength: mid
+      same_model_group: custom/workhorse-alt
+client_profiles:
+  enabled: true
+  default: generic
+  profiles:
+    generic:
+      prefer_tiers: ["default"]
+fallback_chain:
+  - stable-alt
+metrics:
+  enabled: false
+""",
+        )
+    )
+    router = Router(cfg)
+
+    decision = await router.route(
+        [{"role": "user", "content": "Pick the steadier route."}],
+        model_requested="auto",
+        client_profile="generic",
+        profile_hints=cfg.client_profiles["profiles"]["generic"],
+        provider_health={
+            "direct-workhorse": {"healthy": True, "avg_latency_ms": 90, "consecutive_failures": 0},
+            "stable-alt": {"healthy": True, "avg_latency_ms": 160, "consecutive_failures": 0},
+        },
+        provider_runtime_state={
+            "direct-workhorse": {
+                "penalty": 28,
+                "last_issue_type": "rate-limited",
+                "last_issue_detail": "429 too many requests",
+            },
+            "stable-alt": {"penalty": 0},
+        },
+    )
+
+    assert decision.provider_name == "stable-alt"
+    ranking = decision.details["candidate_ranking"]
+    assert ranking[0]["provider"] == "stable-alt"
+    assert ranking[1]["provider"] == "direct-workhorse"
+    assert ranking[1]["adaptation_penalty"] == 28

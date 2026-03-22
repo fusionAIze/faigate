@@ -104,6 +104,7 @@ class _ProviderStub:
         healthy: bool = True,
         capabilities: dict | None = None,
         image: dict | None = None,
+        lane: dict | None = None,
     ):
         self.name = name
         self.model = model
@@ -115,6 +116,7 @@ class _ProviderStub:
         self.limits = {}
         self.cache = {"mode": "none", "read_discount": False}
         self.image = image or {}
+        self.lane = lane or {}
         self.health = types.SimpleNamespace(
             healthy=healthy,
             last_check=0.0,
@@ -150,6 +152,15 @@ providers:
     api_key: "secret"
     model: "cloud-chat"
     tier: default
+    lane:
+      family: custom
+      name: balanced
+      canonical_model: custom/cloud-chat
+      route_type: direct
+      cluster: balanced-workhorse
+      benchmark_cluster: balanced-coding
+      quality_tier: mid
+      reasoning_strength: mid
   local-worker:
     contract: local-worker
     backend: openai-compat
@@ -157,6 +168,15 @@ providers:
     api_key: "local"
     model: "llama3"
     tier: local
+    lane:
+      family: local
+      name: workhorse
+      canonical_model: local/llama3
+      route_type: local
+      cluster: balanced-workhorse
+      benchmark_cluster: local-general
+      quality_tier: mid
+      reasoning_strength: mid
   image-cloud:
     contract: image-provider
     backend: openai-compat
@@ -246,6 +266,13 @@ metrics:
                 name="cloud-default",
                 model="cloud-chat",
                 tier="default",
+                lane={
+                    "family": "custom",
+                    "name": "balanced",
+                    "canonical_model": "custom/cloud-chat",
+                    "route_type": "direct",
+                    "cluster": "balanced-workhorse",
+                },
             ),
             "local-worker": _ProviderStub(
                 name="local-worker",
@@ -253,6 +280,13 @@ metrics:
                 contract="local-worker",
                 tier="local",
                 capabilities={"local": True, "cloud": False, "network_zone": "local"},
+                lane={
+                    "family": "local",
+                    "name": "workhorse",
+                    "canonical_model": "local/llama3",
+                    "route_type": "local",
+                    "cluster": "balanced-workhorse",
+                },
             ),
             "image-cloud": _ProviderStub(
                 name="image-cloud",
@@ -321,6 +355,8 @@ async def test_preview_resolves_explicit_routing_mode(preview_config):
     assert profile_name == "generic"
     assert client_tag == "generic"
     assert decision.provider_name == "cloud-default"
+    assert decision.details["canonical_model"] == "custom/cloud-chat"
+    assert isinstance(decision.details["known_routes"], list)
     assert payload["model"] == "auto"
     assert attempt_order[0] == "cloud-default"
 
@@ -476,6 +512,8 @@ class TestRoutePreview:
         assert client_tag == "generic"
         assert decision.layer == "direct"
         assert decision.provider_name == "cloud-default"
+        assert decision.details["canonical_model"] == "custom/cloud-chat"
+        assert decision.details["route_type"] == "direct"
         assert attempt_order == ["cloud-default"]
         assert hook_state.applied_hooks == []
         assert effective_body["model"] == "cloud-default"

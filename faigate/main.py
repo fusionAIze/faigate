@@ -24,6 +24,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from starlette.datastructures import UploadFile
 
 from . import __version__
+from .adaptation import AdaptiveRouteState
 from .config import Config, load_config
 from .hooks import AppliedHooks, HookExecutionError, RequestHookContext, apply_request_hooks
 from .metrics import MetricsStore, calc_cost
@@ -45,6 +46,7 @@ _providers: dict[str, ProviderBackend] = {}
 _router: Router
 _metrics: MetricsStore
 _update_checker: UpdateChecker
+_adaptive_state: AdaptiveRouteState = AdaptiveRouteState()
 
 
 class PayloadTooLargeError(ValueError):
@@ -386,6 +388,41 @@ def _build_attempt_order(
     return attempt_order
 
 
+def _provider_runtime_state_snapshot() -> dict[str, dict[str, Any]]:
+    return _adaptive_state.snapshot() if "_adaptive_state" in globals() else {}
+
+
+def _decision_metric_fields(decision: RoutingDecision) -> dict[str, Any]:
+    details = dict(decision.details or {})
+    return {
+        "canonical_model": str(details.get("canonical_model") or ""),
+        "route_type": str(details.get("route_type") or ""),
+        "lane_cluster": str(details.get("lane_cluster") or ""),
+        "selection_path": str(details.get("selection_path") or ""),
+        "decision_details": details,
+    }
+
+
+def _decorate_direct_decision(decision: RoutingDecision) -> RoutingDecision:
+    provider = _providers.get(decision.provider_name)
+    if not provider:
+        return decision
+    lane = dict(getattr(provider, "lane", {}) or {})
+    details = dict(decision.details or {})
+    if lane:
+        details.setdefault("selected_lane", lane)
+        details.setdefault("canonical_model", str(lane.get("canonical_model") or ""))
+        details.setdefault("lane_family", str(lane.get("family") or ""))
+        details.setdefault("lane_name", str(lane.get("name") or ""))
+        details.setdefault("route_type", str(lane.get("route_type") or ""))
+        details.setdefault("lane_cluster", str(lane.get("cluster") or ""))
+    details.setdefault(
+        "route_runtime_state", _provider_runtime_state_snapshot().get(provider.name, {})
+    )
+    decision.details = details
+    return decision
+
+
 def _serialize_provider(name: str) -> dict[str, Any] | None:
     """Return one provider snapshot for API responses."""
     provider = _providers.get(name)
@@ -433,6 +470,8 @@ def _build_provider_inventory(
                 "limits": provider.limits,
                 "cache": provider.cache,
                 "image": getattr(provider, "image", {}),
+                "lane": getattr(provider, "lane", {}),
+                "route_runtime_state": _provider_runtime_state_snapshot().get(name, {}),
                 "last_error": getattr(provider.health, "last_error", ""),
                 "avg_latency_ms": getattr(provider.health, "avg_latency_ms", 0.0),
             }
@@ -673,16 +712,18 @@ async def _resolve_route_preview(
         body = {**body, "model": direct_provider_name}
 
     if direct_provider_name:
-        decision = RoutingDecision(
-            provider_name=direct_provider_name,
-            layer="direct",
-            rule_name="explicit-shortcut" if resolved_shortcut else "explicit-model",
-            confidence=1.0,
-            reason=(
-                f"Model shortcut '{resolved_shortcut}' resolved to provider: {direct_provider_name}"
-                if resolved_shortcut
-                else f"Directly requested provider: {direct_provider_name}"
-            ),
+        decision = _decorate_direct_decision(
+            RoutingDecision(
+                provider_name=direct_provider_name,
+                layer="direct",
+                rule_name="explicit-shortcut" if resolved_shortcut else "explicit-model",
+                confidence=1.0,
+                reason=(
+                    f"Model shortcut '{resolved_shortcut}' resolved to provider: {direct_provider_name}"
+                    if resolved_shortcut
+                    else f"Directly requested provider: {direct_provider_name}"
+                ),
+            )
         )
     else:
         health_map = {name: p.health.to_dict() for name, p in _providers.items()}
@@ -697,6 +738,7 @@ async def _resolve_route_preview(
             applied_hooks=hook_state.applied_hooks,
             headers=_merge_routing_context_headers(headers, body),
             provider_health=health_map,
+            provider_runtime_state=_provider_runtime_state_snapshot(),
         )
 
     return (
@@ -926,18 +968,20 @@ async def _resolve_image_route_preview(
             raise ValueError(f"Unknown image provider '{direct_provider_name}'")
         if not provider.capabilities.get(capability):
             raise ValueError(f"Provider '{direct_provider_name}' does not support {capability}")
-        decision = RoutingDecision(
-            provider_name=direct_provider_name,
-            layer="direct",
-            rule_name=f"explicit-{capability}-model",
-            confidence=1.0,
-            reason=(
-                f"Model shortcut '{resolved_shortcut}' resolved to image provider:"
-                f" {direct_provider_name}"
-                if resolved_shortcut
-                else f"Directly requested image provider: {direct_provider_name}"
-            ),
-            details={"required_capability": capability},
+        decision = _decorate_direct_decision(
+            RoutingDecision(
+                provider_name=direct_provider_name,
+                layer="direct",
+                rule_name=f"explicit-{capability}-model",
+                confidence=1.0,
+                reason=(
+                    f"Model shortcut '{resolved_shortcut}' resolved to image provider:"
+                    f" {direct_provider_name}"
+                    if resolved_shortcut
+                    else f"Directly requested image provider: {direct_provider_name}"
+                ),
+                details={"required_capability": capability},
+            )
         )
     else:
         decision = _router.route_capability_request(
@@ -952,6 +996,7 @@ async def _resolve_image_route_preview(
             applied_hooks=hook_state.applied_hooks,
             headers=headers,
             provider_health={name: p.health.to_dict() for name, p in _providers.items()},
+            provider_runtime_state=_provider_runtime_state_snapshot(),
         )
         if not decision:
             raise ValueError(f"No provider with capability '{capability}' is available")
@@ -975,7 +1020,7 @@ async def _resolve_image_route_preview(
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup / shutdown lifecycle."""
-    global _config, _providers, _router, _metrics, _update_checker
+    global _config, _providers, _router, _metrics, _update_checker, _adaptive_state
 
     logging.basicConfig(
         level=logging.INFO,
@@ -995,6 +1040,7 @@ async def lifespan(app: FastAPI):
         logger.info("  ✓ %s → %s (%s)", name, pcfg["model"], pcfg.get("tier", "default"))
 
     _router = Router(_config)
+    _adaptive_state = AdaptiveRouteState()
     await _refresh_local_worker_probes(force=True)
     _update_checker = UpdateChecker(
         current_version=__version__,
@@ -1477,6 +1523,12 @@ async def image_generations(request: Request):
                 prompt,
                 extra_body=image_fields,
             )
+            _adaptive_state.record_success(
+                provider_name,
+                latency_ms=(result.get("_faigate") or {}).get("latency_ms", 0)
+                if isinstance(result, dict)
+                else 0.0,
+            )
             if _config.metrics.get("enabled") and isinstance(result, dict):
                 _metrics.log_request(
                     provider=provider_name,
@@ -1490,6 +1542,7 @@ async def image_generations(request: Request):
                     client_tag=client_tag,
                     decision_reason=decision.reason,
                     confidence=decision.confidence,
+                    **_decision_metric_fields(decision),
                     attempt_order=attempt_order,
                 )
 
@@ -1506,6 +1559,7 @@ async def image_generations(request: Request):
             resp.headers["X-faigate-Hook-Errors"] = str(len(hook_state.errors))
             return resp
         except ProviderError as exc:
+            _adaptive_state.record_failure(provider_name, error=exc.detail[:500])
             errors.append(_serialize_provider_attempt_error(provider_name, exc))
             logger.warning(
                 "Image provider %s failed: %s, trying next...",
@@ -1526,6 +1580,7 @@ async def image_generations(request: Request):
                     client_tag=client_tag,
                     decision_reason=decision.reason,
                     confidence=decision.confidence,
+                    **_decision_metric_fields(decision),
                     attempt_order=attempt_order,
                 )
 
@@ -1607,6 +1662,12 @@ async def image_edits(request: Request):
                 response_format=effective_body.get("response_format"),
                 user=effective_body.get("user"),
             )
+            _adaptive_state.record_success(
+                provider_name,
+                latency_ms=(result.get("_faigate") or {}).get("latency_ms", 0)
+                if isinstance(result, dict)
+                else 0.0,
+            )
             if _config.metrics.get("enabled") and isinstance(result, dict):
                 _metrics.log_request(
                     provider=provider_name,
@@ -1620,6 +1681,7 @@ async def image_edits(request: Request):
                     client_tag=client_tag,
                     decision_reason=decision.reason,
                     confidence=decision.confidence,
+                    **_decision_metric_fields(decision),
                     attempt_order=attempt_order,
                 )
 
@@ -1636,6 +1698,7 @@ async def image_edits(request: Request):
             resp.headers["X-faigate-Hook-Errors"] = str(len(hook_state.errors))
             return resp
         except ProviderError as exc:
+            _adaptive_state.record_failure(provider_name, error=exc.detail[:500])
             errors.append(_serialize_provider_attempt_error(provider_name, exc))
             logger.warning(
                 "Image editing provider %s failed: %s, trying next...",
@@ -1656,6 +1719,7 @@ async def image_edits(request: Request):
                     client_tag=client_tag,
                     decision_reason=decision.reason,
                     confidence=decision.confidence,
+                    **_decision_metric_fields(decision),
                     attempt_order=attempt_order,
                 )
 
@@ -1743,6 +1807,12 @@ async def chat_completions(request: Request):
                 max_tokens=max_tokens,
                 tools=tools,
             )
+            _adaptive_state.record_success(
+                provider_name,
+                latency_ms=(result.get("_faigate") or {}).get("latency_ms", 0)
+                if isinstance(result, dict)
+                else 0.0,
+            )
 
             # Log metrics with cost (cache-aware)
             if _config.metrics.get("enabled") and isinstance(result, dict):
@@ -1772,6 +1842,7 @@ async def chat_completions(request: Request):
                     client_tag=client_tag,
                     decision_reason=decision.reason,
                     confidence=decision.confidence,
+                    **_decision_metric_fields(decision),
                     attempt_order=attempt_order,
                 )
 
@@ -1802,6 +1873,7 @@ async def chat_completions(request: Request):
             return resp
 
         except ProviderError as e:
+            _adaptive_state.record_failure(provider_name, error=e.detail[:500])
             errors.append(_serialize_provider_attempt_error(provider_name, e))
             logger.warning("Provider %s failed: %s, trying next...", provider_name, e.detail[:200])
             if _config.metrics.get("enabled"):
@@ -1818,6 +1890,7 @@ async def chat_completions(request: Request):
                     client_tag=client_tag,
                     decision_reason=decision.reason,
                     confidence=decision.confidence,
+                    **_decision_metric_fields(decision),
                     attempt_order=attempt_order,
                 )
             continue

@@ -75,6 +75,7 @@ class ProviderBackend:
         self.limits = dict(cfg.get("limits", {}))
         self.cache = dict(cfg.get("cache", {}))
         self.image = dict(cfg.get("image", {}))
+        self.lane = dict(cfg.get("lane", {}))
         self.health = ProviderHealth(name=name)
 
         self._client = httpx.AsyncClient(

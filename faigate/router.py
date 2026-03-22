@@ -8,8 +8,160 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .config import Config
+from .lane_registry import get_canonical_model_routes
 
 logger = logging.getLogger("faigate.router")
+
+
+_QUALITY_TIER_SCORES = {
+    "premium": 10,
+    "high": 8,
+    "mid": 5,
+    "budget": 2,
+    "free": 1,
+    "variable": 4,
+    "n/a": 0,
+}
+
+_STRENGTH_SCORES = {
+    "high": 9,
+    "mid": 6,
+    "low": 2,
+    "variable": 4,
+    "n/a": 0,
+}
+
+_CLUSTER_POSTURE_SCORES = {
+    "quality": {
+        "elite-reasoning": 10,
+        "quality-workhorse": 8,
+        "balanced-workhorse": 5,
+        "fast-workhorse": 3,
+        "budget-general": 1,
+        "aggregator-fallback": 2,
+        "image-quality": 8,
+    },
+    "balanced": {
+        "elite-reasoning": 7,
+        "quality-workhorse": 8,
+        "balanced-workhorse": 9,
+        "fast-workhorse": 7,
+        "budget-general": 4,
+        "aggregator-fallback": 4,
+        "image-quality": 5,
+    },
+    "eco": {
+        "elite-reasoning": 2,
+        "quality-workhorse": 4,
+        "balanced-workhorse": 6,
+        "fast-workhorse": 8,
+        "budget-general": 10,
+        "aggregator-fallback": 6,
+        "image-quality": 2,
+    },
+    "free": {
+        "elite-reasoning": 1,
+        "quality-workhorse": 2,
+        "balanced-workhorse": 3,
+        "fast-workhorse": 5,
+        "budget-general": 10,
+        "aggregator-fallback": 8,
+        "image-quality": 1,
+    },
+}
+
+_ROUTE_POSTURE_SCORES = {
+    "quality": {
+        "direct": 4,
+        "aggregator": 1,
+        "wallet-router": 1,
+        "local": 3,
+    },
+    "balanced": {
+        "direct": 3,
+        "aggregator": 2,
+        "wallet-router": 2,
+        "local": 3,
+    },
+    "eco": {
+        "direct": 2,
+        "aggregator": 4,
+        "wallet-router": 4,
+        "local": 3,
+    },
+    "free": {
+        "direct": 1,
+        "aggregator": 5,
+        "wallet-router": 5,
+        "local": 2,
+    },
+}
+
+_BENCHMARK_POSTURE_SCORES = {
+    "quality": {
+        "quality-coding": 8,
+        "reasoning-coding": 9,
+        "balanced-coding": 5,
+        "fast-general": 2,
+        "budget-chat": 1,
+        "free-coding": 2,
+        "marketplace-general": 3,
+        "image-generation": 8,
+    },
+    "balanced": {
+        "quality-coding": 6,
+        "reasoning-coding": 7,
+        "balanced-coding": 8,
+        "fast-general": 6,
+        "budget-chat": 4,
+        "free-coding": 5,
+        "marketplace-general": 5,
+        "image-generation": 5,
+    },
+    "eco": {
+        "quality-coding": 2,
+        "reasoning-coding": 3,
+        "balanced-coding": 6,
+        "fast-general": 8,
+        "budget-chat": 9,
+        "free-coding": 10,
+        "marketplace-general": 6,
+        "image-generation": 2,
+    },
+    "free": {
+        "quality-coding": 1,
+        "reasoning-coding": 2,
+        "balanced-coding": 4,
+        "fast-general": 6,
+        "budget-chat": 9,
+        "free-coding": 10,
+        "marketplace-general": 7,
+        "image-generation": 1,
+    },
+}
+
+_FALLBACK_RELATION_WEIGHTS = {
+    "quality": {
+        "same_model_route": 40,
+        "same_cluster": 16,
+        "preferred_degrade": 12,
+    },
+    "balanced": {
+        "same_model_route": 28,
+        "same_cluster": 14,
+        "preferred_degrade": 10,
+    },
+    "eco": {
+        "same_model_route": 14,
+        "same_cluster": 10,
+        "preferred_degrade": 8,
+    },
+    "free": {
+        "same_model_route": 10,
+        "same_cluster": 8,
+        "preferred_degrade": 6,
+    },
+}
 
 
 @dataclass
@@ -153,6 +305,17 @@ def _parse_image_size_max_side(value: str) -> int:
     return max(width, height)
 
 
+def _normalize_routing_posture(value: str) -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized in {"premium", "quality"}:
+        return "quality"
+    if normalized in {"eco", "cheap", "save"}:
+        return "eco"
+    if normalized in {"free"}:
+        return "free"
+    return "balanced"
+
+
 class Router:
     """Layered routing engine."""
 
@@ -174,6 +337,7 @@ class Router:
         applied_hooks: list[str] | None = None,
         headers: dict[str, str] | None = None,
         provider_health: dict[str, Any] | None = None,
+        provider_runtime_state: dict[str, Any] | None = None,
     ) -> RoutingDecision:
         """
         Run through all enabled routing layers in order.
@@ -208,6 +372,7 @@ class Router:
             applied_hooks=applied_hooks or [],
             headers=headers or {},
             provider_health=provider_health or {},
+            provider_runtime_state=provider_runtime_state or {},
             providers=self.config.providers,
         )
 
@@ -251,13 +416,16 @@ class Router:
         # Fallback: first healthy provider in the chain
         elapsed = (time.time() - t0) * 1000
         fallback = self.config.fallback_chain[0] if self.config.fallback_chain else "deepseek-chat"
-        return RoutingDecision(
-            provider_name=fallback,
-            layer="fallback",
-            rule_name="no-match",
-            confidence=0.3,
-            reason="No routing layer matched, using first fallback",
-            elapsed_ms=elapsed,
+        return self._enrich_decision_details(
+            RoutingDecision(
+                provider_name=fallback,
+                layer="fallback",
+                rule_name="no-match",
+                confidence=0.3,
+                reason="No routing layer matched, using first fallback",
+                elapsed_ms=elapsed,
+            ),
+            ctx,
         )
 
     def route_capability_request(
@@ -274,6 +442,7 @@ class Router:
         applied_hooks: list[str] | None = None,
         headers: dict[str, str] | None = None,
         provider_health: dict[str, Any] | None = None,
+        provider_runtime_state: dict[str, Any] | None = None,
         candidate_names: list[str] | None = None,
     ) -> RoutingDecision | None:
         """Route one non-chat request against providers with a required capability."""
@@ -303,6 +472,7 @@ class Router:
             applied_hooks=applied_hooks or [],
             headers=headers or {},
             provider_health=provider_health or {},
+            provider_runtime_state=provider_runtime_state or {},
             providers=self.config.providers,
         )
 
@@ -512,8 +682,14 @@ class Router:
         prefer_providers = select.get("prefer_providers", [])
         prefer_tiers = set(select.get("prefer_tiers", []))
         locality_preference = self._locality_preference(select)
+        routing_posture = self._routing_posture(select, ctx)
         diagnostics = {
-            name: self._provider_dimension_details(name, ctx, locality_preference)
+            name: self._provider_dimension_details(
+                name,
+                ctx,
+                locality_preference,
+                routing_posture,
+            )
             for name in candidates
         }
         ranked_candidates = sorted(
@@ -590,7 +766,11 @@ class Router:
         return True
 
     def _provider_dimension_details(
-        self, name: str, ctx: _RoutingContext | None, locality_preference: str | None
+        self,
+        name: str,
+        ctx: _RoutingContext | None,
+        locality_preference: str | None,
+        routing_posture: str,
     ) -> dict[str, Any]:
         """Return a multi-dimensional ranking breakdown for one provider."""
         provider = self.config.provider(name) or {}
@@ -598,7 +778,9 @@ class Router:
         cache = provider.get("cache", {})
         image_cfg = provider.get("image", {})
         capabilities = provider.get("capabilities", {})
+        lane = self._provider_lane_summary(name)
         health = ctx.provider_health.get(name, {}) if ctx else {}
+        runtime_state = ctx.provider_runtime_state.get(name, {}) if ctx else {}
 
         if ctx is None:
             return {
@@ -612,6 +794,10 @@ class Router:
                 "context_score": 0,
                 "input_score": 0,
                 "output_score": 0,
+                "lane_score": 0,
+                "route_score": 0,
+                "benchmark_score": 0,
+                "adaptation_penalty": 0,
                 "headroom": 0,
                 "sort_key": (0, 0, 0),
             }
@@ -674,6 +860,10 @@ class Router:
                 2 if capabilities.get("local") else 1 if capabilities.get("cloud") else 0
             )
 
+        lane_score = self._lane_posture_score(lane, routing_posture)
+        route_score = self._route_posture_score(lane, routing_posture)
+        benchmark_score = self._benchmark_posture_score(lane, routing_posture)
+        adaptation_penalty = int(runtime_state.get("penalty", 0) or 0)
         image_score = 0
         image_policy_score = 0
         image_outputs_fit = True
@@ -726,8 +916,12 @@ class Router:
             + context_score
             + input_score
             + output_score
+            + lane_score
+            + route_score
+            + benchmark_score
             + image_score
             + image_policy_score
+            - adaptation_penalty
         )
         return {
             "fit": fit,
@@ -740,6 +934,10 @@ class Router:
             "context_score": context_score,
             "input_score": input_score,
             "output_score": output_score,
+            "lane_score": lane_score,
+            "route_score": route_score,
+            "benchmark_score": benchmark_score,
+            "adaptation_penalty": adaptation_penalty,
             "image_score": image_score,
             "image_policy_score": image_policy_score,
             "headroom": headroom,
@@ -759,14 +957,223 @@ class Router:
             "supported_image_sizes": image_cfg.get("supported_sizes", []),
             "avg_latency_ms": avg_latency_ms,
             "consecutive_failures": consecutive_failures,
+            "runtime_issue_type": str(runtime_state.get("last_issue_type") or ""),
+            "runtime_issue_detail": str(runtime_state.get("last_issue_detail") or ""),
+            "runtime_penalty": adaptation_penalty,
             "cache_mode": cache.get("mode", "none"),
             "locality_preference": locality_preference or "balanced",
+            "routing_posture": routing_posture,
+            "lane_family": lane.get("family", ""),
+            "lane_name": lane.get("name", ""),
+            "canonical_model": lane.get("canonical_model", ""),
+            "route_type": lane.get("route_type", ""),
+            "lane_cluster": lane.get("cluster", ""),
+            "benchmark_cluster": lane.get("benchmark_cluster", ""),
+            "quality_tier": lane.get("quality_tier", ""),
+            "reasoning_strength": lane.get("reasoning_strength", ""),
+            "same_model_group": lane.get("same_model_group", ""),
+            "degrade_to": list(lane.get("degrade_to", [])),
             "sort_key": (
                 1 if fit else 0,
                 score_total,
                 headroom,
             ),
         }
+
+    def _provider_lane_summary(self, name: str) -> dict[str, Any]:
+        provider = self.config.provider(name) or {}
+        lane = provider.get("lane", {})
+        if not isinstance(lane, dict):
+            return {}
+        return {
+            "family": str(lane.get("family") or ""),
+            "name": str(lane.get("name") or ""),
+            "canonical_model": str(lane.get("canonical_model") or ""),
+            "route_type": str(lane.get("route_type") or ""),
+            "cluster": str(lane.get("cluster") or ""),
+            "benchmark_cluster": str(lane.get("benchmark_cluster") or ""),
+            "quality_tier": str(lane.get("quality_tier") or ""),
+            "reasoning_strength": str(lane.get("reasoning_strength") or ""),
+            "context_strength": str(lane.get("context_strength") or ""),
+            "tool_strength": str(lane.get("tool_strength") or ""),
+            "same_model_group": str(lane.get("same_model_group") or ""),
+            "degrade_to": list(lane.get("degrade_to") or []),
+        }
+
+    def _routing_posture(self, select: dict[str, Any], ctx: _RoutingContext | None = None) -> str:
+        routing_mode = str(select.get("routing_mode", "") or "").strip()
+        if not routing_mode and ctx is not None:
+            routing_mode = str((ctx.profile_hints or {}).get("routing_mode", "") or "").strip()
+        if routing_mode:
+            return _normalize_routing_posture(routing_mode)
+
+        prefer_tiers = {str(item).strip().lower() for item in select.get("prefer_tiers", [])}
+        if not prefer_tiers and ctx is not None:
+            prefer_tiers = {
+                str(item).strip().lower()
+                for item in (ctx.profile_hints or {}).get("prefer_tiers", [])
+            }
+
+        if "premium" in prefer_tiers:
+            return "quality"
+        if "cheap" in prefer_tiers or "fallback" in prefer_tiers:
+            return "eco"
+        return "balanced"
+
+    def _lane_posture_score(self, lane: dict[str, Any], routing_posture: str) -> int:
+        if not lane:
+            return 0
+        cluster_scores = _CLUSTER_POSTURE_SCORES.get(
+            routing_posture,
+            _CLUSTER_POSTURE_SCORES["balanced"],
+        )
+        quality_score = _QUALITY_TIER_SCORES.get(str(lane.get("quality_tier") or "").lower(), 0)
+        reasoning_score = _STRENGTH_SCORES.get(str(lane.get("reasoning_strength") or "").lower(), 0)
+        cluster_score = cluster_scores.get(str(lane.get("cluster") or ""), 0)
+        return cluster_score + max(0, quality_score // 2) + max(0, reasoning_score // 3)
+
+    def _route_posture_score(self, lane: dict[str, Any], routing_posture: str) -> int:
+        if not lane:
+            return 0
+        route_scores = _ROUTE_POSTURE_SCORES.get(routing_posture, _ROUTE_POSTURE_SCORES["balanced"])
+        return route_scores.get(str(lane.get("route_type") or "").lower(), 0)
+
+    def _benchmark_posture_score(self, lane: dict[str, Any], routing_posture: str) -> int:
+        if not lane:
+            return 0
+        benchmark_scores = _BENCHMARK_POSTURE_SCORES.get(
+            routing_posture,
+            _BENCHMARK_POSTURE_SCORES["balanced"],
+        )
+        return benchmark_scores.get(str(lane.get("benchmark_cluster") or ""), 0)
+
+    def _fallback_relation_details(
+        self,
+        primary_provider: str,
+        candidate_provider: str,
+        routing_posture: str,
+    ) -> dict[str, Any]:
+        primary_lane = self._provider_lane_summary(primary_provider)
+        candidate_lane = self._provider_lane_summary(candidate_provider)
+        same_model_group = bool(
+            primary_lane.get("same_model_group")
+            and primary_lane.get("same_model_group") == candidate_lane.get("same_model_group")
+        )
+        same_canonical = bool(
+            primary_lane.get("canonical_model")
+            and primary_lane.get("canonical_model") == candidate_lane.get("canonical_model")
+        )
+        same_cluster = bool(
+            primary_lane.get("cluster")
+            and primary_lane.get("cluster") == candidate_lane.get("cluster")
+        )
+        same_benchmark_cluster = bool(
+            primary_lane.get("benchmark_cluster")
+            and primary_lane.get("benchmark_cluster") == candidate_lane.get("benchmark_cluster")
+        )
+        preferred_degrade = bool(
+            candidate_lane.get("canonical_model")
+            and candidate_lane.get("canonical_model") in (primary_lane.get("degrade_to") or [])
+        )
+        weights = _FALLBACK_RELATION_WEIGHTS.get(
+            routing_posture,
+            _FALLBACK_RELATION_WEIGHTS["balanced"],
+        )
+        relation_score = 0
+        selection_path = "fallback-chain"
+        if same_model_group or same_canonical:
+            relation_score += weights["same_model_route"]
+            selection_path = "same-lane-route"
+        elif same_cluster or same_benchmark_cluster:
+            relation_score += weights["same_cluster"]
+            selection_path = "same-cluster-degrade" if same_cluster else "same-benchmark-degrade"
+        elif preferred_degrade:
+            relation_score += weights["preferred_degrade"]
+            selection_path = "preferred-degrade"
+        return {
+            "relation_score": relation_score,
+            "same_model_route": same_model_group or same_canonical,
+            "same_cluster": same_cluster,
+            "same_benchmark_cluster": same_benchmark_cluster,
+            "preferred_degrade": preferred_degrade,
+            "selection_path": selection_path,
+        }
+
+    def _rank_fallback_candidates(
+        self,
+        primary_provider: str,
+        candidates: list[str],
+        ctx: _RoutingContext,
+    ) -> tuple[list[str], list[dict[str, Any]]]:
+        routing_posture = self._routing_posture({}, ctx)
+        diagnostics = {
+            name: self._provider_dimension_details(name, ctx, None, routing_posture)
+            for name in candidates
+        }
+        relations = {
+            name: self._fallback_relation_details(primary_provider, name, routing_posture)
+            for name in candidates
+        }
+        ranked = sorted(
+            candidates,
+            key=lambda name: (
+                relations[name]["relation_score"],
+                diagnostics[name]["score_total"],
+                diagnostics[name]["headroom"],
+            ),
+            reverse=True,
+        )
+        ranking = []
+        for idx, name in enumerate(ranked, start=1):
+            ranking.append(
+                {
+                    "rank": idx,
+                    "provider": name,
+                    **relations[name],
+                    **{key: value for key, value in diagnostics[name].items() if key != "sort_key"},
+                }
+            )
+        return ranked, ranking
+
+    def _enrich_decision_details(
+        self,
+        decision: RoutingDecision,
+        ctx: _RoutingContext,
+        *,
+        extra_details: dict[str, Any] | None = None,
+    ) -> RoutingDecision:
+        details = dict(decision.details)
+        lane = self._provider_lane_summary(decision.provider_name)
+        if lane:
+            details.setdefault("selected_lane", lane)
+            details.setdefault("canonical_model", lane.get("canonical_model", ""))
+            details.setdefault("lane_family", lane.get("family", ""))
+            details.setdefault("lane_name", lane.get("name", ""))
+            details.setdefault("route_type", lane.get("route_type", ""))
+            details.setdefault("lane_cluster", lane.get("cluster", ""))
+            details.setdefault(
+                "known_routes",
+                get_canonical_model_routes(str(lane.get("canonical_model") or "")),
+            )
+            details.setdefault(
+                "configured_same_lane_routes",
+                [
+                    provider_name
+                    for provider_name, provider in ctx.providers.items()
+                    if provider_name != decision.provider_name
+                    and str((provider.get("lane") or {}).get("canonical_model") or "")
+                    == str(lane.get("canonical_model") or "")
+                ],
+            )
+        details.setdefault("routing_posture", self._routing_posture({}, ctx))
+        details.setdefault(
+            "route_runtime_state",
+            ctx.provider_runtime_state.get(decision.provider_name, {}),
+        )
+        if extra_details:
+            details.update(extra_details)
+        decision.details = details
+        return decision
 
     def _locality_preference(self, select: dict[str, Any]) -> str | None:
         """Infer one locality preference from the active selector."""
@@ -1018,22 +1425,35 @@ class Router:
                 fallback_candidates.append(fallback)
 
             if fallback_candidates:
-                _, fallback_ranking = self._rank_policy_candidates(fallback_candidates, {}, ctx)
+                _, fallback_ranking = self._rank_fallback_candidates(
+                    decision.provider_name,
+                    fallback_candidates,
+                    ctx,
+                )
                 best_fallback = fallback_ranking[0]["provider"]
-                return RoutingDecision(
-                    provider_name=best_fallback,
-                    layer=decision.layer,
-                    rule_name=f"{decision.rule_name}→fallback",
-                    confidence=decision.confidence * 0.8,
-                    reason=f"{decision.reason} ({reason_suffix}, fell to {best_fallback})",
-                    elapsed_ms=decision.elapsed_ms,
-                    details={
-                        **decision.details,
-                        "fallback_reason": reason_suffix,
-                        "fallback_ranking": fallback_ranking,
+                return self._enrich_decision_details(
+                    RoutingDecision(
+                        provider_name=best_fallback,
+                        layer=decision.layer,
+                        rule_name=f"{decision.rule_name}→fallback",
+                        confidence=decision.confidence * 0.8,
+                        reason=f"{decision.reason} ({reason_suffix}, fell to {best_fallback})",
+                        elapsed_ms=decision.elapsed_ms,
+                        details={
+                            **decision.details,
+                            "fallback_reason": reason_suffix,
+                            "fallback_ranking": fallback_ranking,
+                        },
+                    ),
+                    ctx,
+                    extra_details={
+                        "selection_path": fallback_ranking[0].get(
+                            "selection_path",
+                            "fallback-chain",
+                        ),
                     },
                 )
-        return decision
+        return self._enrich_decision_details(decision, ctx)
 
 
 class _RoutingContext:
@@ -1061,6 +1481,7 @@ class _RoutingContext:
         "applied_hooks",
         "headers",
         "provider_health",
+        "provider_runtime_state",
         "providers",
         "_classify_fn",
     )

@@ -1312,6 +1312,32 @@ def test_faigate_dashboard_overview_summarizes_live_stats(tmp_path: Path):
                     ],
                 }
             ),
+            "/api/providers": json.dumps(
+                {
+                    "providers": [
+                        {
+                            "name": "deepseek-chat",
+                            "lane": {
+                                "family": "deepseek",
+                                "name": "workhorse",
+                                "canonical_model": "deepseek/chat",
+                                "route_type": "direct",
+                                "cluster": "balanced-workhorse",
+                            },
+                        },
+                        {
+                            "name": "openrouter-fallback",
+                            "lane": {
+                                "family": "openrouter",
+                                "name": "router",
+                                "canonical_model": "aggregator/openrouter-auto",
+                                "route_type": "aggregator",
+                                "cluster": "aggregator-fallback",
+                            },
+                        },
+                    ]
+                }
+            ),
         },
     )
 
@@ -1337,6 +1363,99 @@ def test_faigate_dashboard_overview_summarizes_live_stats(tmp_path: Path):
     assert "Fallback traffic    28 requests" in result.stdout
     assert "Top alert" in result.stdout
     assert "Decision support" in result.stdout
+
+
+def test_faigate_dashboard_provider_detail_shows_canonical_lane(tmp_path: Path):
+    fake_bin = _write_fake_curl(
+        tmp_path,
+        {
+            "/health": json.dumps(
+                {
+                    "status": "ok",
+                    "summary": {
+                        "providers_total": 1,
+                        "providers_healthy": 1,
+                        "providers_unhealthy": 0,
+                    },
+                    "providers": {
+                        "deepseek-chat": {"healthy": True, "tier": "default"},
+                    },
+                }
+            ),
+            "/api/stats": json.dumps(
+                {
+                    "totals": {
+                        "total_requests": 10,
+                        "total_failures": 0,
+                        "total_prompt_tokens": 5000,
+                        "total_compl_tokens": 2000,
+                        "total_cost_usd": 0.4,
+                        "avg_latency_ms": 420.0,
+                    },
+                    "providers": [
+                        {
+                            "provider": "deepseek-chat",
+                            "requests": 10,
+                            "failures": 0,
+                            "total_tokens": 7000,
+                            "prompt_tokens": 5000,
+                            "completion_tokens": 2000,
+                            "cost_usd": 0.4,
+                            "avg_latency_ms": 420.0,
+                        }
+                    ],
+                    "routing": [],
+                    "client_totals": [],
+                    "client_highlights": {},
+                    "operator_actions": [],
+                    "hourly": [],
+                    "daily": [],
+                }
+            ),
+            "/api/providers": json.dumps(
+                {
+                    "providers": [
+                        {
+                            "name": "deepseek-chat",
+                            "lane": {
+                                "family": "deepseek",
+                                "name": "workhorse",
+                                "canonical_model": "deepseek/chat",
+                                "route_type": "direct",
+                                "cluster": "balanced-workhorse",
+                            },
+                            "route_runtime_state": {
+                                "penalty": 6,
+                                "last_issue_type": "rate-limited",
+                            },
+                        }
+                    ]
+                }
+            ),
+        },
+    )
+
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+    env["FAIGATE_PYTHON"] = sys.executable
+    env["PYTHONPATH"] = str(REPO_ROOT)
+    env["FAIGATE_DB_PATH"] = str(tmp_path / "faigate.db")
+
+    result = subprocess.run(
+        ["bash", "scripts/faigate-dashboard", "--provider", "deepseek-chat"],
+        cwd=REPO_ROOT,
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "Provider detail: deepseek-chat" in result.stdout
+    assert "Canonical lane    deepseek/chat" in result.stdout
+    assert "Route type        direct" in result.stdout
+    assert "Lane cluster      balanced-workhorse" in result.stdout
+    assert "Runtime penalty   6" in result.stdout
+    assert "Last issue type   rate-limited" in result.stdout
 
 
 def test_faigate_provider_probe_summarizes_config_env_and_health(tmp_path: Path):

@@ -102,6 +102,7 @@ build_report_json() {
   FAIGATE_DASHBOARD_TARGET="$target_name" \
   FAIGATE_DASHBOARD_HEALTH="$health_payload" \
   FAIGATE_DASHBOARD_STATS="$stats_payload" \
+  FAIGATE_DASHBOARD_INVENTORY="$inventory_payload" \
   "$python_bin" - <<'PY'
 import json
 import os
@@ -110,14 +111,17 @@ from faigate.dashboard import build_dashboard_report, render_dashboard_text, rep
 
 health_raw = os.environ.get("FAIGATE_DASHBOARD_HEALTH", "").strip()
 stats_raw = os.environ.get("FAIGATE_DASHBOARD_STATS", "").strip()
+inventory_raw = os.environ.get("FAIGATE_DASHBOARD_INVENTORY", "").strip()
 
 health_payload = json.loads(health_raw) if health_raw else None
 stats_payload = json.loads(stats_raw) if stats_raw else None
+inventory_payload = json.loads(inventory_raw) if inventory_raw else None
 
 report = build_dashboard_report(
     db_path=os.environ["FAIGATE_DASHBOARD_DB"],
     stats_payload=stats_payload,
     health_payload=health_payload,
+    inventory_payload=inventory_payload,
 )
 
 if os.environ["FAIGATE_DASHBOARD_MODE"] == "json":
@@ -136,6 +140,7 @@ PY
 
 health_payload=""
 stats_payload=""
+inventory_payload=""
 
 if payload="$(curl -fsS -m 2 "$(faigate_health_url)" 2>/dev/null)"; then
   health_payload="$payload"
@@ -143,6 +148,10 @@ fi
 
 if payload="$(curl -fsS -m 2 "$(faigate_stats_url)" 2>/dev/null)"; then
   stats_payload="$payload"
+fi
+
+if payload="$(curl -fsS -m 2 "$(faigate_provider_inventory_url)" 2>/dev/null)"; then
+  inventory_payload="$payload"
 fi
 
 if [[ "$interactive_mode" == "1" && "$mode" == "text" && -z "$target_name" ]]; then

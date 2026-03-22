@@ -26,6 +26,11 @@ def test_metrics_store_persists_trace_fields(tmp_path):
         client_tag="n8n",
         decision_reason="Client profile 'local-only' selected a preferred provider",
         confidence=0.6,
+        canonical_model="local/llama3",
+        route_type="local",
+        lane_cluster="local-workhorse",
+        selection_path="profile-primary",
+        decision_details={"canonical_model": "local/llama3", "route_type": "local"},
         attempt_order=["local-worker", "cloud-default"],
     )
 
@@ -36,6 +41,11 @@ def test_metrics_store_persists_trace_fields(tmp_path):
     assert recent[0]["client_tag"] == "n8n"
     assert recent[0]["decision_reason"].startswith("Client profile")
     assert recent[0]["confidence"] == 0.6
+    assert recent[0]["canonical_model"] == "local/llama3"
+    assert recent[0]["route_type"] == "local"
+    assert recent[0]["lane_cluster"] == "local-workhorse"
+    assert recent[0]["selection_path"] == "profile-primary"
+    assert recent[0]["decision_details"]["canonical_model"] == "local/llama3"
     assert recent[0]["attempt_order"] == ["local-worker", "cloud-default"]
 
     client_rows = metrics.get_client_breakdown()
@@ -96,6 +106,11 @@ def test_metrics_store_migrates_existing_db(tmp_path):
     assert "client_tag" in columns
     assert "modality" in columns
     assert "attempt_order" in columns
+    assert "canonical_model" in columns
+    assert "route_type" in columns
+    assert "lane_cluster" in columns
+    assert "selection_path" in columns
+    assert "decision_details" in columns
     reopened.close()
 
 

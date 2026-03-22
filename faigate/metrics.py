@@ -52,6 +52,11 @@ CREATE TABLE IF NOT EXISTS requests (
     client_tag      TEXT DEFAULT '',
     decision_reason TEXT DEFAULT '',
     confidence      REAL DEFAULT 0,
+    canonical_model TEXT DEFAULT '',
+    route_type      TEXT DEFAULT '',
+    lane_cluster    TEXT DEFAULT '',
+    selection_path  TEXT DEFAULT '',
+    decision_details TEXT DEFAULT '{}',
     attempt_order   TEXT DEFAULT '[]'
 );
 CREATE INDEX IF NOT EXISTS idx_req_ts       ON requests(timestamp);
@@ -83,6 +88,11 @@ _OPTIONAL_COLUMNS: dict[str, str] = {
     "client_tag": "TEXT DEFAULT ''",
     "decision_reason": "TEXT DEFAULT ''",
     "confidence": "REAL DEFAULT 0",
+    "canonical_model": "TEXT DEFAULT ''",
+    "route_type": "TEXT DEFAULT ''",
+    "lane_cluster": "TEXT DEFAULT ''",
+    "selection_path": "TEXT DEFAULT ''",
+    "decision_details": "TEXT DEFAULT '{}'",
     "attempt_order": "TEXT DEFAULT '[]'",
 }
 
@@ -141,6 +151,11 @@ class MetricsStore:
         client_tag: str = "",
         decision_reason: str = "",
         confidence: float = 0.0,
+        canonical_model: str = "",
+        route_type: str = "",
+        lane_cluster: str = "",
+        selection_path: str = "",
+        decision_details: dict[str, Any] | None = None,
         attempt_order: list[str] | None = None,
     ) -> None:
         if not self._conn:
@@ -152,8 +167,9 @@ class MetricsStore:
                    prompt_tok,compl_tok,cache_hit,cache_miss,
                    cost_usd,latency_ms,success,error,
                     requested_model,modality,client_profile,client_tag,
-                    decision_reason,confidence,attempt_order)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    decision_reason,confidence,canonical_model,route_type,lane_cluster,
+                    selection_path,decision_details,attempt_order)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     time.time(),
                     provider,
@@ -174,6 +190,11 @@ class MetricsStore:
                     client_tag,
                     decision_reason,
                     confidence,
+                    canonical_model,
+                    route_type,
+                    lane_cluster,
+                    selection_path,
+                    json.dumps(decision_details or {}, sort_keys=True),
                     json.dumps(attempt_order or []),
                 ),
             )
@@ -236,7 +257,10 @@ class MetricsStore:
                     THEN SUM(cache_hit)*100.0/SUM(cache_hit+cache_miss)
                     ELSE 0 END, 1)                              AS cache_hit_pct,
                 ROUND(SUM(cost_usd),6)                          AS cost_usd,
-                ROUND(AVG(latency_ms),1)                        AS avg_latency_ms
+                ROUND(AVG(latency_ms),1)                        AS avg_latency_ms,
+                MAX(canonical_model)                            AS canonical_model,
+                MAX(route_type)                                 AS route_type,
+                MAX(lane_cluster)                               AS lane_cluster
             FROM requests{where_sql} GROUP BY provider ORDER BY requests DESC
         """,
             params,
@@ -251,11 +275,14 @@ class MetricsStore:
         return self._q(
             f"""
             SELECT layer, rule_name, provider,
+                canonical_model, route_type, lane_cluster, selection_path,
                 COUNT(*)                  AS requests,
                 ROUND(SUM(cost_usd),6)    AS cost_usd,
                 ROUND(AVG(latency_ms),1)  AS avg_latency_ms
             FROM requests{where_sql}
-            GROUP BY layer, rule_name, provider ORDER BY requests DESC
+            GROUP BY layer, rule_name, provider,
+                canonical_model, route_type, lane_cluster, selection_path
+            ORDER BY requests DESC
         """,
             params,
         )
@@ -399,6 +426,12 @@ class MetricsStore:
                     row["attempt_order"] = json.loads(attempt_order)
                 except json.JSONDecodeError:
                     row["attempt_order"] = []
+            decision_details = row.get("decision_details")
+            if isinstance(decision_details, str) and decision_details:
+                try:
+                    row["decision_details"] = json.loads(decision_details)
+                except json.JSONDecodeError:
+                    row["decision_details"] = {}
         return rows
 
     def get_totals(self, **filters: Any) -> dict:

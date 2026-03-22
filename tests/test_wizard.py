@@ -88,6 +88,8 @@ def test_build_initial_config_adds_modes_shortcuts_and_profile_defaults(tmp_path
     assert "free" in config["routing_modes"]["modes"]
     assert config["model_shortcuts"]["enabled"] is True
     assert config["model_shortcuts"]["shortcuts"]["deepseek-chat"]["target"] == "deepseek-chat"
+    assert config["providers"]["deepseek-chat"]["lane"]["canonical_model"] == "deepseek/chat"
+    assert config["providers"]["kilocode"]["lane"]["route_type"] == "aggregator"
     assert config["client_profiles"]["profiles"]["n8n"]["routing_mode"] == "eco"
     assert config["client_profiles"]["profiles"]["opencode"]["routing_mode"] == "auto"
     assert config["fallback_chain"][0] == "kilocode"
@@ -219,6 +221,7 @@ client_profiles:
     assert "More options if you add keys" in rendered
     assert "deepseek-chat  (recommended · already in config)" in rendered
     assert "openai-gpt4o  (needs OPENAI_API_KEY)" in rendered
+    assert "lane: deepseek/chat | route: direct | cluster: balanced-workhorse" in rendered
     assert "discovery_env_var" not in rendered
 
 
@@ -903,6 +906,11 @@ def test_list_client_scenarios_exposes_opencode_quality_path(tmp_path: Path):
 
     assert by_id["opencode-quality"]["routing_mode"] == "premium"
     assert "anthropic-claude" in by_id["opencode-quality"]["ready_providers"]
+    assert any("anthropic/opus-4.6:" in line for line in by_id["opencode-quality"]["route_mirrors"])
+    assert any(
+        line.startswith("anthropic/opus-4.6 ->")
+        for line in by_id["opencode-quality"]["degrade_chains"]
+    )
 
 
 def test_apply_client_scenario_sets_client_profile_mode_and_adds_providers(tmp_path: Path):
@@ -961,4 +969,5 @@ def test_render_client_scenarios_text_mentions_opencode_free(tmp_path: Path):
     assert "budget: free" in rendered
     assert "best when:" in rendered
     assert "tradeoff:" in rendered
+    assert "known route mirrors:" in rendered or "degrade chain:" in rendered
     assert "ready now" in rendered or "needs keys for" in rendered

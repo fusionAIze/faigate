@@ -258,6 +258,10 @@ faigate_stats_url() {
   printf 'http://%s:%s/api/stats\n' "$(faigate_local_host)" "$(faigate_port)"
 }
 
+faigate_provider_inventory_url() {
+  printf 'http://%s:%s/api/providers\n' "$(faigate_local_host)" "$(faigate_port)"
+}
+
 faigate_service_manager() {
   case "$(faigate_platform)" in
     Darwin)

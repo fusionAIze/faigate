@@ -60,6 +60,14 @@ The format is intentionally lightweight and human-readable. Group entries by rel
 
 ## Unreleased
 
+### Changed
+
+- Started the `v1.8.0` lane-foundation line with canonical model-lane and provider-route metadata in the config, wizard, and provider-catalog surfaces, preparing Gate for route-aware aggregator handling and adaptive orchestration
+- Added the first lane-aware router scoring slice so `quality`, `balanced`, `eco`, and `free` postures now influence candidate ranking through canonical lane, cluster, and route-type metadata instead of only provider tier
+- Added the first same-lane-route fallback path so when a primary route becomes unhealthy Gate can preserve the canonical lane before dropping into a weaker cluster when a compatible alternate route exists
+- Carried lane metadata through runtime inventories and dashboard provider drilldowns so operator-facing views can now show canonical lane, route type, and cluster context alongside spend and health
+- Added a dedicated adaptive-orchestration roadmap that sketches the path from lane metadata to scoring, live adaptation, benchmark freshness, and budget-/quota-aware routing through the `v1.10.x` and `v1.11.x` lines
+
 ## v1.5.1 - 2026-03-20
 
 ### Changed
