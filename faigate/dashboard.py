@@ -11,6 +11,7 @@ from typing import Any
 
 from .lane_registry import get_route_add_recommendations
 from .metrics import MetricsStore
+from .provider_catalog import build_provider_refresh_guidance
 
 
 def _safe_int(value: Any) -> int:
@@ -420,6 +421,35 @@ def _freshness_summary(rows: list[dict[str, Any]]) -> dict[str, int]:
     return summary
 
 
+def _refresh_guidance_summary(items: list[dict[str, Any]]) -> dict[str, int]:
+    return {
+        "refresh_now": sum(1 for item in items if str(item.get("action")) == "refresh-now"),
+        "review_soon": sum(1 for item in items if str(item.get("action")) == "review-soon"),
+    }
+
+
+def _render_refresh_guidance_block(report: dict[str, Any], *, limit: int = 3) -> list[str]:
+    rows = list(report.get("refresh_guidance") or [])[:limit]
+    if not rows:
+        return []
+    lines = ["Refresh guidance"]
+    for item in rows:
+        provider = str(item.get("provider") or "unknown")
+        freshness_status = str(item.get("freshness_status") or "unknown")
+        review_age_days = int(item.get("review_age_days") or -1)
+        age_suffix = f", {review_age_days}d" if review_age_days >= 0 else ""
+        line = (
+            f"- {provider}: {item.get('action_label') or item.get('action')}"
+            f" ({freshness_status}{age_suffix})"
+        )
+        if item.get("refresh_url"):
+            line += f" -> {item['refresh_url']}"
+        lines.append(line)
+        if item.get("reason"):
+            lines.append(f"  why: {item['reason']}")
+    return lines
+
+
 def _recommended_scenario_for_client(client_profile: str, *, expensive: bool = False) -> str | None:
     mapping = {
         "opencode": "opencode-eco" if expensive else "opencode-balanced",
@@ -491,6 +521,19 @@ def build_dashboard_report(
         list(inventory_provider_map.values()) if inventory_provider_map else providers
     )
     freshness = _freshness_summary(providers)
+    refresh_guidance = build_provider_refresh_guidance(
+        [str(row.get("provider") or "") for row in providers],
+        freshness_overrides={
+            str(row.get("provider") or ""): {
+                "freshness_status": row.get("freshness_status"),
+                "review_age_days": row.get("review_age_days"),
+                "freshness_hint": row.get("freshness_hint"),
+            }
+            for row in providers
+            if str(row.get("provider") or "")
+        },
+    )
+    refresh_summary = _refresh_guidance_summary(refresh_guidance)
     routing = stats.get("routing") or []
     routing_paths = _routing_path_summary(routing)
     client_totals = stats.get("client_totals") or []
@@ -767,6 +810,13 @@ def build_dashboard_report(
         hints.append(
             f"{freshness['aging']} route assumption(s) are aging and worth rechecking soon."
         )
+    if refresh_guidance:
+        top_refresh = refresh_guidance[0]
+        decision_support.append(
+            f"Refresh guidance: {top_refresh['provider']} is {top_refresh['freshness_status']} "
+            f"and should be {top_refresh['action_label']}"
+            + (f" via {top_refresh['refresh_url']}." if top_refresh.get("refresh_url") else ".")
+        )
     if route_additions:
         top_addition = route_additions[0]
         decision_support.append(
@@ -787,6 +837,7 @@ def build_dashboard_report(
         "providers": providers,
         "lane_families": lane_families,
         "route_additions": route_additions,
+        "refresh_guidance": refresh_guidance,
         "clients": client_totals,
         "routing": routing,
         "routing_paths": routing_paths,
@@ -839,6 +890,8 @@ def build_dashboard_report(
                 "fresh_routes": freshness.get("fresh", 0),
                 "aging_routes": freshness.get("aging", 0),
                 "stale_routes": freshness.get("stale", 0),
+                "refresh_now": refresh_summary.get("refresh_now", 0),
+                "review_soon": refresh_summary.get("review_soon", 0),
             },
             "drivers": {
                 "top_provider": top_provider,
@@ -942,6 +995,9 @@ def _render_overview(report: dict[str, Any]) -> str:
         lines.extend(["", "Operator note", f"  {report['hints'][0]}"])
     if report["decision_support"]:
         lines.extend(["", "Decision support", f"  {report['decision_support'][0]}"])
+    refresh_block = _render_refresh_guidance_block(report, limit=1)
+    if refresh_block:
+        lines.extend([""] + refresh_block)
     return "\n".join(lines) + "\n"
 
 
@@ -1008,6 +1064,10 @@ def _render_providers(report: dict[str, Any]) -> str:
     if route_add_block:
         lines.append("")
         lines.extend(route_add_block)
+    refresh_block = _render_refresh_guidance_block(report)
+    if refresh_block:
+        lines.append("")
+        lines.extend(refresh_block)
     if report["decision_support"]:
         lines.append("")
         lines.append("Budget + routing hints")
@@ -1080,6 +1140,10 @@ def _render_activity(report: dict[str, Any]) -> str:
     if path_block:
         lines.append("")
         lines.extend(path_block)
+    refresh_block = _render_refresh_guidance_block(report)
+    if refresh_block:
+        lines.append("")
+        lines.extend(refresh_block)
     lines.append("")
     lines.append("Operator actions")
     operator_rows = report["operator_actions"][:5]
@@ -1114,6 +1178,9 @@ def _render_alerts(report: dict[str, Any]) -> str:
     route_add_block = _render_route_add_block(report)
     if route_add_block:
         lines.extend(route_add_block)
+    refresh_block = _render_refresh_guidance_block(report)
+    if refresh_block:
+        lines.extend(refresh_block)
     for hint in report["hints"][:5]:
         lines.append(f"- {hint}")
     path_block = _render_selection_path_block(report)
@@ -1181,6 +1248,19 @@ def _render_provider_detail(report: dict[str, Any], provider_name: str) -> str:
         lines.append(f"Review age        {_safe_int(row.get('review_age_days'))}d")
     if row.get("freshness_hint"):
         lines.append(f"Freshness hint    {row.get('freshness_hint')}")
+    refresh_lookup = {
+        str(item.get("provider") or "").lower(): item
+        for item in report.get("refresh_guidance") or []
+    }
+    refresh_item = refresh_lookup.get(target)
+    if refresh_item:
+        lines.append(
+            f"Refresh action    {refresh_item.get('action_label') or refresh_item.get('action')}"
+        )
+        if refresh_item.get("refresh_url"):
+            lines.append(f"Refresh source    {refresh_item.get('refresh_url')}")
+        if refresh_item.get("reason"):
+            lines.append(f"Refresh note      {refresh_item.get('reason')}")
     if request_readiness.get("reason"):
         lines.append(f"Readiness detail  {request_readiness.get('reason')}")
     if request_readiness.get("verified_via"):

@@ -229,6 +229,109 @@ def get_provider_catalog() -> dict[str, dict[str, Any]]:
     return payload
 
 
+def get_provider_catalog_entry(provider_name: str) -> dict[str, Any]:
+    """Return one curated provider catalog entry with discovery metadata."""
+    entry = _CATALOG.get(provider_name)
+    if not entry:
+        return {}
+    item = dict(entry)
+    item["discovery"] = _build_discovery_metadata(provider_name, entry)
+    return item
+
+
+def _refresh_state_from_review(last_reviewed: str) -> tuple[str, int]:
+    reviewed = str(last_reviewed or "").strip()
+    if not reviewed:
+        return "unknown", -1
+    reviewed_on = date.fromisoformat(reviewed)
+    age_days = max(0, (date.today() - reviewed_on).days)
+    if age_days <= 7:
+        return "fresh", age_days
+    if age_days <= 21:
+        return "aging", age_days
+    return "stale", age_days
+
+
+def build_provider_refresh_guidance(
+    provider_names: list[str] | tuple[str, ...],
+    *,
+    freshness_overrides: dict[str, dict[str, Any]] | None = None,
+    limit: int | None = None,
+) -> list[dict[str, Any]]:
+    """Return curated refresh guidance for providers with aging or stale assumptions."""
+    overrides = freshness_overrides or {}
+    guidance: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    for provider_name in provider_names:
+        normalized_name = str(provider_name or "").strip()
+        if not normalized_name or normalized_name in seen:
+            continue
+        seen.add(normalized_name)
+
+        catalog_entry = get_provider_catalog_entry(normalized_name)
+        if not catalog_entry:
+            continue
+
+        override = dict(overrides.get(normalized_name) or {})
+        freshness_status = str(override.get("freshness_status") or "").strip().lower()
+        review_age_days_raw = override.get("review_age_days")
+        review_age_days = int(review_age_days_raw) if review_age_days_raw not in (None, "") else -1
+        freshness_hint = str(override.get("freshness_hint") or "").strip()
+
+        if not freshness_status:
+            freshness_status, review_age_days = _refresh_state_from_review(
+                str(catalog_entry.get("last_reviewed") or "")
+            )
+        if freshness_status not in {"aging", "stale"}:
+            continue
+
+        discovery = dict(catalog_entry.get("discovery") or {})
+        refresh_url = str(
+            discovery.get("resolved_url")
+            or catalog_entry.get("official_source_url")
+            or catalog_entry.get("signup_url")
+            or ""
+        ).strip()
+        action = "refresh-now" if freshness_status == "stale" else "review-soon"
+        action_label = "refresh now" if action == "refresh-now" else "review soon"
+        reason = freshness_hint or (
+            "benchmark and cost assumptions are stale; review before trusting them heavily"
+            if freshness_status == "stale"
+            else "benchmark and cost assumptions are aging and worth rechecking soon"
+        )
+        if catalog_entry.get("volatility") in {"medium", "high"} and catalog_entry.get(
+            "offer_track"
+        ) in {"free", "credit", "byok", "marketplace"}:
+            reason += " This route also sits on a more volatile offer track."
+
+        guidance.append(
+            {
+                "provider": normalized_name,
+                "action": action,
+                "action_label": action_label,
+                "freshness_status": freshness_status,
+                "review_age_days": review_age_days,
+                "reason": reason,
+                "refresh_url": refresh_url,
+                "offer_track": str(catalog_entry.get("offer_track") or ""),
+                "provider_type": str(catalog_entry.get("provider_type") or ""),
+                "notes": str(catalog_entry.get("notes") or ""),
+            }
+        )
+
+    guidance.sort(
+        key=lambda item: (
+            0 if item["action"] == "refresh-now" else 1,
+            -int(item.get("review_age_days") or -1),
+            str(item.get("provider") or ""),
+        )
+    )
+    if limit is not None:
+        return guidance[:limit]
+    return guidance
+
+
 def _alert(
     *,
     provider: str,

@@ -627,6 +627,74 @@ def test_faigate_doctor_reports_recent_route_recovery(tmp_path: Path):
     )
 
 
+def test_faigate_doctor_reports_refresh_guidance_for_stale_routes(tmp_path: Path):
+    config_file = tmp_path / "config.yaml"
+    env_file = tmp_path / "faigate.env"
+    config_file.write_text("server: {}\nproviders: {}\n", encoding="utf-8")
+    env_file.write_text("", encoding="utf-8")
+
+    fake_bin = _write_fake_curl(
+        tmp_path,
+        {
+            "/health": json.dumps(
+                {
+                    "status": "ok",
+                    "summary": {
+                        "providers_total": 1,
+                        "providers_healthy": 1,
+                        "providers_unhealthy": 0,
+                    },
+                    "request_readiness": {
+                        "providers_total": 1,
+                        "providers_ready": 1,
+                        "providers_not_ready": 0,
+                    },
+                    "providers": {
+                        "deepseek-chat": {
+                            "healthy": True,
+                            "lane": {
+                                "family": "deepseek",
+                                "canonical_model": "deepseek/chat",
+                                "cluster": "balanced-workhorse",
+                                "freshness_status": "stale",
+                                "review_age_days": 29,
+                                "freshness_hint": (
+                                    "review this route before trusting benchmark assumptions"
+                                ),
+                            },
+                            "request_readiness": {
+                                "ready": True,
+                                "status": "ready",
+                                "reason": _READY_REASON,
+                            },
+                        }
+                    },
+                }
+            ),
+            "/v1/models": json.dumps({"data": []}),
+        },
+    )
+
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+    env["FAIGATE_CONFIG_FILE"] = str(config_file)
+    env["FAIGATE_ENV_FILE"] = str(env_file)
+    env["FAIGATE_PYTHON"] = sys.executable
+    env["PYTHONPATH"] = str(REPO_ROOT)
+
+    result = subprocess.run(
+        ["bash", "scripts/faigate-doctor"],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert "request-ready refresh actions: refresh-now=1 | review-soon=0" in result.stdout
+    assert "request-ready refresh: deepseek-chat -> refresh now (stale, 29d)" in result.stdout
+
+
 def test_faigate_service_lib_detects_homebrew_runtime_paths(tmp_path: Path):
     env = os.environ.copy()
     env["FAIGATE_CONFIG_FILE"] = "/opt/homebrew/etc/faigate/config.yaml"
@@ -1862,6 +1930,112 @@ def test_faigate_dashboard_provider_detail_shows_canonical_lane(tmp_path: Path):
     assert "Last issue type   rate-limited" in result.stdout
     assert "Observed attempt paths" in result.stdout
     assert "same-lane-route: 3 requests" in result.stdout
+
+
+def test_faigate_dashboard_provider_detail_shows_refresh_guidance_for_stale_lane(tmp_path: Path):
+    fake_bin = _write_fake_curl(
+        tmp_path,
+        {
+            "/health": json.dumps(
+                {
+                    "status": "ok",
+                    "summary": {
+                        "providers_total": 1,
+                        "providers_healthy": 1,
+                        "providers_unhealthy": 0,
+                    },
+                    "providers": {
+                        "deepseek-chat": {
+                            "healthy": True,
+                            "tier": "default",
+                            "request_readiness": {
+                                "ready": True,
+                                "status": "ready",
+                                "reason": "route looks request-ready from runtime state",
+                            },
+                        }
+                    },
+                }
+            ),
+            "/api/stats": json.dumps(
+                {
+                    "totals": {
+                        "total_requests": 4,
+                        "total_failures": 0,
+                        "total_prompt_tokens": 1000,
+                        "total_compl_tokens": 500,
+                        "total_cost_usd": 0.08,
+                        "avg_latency_ms": 220.0,
+                    },
+                    "providers": [
+                        {
+                            "provider": "deepseek-chat",
+                            "requests": 4,
+                            "failures": 0,
+                            "total_tokens": 1500,
+                            "prompt_tokens": 1000,
+                            "completion_tokens": 500,
+                            "cost_usd": 0.08,
+                            "avg_latency_ms": 220.0,
+                        }
+                    ],
+                    "routing": [],
+                    "client_totals": [],
+                    "client_highlights": {},
+                    "operator_actions": [],
+                    "hourly": [],
+                    "daily": [],
+                }
+            ),
+            "/api/providers": json.dumps(
+                {
+                    "providers": [
+                        {
+                            "name": "deepseek-chat",
+                            "lane": {
+                                "family": "deepseek",
+                                "name": "workhorse",
+                                "canonical_model": "deepseek/chat",
+                                "route_type": "direct",
+                                "cluster": "balanced-workhorse",
+                                "benchmark_cluster": "balanced-coding",
+                                "freshness_status": "stale",
+                                "review_age_days": 24,
+                                "freshness_hint": (
+                                    "benchmark and cost assumptions are stale; "
+                                    "review before trusting them heavily"
+                                ),
+                            },
+                            "capabilities": {"cost_tier": "standard"},
+                            "request_readiness": {
+                                "ready": True,
+                                "status": "ready",
+                                "reason": "route looks request-ready from runtime state",
+                            },
+                        }
+                    ]
+                }
+            ),
+        },
+    )
+
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+    env["FAIGATE_PYTHON"] = sys.executable
+    env["PYTHONPATH"] = str(REPO_ROOT)
+    env["FAIGATE_DB_PATH"] = str(tmp_path / "faigate.db")
+
+    result = subprocess.run(
+        ["bash", "scripts/faigate-dashboard", "--provider", "deepseek-chat"],
+        cwd=REPO_ROOT,
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "Refresh action    refresh now" in result.stdout
+    assert "Refresh source    https://platform.deepseek.com/" in result.stdout
 
 
 def test_faigate_dashboard_activity_and_alerts_show_family_and_path_summaries(tmp_path: Path):

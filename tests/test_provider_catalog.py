@@ -6,6 +6,7 @@ from faigate.config import load_config
 from faigate.provider_catalog import (
     build_provider_catalog_report,
     build_provider_discovery_view,
+    build_provider_refresh_guidance,
 )
 
 
@@ -275,3 +276,26 @@ metrics:
     assert [item["provider"] for item in operator_view["providers"]] == ["openrouter-fallback"]
     assert [item["provider"] for item in disclosed_view["providers"]] == ["openrouter-fallback"]
     assert [item["provider"] for item in free_view["providers"]] == ["kilocode"]
+
+
+def test_build_provider_refresh_guidance_prefers_stale_entries():
+    guidance = build_provider_refresh_guidance(
+        ["deepseek-chat", "openrouter-fallback"],
+        freshness_overrides={
+            "deepseek-chat": {
+                "freshness_status": "stale",
+                "review_age_days": 29,
+                "freshness_hint": "review this route before trusting benchmark assumptions",
+            },
+            "openrouter-fallback": {
+                "freshness_status": "aging",
+                "review_age_days": 12,
+                "freshness_hint": "marketplace assumptions should be reviewed soon",
+            },
+        },
+    )
+
+    assert [item["provider"] for item in guidance] == ["deepseek-chat", "openrouter-fallback"]
+    assert guidance[0]["action"] == "refresh-now"
+    assert guidance[0]["refresh_url"].startswith("https://")
+    assert guidance[1]["action"] == "review-soon"

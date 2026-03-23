@@ -83,7 +83,7 @@ from pathlib import Path
 
 import yaml
 from faigate.onboarding import collect_provider_env_requirements
-from faigate.provider_catalog import build_provider_catalog_report
+from faigate.provider_catalog import build_provider_catalog_report, build_provider_refresh_guidance
 from faigate.config import ConfigError, load_config
 from faigate.lane_registry import (
     get_canonical_model_routes,
@@ -385,6 +385,18 @@ if health_raw:
                 f"[ok] request-ready preferred route: {row['provider']} -> {preferred_route} "
                 f"({strategy})"
             )
+    refresh_guidance = build_provider_refresh_guidance(
+        [str(row.get("provider") or "") for row in rows],
+        freshness_overrides={
+            str(row.get("provider") or ""): {
+                "freshness_status": row.get("freshness_status"),
+                "review_age_days": row.get("review_age_days"),
+                "freshness_hint": row.get("freshness_hint"),
+            }
+            for row in rows
+            if str(row.get("provider") or "")
+        },
+    )
     if total:
         print(f"[ok] request readiness summary: {ready}/{total} provider routes look request-ready")
         print(
@@ -408,6 +420,24 @@ if health_raw:
         print(
             f"[ok] request-ready mirror gaps: {mirror_gap_routes} routes have known mirrors not configured"
         )
+        if refresh_guidance:
+            print(
+                "[ok] request-ready refresh actions: "
+                + f"refresh-now={sum(1 for item in refresh_guidance if str(item.get('action')) == 'refresh-now')} | "
+                + f"review-soon={sum(1 for item in refresh_guidance if str(item.get('action')) == 'review-soon')}"
+            )
+            for item in refresh_guidance[:3]:
+                detail = (
+                    f"[ok] request-ready refresh: {item.get('provider')} -> "
+                    f"{item.get('action_label')} ({item.get('freshness_status')}"
+                )
+                review_age_days = int(item.get("review_age_days") or -1)
+                if review_age_days >= 0:
+                    detail += f", {review_age_days}d"
+                detail += ")"
+                if item.get("refresh_url"):
+                    detail += f" -> {item['refresh_url']}"
+                print(detail)
 PY
 then
   status=1

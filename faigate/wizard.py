@@ -19,7 +19,7 @@ from .lane_registry import (
     get_provider_transport_binding,
     get_route_add_recommendations,
 )
-from .provider_catalog import get_provider_catalog
+from .provider_catalog import build_provider_refresh_guidance, get_provider_catalog
 from .providers import ProviderBackend
 
 ProviderFactory = dict[str, Any]
@@ -1296,6 +1296,16 @@ def build_provider_probe_report(
             add_strategy=str(row.get("recommended_add_strategy") or "none"),
         )
 
+    refresh_guidance = _refresh_guidance_from_rows(rows)
+    refresh_counts = {
+        "refresh-now": sum(
+            1 for item in refresh_guidance if str(item.get("action") or "") == "refresh-now"
+        ),
+        "review-soon": sum(
+            1 for item in refresh_guidance if str(item.get("action") or "") == "review-soon"
+        ),
+    }
+
     return {
         "providers": rows,
         "summary": {
@@ -1313,7 +1323,9 @@ def build_provider_probe_report(
             "mirror_gaps": sum(1 for row in rows if row.get("known_mirror_gaps")),
             "recommendations": recommendation_counts,
             "add_recommendations": add_counts,
+            "refresh_actions": refresh_counts,
         },
+        "refresh_guidance": refresh_guidance,
     }
 
 
@@ -1375,6 +1387,16 @@ def render_provider_probe_text(report: dict[str, Any]) -> str:
                 f"same-lane={add_recommendations.get('same-lane-add', 0)}",
                 f"cluster={add_recommendations.get('cluster-add', 0)}",
                 f"family={add_recommendations.get('family-add', 0)}",
+            ]
+        )
+    )
+    refresh_actions = summary.get("refresh_actions") or {}
+    lines.append(
+        "Refresh actions: "
+        + " | ".join(
+            [
+                f"refresh-now={refresh_actions.get('refresh-now', 0)}",
+                f"review-soon={refresh_actions.get('review-soon', 0)}",
             ]
         )
     )
@@ -1447,6 +1469,21 @@ def render_provider_probe_text(report: dict[str, Any]) -> str:
                 lines.append("  " + "other add options: " + ", ".join(other_options))
         if row.get("next_action"):
             lines.append("  " + f"next: {row['next_action']}")
+    refresh_guidance = list(report.get("refresh_guidance") or [])
+    if refresh_guidance:
+        lines.extend(["", "Refresh guidance"])
+        for item in refresh_guidance[:3]:
+            review_age_days = int(item.get("review_age_days") or -1)
+            age_suffix = f", {review_age_days}d" if review_age_days >= 0 else ""
+            line = (
+                f"- {item.get('provider')}: {item.get('action_label') or item.get('action')} "
+                f"({item.get('freshness_status')}{age_suffix})"
+            )
+            if item.get("refresh_url"):
+                line += f" -> {item['refresh_url']}"
+            lines.append(line)
+            if item.get("reason"):
+                lines.append("  " + f"why: {item['reason']}")
     lines.append("")
     lines.append(
         "Tip: Ready means config, env, and the current /health "
@@ -1891,6 +1928,45 @@ def _scenario_route_addition_lines(additions: list[dict[str, Any]], *, limit: in
     return lines
 
 
+def _refresh_guidance_from_rows(
+    rows: list[dict[str, Any]],
+    *,
+    limit: int = 3,
+) -> list[dict[str, Any]]:
+    return build_provider_refresh_guidance(
+        [str(row.get("provider") or "") for row in rows],
+        freshness_overrides={
+            str(row.get("provider") or ""): {
+                "freshness_status": row.get("freshness_status"),
+                "review_age_days": row.get("review_age_days"),
+                "freshness_hint": row.get("freshness_hint"),
+            }
+            for row in rows
+            if str(row.get("provider") or "")
+        },
+        limit=limit,
+    )
+
+
+def _scenario_refresh_guidance_lines(
+    provider_names: list[str],
+    *,
+    limit: int = 2,
+) -> list[str]:
+    guidance = build_provider_refresh_guidance(provider_names, limit=limit)
+    lines: list[str] = []
+    for item in guidance:
+        line = f"{item.get('provider')}: {item.get('action_label')} ({item.get('freshness_status')}"
+        review_age_days = int(item.get("review_age_days") or -1)
+        if review_age_days >= 0:
+            line += f", {review_age_days}d"
+        line += ")"
+        if item.get("refresh_url"):
+            line += f" via {item['refresh_url']}"
+        lines.append(line)
+    return lines
+
+
 def _scenario_routing_rationale_lines(
     provider_names: list[str],
     *,
@@ -1933,6 +2009,7 @@ def build_route_add_setup_plan(
         candidates,
         configured_names=configured_names,
     )
+    refresh_guidance = build_provider_refresh_guidance(candidates, limit=3)
     actionable: list[dict[str, Any]] = []
     auto_apply: list[dict[str, Any]] = []
     manual: list[dict[str, Any]] = []
@@ -1966,6 +2043,7 @@ def build_route_add_setup_plan(
         "actionable_additions": actionable,
         "auto_apply_additions": auto_apply,
         "manual_additions": manual,
+        "refresh_guidance": refresh_guidance,
     }
 
 
@@ -2019,6 +2097,19 @@ def render_route_add_setup_plan_text(plan: dict[str, Any]) -> str:
         lines.append(
             f"Tip: {len(manual)} route addition(s) still need input before they can be written."
         )
+    refresh_guidance = list(plan.get("refresh_guidance") or [])
+    if refresh_guidance:
+        lines.extend(["", "Refresh guidance"])
+        for item in refresh_guidance[:3]:
+            review_age_days = int(item.get("review_age_days") or -1)
+            age_suffix = f", {review_age_days}d" if review_age_days >= 0 else ""
+            line = (
+                f"- {item.get('provider')}: {item.get('action_label') or item.get('action')} "
+                f"({item.get('freshness_status')}{age_suffix})"
+            )
+            if item.get("refresh_url"):
+                line += f" -> {item['refresh_url']}"
+            lines.append(line)
     lines.append("")
     lines.append("Tip: Use Guided Route Additions in Provider Setup")
     lines.append("     to add these sources without re-selecting them manually.")
@@ -2061,6 +2152,7 @@ def list_client_scenarios(
                 "degrade_chains": _scenario_degrade_chains(preferred),
                 "route_additions": route_additions,
                 "route_addition_lines": _scenario_route_addition_lines(route_additions),
+                "refresh_guidance_lines": _scenario_refresh_guidance_lines(preferred),
             }
         )
     return scenarios
@@ -2096,6 +2188,9 @@ def render_client_scenarios_text(
         if item.get("route_addition_lines"):
             for add_line in item["route_addition_lines"]:
                 lines.append("  " + f"add for fuller coverage: {add_line}")
+        if item.get("refresh_guidance_lines"):
+            for refresh_line in item["refresh_guidance_lines"]:
+                lines.append("  " + f"refresh before leaning on: {refresh_line}")
         if item["ready_providers"]:
             lines.append("  " + "ready now: " + ", ".join(item["ready_providers"]))
         elif item["recommended_providers"]:
@@ -2235,6 +2330,11 @@ def render_client_scenario_summary(payload: dict[str, Any]) -> str:
     if routing_rationale:
         lines.extend(["", "Routing rationale"])
         for line in routing_rationale:
+            lines.append("- " + line)
+    refresh_guidance_lines = _scenario_refresh_guidance_lines(rationale_provider_names)
+    if refresh_guidance_lines:
+        lines.extend(["", "Refresh guidance"])
+        for line in refresh_guidance_lines:
             lines.append("- " + line)
     if actionable_additions:
         lines.extend(["", "Operator follow-up"])

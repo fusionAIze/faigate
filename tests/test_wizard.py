@@ -1013,6 +1013,56 @@ providers:
     assert "Action summary: fix-now=0 | hold=0 | watch=0 | route=1 | inspect=0" in rendered
 
 
+def test_render_provider_probe_text_shows_refresh_guidance():
+    rendered = render_provider_probe_text(
+        {
+            "summary": {
+                "configured": 1,
+                "ready": 1,
+                "health_live": True,
+                "live_probe": False,
+                "actions": {
+                    "fix-now": 0,
+                    "hold": 0,
+                    "watch": 0,
+                    "route": 1,
+                    "inspect": 0,
+                },
+                "freshness": {"fresh": 0, "aging": 0, "stale": 1},
+                "families": [],
+                "mirror_gaps": 0,
+                "recommendations": {
+                    "same-lane-route": 0,
+                    "cluster-degrade": 0,
+                    "family-route": 0,
+                },
+                "add_recommendations": {
+                    "same-lane-add": 0,
+                    "cluster-add": 0,
+                    "family-add": 0,
+                },
+                "refresh_actions": {"refresh-now": 1, "review-soon": 0},
+            },
+            "providers": [],
+            "refresh_guidance": [
+                {
+                    "provider": "deepseek-chat",
+                    "action": "refresh-now",
+                    "action_label": "refresh now",
+                    "freshness_status": "stale",
+                    "review_age_days": 28,
+                    "reason": "review this route before trusting benchmark assumptions",
+                    "refresh_url": "https://platform.deepseek.com/",
+                }
+            ],
+        }
+    )
+
+    assert "Refresh actions: refresh-now=1 | review-soon=0" in rendered
+    assert "Refresh guidance" in rendered
+    assert "deepseek-chat: refresh now (stale, 28d)" in rendered
+
+
 def test_build_provider_probe_report_prefers_same_lane_then_cluster_route(tmp_path: Path):
     config_path = tmp_path / "config.yaml"
     config_path.write_text(
@@ -1279,6 +1329,64 @@ client_profiles:
     assert "add route:" in summary
 
 
+def test_render_client_scenario_summary_includes_refresh_guidance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """
+server:
+  host: "127.0.0.1"
+  port: 8090
+providers:
+  deepseek-chat:
+    backend: openai-compat
+    api_key: "${DEEPSEEK_API_KEY}"
+    base_url: "https://api.deepseek.com/v1"
+    model: "deepseek-chat"
+fallback_chain:
+  - deepseek-chat
+client_profiles:
+  enabled: true
+  default: generic
+  profiles:
+    generic: {}
+    opencode:
+      routing_mode: auto
+""".strip(),
+        encoding="utf-8",
+    )
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "DEEPSEEK_API_KEY=sk-demo\nOPENAI_API_KEY=sk-openai\nANTHROPIC_API_KEY=sk-ant\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        "faigate.wizard.build_provider_refresh_guidance",
+        lambda *_args, **_kwargs: [
+            {
+                "provider": "anthropic-claude",
+                "action": "review-soon",
+                "action_label": "review soon",
+                "freshness_status": "aging",
+                "review_age_days": 14,
+                "refresh_url": "https://console.anthropic.com/",
+            }
+        ],
+    )
+
+    payload = apply_client_scenario(
+        scenario_id="opencode-quality",
+        config_path=config_path,
+        env_file=env_file,
+    )
+
+    summary = render_client_scenario_summary(payload)
+    assert "Refresh guidance" in summary
+    assert "anthropic-claude: review soon (aging, 14d)" in summary
+
+
 def test_render_client_scenarios_text_mentions_opencode_free(tmp_path: Path):
     env_file = tmp_path / ".env"
     env_file.write_text("KILOCODE_API_KEY=kilo-demo\nBLACKBOX_API_KEY=bb-demo\n", encoding="utf-8")
@@ -1390,3 +1498,46 @@ providers:
     assert "Ready to add now" in rendered
     assert "Need input first" in rendered
     assert "deepseek-chat" in rendered
+
+
+def test_render_route_add_setup_plan_text_includes_refresh_guidance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """
+providers:
+  anthropic-claude:
+    backend: anthropic-compat
+    api_key: "${ANTHROPIC_API_KEY}"
+    base_url: "https://api.anthropic.com/v1"
+    model: "claude-opus-4-6"
+""".strip(),
+        encoding="utf-8",
+    )
+    env_file = tmp_path / ".env"
+    env_file.write_text("ANTHROPIC_API_KEY=sk-ant\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "faigate.wizard.build_provider_refresh_guidance",
+        lambda *_args, **_kwargs: [
+            {
+                "provider": "anthropic-claude",
+                "action": "refresh-now",
+                "action_label": "refresh now",
+                "freshness_status": "stale",
+                "review_age_days": 25,
+                "refresh_url": "https://console.anthropic.com/",
+            }
+        ],
+    )
+
+    plan = build_route_add_setup_plan(
+        config_path=config_path,
+        env_file=env_file,
+        source_providers=["anthropic-claude"],
+    )
+
+    rendered = render_route_add_setup_plan_text(plan)
+    assert "Refresh guidance" in rendered
+    assert "anthropic-claude: refresh now (stale, 25d)" in rendered
