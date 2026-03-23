@@ -2532,6 +2532,41 @@ providers:
     assert "anthropic-claude  (needs ANTHROPIC_API_KEY)" in result.stdout
 
 
+def test_faigate_provider_setup_recommended_text_lists_guided_route_additions(tmp_path: Path):
+    env_file = tmp_path / ".env"
+    env_file.write_text("ANTHROPIC_API_KEY=sk-ant\n", encoding="utf-8")
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(
+        """
+providers:
+  anthropic-claude:
+    backend: anthropic-compat
+    api_key: "${ANTHROPIC_API_KEY}"
+    base_url: "https://api.anthropic.com/v1"
+    model: "claude-opus-4-6"
+""".strip(),
+        encoding="utf-8",
+    )
+
+    env = os.environ.copy()
+    env["FAIGATE_ENV_FILE"] = str(env_file)
+    env["FAIGATE_CONFIG_FILE"] = str(config_file)
+    env["FAIGATE_PYTHON"] = sys.executable
+
+    result = subprocess.run(
+        ["bash", "scripts/faigate-provider-setup", "--recommended", "--text"],
+        cwd=REPO_ROOT,
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "Guided route additions" in result.stdout
+    assert "openrouter-fallback" in result.stdout
+    assert "route target: openrouter-anthropic-opus" in result.stdout
+
+
 def test_faigate_menu_quick_setup_lists_provider_setup(tmp_path: Path):
     config_file = tmp_path / "config.yaml"
     config_file.write_text(
