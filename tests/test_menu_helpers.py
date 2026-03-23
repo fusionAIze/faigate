@@ -452,6 +452,8 @@ providers:
     assert "[openai-compatible | native | confidence=high]" in result.stdout
     assert "request-ready payload: deepseek-chat -> openai-chat-minimal" in result.stdout
     assert "request-ready next step: deepseek-chat -> route can carry live traffic" in result.stdout
+    assert "request-ready priority next:" in result.stdout
+    assert "Provider Setup -> Guided Route Additions" in result.stdout
 
 
 def test_faigate_doctor_reports_runtime_cooldown_windows(tmp_path: Path):
@@ -1402,6 +1404,7 @@ client_profiles:
 
     assert "Validation completed." in result.stdout
     assert "Recommended next:" in result.stdout
+    assert "Quick Setup shortcut:" in result.stdout
     assert "Fix any missing env or endpoint warnings before restart work." in result.stdout
 
 
@@ -2210,12 +2213,15 @@ def test_faigate_dashboard_activity_and_alerts_show_family_and_path_summaries(tm
     assert "Lane families" in activity.stdout
     assert "- deepseek: 2 routes | 14 req | cooldown=2 | recovery=1" in activity.stdout
     assert "Selection paths" in activity.stdout
+    assert "Priority next" in activity.stdout
+    assert "Providers or Clients" in activity.stdout
     assert (
         "same-lane-route: 6 req / $0.18 / 410ms "
         "[deepseek | cooldown | recovery-watch]" in activity.stdout
     )
     assert "Lane families" in alerts.stdout
     assert "Selection paths" in alerts.stdout
+    assert "Priority next" in alerts.stdout
 
 
 def test_faigate_provider_probe_summarizes_config_env_and_health(tmp_path: Path):

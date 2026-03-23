@@ -450,6 +450,51 @@ def _render_refresh_guidance_block(report: dict[str, Any], *, limit: int = 3) ->
     return lines
 
 
+def _build_priority_next(
+    *,
+    route_additions: list[dict[str, Any]],
+    refresh_summary: dict[str, int],
+    providers_request_not_ready: int,
+    unhealthy_count: int,
+    total_requests: int,
+    providers_request_ready: int,
+    fallback_pct: float,
+) -> dict[str, str]:
+    if route_additions:
+        top_add = route_additions[0]
+        return {
+            "path": "Provider Setup -> Guided Route Additions",
+            "why": (
+                "known route additions are still open, starting with "
+                f"{top_add.get('add_provider')} ({top_add.get('strategy')})."
+            ),
+        }
+    if refresh_summary.get("refresh_now", 0) > 0:
+        return {
+            "path": "Dashboard -> Provider detail",
+            "why": "stale benchmark and cost assumptions should be refreshed before heavier traffic leans on them.",
+        }
+    if providers_request_not_ready > 0 or unhealthy_count > 0:
+        return {
+            "path": "Provider Probe or Doctor",
+            "why": "some routes are not request-ready yet or the live health view still shows degraded providers.",
+        }
+    if total_requests == 0 and providers_request_ready > 0:
+        return {
+            "path": "Client Quickstarts",
+            "why": "the gateway is ready enough that the next real step is wiring in a client and sending live traffic.",
+        }
+    if fallback_pct >= 20.0:
+        return {
+            "path": "Client Scenarios or Client Wizard",
+            "why": "fallback routing is carrying a meaningful share of traffic and the client defaults should be tightened.",
+        }
+    return {
+        "path": "Providers or Clients",
+        "why": "the gateway is live; inspect provider and client detail views for the next focused tuning pass.",
+    }
+
+
 def _recommended_scenario_for_client(client_profile: str, *, expensive: bool = False) -> str | None:
     mapping = {
         "opencode": "opencode-eco" if expensive else "opencode-balanced",
@@ -824,6 +869,20 @@ def build_dashboard_report(
             f"as a {top_addition['strategy']} for {top_addition['family']} traffic."
         )
 
+    priority_next = _build_priority_next(
+        route_additions=route_additions,
+        refresh_summary=refresh_summary,
+        providers_request_not_ready=_safe_int(
+            ((health_payload or {}).get("request_readiness") or {}).get("providers_not_ready")
+        ),
+        unhealthy_count=len(unhealthy_providers),
+        total_requests=total_requests,
+        providers_request_ready=_safe_int(
+            ((health_payload or {}).get("request_readiness") or {}).get("providers_ready")
+        ),
+        fallback_pct=fallback_pct,
+    )
+
     return {
         "source": {
             "mode": source_mode,
@@ -847,6 +906,7 @@ def build_dashboard_report(
         "operator_actions": operator_actions,
         "client_highlights": client_highlights,
         "decision_support": decision_support,
+        "priority_next": priority_next,
         "cards": {
             "traffic": {
                 "requests": total_requests,
@@ -993,6 +1053,16 @@ def _render_overview(report: dict[str, Any]) -> str:
         )
     elif report["hints"]:
         lines.extend(["", "Operator note", f"  {report['hints'][0]}"])
+    priority_next = report.get("priority_next") or {}
+    if priority_next:
+        lines.extend(
+            [
+                "",
+                "Priority next",
+                f"  {priority_next.get('path')}",
+                f"  {priority_next.get('why')}",
+            ]
+        )
     if report["decision_support"]:
         lines.extend(["", "Decision support", f"  {report['decision_support'][0]}"])
     refresh_block = _render_refresh_guidance_block(report, limit=1)
@@ -1144,6 +1214,16 @@ def _render_activity(report: dict[str, Any]) -> str:
     if refresh_block:
         lines.append("")
         lines.extend(refresh_block)
+    priority_next = report.get("priority_next") or {}
+    if priority_next:
+        lines.extend(
+            [
+                "",
+                "Priority next",
+                f"- path: {priority_next.get('path')}",
+                f"- why : {priority_next.get('why')}",
+            ]
+        )
     lines.append("")
     lines.append("Operator actions")
     operator_rows = report["operator_actions"][:5]
@@ -1188,6 +1268,16 @@ def _render_alerts(report: dict[str, Any]) -> str:
         lines.extend(path_block)
     for hint in report["decision_support"][:5]:
         lines.append(f"- {hint}")
+    priority_next = report.get("priority_next") or {}
+    if priority_next:
+        lines.extend(
+            [
+                "",
+                "Priority next",
+                f"- path: {priority_next.get('path')}",
+                f"- why : {priority_next.get('why')}",
+            ]
+        )
     return "\n".join(lines).rstrip() + "\n"
 
 

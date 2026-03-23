@@ -110,7 +110,10 @@ run_and_pause_with_priority_receipt() {
     faigate_ui_warn "Command exited with status ${command_rc}."
   fi
   priority_step="$(priority_next_step_line)"
-  show_next_steps "$title" "$priority_step" "${steps[@]}"
+  show_next_steps "$title" \
+    "$priority_step" \
+    "Quick Setup shortcut: return here and press r to open the current recommended path directly." \
+    "${steps[@]}"
   faigate_ui_pause
   return 0
 }

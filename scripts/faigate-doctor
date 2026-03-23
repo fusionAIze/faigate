@@ -438,6 +438,33 @@ if health_raw:
                 if item.get("refresh_url"):
                     detail += f" -> {item['refresh_url']}"
                 print(detail)
+        if action_counts["fix-now"] > 0:
+            print(
+                "[ok] request-ready priority next: API Keys or Provider Setup -> "
+                "at least one configured route still needs credentials or endpoint cleanup"
+            )
+        elif mirror_gap_routes > 0:
+            print(
+                "[ok] request-ready priority next: Provider Setup -> Guided Route Additions -> "
+                "known same-lane or cluster mirrors are still missing"
+            )
+        elif refresh_guidance and any(
+            str(item.get("action") or "") == "refresh-now" for item in refresh_guidance
+        ):
+            print(
+                "[ok] request-ready priority next: Dashboard -> Provider detail -> "
+                "refresh stale benchmark and cost assumptions before heavier traffic leans on them"
+            )
+        elif action_counts["hold"] > 0 or action_counts["watch"] > 0:
+            print(
+                "[ok] request-ready priority next: Doctor or Dashboard -> Provider detail -> "
+                "runtime cooldown or recovery pressure is active"
+            )
+        elif ready > 0:
+            print(
+                "[ok] request-ready priority next: Client Scenarios or Client Quickstarts -> "
+                "the provider layer looks ready enough to move on to client defaults and wiring"
+            )
 PY
 then
   status=1

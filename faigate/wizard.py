@@ -1329,6 +1329,65 @@ def build_provider_probe_report(
     }
 
 
+def _provider_probe_priority_next(report: dict[str, Any]) -> dict[str, str]:
+    summary = report.get("summary") or {}
+    actions = summary.get("actions") or {}
+    refresh_actions = summary.get("refresh_actions") or {}
+
+    if int(summary.get("configured") or 0) == 0:
+        return {
+            "path": "Provider Setup",
+            "why": "no provider sources are configured yet, so there is nothing real to probe.",
+        }
+    if int(actions.get("fix-now") or 0) > 0:
+        return {
+            "path": "API Keys or Provider Setup",
+            "why": (
+                "at least one configured route still needs credentials, "
+                "endpoint fixes, or model cleanup."
+            ),
+        }
+    if int(summary.get("mirror_gaps") or 0) > 0:
+        return {
+            "path": "Provider Setup -> Guided Route Additions",
+            "why": (
+                "known same-lane or cluster mirrors are still missing from "
+                "the configured route inventory."
+            ),
+        }
+    if int(refresh_actions.get("refresh-now") or 0) > 0:
+        return {
+            "path": "Dashboard -> Provider detail",
+            "why": (
+                "one or more active routes rely on stale benchmark and cost "
+                "assumptions that should be refreshed now."
+            ),
+        }
+    if int(actions.get("hold") or 0) > 0 or int(actions.get("watch") or 0) > 0:
+        return {
+            "path": "Doctor or Dashboard -> Provider detail",
+            "why": (
+                "runtime cooldown or recovery pressure is active and should be "
+                "checked before routing heavier traffic."
+            ),
+        }
+    if int(summary.get("ready") or 0) > 0:
+        return {
+            "path": "Client Scenarios or Client Quickstarts",
+            "why": (
+                "the provider layer looks ready enough to move on to client "
+                "defaults and real client wiring."
+            ),
+        }
+    return {
+        "path": "Validate",
+        "why": (
+            "the probe ran, but the next operator action is still to tighten "
+            "the current config and env state."
+        ),
+    }
+
+
 def render_provider_probe_text(report: dict[str, Any]) -> str:
     lines = ["Provider probe", ""]
     summary = report.get("summary") or {}
@@ -1399,6 +1458,15 @@ def render_provider_probe_text(report: dict[str, Any]) -> str:
                 f"review-soon={refresh_actions.get('review-soon', 0)}",
             ]
         )
+    )
+    priority_next = _provider_probe_priority_next(report)
+    lines.extend(
+        [
+            "",
+            "Priority next",
+            f"- path: {priority_next['path']}",
+            f"- why : {priority_next['why']}",
+        ]
     )
     lines.append("")
     for row in report.get("providers", []):
