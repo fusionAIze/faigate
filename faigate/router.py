@@ -39,6 +39,37 @@ _OPENCODE_COMPLEXITY_HINTS = (
     "performance bottleneck",
     "race condition",
     "deadlock",
+    # v1.9.1: architecture extensions
+    "event sourcing",
+    "cqrs",
+    "saga",
+    "microservices",
+    "distributed system",
+    "service mesh",
+    # v1.9.1: devops
+    "kubernetes",
+    "terraform",
+    "infrastructure as code",
+    "deployment",
+    "ci/cd",
+    # v1.9.1: testing
+    "unit test",
+    "integration test",
+    "test coverage",
+    # v1.9.1: security
+    "jwt",
+    "sql injection",
+    "rbac",
+    "vulnerability",
+    "authentication",
+    "authorization",
+    # v1.9.1: database
+    "schema",
+    "replication",
+    "sharding",
+    "query optimization",
+    "multi-tenant",
+    "row-level security",
 )
 _OPENCODE_COMPLEXITY_RULE_KEYWORDS = {
     "refactor",
@@ -64,6 +95,22 @@ _OPENCODE_COMPLEXITY_RULE_KEYWORDS = {
     "backpressure",
     "failure mode",
     "reliability",
+    # v1.9.1 additions
+    "event sourcing",
+    "cqrs",
+    "kubernetes",
+    "terraform",
+    "infrastructure as code",
+    "unit test",
+    "unit tests",
+    "integration test",
+    "integration tests",
+    "jwt",
+    "sql injection",
+    "vulnerability",
+    "schema",
+    "replication",
+    "query optimization",
 }
 _OPENCODE_SIGNAL_GROUPS = {
     "architecture": (
@@ -73,6 +120,21 @@ _OPENCODE_SIGNAL_GROUPS = {
         "design pattern",
         "system design",
         "design review",
+        # event-driven / domain-driven patterns
+        "event sourcing",
+        "cqrs",
+        "saga",
+        "event-driven",
+        "domain-driven",
+        "ddd",
+        "hexagonal",
+        "ports and adapters",
+        "microservices",
+        "distributed system",
+        "load balancing",
+        "service mesh",
+        "api design",
+        "contract",
     ),
     "change-risk": (
         "migration",
@@ -101,6 +163,86 @@ _OPENCODE_SIGNAL_GROUPS = {
         "security vulnerability",
         "implementation plan",
         "rollout plan",
+    ),
+    # ── new groups added in v1.9.1 ──────────────────────────────────────────
+    "devops": (
+        "kubernetes",
+        "k8s",
+        "terraform",
+        "docker",
+        "ci/cd",
+        "pipeline",
+        "helm",
+        "container",
+        "nginx",
+        "deployment",
+        "infrastructure",
+        "infrastructure as code",
+        "reverse proxy",
+        "ssl termination",
+        "rolling update",
+        "health check",
+        "liveness probe",
+        "service account",
+        "ingress",
+    ),
+    "testing": (
+        "unit test",
+        "unit tests",
+        "integration test",
+        "integration tests",
+        "pytest",
+        "jest",
+        "mock",
+        "tdd",
+        "test coverage",
+        "e2e",
+        "end-to-end",
+        "fixture",
+        "assertion",
+        "test suite",
+        "snapshot test",
+        "spy",
+        "stub",
+    ),
+    "security": (
+        "jwt",
+        "oauth",
+        "xss",
+        "sql injection",
+        "csrf",
+        "rbac",
+        "brute force",
+        "vulnerability",
+        "penetration",
+        "encryption",
+        "authentication",
+        "authorization",
+        "session fixation",
+        "rate limit",
+        "secret",
+        "privilege escalation",
+        "zero trust",
+        "audit",
+    ),
+    "database": (
+        "schema",
+        "query optimization",
+        "index",
+        "replication",
+        "sharding",
+        "multi-tenant",
+        "orm",
+        "transaction",
+        "normalization",
+        "foreign key",
+        "sql",
+        "postgres",
+        "mysql",
+        "row-level security",
+        "rls",
+        "full table scan",
+        "slow query",
     ),
 }
 
@@ -1506,6 +1648,10 @@ class Router:
     def _routing_posture(self, select: dict[str, Any], ctx: _RoutingContext | None = None) -> str:
         routing_mode = str(select.get("routing_mode", "") or "").strip()
         if not routing_mode and ctx is not None:
+            # Hook hints take precedence over profile defaults so that
+            # X-faigate-Mode headers can override the client profile mode.
+            routing_mode = str((ctx.hook_hints or {}).get("routing_mode", "") or "").strip()
+        if not routing_mode and ctx is not None:
             routing_mode = str((ctx.profile_hints or {}).get("routing_mode", "") or "").strip()
         if routing_mode:
             return _normalize_routing_posture(routing_mode)
@@ -1912,8 +2058,16 @@ class Router:
         """Evaluate a heuristic match block."""
         match = rule.get("match", {})
         rule_name = str(rule.get("name") or "")
-        # fallthrough = always matches (used as default)
+        # fallthrough = always matches (used as default).
+        # Exception: bypass it when short_complex=True or when a per-request
+        # provider preference is set — both cases should fall through to the
+        # scoring layer rather than committing to a catch-all cheap route.
         if match.get("fallthrough"):
+            ri = dict(getattr(ctx, "request_insights", {}) or {})
+            hook_hints = dict(getattr(ctx, "hook_hints", {}) or {})
+            if ri.get("short_complex") or hook_hints.get("prefer_providers"):
+                return False, {"rule_name": rule_name, "fallthrough": True,
+                               "bypassed_for": "short_complex_or_prefer_providers"}
             return True, {"rule_name": rule_name, "fallthrough": True}
 
         matched_any = False
@@ -1936,6 +2090,21 @@ class Router:
                 token_ok = token_ok and ctx.total_tokens > tok_match["greater_than"]
             if not token_ok:
                 return False, details
+            # short_complex bypass: a brief prompt that carries ≥2 high-stakes
+            # signal groups should not be committed to a cheap lane by the
+            # token-count heuristic alone.  Fall through to scoring so the
+            # complexity signals can influence provider selection.
+            if "less_than" in tok_match:
+                ri = dict(getattr(ctx, "request_insights", {}) or {})
+                if ri.get("short_complex"):
+                    return False, {**details, "bypassed_for": "short_complex"}
+            # prefer_providers bypass: an explicit per-request provider
+            # preference (from X-faigate-Prefer-Provider header) should be
+            # honoured instead of letting the token-count heuristic win.
+            if "less_than" in tok_match:
+                hook_hints = dict(getattr(ctx, "hook_hints", {}) or {})
+                if hook_hints.get("prefer_providers"):
+                    return False, {**details, "bypassed_for": "prefer_providers"}
 
         # message_keywords
         if "message_keywords" in match:

@@ -312,6 +312,32 @@ def _hook_profile_override_header(context: RequestHookContext) -> RequestHookRes
     )
 
 
+def _hook_mode_override_header(context: RequestHookContext) -> RequestHookResult | None:
+    """Override the routing mode (posture) for one request via X-faigate-Mode header.
+
+    Accepted values mirror the virtual routing modes defined in config.yaml:
+    auto, eco, premium, free — plus common aliases (quality, save, cheap, balanced).
+    Unknown values are silently ignored so misconfigured clients cannot break routing.
+    """
+    raw = context.headers.get("x-faigate-mode", "").strip().lower()
+    if not raw:
+        return None
+
+    _KNOWN_MODE_ALIASES = {
+        "auto", "eco", "premium", "free",
+        # common aliases that _normalize_routing_posture already handles
+        "quality", "save", "cheap", "balanced", "standard",
+    }
+    if raw not in _KNOWN_MODE_ALIASES:
+        return None
+
+    return RequestHookResult(
+        routing_hints={"routing_mode": raw},
+        notes=[f"Mode override hook set routing mode: {raw}"],
+    )
+
+
 register_request_hook("prefer-provider-header", _hook_prefer_provider_header)
 register_request_hook("locality-header", _hook_locality_header)
 register_request_hook("profile-override-header", _hook_profile_override_header)
+register_request_hook("mode-override-header", _hook_mode_override_header)

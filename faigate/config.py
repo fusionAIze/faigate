@@ -1744,7 +1744,26 @@ class Config:
 
 def load_config(path: str | Path | None = None) -> Config:
     """Load config.yaml, expand env vars, return Config object."""
-    load_dotenv()
+    # Resolve env file: FAIGATE_ENV_FILE takes precedence, then look next to
+    # config.yaml (FAIGATE_CONFIG_FILE), then fall back to find_dotenv() (CWD
+    # or calling-frame walk-up).  This ensures the installed Homebrew package
+    # finds faigate.env in /opt/homebrew/etc/faigate/ even though load_dotenv()
+    # would otherwise search from the site-packages directory.
+    _faigate_env_file: str | None = os.environ.get("FAIGATE_ENV_FILE")
+    if not _faigate_env_file:
+        _config_env = os.environ.get("FAIGATE_CONFIG_FILE") or os.environ.get("FAIGATE_CONFIG_PATH")
+        if _config_env:
+            _candidate = Path(_config_env).parent / ".env"
+            if _candidate.exists():
+                _faigate_env_file = str(_candidate)
+            else:
+                _candidate2 = Path(_config_env).parent / "faigate.env"
+                if _candidate2.exists():
+                    _faigate_env_file = str(_candidate2)
+    if _faigate_env_file:
+        load_dotenv(_faigate_env_file)
+    else:
+        load_dotenv()
 
     if path is None:
         env_path = os.environ.get("FAIGATE_CONFIG_FILE") or os.environ.get("FAIGATE_CONFIG_PATH")

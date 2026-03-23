@@ -4,7 +4,23 @@ All notable changes to fusionAIze Gate should be documented here.
 
 The format is intentionally lightweight and human-readable. Group entries by release and focus on user-visible behavior, operational changes, and compatibility notes.
 
-## v1.9.0 - Unreleased
+## v1.9.1 - 2026-03-24
+
+### Fixed
+
+- Corrected version strings in `__init__.py` and `main.py` which incorrectly reported `1.8.0` after the v1.9.0 release
+- Fixed `load_dotenv()` in `config.py` so the service correctly resolves `faigate.env` from the config directory (`/opt/homebrew/etc/faigate/`) instead of searching upward from the package installation path, which caused all providers to start in `unresolved-key` state when run via Homebrew launchd
+
+### Added
+
+- Added `mode-override-header` request hook that reads the new `X-faigate-Mode` header and maps it to a routing posture (`auto`, `eco`, `premium`, `free`, plus common aliases `quality`, `save`, `cheap`, `balanced`, `standard`); unknown values are silently ignored
+- Updated `_routing_posture()` to check `hook_hints.routing_mode` before `profile_hints.routing_mode` so the header override takes effect end-to-end
+- Expanded `opencode` signal groups from 5 to 10 by adding `devops` (kubernetes, terraform, helm, ci/cd, …), `testing` (unit tests, integration tests, pytest, jest, tdd, coverage, …), `security` (jwt, oauth, xss, sql injection, csrf, rbac, …), and `database` (schema, query optimization, index, replication, sharding, …) — each group triggers `short_complex` escalation to reasoning lanes when ≥ 2 groups fire on a brief prompt
+- Added plural keyword forms (`unit tests`, `integration tests`) to the `testing` signal group so word-boundary matching no longer silently drops plural prompts
+- Extended `_OPENCODE_COMPLEXITY_HINTS` and `_OPENCODE_COMPLEXITY_RULE_KEYWORDS` with event sourcing, cqrs, kubernetes, terraform, infrastructure as code, unit test, integration test, jwt, sql injection, vulnerability, schema, replication, and query optimization terms
+- Added `short_complex` and `prefer_providers` bypass guards in `_evaluate_heuristic_match` so brief cross-domain prompts and explicit provider-preference requests skip the `short-message` and `general-default` fallthrough rules and reach the profile scoring layer
+
+## v1.9.0 - 2026-03-23
 
 ### Changed
 
