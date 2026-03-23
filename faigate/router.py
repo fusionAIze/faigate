@@ -54,6 +54,20 @@ _OPENCODE_COMPLEXITY_RULE_KEYWORDS = {
     "failure mode",
     "reliability",
 }
+_OPENCODE_SIGNAL_GROUPS = {
+    "architecture": ("architecture", "tradeoff", "trade-off", "design pattern"),
+    "change-risk": (
+        "migration",
+        "rollback",
+        "idempot",
+        "failure mode",
+        "failure modes",
+        "reliability",
+    ),
+    "concurrency": ("concurrency", "race condition", "deadlock", "backpressure"),
+    "debugging": ("debug", "memory leak", "type error", "performance bottleneck"),
+    "quality": ("refactor", "code review", "optimize", "security vulnerability"),
+}
 
 
 _QUALITY_TIER_SCORES = {
@@ -268,6 +282,82 @@ def _score_image_fit_ratio(ratio: float) -> int:
     return 2
 
 
+def _collect_keyword_hits(text: str, keywords: tuple[str, ...] | set[str] | list[str]) -> list[str]:
+    """Return de-duplicated keywords that match one text using boundary-aware checks."""
+    hits: list[str] = []
+    seen: set[str] = set()
+    for keyword in keywords:
+        normalized = str(keyword).strip().lower()
+        if not normalized or normalized in seen:
+            continue
+        if _keyword_matches_text(normalized, text):
+            seen.add(normalized)
+            hits.append(normalized)
+    return hits
+
+
+def _request_length_bucket(total_tokens: int) -> str:
+    if total_tokens >= 220:
+        return "long"
+    if total_tokens >= 80:
+        return "normal"
+    return "brief"
+
+
+def _build_request_insights(
+    *,
+    last_user_message: str,
+    client_profile: str,
+    has_tools: bool,
+    total_tokens: int,
+    requested_output_tokens: int,
+) -> dict[str, Any]:
+    """Summarize request complexity signals for routing and operator surfaces."""
+    search_text = (last_user_message or "").lower()
+    opencode_hits = _collect_keyword_hits(search_text, _OPENCODE_COMPLEXITY_HINTS)
+    signal_groups = [
+        group
+        for group, keywords in _OPENCODE_SIGNAL_GROUPS.items()
+        if _collect_keyword_hits(search_text, keywords)
+    ]
+
+    score = 0
+    score += min(4, len(opencode_hits))
+    score += len(signal_groups)
+    if has_tools:
+        score += 2
+    if total_tokens >= 80:
+        score += 1
+    if total_tokens >= 180:
+        score += 1
+    if requested_output_tokens >= 1200:
+        score += 1
+    if client_profile == "opencode" and opencode_hits:
+        score += 1
+
+    if score >= 6:
+        complexity_profile = "high"
+    elif score >= 3:
+        complexity_profile = "medium"
+    else:
+        complexity_profile = "low"
+
+    return {
+        "complexity_profile": complexity_profile,
+        "complexity_score": score,
+        "signal_groups": signal_groups,
+        "matched_signals": opencode_hits,
+        "length_bucket": _request_length_bucket(total_tokens),
+        "tool_context": bool(has_tools),
+        "opencode_bias_eligible": client_profile == "opencode"
+        and complexity_profile
+        in {
+            "medium",
+            "high",
+        },
+    }
+
+
 def _merge_select_constraints(*selects: dict[str, Any]) -> dict[str, Any]:
     """Merge policy-like select mappings without dropping list/dict constraints."""
     merged: dict[str, Any] = {
@@ -432,6 +522,13 @@ class Router:
             provider_health=provider_health or {},
             provider_runtime_state=provider_runtime_state or {},
             providers=self.config.providers,
+            request_insights=_build_request_insights(
+                last_user_message=last_user,
+                client_profile=client_profile,
+                has_tools=has_tools,
+                total_tokens=total_tokens,
+                requested_output_tokens=requested_output_tokens,
+            ),
         )
 
         # Layer 0: Policy rules
@@ -532,6 +629,13 @@ class Router:
             provider_health=provider_health or {},
             provider_runtime_state=provider_runtime_state or {},
             providers=self.config.providers,
+            request_insights=_build_request_insights(
+                last_user_message=request_text,
+                client_profile=client_profile,
+                has_tools=False,
+                total_tokens=total_tokens,
+                requested_output_tokens=0,
+            ),
         )
 
         base_select = _merge_select_constraints(
@@ -1240,6 +1344,7 @@ class Router:
     ) -> RoutingDecision:
         details = dict(decision.details)
         lane = self._provider_lane_summary(decision.provider_name)
+        request_insights = dict(getattr(ctx, "request_insights", {}) or {})
         if lane:
             details.setdefault("selected_lane", lane)
             details.setdefault("canonical_model", lane.get("canonical_model", ""))
@@ -1261,15 +1366,65 @@ class Router:
                     == str(lane.get("canonical_model") or "")
                 ],
             )
+        if request_insights:
+            details.setdefault("request_insights", request_insights)
         details.setdefault("routing_posture", self._routing_posture({}, ctx))
         details.setdefault(
             "route_runtime_state",
             ctx.provider_runtime_state.get(decision.provider_name, {}),
         )
+        if "candidate_ranking" not in details and "score_ranking" not in details:
+            details.setdefault("score_ranking", self._score_provider_candidates(ctx))
         if extra_details:
             details.update(extra_details)
         decision.details = details
         return decision
+
+    def _score_provider_candidates(
+        self, ctx: _RoutingContext, *, limit: int = 3
+    ) -> list[dict[str, Any]]:
+        routing_posture = self._routing_posture({}, ctx)
+        diagnostics = {
+            name: self._provider_dimension_details(name, ctx, None, routing_posture)
+            for name in ctx.providers
+        }
+        ranked = [
+            name
+            for name in sorted(
+                ctx.providers,
+                key=lambda name: diagnostics[name]["sort_key"],
+                reverse=True,
+            )
+            if diagnostics[name]["fit"]
+        ]
+        if not ranked:
+            ranked = list(
+                sorted(
+                    ctx.providers,
+                    key=lambda name: diagnostics[name]["sort_key"],
+                    reverse=True,
+                )
+            )
+        summary: list[dict[str, Any]] = []
+        for idx, name in enumerate(ranked[:limit], start=1):
+            details = diagnostics[name]
+            summary.append(
+                {
+                    "rank": idx,
+                    "provider": name,
+                    "score_total": details["score_total"],
+                    "routing_posture": details["routing_posture"],
+                    "lane_family": details["lane_family"],
+                    "canonical_model": details["canonical_model"],
+                    "route_type": details["route_type"],
+                    "lane_cluster": details["lane_cluster"],
+                    "benchmark_cluster": details["benchmark_cluster"],
+                    "runtime_penalty": details["runtime_penalty"],
+                    "runtime_issue_type": details["runtime_issue_type"],
+                    "runtime_recovered_recently": details["runtime_recovered_recently"],
+                }
+            )
+        return summary
 
     def _locality_preference(self, select: dict[str, Any]) -> str | None:
         """Infer one locality preference from the active selector."""
@@ -1389,9 +1544,8 @@ class Router:
             return None
 
         for rule in cfg.get("rules", []):
-            match = rule.get("match", {})
-
-            if self._match_heuristic(match, ctx):
+            matched, match_details = self._match_heuristic(rule, ctx)
+            if matched:
                 logger.debug("Heuristic rule matched: %s → %s", rule["name"], rule["route_to"])
                 return RoutingDecision(
                     provider_name=rule["route_to"],
@@ -1399,23 +1553,29 @@ class Router:
                     rule_name=rule["name"],
                     confidence=0.8,
                     reason=f"Heuristic rule '{rule['name']}' matched",
+                    details={"heuristic_match": match_details},
                 )
 
         return None
 
-    def _match_heuristic(self, match: dict, ctx: _RoutingContext) -> bool:
+    def _match_heuristic(
+        self, rule: dict[str, Any], ctx: _RoutingContext
+    ) -> tuple[bool, dict[str, Any]]:
         """Evaluate a heuristic match block."""
+        match = rule.get("match", {})
+        rule_name = str(rule.get("name") or "")
         # fallthrough = always matches (used as default)
         if match.get("fallthrough"):
-            return True
+            return True, {"rule_name": rule_name, "fallthrough": True}
 
         matched_any = False
+        details: dict[str, Any] = {"rule_name": rule_name}
 
         # has_tools
         if "has_tools" in match:
             matched_any = True
             if match["has_tools"] != ctx.has_tools:
-                return False
+                return False, details
 
         # estimated_tokens
         if "estimated_tokens" in match:
@@ -1427,14 +1587,15 @@ class Router:
             if "greater_than" in tok_match:
                 token_ok = token_ok and ctx.total_tokens > tok_match["greater_than"]
             if not token_ok:
-                return False
+                return False, details
 
         # message_keywords
         if "message_keywords" in match:
             matched_any = True
             kw_cfg = match["message_keywords"]
             keywords = kw_cfg.get("any_of", [])
-            min_matches = kw_cfg.get("min_matches", 1)
+            original_min_matches = int(kw_cfg.get("min_matches", 1) or 1)
+            min_matches = original_min_matches
 
             # CRITICAL: Score only user messages, NOT the system prompt.
             # ClawRouter insight: OpenClaw's system prompt is keyword-rich
@@ -1446,6 +1607,11 @@ class Router:
                 if _keyword_matches_text(str(kw), search_text)
             ]
             hit_count = len(matched_keywords)
+            request_insights = dict(getattr(ctx, "request_insights", {}) or {})
+            complexity_profile = str(request_insights.get("complexity_profile") or "")
+            signal_groups = list(request_insights.get("signal_groups") or [])
+            opencode_bias_applied = False
+            suppressed_for_complexity = False
 
             if (
                 ctx.client_profile == "opencode"
@@ -1455,11 +1621,45 @@ class Router:
                 and any(term in _OPENCODE_COMPLEXITY_RULE_KEYWORDS for term in matched_keywords)
             ):
                 min_matches = max(1, int(min_matches) - 1)
+                opencode_bias_applied = True
+
+            if (
+                ctx.client_profile == "opencode"
+                and complexity_profile == "high"
+                and any(token in rule_name.lower() for token in ("complex", "reason", "debug"))
+                and matched_keywords
+            ):
+                min_matches = max(1, int(min_matches) - 1)
+                opencode_bias_applied = True
+
+            if (
+                ctx.client_profile == "opencode"
+                and complexity_profile in {"medium", "high"}
+                and "simple" in rule_name.lower()
+                and matched_keywords
+            ):
+                suppressed_for_complexity = True
+
+            details.update(
+                {
+                    "matched_keywords": matched_keywords,
+                    "keyword_hit_count": hit_count,
+                    "original_min_matches": original_min_matches,
+                    "effective_min_matches": min_matches,
+                    "opencode_bias_applied": opencode_bias_applied,
+                    "suppressed_for_complexity": suppressed_for_complexity,
+                    "complexity_profile": complexity_profile,
+                    "signal_groups": signal_groups,
+                }
+            )
+
+            if suppressed_for_complexity:
+                return False, details
 
             if hit_count < min_matches:
-                return False
+                return False, details
 
-        return matched_any
+        return matched_any, details
 
     # ── Layer 3: LLM Classifier ────────────────────────────────
 
@@ -1593,6 +1793,7 @@ class _RoutingContext:
         "provider_health",
         "provider_runtime_state",
         "providers",
+        "request_insights",
         "_classify_fn",
     )
 

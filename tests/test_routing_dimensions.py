@@ -867,6 +867,90 @@ metrics:
 
 
 @pytest.mark.asyncio
+async def test_opencode_medium_complexity_suppresses_simple_query_and_promotes_complex_rule(
+    tmp_path,
+):
+    cfg = load_config(
+        _write_config(
+            tmp_path,
+            """
+server:
+  host: "127.0.0.1"
+  port: 8090
+providers:
+  deepseek-reasoner:
+    backend: openai-compat
+    base_url: "https://reasoner.example.com/v1"
+    api_key: "secret"
+    model: "reasoner"
+    tier: reasoning
+  gemini-flash-lite:
+    backend: google-genai
+    base_url: "https://google.example.com/v1beta"
+    api_key: "secret"
+    model: "gemini-2.5-flash-lite"
+    tier: cheap
+heuristic_rules:
+  enabled: true
+  rules:
+    - name: complex-code
+      match:
+        message_keywords:
+          any_of: ["architecture", "rollback", "refactor"]
+          min_matches: 4
+      route_to: deepseek-reasoner
+    - name: simple-query
+      match:
+        message_keywords:
+          any_of: ["hello", "hi"]
+          min_matches: 1
+      route_to: gemini-flash-lite
+fallback_chain:
+  - deepseek-reasoner
+metrics:
+  enabled: false
+""",
+        )
+    )
+    router = Router(cfg)
+    messages = [
+        {
+            "role": "user",
+            "content": "hi, need a rollback-safe architecture plan for this refactor",
+        }
+    ]
+
+    generic_decision = await router.route(
+        messages,
+        model_requested="auto",
+        client_profile="generic",
+        profile_hints={},
+        provider_health={
+            "deepseek-reasoner": {"healthy": True},
+            "gemini-flash-lite": {"healthy": True},
+        },
+    )
+    opencode_decision = await router.route(
+        messages,
+        model_requested="auto",
+        client_profile="opencode",
+        profile_hints={"routing_mode": "auto"},
+        provider_health={
+            "deepseek-reasoner": {"healthy": True},
+            "gemini-flash-lite": {"healthy": True},
+        },
+    )
+
+    assert generic_decision.provider_name == "gemini-flash-lite"
+    assert opencode_decision.provider_name == "deepseek-reasoner"
+    assert opencode_decision.details["request_insights"]["complexity_profile"] in {
+        "medium",
+        "high",
+    }
+    assert opencode_decision.details["heuristic_match"]["opencode_bias_applied"] is True
+
+
+@pytest.mark.asyncio
 async def test_opencode_complexity_bias_promotes_single_strong_architecture_hit(tmp_path):
     cfg = load_config(
         _write_config(
