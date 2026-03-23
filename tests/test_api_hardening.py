@@ -367,6 +367,134 @@ def test_route_preview_sanitizes_header_values(api_client):
     assert body["client_tag"] == "cli-agent-wi"
 
 
+def test_route_preview_includes_route_summary_for_opencode_complexity(
+    api_client, monkeypatch, tmp_path
+):
+    cfg = load_config(
+        _write_config(
+            tmp_path,
+            """
+server:
+  host: "127.0.0.1"
+  port: 8090
+providers:
+  deepseek-reasoner:
+    backend: openai-compat
+    base_url: "https://reasoner.example.com/v1"
+    api_key: "secret"
+    model: "deepseek-reasoner"
+    tier: reasoning
+  gemini-flash-lite:
+    backend: google-genai
+    base_url: "https://google.example.com/v1beta"
+    api_key: "secret"
+    model: "gemini-2.5-flash-lite"
+    tier: cheap
+client_profiles:
+  enabled: true
+  default: generic
+  rules:
+    - profile: opencode
+      match:
+        header_contains:
+          x-faigate-client: ["opencode"]
+  profiles:
+    generic: {}
+    opencode: {}
+heuristic_rules:
+  enabled: true
+  rules:
+    - name: complex-code
+      match:
+        message_keywords:
+          any_of: ["architecture", "rollback", "refactor"]
+          min_matches: 4
+      route_to: deepseek-reasoner
+    - name: simple-query
+      match:
+        message_keywords:
+          any_of: ["hello", "hi"]
+          min_matches: 1
+      route_to: gemini-flash-lite
+fallback_chain:
+  - deepseek-reasoner
+metrics:
+  enabled: false
+""",
+        )
+    )
+    reasoner = _ProviderStub()
+    reasoner.name = "deepseek-reasoner"
+    reasoner.model = "deepseek-reasoner"
+    reasoner.tier = "reasoning"
+    reasoner.health = types.SimpleNamespace(
+        healthy=True,
+        last_check=1.0,
+        avg_latency_ms=18.0,
+        last_error="",
+        to_dict=lambda: {
+            "name": "deepseek-reasoner",
+            "healthy": True,
+            "consecutive_failures": 0,
+            "avg_latency_ms": 18.0,
+            "last_error": "",
+        },
+    )
+    flash = _ProviderStub()
+    flash.name = "gemini-flash-lite"
+    flash.model = "gemini-2.5-flash-lite"
+    flash.backend_type = "google-genai"
+    flash.tier = "cheap"
+    flash.health = types.SimpleNamespace(
+        healthy=True,
+        last_check=1.0,
+        avg_latency_ms=12.0,
+        last_error="",
+        to_dict=lambda: {
+            "name": "gemini-flash-lite",
+            "healthy": True,
+            "consecutive_failures": 0,
+            "avg_latency_ms": 12.0,
+            "last_error": "",
+        },
+    )
+
+    monkeypatch.setattr(main_module, "_config", cfg, raising=False)
+    monkeypatch.setattr(main_module, "_router", Router(cfg), raising=False)
+    monkeypatch.setattr(
+        main_module,
+        "_providers",
+        {
+            "deepseek-reasoner": reasoner,
+            "gemini-flash-lite": flash,
+        },
+        raising=False,
+    )
+
+    response = api_client.post(
+        "/api/route",
+        headers={"X-faigate-Client": "opencode"},
+        json={
+            "model": "auto",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "hi, need a rollback-safe architecture plan for this refactor",
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["decision"]["provider"] == "deepseek-reasoner"
+    assert body["route_summary"]["complexity_profile"] in {"medium", "high"}
+    assert "architecture" in body["route_summary"]["matched_keywords"]
+    assert body["route_summary"]["selected"]["canonical_model"] == "deepseek/reasoner"
+    assert any("Opencode complexity bias" in item for item in body["route_summary"]["why_selected"])
+    assert body["route_summary"]["alternatives"][0]["provider"] == "gemini-flash-lite"
+
+
 def test_image_edit_rejects_large_upload(api_client):
     response = api_client.post(
         "/v1/images/edits",

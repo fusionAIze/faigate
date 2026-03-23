@@ -673,6 +673,97 @@ def _trace_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _build_route_summary(decision: RoutingDecision) -> dict[str, Any]:
+    details = dict(decision.details or {})
+    request_insights = dict(details.get("request_insights") or {})
+    heuristic_match = dict(details.get("heuristic_match") or {})
+    selected = {
+        "provider": decision.provider_name,
+        "canonical_model": str(details.get("canonical_model") or ""),
+        "lane_family": str(details.get("lane_family") or ""),
+        "lane_name": str(details.get("lane_name") or ""),
+        "route_type": str(details.get("route_type") or ""),
+        "lane_cluster": str(details.get("lane_cluster") or ""),
+        "selection_path": str(details.get("selection_path") or "primary-selected"),
+    }
+
+    why_selected: list[str] = []
+    if decision.layer == "direct":
+        why_selected.append(decision.reason)
+    elif decision.layer == "heuristic":
+        why_selected.append(f"Matched heuristic '{decision.rule_name}'.")
+    elif decision.layer == "profile":
+        why_selected.append(
+            f"Client profile '{details.get('profile_name') or ''}' influenced routing.".strip()
+        )
+    elif decision.layer == "fallback":
+        why_selected.append("No stronger rule matched, so the fallback chain was used.")
+    else:
+        why_selected.append(decision.reason)
+
+    if heuristic_match.get("matched_keywords"):
+        why_selected.append(
+            "Matched request keywords: "
+            + ", ".join(str(item) for item in heuristic_match.get("matched_keywords") or [])
+        )
+    if heuristic_match.get("opencode_bias_applied"):
+        why_selected.append("Opencode complexity bias promoted a stronger coding lane.")
+    if heuristic_match.get("suppressed_for_complexity"):
+        why_selected.append(
+            "Simple-query routing was suppressed because the request looked riskier."
+        )
+    if selected["canonical_model"]:
+        why_selected.append(
+            f"Selected canonical lane {selected['canonical_model']} via {selected['route_type'] or 'default'} route."
+        )
+
+    alternatives: list[dict[str, Any]] = []
+    rankings = list(details.get("candidate_ranking") or details.get("score_ranking") or [])
+    selected_score = None
+    if rankings:
+        for row in rankings:
+            if str(row.get("provider") or "") == decision.provider_name:
+                selected_score = row.get("score_total")
+                break
+    for row in rankings:
+        provider_name = str(row.get("provider") or "")
+        if not provider_name or provider_name == decision.provider_name:
+            continue
+        reason_bits: list[str] = []
+        if selected_score is not None and row.get("score_total") is not None:
+            reason_bits.append(f"lower score ({row.get('score_total')} vs {selected_score})")
+        if row.get("runtime_penalty"):
+            reason_bits.append(f"runtime penalty {row.get('runtime_penalty')}")
+        if row.get("route_type") and row.get("route_type") != selected["route_type"]:
+            reason_bits.append(f"{row.get('route_type')} route")
+        alternatives.append(
+            {
+                "provider": provider_name,
+                "canonical_model": str(row.get("canonical_model") or ""),
+                "route_type": str(row.get("route_type") or ""),
+                "lane_cluster": str(row.get("lane_cluster") or ""),
+                "reason": ", ".join(reason_bits)
+                if reason_bits
+                else "ranked below the selected route",
+            }
+        )
+        if len(alternatives) >= 3:
+            break
+
+    return {
+        "layer": decision.layer,
+        "routing_posture": str(details.get("routing_posture") or ""),
+        "complexity_profile": str(request_insights.get("complexity_profile") or ""),
+        "complexity_score": int(request_insights.get("complexity_score") or 0),
+        "signal_groups": list(request_insights.get("signal_groups") or []),
+        "matched_signals": list(request_insights.get("matched_signals") or []),
+        "matched_keywords": list(heuristic_match.get("matched_keywords") or []),
+        "selected": selected,
+        "why_selected": why_selected,
+        "alternatives": alternatives,
+    }
+
+
 def _decorate_direct_decision(decision: RoutingDecision) -> RoutingDecision:
     provider = _providers.get(decision.provider_name)
     if not provider:
@@ -1705,6 +1796,7 @@ async def preview_route(request: Request):
             **_estimate_request_dimensions(effective_body),
         },
         "decision": decision.to_dict(),
+        "route_summary": _build_route_summary(decision),
         "selected_provider": _serialize_provider(decision.provider_name),
         "attempt_order": [_serialize_provider(name) for name in attempt_order],
     }
@@ -1763,6 +1855,7 @@ async def preview_image_route(request: Request):
             **_estimate_image_request_dimensions(effective_body, capability=capability),
         },
         "decision": decision.to_dict(),
+        "route_summary": _build_route_summary(decision),
         "selected_provider": _serialize_provider(decision.provider_name),
         "attempt_order": [_serialize_provider(name) for name in attempt_order],
     }
