@@ -403,6 +403,9 @@ def _provider_request_readiness(provider: Any) -> dict[str, Any]:
     runtime_window_state = str(runtime_state.get("window_state") or "clear")
     runtime_cooldown_remaining = int(runtime_state.get("cooldown_remaining_s", 0) or 0)
     runtime_degraded_remaining = int(runtime_state.get("degraded_remaining_s", 0) or 0)
+    runtime_recovered_recently = bool(runtime_state.get("recovered_recently"))
+    runtime_recovery_remaining = int(runtime_state.get("recovery_remaining_s", 0) or 0)
+    runtime_last_recovered_issue = str(runtime_state.get("last_recovered_issue_type") or "")
 
     if hasattr(provider, "request_readiness"):
         state = dict(provider.request_readiness() or {})
@@ -423,6 +426,9 @@ def _provider_request_readiness(provider: Any) -> dict[str, Any]:
     state["runtime_degraded_remaining_s"] = runtime_degraded_remaining
     state["runtime_cooldown_until"] = float(runtime_state.get("cooldown_until", 0.0) or 0.0)
     state["runtime_degraded_until"] = float(runtime_state.get("degraded_until", 0.0) or 0.0)
+    state["runtime_recovered_recently"] = runtime_recovered_recently
+    state["runtime_recovery_remaining_s"] = runtime_recovery_remaining
+    state["runtime_last_recovered_issue_type"] = runtime_last_recovered_issue
 
     if runtime_window_state == "cooldown" and runtime_issue_type in {
         "auth-invalid",
@@ -449,6 +455,16 @@ def _provider_request_readiness(provider: Any) -> dict[str, Any]:
         )
         state["operator_hint"] = (
             "prefer lower-pressure siblings while this route recovers"
+        )
+    elif runtime_recovered_recently and bool(state.get("ready")):
+        state["status"] = "ready-recovered"
+        state["reason"] = (
+            "route recovered via a recent successful retry after "
+            f"{runtime_last_recovered_issue.replace('-', ' ') or 'runtime'} issues "
+            f"({runtime_recovery_remaining}s recovery watch left)"
+        )
+        state["operator_hint"] = (
+            "route can carry traffic again; keep it under observation during the recovery window"
         )
     elif runtime_penalty >= 20 and runtime_issue_type in {
         "quota-exhausted",
@@ -600,6 +616,10 @@ def _attempt_metric_fields(
             "actual_canonical_model": str(actual_lane.get("canonical_model") or ""),
             "actual_route_type": str(actual_lane.get("route_type") or ""),
             "actual_lane_cluster": str(actual_lane.get("cluster") or ""),
+            "attempt_runtime_state": _provider_runtime_state_snapshot().get(
+                attempted_provider,
+                {},
+            ),
             **relation,
         }
     )

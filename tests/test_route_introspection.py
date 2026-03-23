@@ -818,6 +818,22 @@ class TestProviderCoverage:
         assert readiness["runtime_cooldown_active"] is True
 
     @pytest.mark.asyncio
+    async def test_health_request_readiness_marks_recently_recovered_routes(
+        self, preview_config
+    ):
+        main_module._adaptive_state.record_failure("cloud-default", error="429 rate limit")
+        main_module._adaptive_state.record_success("cloud-default", latency_ms=110.0)
+
+        response = await health()
+
+        readiness = response["providers"]["cloud-default"]["request_readiness"]
+        assert readiness["ready"] is True
+        assert readiness["status"] == "ready-recovered"
+        assert readiness["runtime_recovered_recently"] is True
+        assert readiness["runtime_last_recovered_issue_type"] == "rate-limited"
+        assert readiness["runtime_recovery_remaining_s"] > 0
+
+    @pytest.mark.asyncio
     async def test_provider_inventory_filters_by_capability(self, preview_config):
         response = await provider_inventory(capability="image_editing")
 
@@ -883,3 +899,43 @@ async def test_attempt_metric_fields_capture_same_lane_fallback(monkeypatch):
     assert metric_fields["route_type"] == "aggregator"
     assert metric_fields["selection_path"] == "same-lane-route"
     assert metric_fields["decision_details"]["same_model_route"] is True
+
+
+@pytest.mark.asyncio
+async def test_attempt_metric_fields_capture_runtime_recovery_state(monkeypatch):
+    monkeypatch.setattr(
+        main_module,
+        "_providers",
+        {
+            "deepseek-chat": _ProviderStub(
+                name="deepseek-chat",
+                model="deepseek-chat",
+                lane={
+                    "family": "deepseek",
+                    "name": "workhorse",
+                    "canonical_model": "deepseek/chat",
+                    "route_type": "direct",
+                    "cluster": "balanced-workhorse",
+                },
+            ),
+        },
+        raising=False,
+    )
+    main_module._adaptive_state.record_failure("deepseek-chat", error="429 rate limit")
+    main_module._adaptive_state.record_success("deepseek-chat", latency_ms=95.0)
+
+    metric_fields = _attempt_metric_fields(
+        main_module.RoutingDecision(
+            provider_name="deepseek-chat",
+            layer="heuristic",
+            rule_name="general-chat",
+            confidence=0.7,
+            reason="Heuristic matched",
+        ),
+        "deepseek-chat",
+        attempt_order=["deepseek-chat"],
+    )
+
+    runtime_state = metric_fields["decision_details"]["attempt_runtime_state"]
+    assert runtime_state["recovered_recently"] is True
+    assert runtime_state["last_recovered_issue_type"] == "rate-limited"

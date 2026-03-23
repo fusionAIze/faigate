@@ -19,6 +19,7 @@ _SOFT_DEGRADE_WINDOWS = {
     "degraded": 90,
     "error": 60,
 }
+_RECOVERY_WINDOW_SECONDS = 300
 
 
 def _issue_type_from_error(error: str) -> str:
@@ -74,11 +75,25 @@ class RoutePressure:
     last_issue_detail: str = ""
     last_issue_at: float = 0.0
     last_success_at: float = 0.0
+    last_recovered_issue_type: str = ""
+    last_recovered_issue_detail: str = ""
+    last_recovered_at: float = 0.0
     avg_latency_ms: float = 0.0
     _latencies: list[float] = field(default_factory=list)
 
     def record_success(self, latency_ms: float = 0.0) -> None:
+        if self.last_issue_type:
+            self.last_recovered_issue_type = self.last_issue_type
+            self.last_recovered_issue_detail = self.last_issue_detail
+            self.last_recovered_at = time.time()
+        else:
+            self.last_recovered_issue_type = ""
+            self.last_recovered_issue_detail = ""
+            self.last_recovered_at = 0.0
         self.consecutive_failures = 0
+        self.last_issue_type = ""
+        self.last_issue_detail = ""
+        self.last_issue_at = 0.0
         self.last_success_at = time.time()
         if latency_ms > 0:
             self._latencies.append(latency_ms)
@@ -159,17 +174,33 @@ class RoutePressure:
             return "degraded"
         return "clear"
 
+    def recovery_remaining_seconds(self, now: float | None = None) -> int:
+        if self.last_recovered_at <= 0:
+            return 0
+        current_time = time.time() if now is None else now
+        return max(
+            0,
+            int(round((self.last_recovered_at + _RECOVERY_WINDOW_SECONDS) - current_time)),
+        )
+
+    def recovered_recently(self, now: float | None = None) -> bool:
+        return self.recovery_remaining_seconds(now=now) > 0
+
     def to_dict(self) -> dict[str, Any]:
         cooldown_window_s = self.cooldown_window_seconds()
         degraded_window_s = self.degraded_window_seconds()
         cooldown_remaining_s = self.cooldown_remaining_seconds()
         degraded_remaining_s = self.degraded_remaining_seconds()
+        recovery_remaining_s = self.recovery_remaining_seconds()
         return {
             "consecutive_failures": self.consecutive_failures,
             "last_issue_type": self.last_issue_type,
             "last_issue_detail": self.last_issue_detail,
             "last_issue_at": self.last_issue_at,
             "last_success_at": self.last_success_at,
+            "last_recovered_issue_type": self.last_recovered_issue_type,
+            "last_recovered_issue_detail": self.last_recovered_issue_detail,
+            "last_recovered_at": self.last_recovered_at,
             "avg_latency_ms": round(self.avg_latency_ms, 1),
             "penalty": self.penalty(),
             "cooldown_window_s": cooldown_window_s,
@@ -188,6 +219,9 @@ class RoutePressure:
             ),
             "window_state": self.window_state(),
             "request_blocked": self.cooldown_active(),
+            "recovery_window_s": _RECOVERY_WINDOW_SECONDS,
+            "recovery_remaining_s": recovery_remaining_s,
+            "recovered_recently": recovery_remaining_s > 0,
         }
 
 

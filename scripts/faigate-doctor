@@ -158,6 +158,11 @@ if health_raw:
         runtime_window_state = str(request_readiness.get("runtime_window_state") or "clear")
         runtime_cooldown_remaining = int(request_readiness.get("runtime_cooldown_remaining_s") or 0)
         runtime_degraded_remaining = int(request_readiness.get("runtime_degraded_remaining_s") or 0)
+        runtime_recovered_recently = bool(request_readiness.get("runtime_recovered_recently"))
+        runtime_recovery_remaining = int(request_readiness.get("runtime_recovery_remaining_s") or 0)
+        runtime_last_recovered_issue = str(
+            request_readiness.get("runtime_last_recovered_issue_type") or ""
+        )
         profile_bits = []
         if profile:
             profile_bits.append(profile)
@@ -187,6 +192,11 @@ if health_raw:
             print(
                 f"[ok] request-ready runtime: {provider_name} -> penalty={runtime_penalty}"
                 f" | issue={runtime_issue_type or 'n/a'}{cooldown_suffix}{window_suffix}"
+            )
+        if runtime_recovered_recently:
+            print(
+                f"[ok] request-ready recovery: {provider_name} -> recovered from "
+                f"{runtime_last_recovered_issue or 'n/a'} | watch {runtime_recovery_remaining}s"
             )
     if total:
         print(f"[ok] request readiness summary: {ready}/{total} provider routes look request-ready")

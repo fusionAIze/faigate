@@ -876,6 +876,13 @@ def _render_provider_detail(report: dict[str, Any], provider_name: str) -> str:
             lines.append(f"Cooldown left     {_safe_int(runtime_state.get('cooldown_remaining_s'))}s")
         if runtime_state.get("degraded_remaining_s"):
             lines.append(f"Degraded left     {_safe_int(runtime_state.get('degraded_remaining_s'))}s")
+        if runtime_state.get("recovered_recently"):
+            lines.append(
+                f"Recovered from    {runtime_state.get('last_recovered_issue_type') or 'n/a'}"
+            )
+            lines.append(
+                f"Recovery watch    {_safe_int(runtime_state.get('recovery_remaining_s'))}s"
+            )
     if provider in unhealthy:
         lines.append(f"Live issue        {unhealthy[provider]['detail']}")
     if provider_routing_paths:
