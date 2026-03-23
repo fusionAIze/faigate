@@ -17,6 +17,10 @@ Usage:
   ./scripts/faigate-provider-setup --known --text
   ./scripts/faigate-provider-setup --current --text
   ./scripts/faigate-provider-setup --recommended --text
+  ./scripts/faigate-provider-setup --recommended --json
+  ./scripts/faigate-provider-setup --recommended --interactive
+  ./scripts/faigate-provider-setup --recommended --dry-run
+  ./scripts/faigate-provider-setup --recommended --write
 
 Interactive helper to add provider sources to fusionAIze Gate.
 
@@ -116,6 +120,87 @@ plan = build_route_add_setup_plan(
 )
 print(json.dumps(plan))
 PY
+}
+
+guided_route_additions_apply() {
+  local requested_mode="$1"
+  local apply_mode="$requested_mode"
+  local payload_file
+  local -a provider_list=()
+
+  if [[ "$requested_mode" == "interactive" ]]; then
+    faigate_ui_header "fusionAIze Gate Provider Setup" "Guided route additions from current lane gaps"
+    show_recommended_route_additions
+    echo ""
+  fi
+
+  while IFS='|' read -r setup_provider route_provider strategy; do
+    [ -n "$setup_provider" ] && provider_list+=("$setup_provider")
+  done < <(
+    recommended_route_additions_json | "$python_bin" - <<'PY'
+import json
+import sys
+
+plan = json.loads(sys.stdin.read() or "{}")
+for item in plan.get("actionable_additions") or []:
+    print(
+        "|".join(
+            [
+                str(item.get("setup_provider_name") or ""),
+                str(item.get("provider_name") or ""),
+                str(item.get("strategy") or ""),
+            ]
+        )
+    )
+PY
+  )
+
+  if [ "${#provider_list[@]}" -eq 0 ]; then
+    if [[ "$requested_mode" == "interactive" ]]; then
+      echo ""
+      show_next_steps "No guided route additions are needed right now." \
+        "Open Current Sources when you want to review the active provider inventory." \
+        "Run Client Scenarios after adding new sources if you want the routing defaults refreshed."
+      faigate_ui_pause
+    else
+      show_recommended_route_additions
+    fi
+    return 0
+  fi
+
+  payload_file="$(mktemp)"
+  collect_known_provider_payload "$payload_file" "${provider_list[@]}" || {
+    rm -f "$payload_file"
+    return 0
+  }
+
+  if [[ "$requested_mode" == "interactive" ]]; then
+    echo ""
+    printf "  %bApply mode%b\n" "$FAIGATE_UI_BOLD"
+    printf "    1)  Dry-run only    Preview guided route additions, no writes\n"
+    printf "    2)  Write setup     Add the guided route additions to config.yaml and faigate.env\n"
+    printf "    c)  Cancel\n"
+    printf "    q)  Quit\n"
+    printf "  ▸ [1]: "
+    read -r apply_mode
+    case "${apply_mode:-1}" in
+      q|Q) rm -f "$payload_file"; exit 0 ;;
+      c|C) rm -f "$payload_file"; return 0 ;;
+    esac
+    apply_mode="$([ "${apply_mode:-1}" = "2" ] && printf write || printf dry)"
+  fi
+
+  echo ""
+  apply_setup_payload "$payload_file" "$apply_mode"
+  rm -f "$payload_file"
+  echo ""
+  show_next_steps "Guided route additions completed." \
+    "Run Validate next to confirm the new route sources are ready enough for live traffic." \
+    "Open Full Config Wizard or Client Scenarios if you want routing defaults refreshed around the added routes." \
+    "Provider Probe will show whether the newly added mirrors are now request-ready."
+  if [[ "$requested_mode" == "interactive" ]]; then
+    faigate_ui_pause
+  fi
 }
 
 provider_meta() {
@@ -356,70 +441,7 @@ known_provider_flow() {
 }
 
 guided_route_additions_flow() {
-  local apply_mode payload_file
-  local -a provider_list=()
-
-  faigate_ui_header "fusionAIze Gate Provider Setup" "Guided route additions from current lane gaps"
-  show_recommended_route_additions
-  echo ""
-  while IFS='|' read -r setup_provider route_provider strategy; do
-    [ -n "$setup_provider" ] && provider_list+=("$setup_provider")
-  done < <(
-    recommended_route_additions_json | "$python_bin" - <<'PY'
-import json
-import sys
-
-plan = json.loads(sys.stdin.read() or "{}")
-for item in plan.get("actionable_additions") or []:
-    print(
-        "|".join(
-            [
-                str(item.get("setup_provider_name") or ""),
-                str(item.get("provider_name") or ""),
-                str(item.get("strategy") or ""),
-            ]
-        )
-    )
-PY
-  )
-
-  if [ "${#provider_list[@]}" -eq 0 ]; then
-    echo ""
-    show_next_steps "No guided route additions are needed right now." \
-      "Open Current Sources when you want to review the active provider inventory." \
-      "Run Client Scenarios after adding new sources if you want the routing defaults refreshed."
-    faigate_ui_pause
-    return 0
-  fi
-
-  payload_file="$(mktemp)"
-  collect_known_provider_payload "$payload_file" "${provider_list[@]}" || {
-    rm -f "$payload_file"
-    return 0
-  }
-
-  echo ""
-  printf "  %bApply mode%b\n" "$FAIGATE_UI_BOLD"
-  printf "    1)  Dry-run only    Preview guided route additions, no writes\n"
-  printf "    2)  Write setup     Add the guided route additions to config.yaml and faigate.env\n"
-  printf "    c)  Cancel\n"
-  printf "    q)  Quit\n"
-  printf "  ▸ [1]: "
-  read -r apply_mode
-  case "${apply_mode:-1}" in
-    q|Q) rm -f "$payload_file"; exit 0 ;;
-    c|C) rm -f "$payload_file"; return 0 ;;
-  esac
-
-  echo ""
-  apply_setup_payload "$payload_file" "$([ "${apply_mode:-1}" = "2" ] && printf write || printf dry)"
-  rm -f "$payload_file"
-  echo ""
-  show_next_steps "Guided route additions completed." \
-    "Run Validate next to confirm the new route sources are ready enough for live traffic." \
-    "Open Full Config Wizard or Client Scenarios if you want routing defaults refreshed around the added routes." \
-    "Provider Probe will show whether the newly added mirrors are now request-ready."
-  faigate_ui_pause
+  guided_route_additions_apply "interactive"
 }
 
 custom_provider_flow() {
@@ -693,6 +715,26 @@ fi
 
 if [[ "${1:-}" == "--recommended" && "${2:-}" == "--text" ]]; then
   show_recommended_route_additions
+  exit 0
+fi
+
+if [[ "${1:-}" == "--recommended" && "${2:-}" == "--json" ]]; then
+  recommended_route_additions_json
+  exit 0
+fi
+
+if [[ "${1:-}" == "--recommended" && "${2:-}" == "--interactive" ]]; then
+  guided_route_additions_flow
+  exit 0
+fi
+
+if [[ "${1:-}" == "--recommended" && "${2:-}" == "--dry-run" ]]; then
+  guided_route_additions_apply "dry"
+  exit 0
+fi
+
+if [[ "${1:-}" == "--recommended" && "${2:-}" == "--write" ]]; then
+  guided_route_additions_apply "write"
   exit 0
 fi
 

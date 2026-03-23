@@ -1839,31 +1839,27 @@ def _scenario_route_additions(
 ) -> list[dict[str, Any]]:
     baseline = set(configured_names or set()) | set(provider_names)
     recommendations: list[dict[str, Any]] = []
-    seen_setup_targets = set(baseline)
+    seen_additions = set(baseline)
     for provider_name in provider_names:
         lane = get_provider_lane_binding(provider_name)
         additions = get_route_add_recommendations(
-            configured_provider_names=baseline,
+            configured_provider_names=seen_additions,
             canonical_model=str(lane.get("canonical_model") or ""),
             degrade_to=[str(item) for item in (lane.get("degrade_to") or []) if str(item)],
             family=str(lane.get("family") or ""),
         )
         for item in additions:
-            setup_provider = str(item.get("setup_provider_name") or item.get("provider_name") or "")
-            if not setup_provider or setup_provider in seen_setup_targets:
+            add_provider = str(item.get("provider_name") or "")
+            if not add_provider or add_provider in seen_additions:
                 continue
             enriched = dict(item)
             enriched["source_provider"] = provider_name
             recommendations.append(enriched)
-            seen_setup_targets.add(setup_provider)
+            seen_additions.add(add_provider)
     return recommendations
 
 
-def _scenario_route_addition_lines(
-    additions: list[dict[str, Any]],
-    *,
-    limit: int = 3,
-) -> list[str]:
+def _scenario_route_addition_lines(additions: list[dict[str, Any]], *, limit: int = 3) -> list[str]:
     lines: list[str] = []
     for item in additions[:limit]:
         provider_name = str(item.get("provider_name") or "")
@@ -1957,8 +1953,6 @@ def render_route_add_setup_plan_text(plan: dict[str, Any]) -> str:
     lines.append("Tip: Use Guided Route Additions in Provider Setup")
     lines.append("     to add these sources without re-selecting them manually.")
     return "\n".join(lines) + "\n"
-
-
 def list_client_scenarios(
     *,
     env_file: str | Path | None = None,
@@ -2099,6 +2093,10 @@ def apply_client_scenario(
         env_file=env_file,
         source_providers=active_provider_names,
     )
+    route_additions = _scenario_route_additions(
+        active_provider_names,
+        configured_names=merged_provider_names,
+    )
     return {
         "scenario": {
             "id": scenario_id,
@@ -2110,6 +2108,7 @@ def apply_client_scenario(
         "config": merged,
         "summary": build_config_change_summary(config_path=config_path, updated_config=merged),
         "route_add_setup_plan": route_add_setup_plan,
+        "route_additions": route_additions,
     }
 
 
@@ -2118,6 +2117,7 @@ def render_client_scenario_summary(payload: dict[str, Any]) -> str:
     summary = payload.get("summary") or {}
     route_add_setup_plan = payload.get("route_add_setup_plan") or {}
     actionable_additions = list(route_add_setup_plan.get("actionable_additions") or [])
+    route_additions = payload.get("route_additions") or []
     scenario_spec = _CLIENT_SCENARIOS.get(str(scenario.get("id", "")), {})
     lines = [
         "Client scenario summary",
@@ -2162,6 +2162,21 @@ def render_client_scenario_summary(payload: dict[str, Any]) -> str:
         lines.append(
             "- next path : Provider Setup -> Guided Route Additions"
         )
+    if route_additions:
+        if "Operator follow-up" not in lines:
+            lines.extend(["", "Operator follow-up"])
+        for item in route_additions[:3]:
+            route_line = (
+                "- route target: "
+                + f"{item.get('provider_name')} ({item.get('strategy')})"
+                + (
+                    f" for {item.get('source_provider')}"
+                    if item.get("source_provider")
+                    else ""
+                )
+            )
+            if route_line not in lines:
+                lines.append(route_line)
     return "\n".join(lines) + "\n"
 
 
