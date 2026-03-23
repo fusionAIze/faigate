@@ -525,6 +525,87 @@ def test_faigate_doctor_reports_runtime_cooldown_windows(tmp_path: Path):
     )
 
 
+def test_faigate_doctor_reports_recent_route_recovery(tmp_path: Path):
+    config_file = tmp_path / "config.yaml"
+    env_file = tmp_path / "faigate.env"
+    config_file.write_text("server: {}\nproviders: {}\n", encoding="utf-8")
+    env_file.write_text("", encoding="utf-8")
+
+    fake_bin = _write_fake_curl(
+        tmp_path,
+        {
+            "/health": json.dumps(
+                {
+                    "status": "ok",
+                    "summary": {
+                        "providers_total": 1,
+                        "providers_healthy": 1,
+                        "providers_unhealthy": 0,
+                    },
+                    "request_readiness": {
+                        "providers_total": 1,
+                        "providers_ready": 1,
+                        "providers_not_ready": 0,
+                    },
+                    "providers": {
+                        "deepseek-chat": {
+                            "healthy": True,
+                            "request_readiness": {
+                                "ready": True,
+                                "status": "ready-recovered",
+                                "reason": (
+                                    "route recovered via a recent successful retry after "
+                                    "rate limited issues (240s recovery watch left)"
+                                ),
+                                "profile": "openai-compatible",
+                                "compatibility": "native",
+                                "probe_confidence": "high",
+                                "probe_payload": "openai-chat-minimal | user='ping' | max_tokens=1",
+                                "operator_hint": (
+                                    "route can carry traffic again; keep it under "
+                                    "observation during the recovery window"
+                                ),
+                                "runtime_penalty": 0,
+                                "runtime_issue_type": "",
+                                "runtime_cooldown_active": False,
+                                "runtime_window_state": "clear",
+                                "runtime_cooldown_remaining_s": 0,
+                                "runtime_degraded_remaining_s": 0,
+                                "runtime_recovered_recently": True,
+                                "runtime_recovery_remaining_s": 240,
+                                "runtime_last_recovered_issue_type": "rate-limited",
+                            },
+                        }
+                    },
+                }
+            ),
+            "/v1/models": json.dumps({"data": []}),
+        },
+    )
+
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+    env["FAIGATE_CONFIG_FILE"] = str(config_file)
+    env["FAIGATE_ENV_FILE"] = str(env_file)
+    env["FAIGATE_PYTHON"] = sys.executable
+    env["PYTHONPATH"] = str(REPO_ROOT)
+
+    result = subprocess.run(
+        ["bash", "scripts/faigate-doctor"],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert "request-ready: deepseek-chat -> ready-recovered" in result.stdout
+    assert (
+        "request-ready recovery: deepseek-chat -> recovered from rate-limited | watch 240s"
+        in result.stdout
+    )
+
+
 def test_faigate_service_lib_detects_homebrew_runtime_paths(tmp_path: Path):
     env = os.environ.copy()
     env["FAIGATE_CONFIG_FILE"] = "/opt/homebrew/etc/faigate/config.yaml"
