@@ -618,3 +618,82 @@ def get_canonical_model_routes(canonical_model: str) -> list[dict[str, Any]]:
     """Return known direct and aggregator execution routes for one canonical model."""
     routes = _CANONICAL_MODEL_ROUTE_REGISTRY.get(canonical_model, [])
     return deepcopy(routes)
+
+
+def get_route_add_recommendations(
+    *,
+    configured_provider_names: set[str] | list[str] | tuple[str, ...],
+    canonical_model: str = "",
+    degrade_to: list[str] | tuple[str, ...] | None = None,
+    family: str = "",
+) -> list[dict[str, Any]]:
+    """Return concrete provider additions that would improve route resilience.
+
+    Recommendations are ordered by usefulness:
+    1. same-lane mirrors for the exact canonical model
+    2. next-cluster providers from the configured degrade chain
+    3. remaining family siblings that are known in the catalog
+    """
+
+    configured = {str(name) for name in configured_provider_names if str(name)}
+    seen = set(configured)
+    recommendations: list[dict[str, Any]] = []
+
+    def add_route_candidates(target_model: str, strategy: str) -> None:
+        for route in get_canonical_model_routes(target_model):
+            provider_name = str(route.get("provider_name") or "")
+            if not provider_name or provider_name in seen:
+                continue
+            if strategy == "same-lane-add":
+                reason = f"adds a same-lane mirror for {target_model}"
+            else:
+                reason = f"adds a cluster fallback for {target_model}"
+            recommendations.append(
+                {
+                    "provider_name": provider_name,
+                    "strategy": strategy,
+                    "strategy_label": {
+                        "same-lane-add": "same lane",
+                        "cluster-add": "next cluster lane",
+                        "family-add": "family lane",
+                    }.get(strategy, "route addition"),
+                    "canonical_model": target_model,
+                    "provider_family": str(route.get("provider_family") or ""),
+                    "route_type": str(route.get("route_type") or ""),
+                    "route_group": str(route.get("route_group") or ""),
+                    "reason": reason,
+                }
+            )
+            seen.add(provider_name)
+
+    if canonical_model:
+        add_route_candidates(canonical_model, "same-lane-add")
+
+    for target_model in degrade_to or []:
+        if str(target_model):
+            add_route_candidates(str(target_model), "cluster-add")
+
+    if family:
+        for provider_name, binding in sorted(_PROVIDER_LANE_BINDINGS.items()):
+            if provider_name in seen:
+                continue
+            if str(binding.get("family") or "") != family:
+                continue
+            recommendations.append(
+                {
+                    "provider_name": provider_name,
+                    "strategy": "family-add",
+                    "strategy_label": "family lane",
+                    "canonical_model": str(binding.get("canonical_model") or ""),
+                    "provider_family": family,
+                    "route_type": str(binding.get("route_type") or ""),
+                    "route_group": "family-lane",
+                    "reason": (
+                        f"adds another {family} family lane "
+                        "for recovery and routing flexibility"
+                    ),
+                }
+            )
+            seen.add(provider_name)
+
+    return recommendations

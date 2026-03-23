@@ -1828,6 +1828,7 @@ def test_faigate_dashboard_provider_detail_shows_canonical_lane(tmp_path: Path):
     assert "Verified via      models" in result.stdout
     assert "Probe payload     openai-chat-minimal | user='ping' | max_tokens=1" in result.stdout
     assert "Operator hint     route can carry live traffic" in result.stdout
+    assert "Add route         openrouter-fallback (same-lane-add)" in result.stdout
     assert "Transport profile openai-compatible" in result.stdout
     assert "Compatibility     native" in result.stdout
     assert "Chat path         /chat/completions" in result.stdout
@@ -2260,6 +2261,11 @@ providers:
         "request-ready mirror gap: anthropic-claude -> openrouter-anthropic-opus"
         in result.stdout
     )
+    assert (
+        "request-ready add route: anthropic-claude -> openrouter-anthropic-opus (same-lane-add)"
+        in result.stdout
+    )
+    assert "request-ready add guidance: same-lane=1 | cluster=0 | family=0" in result.stdout
     assert (
         "request-ready mirror gaps: 1 routes have known mirrors not configured"
         in result.stdout

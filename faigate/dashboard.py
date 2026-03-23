@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from .lane_registry import get_route_add_recommendations
 from .metrics import MetricsStore
 
 
@@ -280,6 +281,19 @@ def _render_lane_family_block(report: dict[str, Any], *, limit: int = 3) -> list
     return lines
 
 
+def _render_route_add_block(report: dict[str, Any], *, limit: int = 3) -> list[str]:
+    rows = report.get("route_additions") or []
+    if not rows:
+        return []
+    lines = ["Route additions"]
+    for row in rows[:limit]:
+        lines.append(
+            f"- {row.get('family')}: add {row.get('add_provider')} "
+            f"({row.get('strategy')}) to strengthen {row.get('canonical_model') or 'the lane'}"
+        )
+    return lines
+
+
 def _render_selection_path_block(report: dict[str, Any], *, limit: int = 4) -> list[str]:
     rows = report.get("selection_paths") or []
     if not rows:
@@ -306,11 +320,20 @@ def _enrich_provider_rows_with_lane(
     rows: list[dict[str, Any]],
     provider_map: dict[str, dict[str, Any]],
 ) -> list[dict[str, Any]]:
+    configured_provider_names = set(provider_map.keys()) or {
+        str(row.get("provider") or "") for row in rows if str(row.get("provider") or "")
+    }
     enriched: list[dict[str, Any]] = []
     for row in rows:
         provider_name = str(row.get("provider") or "")
         provider_inventory = dict(provider_map.get(provider_name) or {})
         lane = dict(provider_inventory.get("lane") or {})
+        add_recommendations = get_route_add_recommendations(
+            configured_provider_names=configured_provider_names,
+            canonical_model=str(lane.get("canonical_model") or ""),
+            degrade_to=[str(item) for item in (lane.get("degrade_to") or []) if str(item)],
+            family=str(lane.get("family") or ""),
+        )
         enriched.append(
             {
                 **row,
@@ -323,9 +346,46 @@ def _enrich_provider_rows_with_lane(
                 "transport": dict(provider_inventory.get("transport") or {}),
                 "request_readiness": dict(provider_inventory.get("request_readiness") or {}),
                 "route_runtime_state": dict(provider_inventory.get("route_runtime_state") or {}),
+                "route_add_recommendations": add_recommendations,
+                "recommended_add_provider": (
+                    str(add_recommendations[0].get("provider_name") or "")
+                    if add_recommendations
+                    else ""
+                ),
+                "recommended_add_strategy": (
+                    str(add_recommendations[0].get("strategy") or "")
+                    if add_recommendations
+                    else ""
+                ),
             }
         )
     return enriched
+
+
+def _route_add_summary(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    totals: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        family = str(row.get("lane_family") or "unclassified")
+        add_provider = str(row.get("recommended_add_provider") or "")
+        if not add_provider:
+            continue
+        bucket = totals.setdefault(
+            family,
+            {
+                "family": family,
+                "providers": 0,
+                "top_provider": str(row.get("provider") or ""),
+                "add_provider": add_provider,
+                "strategy": str(row.get("recommended_add_strategy") or ""),
+                "canonical_model": str(row.get("canonical_model") or ""),
+            },
+        )
+        bucket["providers"] += 1
+    return sorted(
+        totals.values(),
+        key=lambda row: (row["providers"], row["family"]),
+        reverse=True,
+    )
 
 
 def _recommended_scenario_for_client(client_profile: str, *, expensive: bool = False) -> str | None:
@@ -390,6 +450,7 @@ def build_dashboard_report(
     providers = _enrich_provider_rows_with_lane(
         stats.get("providers") or [], inventory_provider_map
     )
+    route_additions = _route_add_summary(providers)
     lane_families = _lane_family_summary_from_stats(stats.get("lane_families") or [])
     if not lane_families:
         lane_families = _lane_family_summary(providers, inventory_provider_map)
@@ -665,6 +726,12 @@ def build_dashboard_report(
             hints.append(
                 f"{family_recoveries} route(s) are currently under recovery watch across the live lane families."
             )
+    if route_additions:
+        top_addition = route_additions[0]
+        decision_support.append(
+            f"Add-provider hint: add {top_addition['add_provider']} "
+            f"as a {top_addition['strategy']} for {top_addition['family']} traffic."
+        )
 
     return {
         "source": {
@@ -678,6 +745,7 @@ def build_dashboard_report(
         "health": health_payload or {},
         "providers": providers,
         "lane_families": lane_families,
+        "route_additions": route_additions,
         "clients": client_totals,
         "routing": routing,
         "routing_paths": routing_paths,
@@ -726,6 +794,7 @@ def build_dashboard_report(
             "lane_families": {
                 "cooldown_routes": sum(_safe_int(item.get("cooldown")) for item in lane_families),
                 "recovered_routes": sum(_safe_int(item.get("recovered")) for item in lane_families),
+                "route_additions": len(route_additions),
             },
             "drivers": {
                 "top_provider": top_provider,
@@ -799,6 +868,7 @@ def _render_overview(report: dict[str, Any]) -> str:
                 f"  Top family         {top_family.get('family')} ({_safe_int(top_family.get('providers'))} routes / {_safe_int(top_family.get('requests'))} req)",
                 f"  Cooldown routes    {_safe_int(report['cards']['lane_families']['cooldown_routes'])}",
                 f"  Recovery watch     {_safe_int(report['cards']['lane_families']['recovered_routes'])}",
+                f"  Add opportunities  {_safe_int(report['cards']['lane_families']['route_additions'])}",
             ]
         )
     if report["alerts"]:
@@ -877,6 +947,10 @@ def _render_providers(report: dict[str, Any]) -> str:
     if family_block:
         lines.append("")
         lines.extend(family_block)
+    route_add_block = _render_route_add_block(report)
+    if route_add_block:
+        lines.append("")
+        lines.extend(route_add_block)
     if report["decision_support"]:
         lines.append("")
         lines.append("Budget + routing hints")
@@ -941,6 +1015,10 @@ def _render_activity(report: dict[str, Any]) -> str:
     if family_block:
         lines.append("")
         lines.extend(family_block)
+    route_add_block = _render_route_add_block(report)
+    if route_add_block:
+        lines.append("")
+        lines.extend(route_add_block)
     path_block = _render_selection_path_block(report)
     if path_block:
         lines.append("")
@@ -976,6 +1054,9 @@ def _render_alerts(report: dict[str, Any]) -> str:
     family_block = _render_lane_family_block(report)
     if family_block:
         lines.extend(family_block)
+    route_add_block = _render_route_add_block(report)
+    if route_add_block:
+        lines.extend(route_add_block)
     for hint in report["hints"][:5]:
         lines.append(f"- {hint}")
     path_block = _render_selection_path_block(report)
@@ -1043,6 +1124,10 @@ def _render_provider_detail(report: dict[str, Any], provider_name: str) -> str:
         lines.append(f"Probe payload     {request_readiness.get('probe_payload')}")
     if request_readiness.get("operator_hint"):
         lines.append(f"Operator hint     {request_readiness.get('operator_hint')}")
+    if row.get("recommended_add_provider"):
+        lines.append(
+            f"Add route         {row.get('recommended_add_provider')} ({row.get('recommended_add_strategy')})"
+        )
     if transport:
         lines.extend(
             [

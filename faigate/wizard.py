@@ -17,6 +17,7 @@ from .lane_registry import (
     get_canonical_model_routes,
     get_provider_lane_binding,
     get_provider_transport_binding,
+    get_route_add_recommendations,
 )
 from .provider_catalog import get_provider_catalog
 from .providers import ProviderBackend
@@ -1249,6 +1250,12 @@ def build_provider_probe_report(
         "family-route": 0,
         "none": 0,
     }
+    add_counts = {
+        "same-lane-add": 0,
+        "cluster-add": 0,
+        "family-add": 0,
+        "none": 0,
+    }
     family_summaries = _build_probe_family_summaries(rows)
     for row in rows:
         recommendation = _pick_probe_recommendation(row=row, rows=rows)
@@ -1260,12 +1267,30 @@ def build_provider_probe_report(
         row["family_summary"] = dict(
             family_summaries.get(str(row.get("lane_family") or "unclassified")) or {}
         )
+        add_recommendations = get_route_add_recommendations(
+            configured_provider_names=configured_names,
+            canonical_model=str(row.get("canonical_model") or ""),
+            degrade_to=list(row.get("degrade_to") or []),
+            family=str(row.get("lane_family") or ""),
+        )
+        row["add_recommendations"] = add_recommendations
+        row["recommended_add_provider"] = (
+            str(add_recommendations[0].get("provider_name") or "") if add_recommendations else ""
+        )
+        row["recommended_add_strategy"] = (
+            str(add_recommendations[0].get("strategy") or "") if add_recommendations else "none"
+        )
+        add_counts[row["recommended_add_strategy"]] = (
+            add_counts.get(row["recommended_add_strategy"], 0) + 1
+        )
         row["next_action"] = _combine_probe_next_action(
             current_hint=str(row.get("next_action") or ""),
             action_group=str(row.get("action_group") or "inspect"),
             family=str(row.get("lane_family") or ""),
             preferred_route=str(recommendation["provider"] or ""),
             strategy=str(recommendation["strategy"] or "none"),
+            add_provider=str(row.get("recommended_add_provider") or ""),
+            add_strategy=str(row.get("recommended_add_strategy") or "none"),
         )
 
     return {
@@ -1279,6 +1304,7 @@ def build_provider_probe_report(
             "families": list(family_summaries.values()),
             "mirror_gaps": sum(1 for row in rows if row.get("known_mirror_gaps")),
             "recommendations": recommendation_counts,
+            "add_recommendations": add_counts,
         },
     }
 
@@ -1326,6 +1352,17 @@ def render_provider_probe_text(report: dict[str, Any]) -> str:
                 f"same-lane={recommendations.get('same-lane-route', 0)}",
                 f"cluster={recommendations.get('cluster-degrade', 0)}",
                 f"family={recommendations.get('family-route', 0)}",
+            ]
+        )
+    )
+    add_recommendations = summary.get("add_recommendations") or {}
+    lines.append(
+        "Add guidance: "
+        + " | ".join(
+            [
+                f"same-lane={add_recommendations.get('same-lane-add', 0)}",
+                f"cluster={add_recommendations.get('cluster-add', 0)}",
+                f"family={add_recommendations.get('family-add', 0)}",
             ]
         )
     )
@@ -1380,6 +1417,22 @@ def render_provider_probe_text(report: dict[str, Any]) -> str:
                 + "known mirrors not configured: "
                 + ", ".join(row["known_mirror_gaps"][:3])
             )
+        if row.get("recommended_add_provider"):
+            lines.append(
+                "  "
+                + "add now: "
+                + f"{row['recommended_add_provider']} "
+                + f"({row.get('recommended_add_strategy') or 'route-addition'})"
+            )
+        add_recommendations = row.get("add_recommendations") or []
+        if len(add_recommendations) > 1:
+            other_options = [
+                f"{item.get('provider_name')} ({item.get('strategy')})"
+                for item in add_recommendations[1:3]
+                if item.get("provider_name")
+            ]
+            if other_options:
+                lines.append("  " + "other add options: " + ", ".join(other_options))
         if row.get("next_action"):
             lines.append("  " + f"next: {row['next_action']}")
     lines.append("")
@@ -1546,29 +1599,40 @@ def _combine_probe_next_action(
     family: str,
     preferred_route: str,
     strategy: str,
+    add_provider: str,
+    add_strategy: str,
 ) -> str:
-    if not preferred_route:
-        return current_hint
     strategy_label = {
         "same-lane-route": "same lane",
         "cluster-degrade": "next cluster lane",
         "family-route": "family route",
     }.get(strategy, "fallback route")
+    add_strategy_label = {
+        "same-lane-add": "same-lane mirror",
+        "cluster-add": "next cluster lane",
+        "family-add": "family lane",
+    }.get(add_strategy, "route addition")
     traffic_label = family or "this"
-    if action_group == "hold":
+    if preferred_route:
+        if action_group == "hold":
+            return (
+                f"{current_hint}; prefer {preferred_route} as the {strategy_label} "
+                f"for {traffic_label} traffic meanwhile"
+            )
+        if action_group == "watch":
+            return (
+                f"{current_hint}; favor {preferred_route} as the {strategy_label} "
+                f"for steady {traffic_label} traffic"
+            )
+        if action_group in {"fix-now", "inspect"}:
+            return (
+                f"{current_hint}; route {traffic_label} traffic through {preferred_route} "
+                f"as the {strategy_label} until fixed"
+            )
+    if add_provider and action_group in {"hold", "watch", "fix-now", "inspect"}:
         return (
-            f"{current_hint}; prefer {preferred_route} as the {strategy_label} "
-            f"for {traffic_label} traffic meanwhile"
-        )
-    if action_group == "watch":
-        return (
-            f"{current_hint}; favor {preferred_route} as the {strategy_label} "
-            f"for steady {traffic_label} traffic"
-        )
-    if action_group in {"fix-now", "inspect"}:
-        return (
-            f"{current_hint}; route {traffic_label} traffic through {preferred_route} "
-            f"as the {strategy_label} until fixed"
+            f"{current_hint}; add {add_provider} as a {add_strategy_label} "
+            f"for {traffic_label} traffic"
         )
     return current_hint
 

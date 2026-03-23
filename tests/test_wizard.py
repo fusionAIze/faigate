@@ -1190,9 +1190,13 @@ providers:
 
     row = report["providers"][0]
     assert "openrouter-anthropic-opus" in row["known_mirror_gaps"]
+    assert row["recommended_add_provider"] == "openrouter-anthropic-opus"
+    assert row["recommended_add_strategy"] == "same-lane-add"
     rendered = render_provider_probe_text(report)
     assert "Mirror gaps: 1 routes with known mirrors not configured" in rendered
+    assert "Add guidance: same-lane=1 | cluster=0 | family=0" in rendered
     assert "known mirrors not configured: openrouter-anthropic-opus" in rendered
+    assert "add now: openrouter-anthropic-opus (same-lane-add)" in rendered
 
 
 def test_list_client_scenarios_exposes_opencode_quality_path(tmp_path: Path):

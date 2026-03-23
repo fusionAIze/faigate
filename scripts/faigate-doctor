@@ -85,7 +85,7 @@ import yaml
 from faigate.onboarding import collect_provider_env_requirements
 from faigate.provider_catalog import build_provider_catalog_report
 from faigate.config import ConfigError, load_config
-from faigate.lane_registry import get_canonical_model_routes
+from faigate.lane_registry import get_canonical_model_routes, get_route_add_recommendations
 
 config_path = Path(os.environ.get("FAIGATE_CONFIG_FILE", ""))
 raw_config = {}
@@ -152,6 +152,12 @@ if health_raw:
         "same-lane-route": 0,
         "cluster-degrade": 0,
         "family-route": 0,
+        "none": 0,
+    }
+    add_counts = {
+        "same-lane-add": 0,
+        "cluster-add": 0,
+        "family-add": 0,
         "none": 0,
     }
     rows = []
@@ -228,6 +234,12 @@ if health_raw:
             mirror_gap_routes += 1
         lane_cluster = str(lane.get("cluster") or "")
         degrade_to = [str(item) for item in (lane.get("degrade_to") or []) if str(item)]
+        add_recommendations = get_route_add_recommendations(
+            configured_provider_names=configured_provider_names,
+            canonical_model=canonical_model,
+            degrade_to=degrade_to,
+            family=family,
+        )
         rows.append(
             {
                 "provider": provider_name,
@@ -236,6 +248,7 @@ if health_raw:
                 "lane_cluster": lane_cluster,
                 "degrade_to": degrade_to,
                 "known_mirror_gaps": known_mirror_gaps,
+                "add_recommendations": add_recommendations,
                 "action": action_group,
                 "ready": bool(request_readiness.get("ready")),
                 "status": status,
@@ -336,6 +349,15 @@ if health_raw:
                 f"[ok] request-ready mirror gap: {row['provider']} -> "
                 + ", ".join(row["known_mirror_gaps"][:3])
             )
+        add_recommendations = row["add_recommendations"]
+        if add_recommendations:
+            top_add = add_recommendations[0]
+            add_strategy = str(top_add.get("strategy") or "route-addition")
+            add_counts[add_strategy] = add_counts.get(add_strategy, 0) + 1
+            print(
+                f"[ok] request-ready add route: {row['provider']} -> "
+                f"{top_add.get('provider_name')} ({add_strategy})"
+            )
         preferred_route, strategy = pick_recommendation(row)
         recommendation_counts[strategy] = recommendation_counts.get(strategy, 0) + 1
         if preferred_route:
@@ -356,6 +378,12 @@ if health_raw:
             f"same-lane={recommendation_counts['same-lane-route']} | "
             f"cluster={recommendation_counts['cluster-degrade']} | "
             f"family={recommendation_counts['family-route']}"
+        )
+        print(
+            "[ok] request-ready add guidance: "
+            f"same-lane={add_counts['same-lane-add']} | "
+            f"cluster={add_counts['cluster-add']} | "
+            f"family={add_counts['family-add']}"
         )
         print(
             f"[ok] request-ready mirror gaps: {mirror_gap_routes} routes have known mirrors not configured"
