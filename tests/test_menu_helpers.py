@@ -2083,6 +2083,85 @@ def test_faigate_doctor_prefers_family_route_when_route_is_on_hold(tmp_path: Pat
     ) in result.stdout
 
 
+def test_faigate_doctor_reports_known_mirror_gaps(tmp_path: Path):
+    config_file = tmp_path / "config.yaml"
+    env_file = tmp_path / "faigate.env"
+    config_file.write_text(
+        """
+server: {}
+providers:
+  anthropic-claude:
+    backend: anthropic-compat
+    api_key: "${ANTHROPIC_API_KEY}"
+    base_url: "https://api.anthropic.com/v1"
+    model: "claude-opus-4-6"
+""".strip(),
+        encoding="utf-8",
+    )
+    env_file.write_text("ANTHROPIC_API_KEY=sk-ant\n", encoding="utf-8")
+
+    fake_bin = _write_fake_curl(
+        tmp_path,
+        {
+            "/health": json.dumps(
+                {
+                    "status": "ok",
+                    "summary": {
+                        "providers_total": 1,
+                        "providers_healthy": 1,
+                        "providers_unhealthy": 0,
+                    },
+                    "request_readiness": {
+                        "providers_total": 1,
+                        "providers_ready": 1,
+                        "providers_not_ready": 0,
+                    },
+                    "providers": {
+                        "anthropic-claude": {
+                            "healthy": True,
+                            "lane": {
+                                "family": "anthropic",
+                                "canonical_model": "anthropic/opus-4.6",
+                            },
+                            "request_readiness": {
+                                "ready": True,
+                                "status": "ready",
+                                "reason": "route looks request-ready from runtime state",
+                            },
+                        }
+                    },
+                }
+            ),
+            "/v1/models": json.dumps({"data": []}),
+        },
+    )
+
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+    env["FAIGATE_CONFIG_FILE"] = str(config_file)
+    env["FAIGATE_ENV_FILE"] = str(env_file)
+    env["FAIGATE_PYTHON"] = sys.executable
+    env["PYTHONPATH"] = str(REPO_ROOT)
+
+    result = subprocess.run(
+        ["bash", "scripts/faigate-doctor"],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert (
+        "request-ready mirror gap: anthropic-claude -> openrouter-anthropic-opus"
+        in result.stdout
+    )
+    assert (
+        "request-ready mirror gaps: 1 routes have known mirrors not configured"
+        in result.stdout
+    )
+
+
 def test_faigate_client_scenarios_help_lists_usage():
     result = subprocess.run(
         ["bash", "scripts/faigate-client-scenarios", "--help"],

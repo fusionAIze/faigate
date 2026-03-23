@@ -1073,6 +1073,47 @@ providers:
     assert "prefer: deepseek-chat" in rendered
 
 
+def test_build_provider_probe_report_surfaces_known_mirror_gaps(tmp_path: Path):
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """
+providers:
+  anthropic-claude:
+    backend: anthropic-compat
+    api_key: "${ANTHROPIC_API_KEY}"
+    base_url: "https://api.anthropic.com/v1"
+    model: "claude-opus-4-6"
+    tier: mid
+""".strip(),
+        encoding="utf-8",
+    )
+    env_file = tmp_path / ".env"
+    env_file.write_text("ANTHROPIC_API_KEY=sk-ant\n", encoding="utf-8")
+
+    report = build_provider_probe_report(
+        config_path=config_path,
+        env_file=env_file,
+        health_payload={
+            "providers": {
+                "anthropic-claude": {
+                    "healthy": True,
+                    "request_readiness": {
+                        "ready": True,
+                        "status": "ready",
+                        "reason": "route looks request-ready from runtime state",
+                    },
+                }
+            }
+        },
+    )
+
+    row = report["providers"][0]
+    assert "openrouter-anthropic-opus" in row["known_mirror_gaps"]
+    rendered = render_provider_probe_text(report)
+    assert "Mirror gaps: 1 routes with known mirrors not configured" in rendered
+    assert "known mirrors not configured: openrouter-anthropic-opus" in rendered
+
+
 def test_list_client_scenarios_exposes_opencode_quality_path(tmp_path: Path):
     env_file = tmp_path / ".env"
     env_file.write_text(

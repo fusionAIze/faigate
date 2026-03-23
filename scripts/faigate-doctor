@@ -85,6 +85,7 @@ import yaml
 from faigate.onboarding import collect_provider_env_requirements
 from faigate.provider_catalog import build_provider_catalog_report
 from faigate.config import ConfigError, load_config
+from faigate.lane_registry import get_canonical_model_routes
 
 config_path = Path(os.environ.get("FAIGATE_CONFIG_FILE", ""))
 raw_config = {}
@@ -112,6 +113,7 @@ try:
 except ConfigError as exc:
     print(f"[fail] config invalid: {exc}")
     sys.exit(1)
+configured_provider_names = set(config.providers.keys())
 
 catalog = build_provider_catalog_report(config)
 if catalog["alert_count"] == 0:
@@ -141,6 +143,7 @@ if health_raw:
     total = 0
     action_counts = {"fix-now": 0, "hold": 0, "watch": 0, "route": 0, "inspect": 0}
     family_rows = []
+    mirror_gap_routes = 0
 
     def classify_action(
         *,
@@ -204,6 +207,15 @@ if health_raw:
         )
         lane = payload.get("lane") or {}
         family = str(lane.get("family") or "unclassified")
+        canonical_model = str(lane.get("canonical_model") or "")
+        known_routes = get_canonical_model_routes(canonical_model) if canonical_model else []
+        known_mirror_gaps = [
+            str(route.get("provider_name") or "")
+            for route in known_routes
+            if str(route.get("provider_name") or "")
+            and str(route.get("provider_name") or "") != provider_name
+            and str(route.get("provider_name") or "") not in configured_provider_names
+        ]
         action_group = classify_action(
             status=status,
             ready=bool(request_readiness.get("ready")),
@@ -213,6 +225,8 @@ if health_raw:
         )
         action_counts[action_group] += 1
         family_rows.append({"provider": provider_name, "family": family, "action": action_group})
+        if known_mirror_gaps:
+            mirror_gap_routes += 1
         profile_bits = []
         if profile:
             profile_bits.append(profile)
@@ -228,7 +242,6 @@ if health_raw:
             print(f"[ok] request-ready: {provider_name} -> {status}{profile_suffix} ({reason})")
         else:
             print(f"[warn] request-ready: {provider_name} -> {status}{profile_suffix} ({reason})")
-        print(f"[ok] request-ready action: {provider_name} -> {action_group} [{family}]")
         print(f"[ok] request-ready action: {provider_name} -> {action_group} [{family}]")
         if probe_payload:
             print(f"[ok] request-ready payload: {provider_name} -> {probe_payload}")
@@ -250,6 +263,11 @@ if health_raw:
                 f"[ok] request-ready recovery: {provider_name} -> recovered from "
                 f"{runtime_last_recovered_issue or 'n/a'} | watch {runtime_recovery_remaining}s"
             )
+        if known_mirror_gaps:
+            print(
+                f"[ok] request-ready mirror gap: {provider_name} -> "
+                + ", ".join(known_mirror_gaps[:3])
+            )
         preferred_route = preferred_route_for(provider_name, family, action_group)
         if preferred_route:
             print(
@@ -263,6 +281,9 @@ if health_raw:
             f"fix-now={action_counts['fix-now']} | hold={action_counts['hold']} | "
             f"watch={action_counts['watch']} | route={action_counts['route']} | "
             f"inspect={action_counts['inspect']}"
+        )
+        print(
+            f"[ok] request-ready mirror gaps: {mirror_gap_routes} routes have known mirrors not configured"
         )
 PY
 then
