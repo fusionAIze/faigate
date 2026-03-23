@@ -27,9 +27,13 @@ from . import __version__
 from .adaptation import AdaptiveRouteState
 from .config import Config, load_config
 from .hooks import AppliedHooks, HookExecutionError, RequestHookContext, apply_request_hooks
-from .lane_registry import get_provider_lane_binding
+from .lane_registry import get_provider_lane_binding, get_route_add_recommendations
 from .metrics import MetricsStore, calc_cost
-from .provider_catalog import build_provider_catalog_report, build_provider_discovery_view
+from .provider_catalog import (
+    build_provider_catalog_report,
+    build_provider_discovery_view,
+    build_provider_refresh_guidance,
+)
 from .providers import ProviderBackend, ProviderError
 from .router import Router, RoutingDecision
 from .updates import (
@@ -798,6 +802,84 @@ def _build_route_summary(decision: RoutingDecision) -> dict[str, Any]:
         if len(alternatives) >= 3:
             break
 
+    next_actions: list[dict[str, Any]] = []
+    configured_provider_names = set(getattr(_config, "providers", {}).keys()) if _config else set()
+    selected_refresh = build_provider_refresh_guidance(
+        [decision.provider_name],
+        freshness_overrides={
+            decision.provider_name: {
+                "freshness_status": selected.get("freshness_status"),
+                "review_age_days": selected.get("review_age_days"),
+            }
+        },
+        limit=1,
+    )
+    if selected_refresh:
+        refresh = selected_refresh[0]
+        next_actions.append(
+            {
+                "kind": "refresh-guidance",
+                "title": f"Review {decision.provider_name} before leaning on it heavily",
+                "detail": refresh.get("reason") or "",
+                "path": "Provider Probe or Dashboard -> Provider detail",
+                "target": decision.provider_name,
+                "refresh_url": refresh.get("refresh_url") or "",
+            }
+        )
+
+    add_recommendations = get_route_add_recommendations(
+        configured_provider_names=configured_provider_names,
+        canonical_model=selected["canonical_model"],
+        degrade_to=list(details.get("degrade_to") or []),
+        family=selected["lane_family"],
+    )
+    if add_recommendations:
+        top_add = add_recommendations[0]
+        next_actions.append(
+            {
+                "kind": "route-add",
+                "title": (
+                    f"Add {top_add.get('setup_provider_name') or top_add.get('provider_name')} "
+                    "for fuller lane coverage"
+                ),
+                "detail": str(top_add.get("reason") or ""),
+                "path": "Provider Setup -> Guided Route Additions",
+                "target": str(top_add.get("provider_name") or ""),
+                "strategy": str(top_add.get("strategy") or ""),
+            }
+        )
+
+    selected_cost = float(selected.get("estimated_request_cost_usd") or 0.0)
+    cheaper_alternative = next(
+        (
+            item
+            for item in alternatives
+            if float(item.get("estimated_request_cost_usd") or 0.0) > 0
+            and (
+                float(item.get("estimated_request_cost_usd") or 0.0)
+                <= max(0.0, selected_cost * 0.6)
+            )
+        ),
+        None,
+    )
+    if cheaper_alternative and str(details.get("routing_posture") or "") in {
+        "balanced",
+        "eco",
+        "auto",
+    }:
+        next_actions.append(
+            {
+                "kind": "cost-review",
+                "title": f"Review {cheaper_alternative['provider']} for cheaper default traffic",
+                "detail": (
+                    "A meaningfully cheaper alternative is already available if this request class "
+                    "starts dominating your normal traffic."
+                ),
+                "path": "Client Scenarios or Client Wizard",
+                "target": cheaper_alternative["provider"],
+            }
+        )
+
     return {
         "layer": decision.layer,
         "routing_posture": str(details.get("routing_posture") or ""),
@@ -809,6 +891,7 @@ def _build_route_summary(decision: RoutingDecision) -> dict[str, Any]:
         "selected": selected,
         "why_selected": why_selected,
         "alternatives": alternatives,
+        "next_actions": next_actions,
     }
 
 

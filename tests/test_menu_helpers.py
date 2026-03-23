@@ -1400,6 +1400,68 @@ client_profiles:
     assert "Fix any missing env or endpoint warnings before restart work." in result.stdout
 
 
+def test_faigate_menu_quick_setup_surfaces_guided_route_additions(tmp_path: Path):
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(
+        """
+server:
+  host: "127.0.0.1"
+  port: 8090
+providers:
+  anthropic-claude:
+    backend: anthropic-compat
+    api_key: "${ANTHROPIC_API_KEY}"
+    base_url: "https://api.anthropic.com/v1"
+    model: "claude-opus-4-6"
+fallback_chain:
+  - anthropic-claude
+client_profiles:
+  enabled: true
+  default: generic
+  profiles:
+    generic: {}
+""".strip(),
+        encoding="utf-8",
+    )
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "ANTHROPIC_API_KEY=sk-ant\nOPENROUTER_API_KEY=sk-openrouter\n",
+        encoding="utf-8",
+    )
+    fake_bin = _write_fake_curl(
+        tmp_path,
+        {
+            "/health": json.dumps(
+                {
+                    "status": "ok",
+                    "summary": {"providers_total": 1, "providers_healthy": 1},
+                }
+            )
+        },
+    )
+
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+    env["FAIGATE_CONFIG_FILE"] = str(config_file)
+    env["FAIGATE_ENV_FILE"] = str(env_file)
+    env["FAIGATE_PYTHON"] = sys.executable
+    env["PYTHONPATH"] = str(REPO_ROOT)
+
+    result = subprocess.run(
+        ["bash", "scripts/faigate-menu"],
+        cwd=REPO_ROOT,
+        env=env,
+        input="1\nq\n",
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert "fusionAIze Gate Quick Setup" in result.stdout
+    assert "Route gaps" in result.stdout
+    assert "Provider Setup -> Guided Route Additions next" in result.stdout
+
+
 def test_faigate_server_settings_updates_config_and_creates_backup(tmp_path: Path):
     config_file = tmp_path / "config.yaml"
     config_file.write_text(

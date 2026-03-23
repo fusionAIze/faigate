@@ -117,6 +117,31 @@ EOF
   fi
 }
 
+dynamic_operator_followups() {
+  local snapshot_output line route_gaps refresh_now review_soon top_refresh_provider top_add_provider
+  snapshot_output="$(collect_runtime_snapshot)"
+  while IFS= read -r line; do
+    case "$line" in
+      route_gaps=*) route_gaps="${line#route_gaps=}" ;;
+      refresh_now=*) refresh_now="${line#refresh_now=}" ;;
+      review_soon=*) review_soon="${line#review_soon=}" ;;
+      top_refresh_provider=*) top_refresh_provider="${line#top_refresh_provider=}" ;;
+      top_add_provider=*) top_add_provider="${line#top_add_provider=}" ;;
+    esac
+  done <<EOF
+$snapshot_output
+EOF
+
+  if [ "${route_gaps:-0}" -gt 0 ]; then
+    printf '%s\n' "Open Provider Setup -> Guided Route Additions next to close ${route_gaps} recommended lane gap(s)${top_add_provider:+, starting with ${top_add_provider}}."
+  fi
+  if [ "${refresh_now:-0}" -gt 0 ]; then
+    printf '%s\n' "Review stale route assumptions before heavier traffic leans on them${top_refresh_provider:+, starting with ${top_refresh_provider}}."
+  elif [ "${review_soon:-0}" -gt 0 ]; then
+    printf '%s\n' "Review aging route assumptions soon${top_refresh_provider:+, starting with ${top_refresh_provider}}."
+  fi
+}
+
 run_provider_setup_with_handoff() {
   local command_rc=0
   echo ""
@@ -142,6 +167,8 @@ import os
 import re
 
 import yaml
+from faigate.provider_catalog import build_provider_refresh_guidance
+from faigate.wizard import build_route_add_setup_plan
 
 config_path = Path(os.environ["FAIGATE_MENU_CONFIG"])
 env_path = Path(os.environ["FAIGATE_MENU_ENV"])
@@ -202,6 +229,33 @@ if len(presets) == 1:
 elif len(presets) > 1:
     preset_summary = f"{len(presets)} active"
 
+provider_names = [
+    name for name, payload in providers.items() if isinstance(payload, dict) and str(name).strip()
+]
+route_plan = build_route_add_setup_plan(
+    config_path=config_path,
+    env_file=env_path,
+    source_providers=provider_names,
+)
+refresh_guidance = build_provider_refresh_guidance(
+    provider_names,
+    freshness_overrides={
+        str(name): {
+            "freshness_status": str((payload.get("lane") or {}).get("freshness_status") or ""),
+            "review_age_days": (payload.get("lane") or {}).get("review_age_days"),
+            "freshness_hint": str((payload.get("lane") or {}).get("freshness_hint") or ""),
+        }
+        for name, payload in providers.items()
+        if isinstance(payload, dict)
+    },
+)
+top_refresh = refresh_guidance[0] if refresh_guidance else {}
+top_add = (
+    (route_plan.get("actionable_additions") or [{}])[0]
+    if route_plan.get("actionable_additions")
+    else {}
+)
+
 print(f"providers={len(providers)}")
 print(f"providers_ready={providers_ready}")
 print(f"providers_missing_keys={providers_missing_keys}")
@@ -212,13 +266,28 @@ print(f"profiles={len(profiles)}")
 print(f"presets={len(presets)}")
 print(f"preset_summary={preset_summary}")
 print(f"next_client={next_client or 'none'}")
+print(f"route_gaps={len(route_plan.get('actionable_additions') or [])}")
+print(f"route_gaps_ready={len(route_plan.get('auto_apply_additions') or [])}")
+print(f"route_gaps_manual={len(route_plan.get('manual_additions') or [])}")
+print(
+    "refresh_now="
+    + str(sum(1 for item in refresh_guidance if str(item.get("action") or "") == "refresh-now"))
+)
+print(
+    "review_soon="
+    + str(sum(1 for item in refresh_guidance if str(item.get("action") or "") == "review-soon"))
+)
+print(f"top_refresh_provider={top_refresh.get('provider', '')}")
+print(f"top_refresh_action={top_refresh.get('action_label', '')}")
+print(f"top_add_provider={top_add.get('setup_provider_name') or top_add.get('provider_name') or ''}")
 PY
 }
 
 collect_runtime_snapshot() {
   local state health_state bind snapshot_output line providers_count providers_ready providers_missing_keys
   local fallback_count default_mode default_profile profile_count preset_count
-  local preset_summary next_client
+  local preset_summary next_client route_gaps route_gaps_ready route_gaps_manual
+  local refresh_now review_soon top_refresh_provider top_refresh_action top_add_provider
   state="$(faigate_service_state)"
   if faigate_is_healthy; then
     health_state="healthy"
@@ -247,6 +316,14 @@ collect_runtime_snapshot() {
       presets=*) preset_count="${line#presets=}" ;;
       preset_summary=*) preset_summary="${line#preset_summary=}" ;;
       next_client=*) next_client="${line#next_client=}" ;;
+      route_gaps=*) route_gaps="${line#route_gaps=}" ;;
+      route_gaps_ready=*) route_gaps_ready="${line#route_gaps_ready=}" ;;
+      route_gaps_manual=*) route_gaps_manual="${line#route_gaps_manual=}" ;;
+      refresh_now=*) refresh_now="${line#refresh_now=}" ;;
+      review_soon=*) review_soon="${line#review_soon=}" ;;
+      top_refresh_provider=*) top_refresh_provider="${line#top_refresh_provider=}" ;;
+      top_refresh_action=*) top_refresh_action="${line#top_refresh_action=}" ;;
+      top_add_provider=*) top_add_provider="${line#top_add_provider=}" ;;
     esac
   done <<EOF
 $snapshot_output
@@ -265,11 +342,20 @@ EOF
   printf 'presets=%s\n' "$preset_count"
   printf 'preset_summary=%s\n' "${preset_summary:-none yet}"
   printf 'next_client=%s\n' "${next_client:-none}"
+  printf 'route_gaps=%s\n' "${route_gaps:-0}"
+  printf 'route_gaps_ready=%s\n' "${route_gaps_ready:-0}"
+  printf 'route_gaps_manual=%s\n' "${route_gaps_manual:-0}"
+  printf 'refresh_now=%s\n' "${refresh_now:-0}"
+  printf 'review_soon=%s\n' "${review_soon:-0}"
+  printf 'top_refresh_provider=%s\n' "${top_refresh_provider:-}"
+  printf 'top_refresh_action=%s\n' "${top_refresh_action:-}"
+  printf 'top_add_provider=%s\n' "${top_add_provider:-}"
 }
 
 render_summary_cards() {
   local snapshot_output line state health_state bind providers_count providers_ready providers_missing_keys
   local fallback_count default_mode default_profile profile_count preset_count preset_summary next_client
+  local route_gaps refresh_now review_soon
   snapshot_output="$(collect_runtime_snapshot)"
   while IFS= read -r line; do
     case "$line" in
@@ -286,6 +372,9 @@ render_summary_cards() {
       presets=*) preset_count="${line#presets=}" ;;
       preset_summary=*) preset_summary="${line#preset_summary=}" ;;
       next_client=*) next_client="${line#next_client=}" ;;
+      route_gaps=*) route_gaps="${line#route_gaps=}" ;;
+      refresh_now=*) refresh_now="${line#refresh_now=}" ;;
+      review_soon=*) review_soon="${line#review_soon=}" ;;
     esac
   done <<EOF
 $snapshot_output
@@ -306,6 +395,14 @@ EOF
   printf "  %-18s %s\n" "Ready" "$providers_ready"
   printf "  %-18s %s\n" "Missing keys" "$providers_missing_keys"
   printf "  %-18s %s\n" "Fallbacks" "$fallback_count"
+  if [ "${route_gaps:-0}" -gt 0 ]; then
+    printf "  %-18s %s\n" "Route gaps" "$route_gaps"
+  fi
+  if [ "${refresh_now:-0}" -gt 0 ]; then
+    printf "  %-18s %s\n" "Refresh now" "$refresh_now"
+  elif [ "${review_soon:-0}" -gt 0 ]; then
+    printf "  %-18s %s\n" "Review soon" "$review_soon"
+  fi
   echo ""
   printf "  %bClients%b\n" "$FAIGATE_UI_BOLD" "$FAIGATE_UI_RESET"
   printf "  %-18s %s\n" "Default profile" "$default_profile"
@@ -334,6 +431,7 @@ EOF
 
 render_quick_setup_guidance() {
   local snapshot_output line health_state providers_count providers_ready providers_missing_keys
+  local route_gaps refresh_now review_soon top_refresh_provider top_refresh_action top_add_provider
   snapshot_output="$(collect_runtime_snapshot)"
   while IFS= read -r line; do
     case "$line" in
@@ -341,6 +439,12 @@ render_quick_setup_guidance() {
       providers=*) providers_count="${line#providers=}" ;;
       providers_ready=*) providers_ready="${line#providers_ready=}" ;;
       providers_missing_keys=*) providers_missing_keys="${line#providers_missing_keys=}" ;;
+      route_gaps=*) route_gaps="${line#route_gaps=}" ;;
+      refresh_now=*) refresh_now="${line#refresh_now=}" ;;
+      review_soon=*) review_soon="${line#review_soon=}" ;;
+      top_refresh_provider=*) top_refresh_provider="${line#top_refresh_provider=}" ;;
+      top_refresh_action=*) top_refresh_action="${line#top_refresh_action=}" ;;
+      top_add_provider=*) top_add_provider="${line#top_add_provider=}" ;;
     esac
   done <<EOF
 $snapshot_output
@@ -350,6 +454,12 @@ EOF
     faigate_ui_tip "Start with Provider Setup to add sources, then fill in keys and run Full Config Wizard to generate the first usable config."
   elif [ "${providers_missing_keys:-0}" != "0" ] || [ "${providers_ready:-0}" = "0" ]; then
     faigate_ui_tip "Some configured providers are still missing API keys. Fill them in next, then rerun Validate."
+  elif [ "${route_gaps:-0}" -gt 0 ]; then
+    faigate_ui_tip "The config is live, but ${route_gaps} recommended route addition(s) are still open. Open Provider Setup -> Guided Route Additions next${top_add_provider:+, starting with ${top_add_provider}}."
+  elif [ "${refresh_now:-0}" -gt 0 ]; then
+    faigate_ui_tip "The gateway is up, but ${top_refresh_provider:-one or more active routes} should be ${top_refresh_action:-reviewed} before heavier traffic leans on current benchmark and cost assumptions."
+  elif [ "${review_soon:-0}" -gt 0 ]; then
+    faigate_ui_tip "The gateway looks ready. Review aging route assumptions soon${top_refresh_provider:+, starting with ${top_refresh_provider}}."
   elif [ "${health_state:-unreachable}" != "healthy" ]; then
     faigate_ui_tip "Config looks close. Restart + Verify is the next best step so the gateway can pick up the current config."
   else
@@ -494,10 +604,13 @@ run_config_wizard() {
     else
       offer_guided_route_additions_now "Full Config Wizard"
     fi
+    local -a dynamic_steps=()
+    mapfile -t dynamic_steps < <(dynamic_operator_followups)
     show_next_steps "Wizard wrote the config." \
       "Restart + Verify to load the new config." \
       "Run Validate if you changed providers or routing defaults." \
-      "Open Clients when you want the first consumer wired in."
+      "Open Clients when you want the first consumer wired in." \
+      "${dynamic_steps[@]}"
     faigate_ui_pause
     printf "  Restart fusionAIze Gate to apply changes? [y/N]: "
     read -r restart_choice
@@ -589,10 +702,13 @@ run_client_wizard() {
     else
       offer_guided_route_additions_now "Client Wizard"
     fi
+    local -a dynamic_steps=()
+    mapfile -t dynamic_steps < <(dynamic_operator_followups)
     show_next_steps "Client-scoped config update completed." \
       "Restart + Verify to activate the new client default." \
       "Use Client Matrix to confirm the profile and match intent." \
-      "Use the client drilldown to grab the exact setup hints again."
+      "Use the client drilldown to grab the exact setup hints again." \
+      "${dynamic_steps[@]}"
     faigate_ui_pause
   else
     cmd_args+=(--dry-run-summary)

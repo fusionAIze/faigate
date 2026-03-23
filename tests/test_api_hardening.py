@@ -518,6 +518,11 @@ metrics:
     )
     assert body["route_summary"]["alternatives"][0]["provider"] == "gemini-flash-lite"
     assert body["route_summary"]["alternatives"][0]["estimated_request_cost_usd"] > 0
+    assert body["route_summary"]["next_actions"]
+    assert any(
+        item["kind"] == "cost-review" and item["path"] == "Client Scenarios or Client Wizard"
+        for item in body["route_summary"]["next_actions"]
+    )
 
 
 def test_image_edit_rejects_large_upload(api_client):
