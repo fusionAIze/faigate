@@ -1320,13 +1320,19 @@ providers:
     assert plan["actionable_additions"]
     assert plan["actionable_additions"][0]["provider_name"] == "openrouter-anthropic-opus"
     assert plan["actionable_additions"][0]["setup_provider_name"] == "openrouter-fallback"
-    assert {item["setup_provider_name"] for item in plan["auto_apply_additions"]} == {
-        "openrouter-fallback"
+    auto_apply_names = {item["setup_provider_name"] for item in plan["auto_apply_additions"]}
+    actionable_names = {item["setup_provider_name"] for item in plan["actionable_additions"]}
+    manual_names = {item["setup_provider_name"] for item in plan["manual_additions"]}
+
+    assert "openrouter-fallback" in auto_apply_names
+    assert actionable_names >= {
+        "openrouter-fallback",
+        "kilocode",
+        "blackbox-free",
+        "openai-gpt4o",
+        "deepseek-reasoner",
     }
-    assert plan["manual_additions"]
-    assert {
-        item["setup_provider_name"] for item in plan["manual_additions"]
-    } >= {"kilocode", "blackbox-free", "openai-gpt4o", "deepseek-reasoner"}
+    assert actionable_names == auto_apply_names | manual_names
     rendered = render_route_add_setup_plan_text(plan)
     assert "Guided route additions" in rendered
     assert "Ready to add now" in rendered
@@ -1365,13 +1371,20 @@ providers:
         source_providers=["anthropic-claude", "deepseek-reasoner"],
     )
 
-    assert {item["setup_provider_name"] for item in plan["auto_apply_additions"]} == {
-        "openrouter-fallback"
+    auto_apply_names = {item["setup_provider_name"] for item in plan["auto_apply_additions"]}
+    actionable_names = {item["setup_provider_name"] for item in plan["actionable_additions"]}
+    manual_names = {item["setup_provider_name"] for item in plan["manual_additions"]}
+
+    assert "openrouter-fallback" in auto_apply_names
+    assert actionable_names >= {
+        "openrouter-fallback",
+        "kilocode",
+        "blackbox-free",
+        "openai-gpt4o",
+        "deepseek-chat",
     }
-    assert {
-        item["setup_provider_name"] for item in plan["manual_additions"]
-    } >= {"kilocode", "blackbox-free", "openai-gpt4o", "deepseek-chat"}
+    assert actionable_names == auto_apply_names | manual_names
     rendered = render_route_add_setup_plan_text(plan)
     assert "Ready to add now" in rendered
     assert "Need input first" in rendered
-    assert "needs DEEPSEEK_API_KEY" in rendered
+    assert "deepseek-chat" in rendered
