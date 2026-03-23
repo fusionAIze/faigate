@@ -1011,6 +1011,90 @@ providers:
     assert "Action summary: fix-now=0 | hold=0 | watch=0 | route=1 | inspect=0" in rendered
 
 
+def test_build_provider_probe_report_prefers_same_lane_then_cluster_route(tmp_path: Path):
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """
+providers:
+  anthropic-claude:
+    backend: anthropic-compat
+    api_key: "${ANTHROPIC_API_KEY}"
+    base_url: "https://api.anthropic.com/v1"
+    model: "claude-opus-4-6"
+    tier: mid
+  openrouter-anthropic-opus:
+    backend: openai-compat
+    api_key: "${OPENROUTER_API_KEY}"
+    base_url: "https://openrouter.ai/api/v1"
+    model: "anthropic/claude-opus-4.6"
+    tier: fallback
+    lane:
+      family: anthropic
+      name: quality-mirror
+      canonical_model: anthropic/opus-4.6
+      route_type: aggregator
+      cluster: elite-reasoning
+      degrade_to:
+        - anthropic/sonnet-4.6
+  openai-gpt4o:
+    backend: openai-compat
+    api_key: "${OPENAI_API_KEY}"
+    base_url: "https://api.openai.com/v1"
+    model: "gpt-4o"
+    tier: mid
+""".strip(),
+        encoding="utf-8",
+    )
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "ANTHROPIC_API_KEY=sk-ant\nOPENROUTER_API_KEY=sk-or\nOPENAI_API_KEY=sk-openai\n",
+        encoding="utf-8",
+    )
+
+    report = build_provider_probe_report(
+        config_path=config_path,
+        env_file=env_file,
+        health_payload={
+            "providers": {
+                "anthropic-claude": {
+                    "healthy": True,
+                    "request_readiness": {
+                        "ready": False,
+                        "status": "rate-limited",
+                        "reason": "route is in runtime cooldown after recent rate limited failures",
+                        "runtime_cooldown_active": True,
+                        "runtime_window_state": "cooldown",
+                    },
+                },
+                "openrouter-anthropic-opus": {
+                    "healthy": True,
+                    "request_readiness": {
+                        "ready": True,
+                        "status": "ready-compat",
+                        "reason": "route looks request-ready from runtime state",
+                    },
+                },
+                "openai-gpt4o": {
+                    "healthy": True,
+                    "request_readiness": {
+                        "ready": True,
+                        "status": "ready",
+                        "reason": "route looks request-ready from runtime state",
+                    },
+                },
+            }
+        },
+    )
+
+    by_name = {row["provider"]: row for row in report["providers"]}
+    assert by_name["anthropic-claude"]["recommended_route"] == "openrouter-anthropic-opus"
+    assert by_name["anthropic-claude"]["recommended_strategy"] == "same-lane-route"
+    assert "same lane" in by_name["anthropic-claude"]["next_action"]
+    rendered = render_provider_probe_text(report)
+    assert "Fallback guidance: same-lane=1 | cluster=0 | family=0" in rendered
+    assert "prefer: openrouter-anthropic-opus (same-lane-route)" in rendered
+
+
 def test_build_provider_probe_report_prefers_family_route_during_cooldown(tmp_path: Path):
     config_path = tmp_path / "config.yaml"
     config_path.write_text(
@@ -1062,15 +1146,12 @@ providers:
     )
 
     by_name = {row["provider"]: row for row in report["providers"]}
-    assert by_name["deepseek-reasoner"]["action_group"] == "hold"
-    assert by_name["deepseek-reasoner"]["preferred_route"] == "deepseek-chat"
-    assert (
-        "prefer deepseek-chat for deepseek traffic meanwhile"
-        in by_name["deepseek-reasoner"]["next_action"]
-    )
+    assert by_name["deepseek-reasoner"]["recommended_route"] == "deepseek-chat"
+    assert by_name["deepseek-reasoner"]["recommended_strategy"] == "cluster-degrade"
+    assert "next cluster lane" in by_name["deepseek-reasoner"]["next_action"]
     rendered = render_provider_probe_text(report)
     assert "Family actions: deepseek: route=1/watch=0/hold=1" in rendered
-    assert "prefer: deepseek-chat" in rendered
+    assert "prefer: deepseek-chat (cluster-degrade)" in rendered
 
 
 def test_build_provider_probe_report_surfaces_known_mirror_gaps(tmp_path: Path):
