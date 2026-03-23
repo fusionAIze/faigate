@@ -442,6 +442,11 @@ providers:
 
     assert "request-ready: deepseek-chat -> ready" in result.stdout
     assert "request readiness summary: 1/1 provider routes look request-ready" in result.stdout
+    assert "request-ready action: deepseek-chat -> route [unclassified]" in result.stdout
+    assert (
+        "request-ready actions: fix-now=0 | hold=0 | watch=0 | route=1 | inspect=0"
+        in result.stdout
+    )
     assert "[openai-compatible | native | confidence=high]" in result.stdout
     assert "request-ready payload: deepseek-chat -> openai-chat-minimal" in result.stdout
     assert "request-ready next step: deepseek-chat -> route can carry live traffic" in result.stdout
@@ -519,9 +524,14 @@ def test_faigate_doctor_reports_runtime_cooldown_windows(tmp_path: Path):
     )
 
     assert "request-ready: deepseek-chat -> rate-limited" in result.stdout
+    assert "request-ready action: deepseek-chat -> hold [unclassified]" in result.stdout
     assert (
         "request-ready runtime: deepseek-chat -> penalty=24 | issue=rate-limited "
         "| cooldown active | cooldown 120s left" in result.stdout
+    )
+    assert (
+        "request-ready actions: fix-now=0 | hold=1 | watch=0 | route=0 | inspect=0"
+        in result.stdout
     )
 
 
@@ -600,8 +610,13 @@ def test_faigate_doctor_reports_recent_route_recovery(tmp_path: Path):
     )
 
     assert "request-ready: deepseek-chat -> ready-recovered" in result.stdout
+    assert "request-ready action: deepseek-chat -> watch [unclassified]" in result.stdout
     assert (
         "request-ready recovery: deepseek-chat -> recovered from rate-limited | watch 240s"
+        in result.stdout
+    )
+    assert (
+        "request-ready actions: fix-now=0 | hold=0 | watch=1 | route=0 | inspect=0"
         in result.stdout
     )
 
@@ -1986,8 +2001,86 @@ providers:
 
     assert "Provider probe" in result.stdout
     assert "Configured: 2 | Ready now: 1" in result.stdout
+    assert "Action summary: fix-now=1 | hold=0 | watch=0 | route=1 | inspect=0" in result.stdout
     assert "- deepseek-chat  (ready)" in result.stdout
     assert "- anthropic-claude  (missing-key)" in result.stdout
+
+
+def test_faigate_doctor_prefers_family_route_when_route_is_on_hold(tmp_path: Path):
+    config_file = tmp_path / "config.yaml"
+    env_file = tmp_path / "faigate.env"
+    config_file.write_text("server: {}\nproviders: {}\n", encoding="utf-8")
+    env_file.write_text("", encoding="utf-8")
+
+    fake_bin = _write_fake_curl(
+        tmp_path,
+        {
+            "/health": json.dumps(
+                {
+                    "status": "ok",
+                    "summary": {
+                        "providers_total": 2,
+                        "providers_healthy": 2,
+                        "providers_unhealthy": 0,
+                    },
+                    "request_readiness": {
+                        "providers_total": 2,
+                        "providers_ready": 1,
+                        "providers_not_ready": 1,
+                    },
+                    "providers": {
+                        "deepseek-chat": {
+                            "healthy": True,
+                            "lane": {"family": "deepseek"},
+                            "request_readiness": {
+                                "ready": True,
+                                "status": "ready",
+                                "reason": "route looks request-ready from runtime state",
+                            },
+                        },
+                        "deepseek-reasoner": {
+                            "healthy": True,
+                            "lane": {"family": "deepseek"},
+                            "request_readiness": {
+                                "ready": False,
+                                "status": "rate-limited",
+                                "reason": (
+                                    "route is in runtime cooldown after recent "
+                                    "rate limited failures"
+                                ),
+                                "runtime_cooldown_active": True,
+                                "runtime_window_state": "cooldown",
+                            },
+                        },
+                    },
+                }
+            ),
+            "/v1/models": json.dumps({"data": []}),
+        },
+    )
+
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+    env["FAIGATE_CONFIG_FILE"] = str(config_file)
+    env["FAIGATE_ENV_FILE"] = str(env_file)
+    env["FAIGATE_PYTHON"] = sys.executable
+    env["PYTHONPATH"] = str(REPO_ROOT)
+
+    result = subprocess.run(
+        ["bash", "scripts/faigate-doctor"],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert "request-ready action: deepseek-reasoner -> hold [deepseek]" in result.stdout
+    assert (
+        "request-ready family route: deepseek-reasoner -> prefer "
+        "deepseek-chat for deepseek traffic "
+        "while this route is hold"
+    ) in result.stdout
 
 
 def test_faigate_client_scenarios_help_lists_usage():

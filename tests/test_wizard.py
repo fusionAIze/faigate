@@ -891,9 +891,13 @@ providers:
     assert by_name["deepseek-chat"]["status"] == "ready"
     assert by_name["anthropic-claude"]["status"] == "missing-key"
     assert by_name["deepseek-chat"]["transport_profile"] == "openai-compatible"
+    assert by_name["deepseek-chat"]["action_group"] == "route"
+    assert by_name["anthropic-claude"]["action_group"] == "fix-now"
     rendered = render_provider_probe_text(report)
     assert "Configured: 2 | Ready now: 1" in rendered
+    assert "Action summary: fix-now=1 | hold=0 | watch=0 | route=1 | inspect=0" in rendered
     assert "- deepseek-chat  (ready)" in rendered
+    assert "family: deepseek | action: route" in rendered
     assert "transport: openai-compatible | native | confidence: high | strategy: models" in rendered
 
 
@@ -940,6 +944,7 @@ providers:
 
     row = report["providers"][0]
     assert row["status"] == "ready-verified"
+    assert row["action_group"] == "route"
     assert row["verified_via"] == "chat"
     assert "kilo-chat-minimal" in row["probe_payload"]
     rendered = render_provider_probe_text(report)
@@ -997,11 +1002,75 @@ providers:
     row = report["providers"][0]
     assert report["summary"]["live_probe"] is True
     assert row["status"] == "ready-verified"
+    assert row["action_group"] == "route"
     assert row["probe_strategy"] == "chat"
     assert row["verified_via"] == "chat"
     rendered = render_provider_probe_text(report)
     assert "Live probe: enabled" in rendered
     assert "verified via: chat" in rendered
+    assert "Action summary: fix-now=0 | hold=0 | watch=0 | route=1 | inspect=0" in rendered
+
+
+def test_build_provider_probe_report_prefers_family_route_during_cooldown(tmp_path: Path):
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """
+providers:
+  deepseek-chat:
+    backend: openai-compat
+    api_key: "${DEEPSEEK_API_KEY}"
+    base_url: "https://api.deepseek.com/v1"
+    model: "deepseek-chat"
+    tier: default
+  deepseek-reasoner:
+    backend: openai-compat
+    api_key: "${DEEPSEEK_API_KEY}"
+    base_url: "https://api.deepseek.com/v1"
+    model: "deepseek-reasoner"
+    tier: reasoning
+""".strip(),
+        encoding="utf-8",
+    )
+    env_file = tmp_path / ".env"
+    env_file.write_text("DEEPSEEK_API_KEY=sk-demo\n", encoding="utf-8")
+
+    report = build_provider_probe_report(
+        config_path=config_path,
+        env_file=env_file,
+        health_payload={
+            "providers": {
+                "deepseek-chat": {
+                    "healthy": True,
+                    "request_readiness": {
+                        "ready": True,
+                        "status": "ready",
+                        "reason": "route looks request-ready from runtime state",
+                    },
+                },
+                "deepseek-reasoner": {
+                    "healthy": True,
+                    "request_readiness": {
+                        "ready": False,
+                        "status": "rate-limited",
+                        "reason": "route is in runtime cooldown after recent rate limited failures",
+                        "runtime_cooldown_active": True,
+                        "runtime_window_state": "cooldown",
+                    },
+                },
+            }
+        },
+    )
+
+    by_name = {row["provider"]: row for row in report["providers"]}
+    assert by_name["deepseek-reasoner"]["action_group"] == "hold"
+    assert by_name["deepseek-reasoner"]["preferred_route"] == "deepseek-chat"
+    assert (
+        "prefer deepseek-chat for deepseek traffic meanwhile"
+        in by_name["deepseek-reasoner"]["next_action"]
+    )
+    rendered = render_provider_probe_text(report)
+    assert "Family actions: deepseek: route=1/watch=0/hold=1" in rendered
+    assert "prefer: deepseek-chat" in rendered
 
 
 def test_list_client_scenarios_exposes_opencode_quality_path(tmp_path: Path):

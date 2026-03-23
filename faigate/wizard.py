@@ -1103,6 +1103,13 @@ def build_provider_probe_report(
         }
     rows: list[dict[str, Any]] = []
     ready_count = 0
+    action_counts = {
+        "fix-now": 0,
+        "hold": 0,
+        "watch": 0,
+        "route": 0,
+        "inspect": 0,
+    }
 
     for name, provider in sorted(configured.items()):
         transport_defaults = get_provider_transport_binding(
@@ -1110,6 +1117,7 @@ def build_provider_probe_report(
             backend=str(provider.get("backend", "openai-compat") or "openai-compat"),
             contract=str(provider.get("contract", "generic") or "generic"),
         )
+        lane_binding = get_provider_lane_binding(name)
         api_key = str(provider.get("api_key", "") or "").strip()
         env_name = _extract_env_reference(api_key)
         missing_key = bool(env_name) and not bool(env_values.get(env_name))
@@ -1153,6 +1161,22 @@ def build_provider_probe_report(
             else:
                 status = "configured"
             status_reason = last_error or "configured but not reporting healthy yet"
+        runtime_window_state = str(request_readiness.get("runtime_window_state") or "clear")
+        runtime_cooldown_active = bool(request_readiness.get("runtime_cooldown_active"))
+        runtime_recovered_recently = bool(request_readiness.get("runtime_recovered_recently"))
+        action_group = _classify_probe_action(
+            status=status,
+            missing_key=missing_key,
+            ready=bool(request_readiness.get("ready")),
+            runtime_window_state=runtime_window_state,
+            runtime_cooldown_active=runtime_cooldown_active,
+            runtime_recovered_recently=runtime_recovered_recently,
+        )
+        action_counts[action_group] += 1
+        family = str(
+            (provider.get("lane") or {}).get("family") or lane_binding.get("family") or ""
+        )
+        operator_hint = str(request_readiness.get("operator_hint") or "")
         rows.append(
             {
                 "provider": name,
@@ -1165,6 +1189,7 @@ def build_provider_probe_report(
                 "env": env_name,
                 "healthy": healthy,
                 "avg_latency_ms": float(health.get("avg_latency_ms", 0.0) or 0.0),
+                "lane_family": family,
                 "transport_profile": str(
                     request_readiness.get("profile")
                     or (provider.get("transport") or {}).get("profile")
@@ -1191,8 +1216,33 @@ def build_provider_probe_report(
                 ),
                 "probe_payload": str(request_readiness.get("probe_payload") or ""),
                 "verified_via": str(request_readiness.get("verified_via") or ""),
-                "operator_hint": str(request_readiness.get("operator_hint") or ""),
+                "operator_hint": operator_hint,
+                "action_group": action_group,
+                "next_action": operator_hint
+                or _default_probe_action_hint(
+                    action_group=action_group,
+                    provider_name=name,
+                    family=family,
+                ),
             }
+        )
+
+    family_summaries = _build_probe_family_summaries(rows)
+    for row in rows:
+        family = str(row.get("lane_family") or "unclassified")
+        family_summary = dict(family_summaries.get(family) or {})
+        preferred_route = _pick_family_preferred_route(
+            row=row,
+            rows=rows,
+            family_summary=family_summary,
+        )
+        row["family_summary"] = family_summary
+        row["preferred_route"] = preferred_route
+        row["next_action"] = _combine_probe_next_action(
+            current_hint=str(row.get("next_action") or ""),
+            action_group=str(row.get("action_group") or "inspect"),
+            family=family,
+            preferred_route=preferred_route,
         )
 
     return {
@@ -1202,6 +1252,8 @@ def build_provider_probe_report(
             "ready": ready_count,
             "health_live": health_payload is not None,
             "live_probe": live_probe,
+            "actions": action_counts,
+            "families": list(family_summaries.values()),
         },
     }
 
@@ -1218,12 +1270,34 @@ def render_provider_probe_text(report: dict[str, Any]) -> str:
     )
     if summary.get("live_probe"):
         lines.append("Live probe: enabled (using transport-specific shallow request probes)")
+    actions = summary.get("actions") or {}
+    action_bits = [
+        f"fix-now={actions.get('fix-now', 0)}",
+        f"hold={actions.get('hold', 0)}",
+        f"watch={actions.get('watch', 0)}",
+        f"route={actions.get('route', 0)}",
+        f"inspect={actions.get('inspect', 0)}",
+    ]
+    lines.append("Action summary: " + " | ".join(action_bits))
+    families = summary.get("families") or []
+    if families:
+        family_bits = []
+        for family in families[:3]:
+            family_bits.append(
+                f"{family.get('family')}: route={family.get('route', 0)}"
+                f"/watch={family.get('watch', 0)}/hold={family.get('hold', 0)}"
+            )
+        lines.append("Family actions: " + " | ".join(family_bits))
     lines.append("")
     for row in report.get("providers", []):
         lines.append(f"- {row['provider']}  ({row['status']})")
         lines.append(
             "  " + f"model: {row['model']} | tier: {row['tier']} | contract: {row['contract']}"
         )
+        if row.get("lane_family") or row.get("action_group"):
+            family = row.get("lane_family") or "unclassified"
+            action = row.get("action_group") or "inspect"
+            lines.append("  " + f"family: {family} | action: {action}")
         if row.get("transport_profile"):
             lines.append(
                 "  "
@@ -1247,8 +1321,10 @@ def render_provider_probe_text(report: dict[str, Any]) -> str:
         if row.get("avg_latency_ms"):
             lines.append("  " + f"latency: {row['avg_latency_ms']:.1f} ms")
         lines.append("  " + f"why: {row['reason']}")
-        if row.get("operator_hint"):
-            lines.append("  " + f"next: {row['operator_hint']}")
+        if row.get("preferred_route"):
+            lines.append("  " + f"prefer: {row['preferred_route']}")
+        if row.get("next_action"):
+            lines.append("  " + f"next: {row['next_action']}")
     lines.append("")
     lines.append(
         "Tip: Ready means config, env, and the current /health "
@@ -1258,6 +1334,159 @@ def render_provider_probe_text(report: dict[str, Any]) -> str:
         "Tip: Missing-key or model-unavailable states should be fixed before client rollout."
     )
     return "\n".join(lines) + "\n"
+
+
+def _classify_probe_action(
+    *,
+    status: str,
+    missing_key: bool,
+    ready: bool,
+    runtime_window_state: str,
+    runtime_cooldown_active: bool,
+    runtime_recovered_recently: bool,
+) -> str:
+    if missing_key or status in {
+        "missing-key",
+        "unresolved-key",
+        "auth-invalid",
+        "endpoint-mismatch",
+        "model-unavailable",
+    }:
+        return "fix-now"
+    if (
+        runtime_cooldown_active
+        or runtime_window_state == "cooldown"
+        or status in {"quota-exhausted", "rate-limited"}
+    ):
+        return "hold"
+    if (
+        runtime_recovered_recently
+        or runtime_window_state == "degraded"
+        or status == "ready-recovered"
+    ):
+        return "watch"
+    if ready or status in {"ready", "ready-verified", "ready-compat"}:
+        return "route"
+    return "inspect"
+
+
+def _default_probe_action_hint(*, action_group: str, provider_name: str, family: str) -> str:
+    family_label = family or "this route"
+    if action_group == "fix-now":
+        return (
+            "fix credentials, model mapping, or endpoint settings "
+            f"before routing {provider_name}"
+        )
+    if action_group == "hold":
+        return f"hold {provider_name} out of primary traffic until the cooldown pressure clears"
+    if action_group == "watch":
+        return (
+            f"keep {provider_name} in light traffic while the {family_label} "
+            "recovery window stays open"
+        )
+    if action_group == "route":
+        return f"route can carry live traffic for the {family_label} lane"
+    return f"inspect runtime hints for {provider_name} before making it a primary lane"
+
+
+def _build_probe_family_summaries(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    summaries: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        family = str(row.get("lane_family") or "unclassified")
+        bucket = summaries.setdefault(
+            family,
+            {
+                "family": family,
+                "providers": 0,
+                "fix-now": 0,
+                "hold": 0,
+                "watch": 0,
+                "route": 0,
+                "inspect": 0,
+            },
+        )
+        bucket["providers"] += 1
+        action = str(row.get("action_group") or "inspect")
+        bucket[action] = bucket.get(action, 0) + 1
+    return dict(
+        sorted(
+            summaries.items(),
+            key=lambda item: (
+                item[1].get("route", 0),
+                -item[1].get("hold", 0),
+                item[1].get("providers", 0),
+                item[0],
+            ),
+            reverse=True,
+        )
+    )
+
+
+def _pick_family_preferred_route(
+    *,
+    row: dict[str, Any],
+    rows: list[dict[str, Any]],
+    family_summary: dict[str, Any],
+) -> str:
+    action_group = str(row.get("action_group") or "inspect")
+    if action_group == "route":
+        return ""
+    family = str(row.get("lane_family") or "unclassified")
+    candidates = [
+        candidate
+        for candidate in rows
+        if candidate.get("provider") != row.get("provider")
+        and str(candidate.get("lane_family") or "unclassified") == family
+    ]
+    for preferred_action in ("route", "watch"):
+        action_candidates = [
+            candidate
+            for candidate in candidates
+            if str(candidate.get("action_group") or "inspect") == preferred_action
+        ]
+        if action_candidates:
+            action_candidates.sort(
+                key=lambda candidate: (
+                    float(candidate.get("avg_latency_ms") or 0.0),
+                    str(candidate.get("provider") or ""),
+                )
+            )
+            return str(action_candidates[0].get("provider") or "")
+    if family_summary.get("route", 0) or family_summary.get("watch", 0):
+        return ""
+    global_routes = [
+        candidate
+        for candidate in rows
+        if candidate.get("provider") != row.get("provider")
+        and str(candidate.get("action_group") or "inspect") == "route"
+    ]
+    if not global_routes:
+        return ""
+    global_routes.sort(
+        key=lambda candidate: (
+            float(candidate.get("avg_latency_ms") or 0.0),
+            str(candidate.get("provider") or ""),
+        )
+    )
+    return str(global_routes[0].get("provider") or "")
+
+
+def _combine_probe_next_action(
+    *,
+    current_hint: str,
+    action_group: str,
+    family: str,
+    preferred_route: str,
+) -> str:
+    if not preferred_route:
+        return current_hint
+    if action_group == "hold":
+        return f"{current_hint}; prefer {preferred_route} for {family} traffic meanwhile"
+    if action_group == "watch":
+        return f"{current_hint}; favor {preferred_route} for steady {family} traffic"
+    if action_group in {"fix-now", "inspect"}:
+        return f"{current_hint}; route {family} traffic through {preferred_route} until fixed"
+    return current_hint
 
 
 def _scenario_provider_selection(*, purpose: str, client: str) -> list[str]:
