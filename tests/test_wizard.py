@@ -1323,6 +1323,7 @@ client_profiles:
     assert "best when:" in summary
     assert "Change preview" in summary
     assert "Routing rationale" in summary
+    assert "Priority next" in summary
     assert "quality-coding" in summary or "reasoning-coding" in summary
     assert "Operator follow-up" in summary
     assert "Provider Setup -> Guided Route Additions" in summary
@@ -1383,6 +1384,8 @@ client_profiles:
     )
 
     summary = render_client_scenario_summary(payload)
+    assert "Priority next" in summary
+    assert "Provider Setup -> Guided Route Additions" in summary
     assert "Refresh guidance" in summary
     assert "anthropic-claude: review soon (aging, 14d)" in summary
 
@@ -1445,6 +1448,8 @@ providers:
     assert actionable_names == auto_apply_names | manual_names
     rendered = render_route_add_setup_plan_text(plan)
     assert "Guided route additions" in rendered
+    assert "Priority next" in rendered
+    assert "Write setup now" in rendered
     assert "Ready to add now" in rendered
     assert "Need input first" in rendered
     assert "openrouter-fallback" in rendered
@@ -1495,6 +1500,7 @@ providers:
     }
     assert actionable_names == auto_apply_names | manual_names
     rendered = render_route_add_setup_plan_text(plan)
+    assert "Priority next" in rendered
     assert "Ready to add now" in rendered
     assert "Need input first" in rendered
     assert "deepseek-chat" in rendered

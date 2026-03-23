@@ -1343,7 +1343,9 @@ client_profiles:
     )
 
     assert "fusionAIze Gate Quick Setup" in result.stdout
-    assert "Start with Provider Setup" in result.stdout
+    assert "No provider sources are configured yet." in result.stdout
+    assert "Priority next" in result.stdout
+    assert "Provider Setup" in result.stdout
 
 
 def test_faigate_menu_quick_setup_validate_shows_next_steps(tmp_path: Path):
@@ -1458,8 +1460,11 @@ client_profiles:
     )
 
     assert "fusionAIze Gate Quick Setup" in result.stdout
+    assert "Priority next" in result.stdout
+    assert "Recommended path" in result.stdout
     assert "Route gaps" in result.stdout
-    assert "Provider Setup -> Guided Route Additions next" in result.stdout
+    assert "Provider Setup (Recommended)" in result.stdout
+    assert "Provider Setup -> Guided Route Additions" in result.stdout
 
 
 def test_faigate_server_settings_updates_config_and_creates_backup(tmp_path: Path):
@@ -2627,6 +2632,9 @@ client_profiles:
     )
 
     assert "Client scenario applied." in result.stdout
+    assert (
+        "Recommended next: open Provider Setup -> Guided Route Additions before restart work"
+    ) in result.stdout
     assert "new opencode profile default" in result.stdout
     assert "drill into opencode Details" in result.stdout
 
@@ -3011,7 +3019,7 @@ client_profiles:
     )
 
     assert "Provider Setup" in result.stdout
-    assert "Add known providers, custom endpoints, or local workers" in result.stdout
+    assert "Add providers, local workers, or route mirrors" in result.stdout
 
 
 def test_faigate_routing_settings_updates_default_and_profile_modes(tmp_path: Path):

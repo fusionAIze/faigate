@@ -142,6 +142,167 @@ EOF
   fi
 }
 
+recommended_quick_setup_action() {
+  local snapshot_output line health_state providers_count providers_ready providers_missing_keys
+  local route_gaps refresh_now review_soon next_client top_refresh_provider top_refresh_action top_add_provider
+  local key label reason choice
+  snapshot_output="$(collect_runtime_snapshot)"
+  while IFS= read -r line; do
+    case "$line" in
+      health=*) health_state="${line#health=}" ;;
+      providers=*) providers_count="${line#providers=}" ;;
+      providers_ready=*) providers_ready="${line#providers_ready=}" ;;
+      providers_missing_keys=*) providers_missing_keys="${line#providers_missing_keys=}" ;;
+      route_gaps=*) route_gaps="${line#route_gaps=}" ;;
+      refresh_now=*) refresh_now="${line#refresh_now=}" ;;
+      review_soon=*) review_soon="${line#review_soon=}" ;;
+      next_client=*) next_client="${line#next_client=}" ;;
+      top_refresh_provider=*) top_refresh_provider="${line#top_refresh_provider=}" ;;
+      top_refresh_action=*) top_refresh_action="${line#top_refresh_action=}" ;;
+      top_add_provider=*) top_add_provider="${line#top_add_provider=}" ;;
+    esac
+  done <<EOF
+$snapshot_output
+EOF
+
+  if [ "${providers_count:-0}" -eq 0 ]; then
+    key="provider-setup"
+    choice="1"
+    label="Provider Setup"
+    reason="No provider sources are configured yet. Add at least one live source before tuning routing or client defaults."
+  elif [ "${providers_missing_keys:-0}" -gt 0 ] || [ "${providers_ready:-0}" -eq 0 ]; then
+    key="api-keys"
+    choice="2"
+    label="API Keys"
+    reason="Configured providers are still missing credentials. Fill those in before spending time on routing and client posture."
+  elif [ "${health_state:-unreachable}" != "healthy" ]; then
+    key="restart-verify"
+    choice="6"
+    label="Restart + Verify"
+    reason="The gateway is not healthy yet. Bring the current config live again before leaning on route coverage or client flows."
+  elif [ "${route_gaps:-0}" -gt 0 ]; then
+    key="guided-routes"
+    choice="1"
+    label="Provider Setup -> Guided Route Additions"
+    reason="Recommended lane mirrors are still missing. Close those route gaps next${top_add_provider:+, starting with ${top_add_provider}}."
+  elif [ "${refresh_now:-0}" -gt 0 ]; then
+    key="provider-probe"
+    choice="3"
+    label="Provider Probe"
+    reason="Current benchmark and cost assumptions need review before heavier traffic leans on them${top_refresh_provider:+, starting with ${top_refresh_provider} (${top_refresh_action:-review})}."
+  elif [ "${review_soon:-0}" -gt 0 ]; then
+    key="provider-probe"
+    choice="3"
+    label="Provider Probe"
+    reason="The gateway is live, but some route assumptions are aging and should be reviewed soon${top_refresh_provider:+, starting with ${top_refresh_provider}}."
+  elif [ -n "${next_client:-}" ] && [ "${next_client}" != "none" ]; then
+    key="client-quickstarts"
+    choice="8"
+    label="Client Quickstarts"
+    reason="The gateway looks ready. Wire in ${next_client} next so real traffic starts using the current routing posture."
+  else
+    key="validate"
+    choice="5"
+    label="Validate"
+    reason="The baseline looks good. Run the operator checks once more before treating the current setup as ready."
+  fi
+
+  printf 'key=%s\n' "$key"
+  printf 'choice=%s\n' "$choice"
+  printf 'label=%s\n' "$label"
+  printf 'reason=%s\n' "$reason"
+}
+
+render_priority_next_step() {
+  local action_output line label reason
+  action_output="$(recommended_quick_setup_action)"
+  while IFS= read -r line; do
+    case "$line" in
+      label=*) label="${line#label=}" ;;
+      reason=*) reason="${line#reason=}" ;;
+    esac
+  done <<EOF
+$action_output
+EOF
+
+  echo ""
+  printf "  %bPriority next%b\n" "$FAIGATE_UI_BOLD" "$FAIGATE_UI_RESET"
+  printf "  %-18s %s\n" "Path" "${label:-n/a}"
+  printf "  %-18s %s\n" "Why" "${reason:-No dominant next action right now.}"
+}
+
+quick_setup_recommended_choice() {
+  local action_output line choice
+  action_output="$(recommended_quick_setup_action)"
+  while IFS= read -r line; do
+    case "$line" in
+      choice=*) choice="${line#choice=}" ;;
+    esac
+  done <<EOF
+$action_output
+EOF
+  printf '%s\n' "${choice:-}"
+}
+
+quick_setup_option_text() {
+  local option_number="$1"
+  local label="$2"
+  local recommended_choice
+  recommended_choice="$(quick_setup_recommended_choice)"
+  if [ "$recommended_choice" = "$option_number" ]; then
+    printf '%s\n' "${label} (Recommended)"
+  else
+    printf '%s\n' "$label"
+  fi
+}
+
+run_recommended_quick_setup_action() {
+  local action_output line key
+  action_output="$(recommended_quick_setup_action)"
+  while IFS= read -r line; do
+    case "$line" in
+      key=*) key="${line#key=}" ;;
+    esac
+  done <<EOF
+$action_output
+EOF
+
+  case "${key:-}" in
+    provider-setup) run_provider_setup_with_handoff ;;
+    guided-routes) run_and_pause bash "${script_dir}/faigate-provider-setup" --recommended --interactive ;;
+    api-keys) run_and_pause bash "${script_dir}/faigate-api-keys" ;;
+    provider-probe) run_and_pause bash "${script_dir}/faigate-provider-probe" ;;
+    validate) run_and_pause bash "${script_dir}/faigate-doctor" ;;
+    restart-verify) run_and_pause bash "${script_dir}/faigate-restart" ;;
+    client-scenarios) run_and_pause bash "${script_dir}/faigate-client-scenarios" ;;
+    client-quickstarts) run_and_pause bash "${script_dir}/faigate-client-integrations" --recommended ;;
+    current-config) run_and_pause bash "${script_dir}/faigate-config-overview" ;;
+  esac
+}
+
+offer_priority_followup_now() {
+  local action_output line key label
+  action_output="$(recommended_quick_setup_action)"
+  while IFS= read -r line; do
+    case "$line" in
+      key=*) key="${line#key=}" ;;
+      label=*) label="${line#label=}" ;;
+    esac
+  done <<EOF
+$action_output
+EOF
+
+  case "${key:-}" in
+    ""|none) return 0 ;;
+  esac
+
+  printf "  Open the recommended next step now (%s)? [y/N]: " "${label:-next step}"
+  read -r followup_choice
+  if [[ "${followup_choice:-N}" =~ ^[Yy]$ ]]; then
+    run_recommended_quick_setup_action
+  fi
+}
+
 run_provider_setup_with_handoff() {
   local command_rc=0
   echo ""
@@ -430,41 +591,17 @@ EOF
 }
 
 render_quick_setup_guidance() {
-  local snapshot_output line health_state providers_count providers_ready providers_missing_keys
-  local route_gaps refresh_now review_soon top_refresh_provider top_refresh_action top_add_provider
-  snapshot_output="$(collect_runtime_snapshot)"
+  local action_output line reason
+  action_output="$(recommended_quick_setup_action)"
   while IFS= read -r line; do
     case "$line" in
-      health=*) health_state="${line#health=}" ;;
-      providers=*) providers_count="${line#providers=}" ;;
-      providers_ready=*) providers_ready="${line#providers_ready=}" ;;
-      providers_missing_keys=*) providers_missing_keys="${line#providers_missing_keys=}" ;;
-      route_gaps=*) route_gaps="${line#route_gaps=}" ;;
-      refresh_now=*) refresh_now="${line#refresh_now=}" ;;
-      review_soon=*) review_soon="${line#review_soon=}" ;;
-      top_refresh_provider=*) top_refresh_provider="${line#top_refresh_provider=}" ;;
-      top_refresh_action=*) top_refresh_action="${line#top_refresh_action=}" ;;
-      top_add_provider=*) top_add_provider="${line#top_add_provider=}" ;;
+      reason=*) reason="${line#reason=}" ;;
     esac
   done <<EOF
-$snapshot_output
+$action_output
 EOF
 
-  if [ "${providers_count:-0}" = "0" ]; then
-    faigate_ui_tip "Start with Provider Setup to add sources, then fill in keys and run Full Config Wizard to generate the first usable config."
-  elif [ "${providers_missing_keys:-0}" != "0" ] || [ "${providers_ready:-0}" = "0" ]; then
-    faigate_ui_tip "Some configured providers are still missing API keys. Fill them in next, then rerun Validate."
-  elif [ "${route_gaps:-0}" -gt 0 ]; then
-    faigate_ui_tip "The config is live, but ${route_gaps} recommended route addition(s) are still open. Open Provider Setup -> Guided Route Additions next${top_add_provider:+, starting with ${top_add_provider}}."
-  elif [ "${refresh_now:-0}" -gt 0 ]; then
-    faigate_ui_tip "The gateway is up, but ${top_refresh_provider:-one or more active routes} should be ${top_refresh_action:-reviewed} before heavier traffic leans on current benchmark and cost assumptions."
-  elif [ "${review_soon:-0}" -gt 0 ]; then
-    faigate_ui_tip "The gateway looks ready. Review aging route assumptions soon${top_refresh_provider:+, starting with ${top_refresh_provider}}."
-  elif [ "${health_state:-unreachable}" != "healthy" ]; then
-    faigate_ui_tip "Config looks close. Restart + Verify is the next best step so the gateway can pick up the current config."
-  else
-    faigate_ui_tip "The gateway looks ready. Open Client Quickstarts next and wire in the first client."
-  fi
+  faigate_ui_tip "${reason:-Use Quick Setup to work through the current highest-priority next step.}"
 }
 
 show_status_overview() {
@@ -595,6 +732,7 @@ run_config_wizard() {
     backup_suffix=".before-wizard-$(date +%Y%m%d%H%M%S)"
     cmd_args+=(--write "$config_file" --write-backup --backup-suffix "$backup_suffix")
     local command_rc=0
+    local action_output line priority_label
     echo ""
     env FAIGATE_PYTHON="$python_bin" FAIGATE_ENV_FILE="$env_file" \
       bash "${script_dir}/faigate-config-wizard" "${cmd_args[@]}" || command_rc=$?
@@ -606,21 +744,22 @@ run_config_wizard() {
     fi
     local -a dynamic_steps=()
     mapfile -t dynamic_steps < <(dynamic_operator_followups)
+    action_output="$(recommended_quick_setup_action)"
+    while IFS= read -r line; do
+      case "$line" in
+        label=*) priority_label="${line#label=}" ;;
+      esac
+    done <<EOF
+$action_output
+EOF
     show_next_steps "Wizard wrote the config." \
+      "Recommended next: ${priority_label:-Validate}." \
       "Restart + Verify to load the new config." \
       "Run Validate if you changed providers or routing defaults." \
       "Open Clients when you want the first consumer wired in." \
       "${dynamic_steps[@]}"
     faigate_ui_pause
-    printf "  Restart fusionAIze Gate to apply changes? [y/N]: "
-    read -r restart_choice
-    if [[ "${restart_choice:-N}" =~ ^[Yy]$ ]]; then
-      run_and_pause_with_receipt "Gateway restart completed." 3 \
-        "Run Health Check to confirm the active runtime." \
-        "Open Status if you want the manager and bound port details." \
-        "Open Clients to connect the first workflow or coding tool." \
-        bash "${script_dir}/faigate-restart"
-    fi
+    offer_priority_followup_now
   else
     cmd_args+=(--dry-run-summary)
     run_and_pause_with_receipt "Dry-run completed." 3 \
@@ -693,6 +832,7 @@ run_client_wizard() {
     backup_suffix=".client-${client}-$(date +%Y%m%d%H%M%S)"
     cmd_args+=(--write "$config_file" --write-backup --backup-suffix "$backup_suffix")
     local command_rc=0
+    local action_output line priority_label
     echo ""
     env FAIGATE_PYTHON="$python_bin" FAIGATE_ENV_FILE="$env_file" \
       bash "${script_dir}/faigate-config-wizard" "${cmd_args[@]}" || command_rc=$?
@@ -704,12 +844,22 @@ run_client_wizard() {
     fi
     local -a dynamic_steps=()
     mapfile -t dynamic_steps < <(dynamic_operator_followups)
+    action_output="$(recommended_quick_setup_action)"
+    while IFS= read -r line; do
+      case "$line" in
+        label=*) priority_label="${line#label=}" ;;
+      esac
+    done <<EOF
+$action_output
+EOF
     show_next_steps "Client-scoped config update completed." \
+      "Recommended next: ${priority_label:-Restart + Verify}." \
       "Restart + Verify to activate the new client default." \
       "Use Client Matrix to confirm the profile and match intent." \
       "Use the client drilldown to grab the exact setup hints again." \
       "${dynamic_steps[@]}"
     faigate_ui_pause
+    offer_priority_followup_now
   else
     cmd_args+=(--dry-run-summary)
     run_and_pause_with_receipt "Client-scoped dry-run completed." 3 \
@@ -748,21 +898,34 @@ status_menu() {
 }
 
 quick_setup_menu() {
+  local provider_setup_label api_keys_label provider_probe_label full_config_label
+  local validate_label restart_label scenarios_label quickstarts_label current_config_label
   while true; do
     faigate_ui_header "fusionAIze Gate Quick Setup" "Fastest path from first keys to first healthy client"
     render_summary_cards
     render_quick_setup_guidance
+    render_priority_next_step
+    provider_setup_label="$(quick_setup_option_text 1 "Provider Setup")"
+    api_keys_label="$(quick_setup_option_text 2 "API Keys")"
+    provider_probe_label="$(quick_setup_option_text 3 "Provider Probe")"
+    full_config_label="$(quick_setup_option_text 4 "Full Config Wizard")"
+    validate_label="$(quick_setup_option_text 5 "Validate")"
+    restart_label="$(quick_setup_option_text 6 "Restart + Verify")"
+    scenarios_label="$(quick_setup_option_text 7 "Client Scenarios")"
+    quickstarts_label="$(quick_setup_option_text 8 "Client Quickstarts")"
+    current_config_label="$(quick_setup_option_text 9 "Current Config")"
     echo ""
-    printf "    1)  Provider Setup     Add known providers, custom endpoints, or local workers\n"
-    printf "    2)  API Keys           Set provider keys in the env file\n"
-    printf "    3)  Provider Probe     Check which configured providers really look ready\n"
-    printf "    4)  Full Config Wizard Generate or update the main config\n"
-    printf "    5)  Validate           Run doctor checks against the current config\n"
-    printf "    6)  Restart + Verify   Restart the gateway and wait for /health\n"
-    printf "    7)  Client Scenarios   Apply client-specific templates like opencode/eco\n"
-    printf "    8)  Client Quickstarts Show client-specific next steps\n"
-    printf "    9)  Current Config     Review the current config snapshot\n"
+    printf "    1)  %-28s %s\n" "$provider_setup_label" "Add providers, local workers, or route mirrors"
+    printf "    2)  %-28s %s\n" "$api_keys_label" "Set provider keys in the env file"
+    printf "    3)  %-28s %s\n" "$provider_probe_label" "Check which configured providers really look ready"
+    printf "    4)  %-28s %s\n" "$full_config_label" "Generate or update the main config"
+    printf "    5)  %-28s %s\n" "$validate_label" "Run doctor checks against the current config"
+    printf "    6)  %-28s %s\n" "$restart_label" "Restart the gateway and wait for /health"
+    printf "    7)  %-28s %s\n" "$scenarios_label" "Apply client-specific templates like opencode/eco"
+    printf "    8)  %-28s %s\n" "$quickstarts_label" "Show client-specific next steps"
+    printf "    9)  %-28s %s\n" "$current_config_label" "Review the current config snapshot"
     printf "\n"
+    printf "    r)  Recommended path             Open the highest-priority next step now\n"
     printf "    c)  Cancel\n"
     printf "    q)  Quit\n\n"
     printf "  ▸ Choice: "
@@ -801,6 +964,7 @@ quick_setup_menu() {
         "Return to Quick Setup when you want the shortest path again." \
         bash "${script_dir}/faigate-client-integrations" --recommended ;;
       9) run_and_pause bash "${script_dir}/faigate-config-overview" ;;
+      r|R) run_recommended_quick_setup_action ;;
       c|C|"") return 0 ;;
       q|Q) exit 0 ;;
       *) faigate_ui_warn "Invalid choice."; faigate_ui_pause ;;

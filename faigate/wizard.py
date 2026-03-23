@@ -2058,6 +2058,28 @@ def render_route_add_setup_plan_text(plan: dict[str, Any]) -> str:
         lines.append("       the known setup-capable route additions.")
         return "\n".join(lines) + "\n"
 
+    if auto_apply:
+        lines.extend(
+            [
+                "Priority next",
+                f"- path: Write setup now ({len(auto_apply)} ready route addition(s))",
+                "- why : these mirrors can already be added in one pass with the current env.",
+                "",
+            ]
+        )
+    elif manual:
+        lines.extend(
+            [
+                "Priority next",
+                f"- path: Review remaining env inputs ({len(manual)} route addition(s) blocked)",
+                (
+                    "- why : the recommended mirrors are known, but at least "
+                    "one required env value is still missing."
+                ),
+                "",
+            ]
+        )
+
     def _render_item(item: dict[str, Any]) -> None:
         status_bits = []
         if item.get("key_present"):
@@ -2332,6 +2354,21 @@ def render_client_scenario_summary(payload: dict[str, Any]) -> str:
         for line in routing_rationale:
             lines.append("- " + line)
     refresh_guidance_lines = _scenario_refresh_guidance_lines(rationale_provider_names)
+    priority_path = "Restart + Verify"
+    priority_reason = "the scenario change is ready to be picked up by the live gateway."
+    if actionable_additions:
+        priority_path = "Provider Setup -> Guided Route Additions"
+        priority_reason = (
+            "recommended same-lane or cluster mirrors are still missing for "
+            "the scenario you just selected."
+        )
+    elif refresh_guidance_lines:
+        priority_path = "Provider Probe or Dashboard -> Provider detail"
+        priority_reason = (
+            "the scenario is usable, but route freshness should be reviewed "
+            "before heavier traffic leans on it."
+        )
+    lines.extend(["", "Priority next", f"- path: {priority_path}", f"- why : {priority_reason}"])
     if refresh_guidance_lines:
         lines.extend(["", "Refresh guidance"])
         for line in refresh_guidance_lines:

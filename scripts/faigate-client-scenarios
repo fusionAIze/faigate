@@ -250,7 +250,7 @@ while true; do
   printf "    1)  Dry-run only    Keep this as a preview\n"
   printf "    2)  Write config    Update config.yaml with this scenario\n"
   if [[ "${route_add_count:-0}" -gt 0 ]]; then
-    printf "    3)  Write + routes  Update config.yaml, then open Guided Route Additions\n"
+    printf "    3)  Write + routes  Update config.yaml, then open Guided Route Additions (Recommended)\n"
   fi
   printf "    c)  Cancel\n"
   printf "    q)  Quit\n"
@@ -268,11 +268,13 @@ while true; do
       echo ""
       if [[ -n "$scenario_client" ]]; then
         show_next_steps "Client scenario applied." \
+          "Recommended next: open Provider Setup -> Guided Route Additions before restart work when the scenario still surfaced missing mirrors." \
           "Restart + Verify next so the running gateway picks up the new ${scenario_client} profile default." \
           "Open Client Quickstarts and drill into ${scenario_client} Details to grab the exact connection settings." \
           "Provider Probe is useful when the scenario added providers you have not tested yet."
       else
         show_next_steps "Client scenario applied." \
+          "Recommended next: open Provider Setup -> Guided Route Additions before restart work when the scenario still surfaced missing mirrors." \
           "Restart + Verify next so the running gateway picks up the new client profile default." \
           "Open Client Quickstarts to grab the matching client-specific connection details." \
           "Provider Probe is useful when the scenario added providers you have not tested yet."
