@@ -247,6 +247,61 @@ def _lane_family_summary_from_stats(rows: list[dict[str, Any]]) -> list[dict[str
     return normalized
 
 
+def _selection_path_summary_from_stats(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if not rows:
+        return []
+    normalized: list[dict[str, Any]] = []
+    for row in rows:
+        normalized.append(
+            {
+                "selection_path": str(row.get("selection_path") or ""),
+                "lane_family": str(row.get("lane_family") or ""),
+                "runtime_window_state": str(row.get("runtime_window_state") or ""),
+                "recovered_recently": bool(row.get("recovered_recently")),
+                "requests": _safe_int(row.get("requests")),
+                "cost_usd": _safe_float(row.get("cost_usd")),
+                "avg_latency_ms": _safe_float(row.get("avg_latency_ms")),
+            }
+        )
+    return normalized
+
+
+def _render_lane_family_block(report: dict[str, Any], *, limit: int = 3) -> list[str]:
+    rows = report.get("lane_families") or []
+    if not rows:
+        return []
+    lines = ["Lane families"]
+    for row in rows[:limit]:
+        lines.append(
+            f"- {row.get('family')}: {_safe_int(row.get('providers'))} routes | "
+            f"{_safe_int(row.get('requests'))} req | cooldown={_safe_int(row.get('cooldown'))} | "
+            f"recovery={_safe_int(row.get('recovered'))}"
+        )
+    return lines
+
+
+def _render_selection_path_block(report: dict[str, Any], *, limit: int = 4) -> list[str]:
+    rows = report.get("selection_paths") or []
+    if not rows:
+        return []
+    lines = ["Selection paths"]
+    for row in rows[:limit]:
+        bits: list[str] = []
+        if row.get("lane_family"):
+            bits.append(str(row.get("lane_family")))
+        if row.get("runtime_window_state"):
+            bits.append(str(row.get("runtime_window_state")))
+        if row.get("recovered_recently"):
+            bits.append("recovery-watch")
+        suffix = f" [{' | '.join(bits)}]" if bits else ""
+        lines.append(
+            f"- {row.get('selection_path')}: {_safe_int(row.get('requests'))} req / "
+            f"{_format_usd(_safe_float(row.get('cost_usd')))} / "
+            f"{_format_latency_ms(_safe_float(row.get('avg_latency_ms')))}{suffix}"
+        )
+    return lines
+
+
 def _enrich_provider_rows_with_lane(
     rows: list[dict[str, Any]],
     provider_map: dict[str, dict[str, Any]],
@@ -338,12 +393,12 @@ def build_dashboard_report(
     lane_families = _lane_family_summary_from_stats(stats.get("lane_families") or [])
     if not lane_families:
         lane_families = _lane_family_summary(providers, inventory_provider_map)
+    selection_paths = _selection_path_summary_from_stats(stats.get("selection_paths") or [])
     readiness_breakdown = _request_readiness_breakdown(
         list(inventory_provider_map.values()) if inventory_provider_map else providers
     )
     routing = stats.get("routing") or []
     routing_paths = _routing_path_summary(routing)
-    selection_paths = stats.get("selection_paths") or []
     client_totals = stats.get("client_totals") or []
     client_highlights = stats.get("client_highlights") or _client_highlights(client_totals)
     daily = stats.get("daily") or []
@@ -818,6 +873,10 @@ def _render_providers(report: dict[str, Any]) -> str:
         lines.append("Operator hints")
         for hint in report["hints"][:3]:
             lines.append(f"- {hint}")
+    family_block = _render_lane_family_block(report)
+    if family_block:
+        lines.append("")
+        lines.extend(family_block)
     if report["decision_support"]:
         lines.append("")
         lines.append("Budget + routing hints")
@@ -878,6 +937,14 @@ def _render_activity(report: dict[str, Any]) -> str:
         lines.append(
             f"- {row.get('day')}: {_safe_int(row.get('requests'))} req | {_format_usd(_safe_float(row.get('cost_usd')))} | {_format_tokens(_safe_int(row.get('tokens')))} | {_safe_int(row.get('failures'))} fail"
         )
+    family_block = _render_lane_family_block(report)
+    if family_block:
+        lines.append("")
+        lines.extend(family_block)
+    path_block = _render_selection_path_block(report)
+    if path_block:
+        lines.append("")
+        lines.extend(path_block)
     lines.append("")
     lines.append("Operator actions")
     operator_rows = report["operator_actions"][:5]
@@ -906,8 +973,14 @@ def _render_alerts(report: dict[str, Any]) -> str:
             ]
         )
     lines.append("Context")
+    family_block = _render_lane_family_block(report)
+    if family_block:
+        lines.extend(family_block)
     for hint in report["hints"][:5]:
         lines.append(f"- {hint}")
+    path_block = _render_selection_path_block(report)
+    if path_block:
+        lines.extend(path_block)
     for hint in report["decision_support"][:5]:
         lines.append(f"- {hint}")
     return "\n".join(lines).rstrip() + "\n"

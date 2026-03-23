@@ -187,7 +187,24 @@ class _MetricsStub:
         return []
 
     def get_recent(self, *_args, **_kwargs):
-        return []
+        return [
+            {
+                "provider": "cloud-default",
+                "selection_path": "same-lane-route",
+                "lane_family": "deepseek",
+                "runtime_window_state": "cooldown",
+                "recovered_recently": 1,
+                "decision_details": {"same_model_route": True},
+            },
+            {
+                "provider": "cloud-default",
+                "selection_path": "primary-selected",
+                "lane_family": "openrouter",
+                "runtime_window_state": "clear",
+                "recovered_recently": 0,
+                "decision_details": {"same_model_route": False},
+            },
+        ]
 
     def get_operator_events(self, *_args, **_kwargs):
         return []
@@ -268,6 +285,18 @@ def test_stats_includes_client_highlights(api_client):
     assert body["lane_families"][1]["cooldown_requests"] == 3
     assert body["selection_paths"][0]["selection_path"] == "primary-selected"
     assert body["selection_paths"][0]["recovered_recently"] == 1
+
+
+def test_traces_include_operator_summary(api_client):
+    response = api_client.get("/api/traces")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["summary"]["selection_paths"]["primary-selected"] == 1
+    assert body["summary"]["selection_paths"]["same-lane-route"] == 1
+    assert body["summary"]["lane_families"]["deepseek"] == 1
+    assert body["summary"]["runtime_windows"]["cooldown"] == 1
+    assert body["summary"]["recovered_recently"] == 1
 
 
 def test_provider_discovery_endpoint_supports_filters(api_client, monkeypatch, tmp_path):

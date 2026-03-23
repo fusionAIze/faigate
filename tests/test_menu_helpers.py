@@ -1822,6 +1822,116 @@ def test_faigate_dashboard_provider_detail_shows_canonical_lane(tmp_path: Path):
     assert "same-lane-route: 3 requests" in result.stdout
 
 
+def test_faigate_dashboard_activity_and_alerts_show_family_and_path_summaries(tmp_path: Path):
+    fake_bin = _write_fake_curl(
+        tmp_path,
+        {
+            "/health": json.dumps(
+                {
+                    "status": "ok",
+                    "summary": {
+                        "providers_total": 2,
+                        "providers_healthy": 2,
+                        "providers_unhealthy": 0,
+                    },
+                    "request_readiness": {
+                        "providers_total": 2,
+                        "providers_ready": 2,
+                        "providers_not_ready": 0,
+                    },
+                    "providers": {},
+                }
+            ),
+            "/api/stats": json.dumps(
+                {
+                    "totals": {
+                        "total_requests": 20,
+                        "total_failures": 0,
+                        "total_prompt_tokens": 8000,
+                        "total_compl_tokens": 3000,
+                        "total_cost_usd": 0.6,
+                        "avg_latency_ms": 320.0,
+                    },
+                    "providers": [],
+                    "routing": [],
+                    "selection_paths": [
+                        {
+                            "selection_path": "same-lane-route",
+                            "lane_family": "deepseek",
+                            "runtime_window_state": "cooldown",
+                            "recovered_recently": 1,
+                            "requests": 6,
+                            "cost_usd": 0.18,
+                            "avg_latency_ms": 410.0,
+                        }
+                    ],
+                    "lane_families": [
+                        {
+                            "lane_family": "deepseek",
+                            "requests": 14,
+                            "providers": 2,
+                            "cost_usd": 0.42,
+                            "cooldown_requests": 2,
+                            "degraded_requests": 1,
+                            "recovered_requests": 1,
+                            "selection_paths": "same-lane-route,primary-selected",
+                        }
+                    ],
+                    "client_totals": [],
+                    "client_highlights": {},
+                    "operator_actions": [],
+                    "hourly": [
+                        {"hour_offset": 0, "requests": 20, "cost_usd": 0.6, "tokens": 11000}
+                    ],
+                    "daily": [
+                        {
+                            "day": "2026-03-20",
+                            "requests": 20,
+                            "cost_usd": 0.6,
+                            "tokens": 11000,
+                            "failures": 0,
+                        }
+                    ],
+                }
+            ),
+            "/api/providers": json.dumps({"providers": []}),
+        },
+    )
+
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+    env["FAIGATE_PYTHON"] = sys.executable
+    env["PYTHONPATH"] = str(REPO_ROOT)
+    env["FAIGATE_DB_PATH"] = str(tmp_path / "faigate.db")
+
+    activity = subprocess.run(
+        ["bash", "scripts/faigate-dashboard", "--activity"],
+        cwd=REPO_ROOT,
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    alerts = subprocess.run(
+        ["bash", "scripts/faigate-dashboard", "--alerts"],
+        cwd=REPO_ROOT,
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "Lane families" in activity.stdout
+    assert "- deepseek: 2 routes | 14 req | cooldown=2 | recovery=1" in activity.stdout
+    assert "Selection paths" in activity.stdout
+    assert (
+        "same-lane-route: 6 req / $0.18 / 410ms "
+        "[deepseek | cooldown | recovery-watch]" in activity.stdout
+    )
+    assert "Lane families" in alerts.stdout
+    assert "Selection paths" in alerts.stdout
+
+
 def test_faigate_provider_probe_summarizes_config_env_and_health(tmp_path: Path):
     config_file = tmp_path / "config.yaml"
     config_file.write_text(

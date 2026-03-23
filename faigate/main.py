@@ -652,6 +652,31 @@ def _attempt_metric_fields(
     }
 
 
+def _trace_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    selection_paths: dict[str, int] = {}
+    lane_families: dict[str, int] = {}
+    runtime_windows: dict[str, int] = {}
+    recovered_recently = 0
+    for row in rows:
+        selection_path = str(row.get("selection_path") or "").strip()
+        if selection_path:
+            selection_paths[selection_path] = selection_paths.get(selection_path, 0) + 1
+        lane_family = str(row.get("lane_family") or "").strip()
+        if lane_family:
+            lane_families[lane_family] = lane_families.get(lane_family, 0) + 1
+        runtime_window = str(row.get("runtime_window_state") or "").strip()
+        if runtime_window:
+            runtime_windows[runtime_window] = runtime_windows.get(runtime_window, 0) + 1
+        if bool(row.get("recovered_recently")):
+            recovered_recently += 1
+    return {
+        "selection_paths": dict(sorted(selection_paths.items())),
+        "lane_families": dict(sorted(lane_families.items())),
+        "runtime_windows": dict(sorted(runtime_windows.items())),
+        "recovered_recently": recovered_recently,
+    }
+
+
 def _decorate_direct_decision(decision: RoutingDecision) -> RoutingDecision:
     provider = _providers.get(decision.provider_name)
     if not provider:
@@ -1568,16 +1593,18 @@ async def traces(
     success: bool | None = None,
 ):
     """Recent enriched route traces for debugging and policy tuning."""
+    trace_rows = _metrics.get_recent(
+        limit,
+        provider=provider,
+        modality=modality,
+        client_profile=client_profile,
+        client_tag=client_tag,
+        layer=layer,
+        success=success,
+    )
     return {
-        "traces": _metrics.get_recent(
-            limit,
-            provider=provider,
-            modality=modality,
-            client_profile=client_profile,
-            client_tag=client_tag,
-            layer=layer,
-            success=success,
-        )
+        "traces": trace_rows,
+        "summary": _trace_summary(trace_rows),
     }
 
 
