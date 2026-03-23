@@ -409,6 +409,9 @@ providers:
                                 "probe_confidence": "high",
                                 "probe_payload": "openai-chat-minimal | user='ping' | max_tokens=1",
                                 "operator_hint": "route can carry live traffic",
+                                "runtime_penalty": 0,
+                                "runtime_issue_type": "",
+                                "runtime_cooldown_active": False,
                             },
                         }
                     },
