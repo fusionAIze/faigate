@@ -28,7 +28,7 @@ from urllib.parse import urlparse
 import yaml
 from dotenv import load_dotenv
 
-from .hooks import get_registered_request_hooks
+from .hooks import get_community_hooks_loaded, get_registered_request_hooks, load_community_hooks
 from .lane_registry import get_provider_lane_binding, get_provider_transport_binding
 
 _SUPPORTED_BACKENDS = {"openai-compat", "google-genai", "anthropic-compat"}
@@ -322,6 +322,17 @@ def _normalize_positive_int(value: Any, *, field_name: str, provider_name: str) 
     return value
 
 
+def _normalize_nonneg_int(value: Any, *, field_name: str, provider_name: str) -> int | None:
+    """Validate one optional non-negative integer provider field (0 is allowed)."""
+    if value in (None, ""):
+        return None
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ConfigError(
+            f"Provider '{provider_name}' field '{field_name}' must be a non-negative integer"
+        )
+    return value
+
+
 def _normalize_provider_limits(name: str, cfg: dict[str, Any]) -> dict[str, int]:
     """Validate optional provider token limit metadata."""
     raw = cfg.get("limits") or {}
@@ -371,7 +382,73 @@ def _normalize_provider_cache(name: str, cfg: dict[str, Any]) -> dict[str, Any]:
     elif not isinstance(read_discount, bool):
         raise ConfigError(f"Provider '{name}' field 'cache.read_discount' must be a boolean")
 
-    return {"mode": mode, "read_discount": read_discount}
+    # Cache intelligence fields (v1.10.x)
+    min_prefix_tokens_raw = raw.get("min_prefix_tokens")
+    min_prefix_tokens = _normalize_nonneg_int(
+        min_prefix_tokens_raw,
+        field_name="cache.min_prefix_tokens",
+        provider_name=name,
+    )
+
+    ttl_seconds_raw = raw.get("ttl_seconds")
+    ttl_seconds = _normalize_nonneg_int(
+        ttl_seconds_raw,
+        field_name="cache.ttl_seconds",
+        provider_name=name,
+    )
+
+    max_cached_tokens_raw = raw.get("max_cached_tokens")
+    max_cached_tokens = _normalize_nonneg_int(
+        max_cached_tokens_raw,
+        field_name="cache.max_cached_tokens",
+        provider_name=name,
+    )
+
+    cache_read_discount_raw = raw.get("cache_read_discount")
+    if cache_read_discount_raw is not None:
+        try:
+            cache_read_discount = float(cache_read_discount_raw)
+        except (TypeError, ValueError):
+            raise ConfigError(
+                f"Provider '{name}' field 'cache.cache_read_discount' must be a float"
+            )
+        if not (0.0 <= cache_read_discount <= 1.0):
+            raise ConfigError(
+                f"Provider '{name}' field 'cache.cache_read_discount' must be between 0.0 and 1.0"
+            )
+    else:
+        # Derive from pricing if available
+        input_price = float(pricing.get("input", 0) or 0)
+        cache_price = float(pricing.get("cache_read", input_price) or input_price)
+        if mode != "none" and input_price > 0:
+            cache_read_discount = round(cache_price / input_price, 4)
+        else:
+            cache_read_discount = 1.0
+
+    cache_write_surcharge_raw = raw.get("cache_write_surcharge")
+    if cache_write_surcharge_raw is not None:
+        try:
+            cache_write_surcharge = float(cache_write_surcharge_raw)
+        except (TypeError, ValueError):
+            raise ConfigError(
+                f"Provider '{name}' field 'cache.cache_write_surcharge' must be a float"
+            )
+        if cache_write_surcharge < 1.0:
+            raise ConfigError(
+                f"Provider '{name}' field 'cache.cache_write_surcharge' must be >= 1.0"
+            )
+    else:
+        cache_write_surcharge = 1.0
+
+    return {
+        "mode": mode,
+        "read_discount": read_discount,
+        "min_prefix_tokens": min_prefix_tokens if min_prefix_tokens is not None else 0,
+        "ttl_seconds": ttl_seconds if ttl_seconds is not None else 0,
+        "max_cached_tokens": max_cached_tokens if max_cached_tokens is not None else 0,
+        "cache_read_discount": cache_read_discount,
+        "cache_write_surcharge": cache_write_surcharge,
+    }
 
 
 def _normalize_provider_image(name: str, cfg: dict[str, Any]) -> dict[str, Any]:
@@ -1276,7 +1353,11 @@ def _validate_routing_mode_references(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def _normalize_request_hooks(data: dict[str, Any]) -> dict[str, Any]:
-    """Validate the optional request hook pipeline."""
+    """Validate the optional request hook pipeline.
+
+    Community hooks (from *community_hooks_dir*) are loaded before the hook
+    name allowlist is checked so that plugin-provided names validate cleanly.
+    """
     raw = data.get("request_hooks", {"enabled": False, "hooks": []})
     if not isinstance(raw, dict):
         raise ConfigError("'request_hooks' must be a mapping")
@@ -1288,13 +1369,26 @@ def _normalize_request_hooks(data: dict[str, Any]) -> dict[str, Any]:
     if on_error not in {"continue", "fail"}:
         raise ConfigError("'request_hooks.on_error' must be 'continue' or 'fail'")
 
+    # Parse and load community hooks before validating names so plugin-provided
+    # hook names are in the registry when the allowlist check runs.
+    community_hooks_dir_raw = raw.get("community_hooks_dir")
+    community_hooks_dir: str | None = None
+    if community_hooks_dir_raw is not None:
+        if not isinstance(community_hooks_dir_raw, str):
+            raise ConfigError("'request_hooks.community_hooks_dir' must be a string path or null")
+        community_hooks_dir = community_hooks_dir_raw.strip() or None
+    if community_hooks_dir:
+        load_community_hooks(community_hooks_dir)
+
     hooks = _normalize_string_list(
         raw.get("hooks", []),
         field_name="hooks",
         rule_name="request_hooks",
         allow_empty=True,
     )
-    unknown_hooks = sorted(set(hooks) - _SUPPORTED_REQUEST_HOOKS)
+    # Re-read after potential community hook load so new names pass validation.
+    supported_hooks = set(get_registered_request_hooks())
+    unknown_hooks = sorted(set(hooks) - supported_hooks)
     if unknown_hooks:
         unknown_list = ", ".join(unknown_hooks)
         raise ConfigError(f"'request_hooks.hooks' has unknown hook names: {unknown_list}")
@@ -1304,6 +1398,7 @@ def _normalize_request_hooks(data: dict[str, Any]) -> dict[str, Any]:
         "enabled": enabled,
         "hooks": hooks,
         "on_error": on_error,
+        "community_hooks_dir": community_hooks_dir,
     }
     return normalized
 

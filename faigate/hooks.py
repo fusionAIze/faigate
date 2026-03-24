@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import importlib.util
 import inspect
+import logging
+import pathlib
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
+
+_logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -360,3 +365,61 @@ register_request_hook("prefer-provider-header", _hook_prefer_provider_header)
 register_request_hook("locality-header", _hook_locality_header)
 register_request_hook("profile-override-header", _hook_profile_override_header)
 register_request_hook("mode-override-header", _hook_mode_override_header)
+
+
+# ── Community / plugin hook loader ──────────────────────────────────────────
+
+_COMMUNITY_HOOKS_LOADED: list[str] = []
+
+
+def load_community_hooks(plugin_dir: str | None) -> list[str]:
+    """Discover and register community hooks from a directory of Python files.
+
+    Each ``.py`` file in *plugin_dir* must expose a top-level ``register``
+    callable with the signature::
+
+        def register(register_fn: Callable[[str, RequestHook], None]) -> None: ...
+
+    The function receives ``register_request_hook`` and should call it to
+    install its hook(s) under a unique name.  Files that do not expose
+    ``register`` are silently skipped.
+
+    Returns the list of successfully loaded filenames (e.g. ``["grok-wrapper.py"]``).
+    """
+    if not plugin_dir:
+        return []
+
+    path = pathlib.Path(plugin_dir).expanduser().resolve()
+    if not path.is_dir():
+        _logger.warning("community_hooks_dir %r is not a directory — skipping", str(plugin_dir))
+        return []
+
+    loaded: list[str] = []
+    for py_file in sorted(path.glob("*.py")):
+        try:
+            spec = importlib.util.spec_from_file_location(
+                f"faigate_community_hook_{py_file.stem}", py_file
+            )
+            if spec is None or spec.loader is None:
+                _logger.warning("Cannot load community hook %s — invalid spec", py_file.name)
+                continue
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)  # type: ignore[union-attr]
+            if not hasattr(module, "register"):
+                _logger.warning(
+                    "Community hook %s has no register() function — skipped", py_file.name
+                )
+                continue
+            module.register(register_request_hook)
+            loaded.append(py_file.name)
+            _logger.info("Loaded community hook: %s", py_file.name)
+        except Exception as exc:  # noqa: BLE001
+            _logger.error("Failed to load community hook %s: %s", py_file.name, exc)
+
+    _COMMUNITY_HOOKS_LOADED.extend(loaded)
+    return loaded
+
+
+def get_community_hooks_loaded() -> list[str]:
+    """Return the list of successfully loaded community hook filenames."""
+    return list(_COMMUNITY_HOOKS_LOADED)

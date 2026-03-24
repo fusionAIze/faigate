@@ -4,6 +4,31 @@ All notable changes to fusionAIze Gate should be documented here.
 
 The format is intentionally lightweight and human-readable. Group entries by release and focus on user-visible behavior, operational changes, and compatibility notes.
 
+## v1.10.0 - 2026-03-24
+
+### Added
+
+- **Cache Intelligence layer** — all providers now carry precise cache metadata in `config.yaml` and the routing engine uses it for cost estimation and scoring:
+  - `cache.min_prefix_tokens` — minimum stable prefix required for cache activation (provider-specific: 64 for DeepSeek, 1024 for Google, 1024 for Anthropic)
+  - `cache.ttl_seconds` — provider cache lifetime (0 = unknown; Google: 3600 s, Anthropic: 300 s)
+  - `cache.max_cached_tokens` — maximum prefix retained in cache (64k for DeepSeek, 1M for Google, 32k for Anthropic)
+  - `cache.cache_read_discount` — actual cost ratio of cached vs fresh input tokens (e.g. DeepSeek: 0.07, Anthropic: 0.10, Google Flash: 0.04)
+  - `cache.cache_write_surcharge` — write cost multiplier for explicit-mode caches (Anthropic: 1.25, others: 1.0)
+  - Cache threshold in `router.py` is now provider-aware (`max(64, min_prefix_tokens)` per provider)
+  - Cache scoring bonus in `router.py` rewards providers where cache is likely to activate given the current request shape
+  - `/route` endpoint response now includes a `cache_intelligence` block with activation forecast, estimated savings, TTL, and write surcharge
+- **Community / plugin hook system** — faigate now supports dropping custom Python hooks into a directory without editing core code:
+  - `load_community_hooks(plugin_dir)` in `hooks.py` scans `*.py` files in the configured dir and calls their `register(register_fn)` entry point
+  - `community_hooks_dir` config key added to `request_hooks` section; community hooks are loaded before hook-name validation so plugin names pass cleanly
+  - Community hooks are logged at startup and exposed in `/health` response under `community_hooks`
+  - `get_community_hooks_loaded()` utility function for observability
+- **`hooks/grok-wrapper.py`** — first community hook example, ships with faigate:
+  - Automatically routes requests to `grok-xai` when the model name is a known Grok variant (`grok-3`, `grok-3-mini`, `grok-3-fast`, `grok-2`, …) or starts with `grok-`
+  - Also triggered by `X-Faigate-Grok: 1` / `true` / `yes` request header
+  - Includes full install instructions and self-documenting docstring
+- **`grok-xai` provider template** in `config.yaml` section B — full lane + cache + capabilities metadata for xAI Grok 3 (commented out; activate with `XAI_API_KEY`)
+- Updated `request_hooks` config comment block to document `community_hooks_dir`, example usage, and grok-wrapper installation steps
+
 ## v1.9.2 - 2026-03-24
 
 ### Fixed

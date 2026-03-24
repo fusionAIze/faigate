@@ -598,8 +598,11 @@ def _estimated_request_cost_usd(provider: dict[str, Any], ctx: _RoutingContext |
     if output_tokens <= 0:
         output_tokens = min(1024, max(128, prompt_tokens // 2))
 
-    cache_mode = str((provider.get("cache") or {}).get("mode") or "none")
-    if ctx.stable_prefix_tokens >= 64 and cache_mode != "none":
+    cache_cfg = provider.get("cache") or {}
+    cache_mode = str(cache_cfg.get("mode") or "none")
+    cache_min_prefix = int(cache_cfg.get("min_prefix_tokens") or 64)
+    cache_threshold = max(64, cache_min_prefix)
+    if ctx.stable_prefix_tokens >= cache_threshold and cache_mode != "none":
         cached_tokens = min(prompt_tokens, int(ctx.stable_prefix_tokens))
         prompt_cost = (
             (cached_tokens * cache_rate) + ((prompt_tokens - cached_tokens) * prompt_rate)
@@ -1435,6 +1438,25 @@ class Router:
             cache_score = 10 if cache.get("read_discount") else 7
         elif cache.get("mode") != "none":
             cache_score = 2
+
+        # Cache intelligence bonus (v1.10.x): reward providers where cache is likely to activate
+        cache_min_prefix = int(cache.get("min_prefix_tokens") or 0)
+        cache_max_tokens = int(cache.get("max_cached_tokens") or 0)
+        cache_write_surcharge = float(cache.get("cache_write_surcharge") or 1.0)
+        cache_read_discount_ratio = float(cache.get("cache_read_discount") or 1.0)
+        estimated_tokens = int(ctx.total_tokens or 0)
+        if cache.get("mode") not in (None, "none"):
+            threshold = cache_min_prefix if cache_min_prefix > 0 else 64
+            if estimated_tokens >= threshold:
+                # Higher discount = bigger bonus (scale 0.0 discount → 0 pts, 1.0 discount → 3 pts)
+                discount_depth = max(0.0, 1.0 - cache_read_discount_ratio)
+                cache_score += round(discount_depth * 3.0)
+            if cache_max_tokens > 0 and estimated_tokens > cache_max_tokens:
+                # Tokens exceed what can be cached — cache won't activate
+                cache_score -= 2
+            if cache_write_surcharge > 1.0:
+                # Explicit mode write cost penalty (first request more expensive)
+                cache_score -= 1
 
         context_score = _score_capacity_ratio(context_ratio)
         input_score = _score_capacity_ratio(input_ratio)

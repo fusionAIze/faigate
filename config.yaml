@@ -46,8 +46,13 @@ provider_catalog_check:
 #     max_input_tokens : maximum estimated input tokens
 #     max_output_tokens: maximum requested output tokens
 #   cache        : optional cache metadata used for route ranking
-#     mode       : none | implicit | explicit
-#     read_discount: whether cache reads are cheaper than fresh input
+#     mode              : none | implicit | explicit
+#     read_discount     : whether cache reads are cheaper than fresh input (derived from pricing)
+#     min_prefix_tokens : minimum stable prefix tokens for cache to activate (default: 0)
+#     ttl_seconds       : provider cache lifetime in seconds; 0 = unknown (default: 0)
+#     max_cached_tokens : max prefix tokens kept in cache at this provider; 0 = no limit (default: 0)
+#     cache_read_discount : cost ratio of cached vs fresh input tokens (default: derived from pricing)
+#     cache_write_surcharge: write cost multiplier for explicit mode (default: 1.0)
 #   capabilities : optional provider metadata for future policy-aware routing
 #     chat            : must stay true in the current runtime
 #     reasoning       : provider is suitable for deeper reasoning tasks
@@ -119,6 +124,13 @@ providers:
       input: 0.27
       output: 1.10
       cache_read: 0.07
+    cache:
+      mode: implicit
+      min_prefix_tokens: 64
+      ttl_seconds: 0        # DeepSeek doesn't publish cache TTL
+      max_cached_tokens: 64000
+      cache_read_discount: 0.07   # $0.07 vs $0.27 input
+      cache_write_surcharge: 1.0
 
   deepseek-reasoner:
     backend: openai-compat
@@ -134,6 +146,13 @@ providers:
       input: 0.55
       output: 2.19
       cache_read: 0.14
+    cache:
+      mode: implicit
+      min_prefix_tokens: 64
+      ttl_seconds: 0
+      max_cached_tokens: 64000
+      cache_read_discount: 0.25   # $0.14/$0.55
+      cache_write_surcharge: 1.0
 
   gemini-flash-lite:
     backend: google-genai
@@ -149,6 +168,13 @@ providers:
       input: 0.075
       output: 0.30
       cache_read: 0.02
+    cache:
+      mode: implicit
+      min_prefix_tokens: 1024     # Google context caching minimum
+      ttl_seconds: 3600           # Google: 1 hour default
+      max_cached_tokens: 1000000
+      cache_read_discount: 0.02   # $0.02/$0.075
+      cache_write_surcharge: 1.0
 
   gemini-flash:
     backend: google-genai
@@ -164,6 +190,13 @@ providers:
       input: 0.15
       output: 0.60
       cache_read: 0.04
+    cache:
+      mode: implicit
+      min_prefix_tokens: 1024
+      ttl_seconds: 3600
+      max_cached_tokens: 1000000
+      cache_read_discount: 0.04   # $0.04/$0.15
+      cache_write_surcharge: 1.0
 
   openrouter-fallback:
     backend: openai-compat
@@ -199,6 +232,13 @@ providers:
       input: 0.80
       output: 4.00
       cache_read: 0.08
+    cache:
+      mode: explicit
+      min_prefix_tokens: 1024
+      ttl_seconds: 300            # Anthropic: 5 minutes
+      max_cached_tokens: 32000
+      cache_read_discount: 0.10   # 10% of full input price
+      cache_write_surcharge: 1.25 # Anthropic: +25% for cache writes
     capabilities:
       cost_tier: cheap
       latency_tier: fast
@@ -233,6 +273,13 @@ providers:
       input: 3.00
       output: 15.00
       cache_read: 0.30
+    cache:
+      mode: explicit
+      min_prefix_tokens: 1024
+      ttl_seconds: 300
+      max_cached_tokens: 32000
+      cache_read_discount: 0.10
+      cache_write_surcharge: 1.25
     capabilities:
       cost_tier: standard
       latency_tier: balanced
@@ -268,6 +315,13 @@ providers:
       input: 15.00
       output: 75.00
       cache_read: 1.50
+    cache:
+      mode: explicit
+      min_prefix_tokens: 1024
+      ttl_seconds: 300
+      max_cached_tokens: 32000
+      cache_read_discount: 0.10
+      cache_write_surcharge: 1.25
     capabilities:
       cost_tier: premium
       latency_tier: quality
@@ -301,6 +355,13 @@ providers:
       input: 1.25
       output: 10.00
       cache_read: 0.31
+    cache:
+      mode: implicit
+      min_prefix_tokens: 2048
+      ttl_seconds: 3600
+      max_cached_tokens: 2000000
+      cache_read_discount: 0.31   # $0.31/$1.25
+      cache_write_surcharge: 1.0
     capabilities:
       cost_tier: premium
       latency_tier: balanced
@@ -335,6 +396,13 @@ providers:
       input: 2.50
       output: 10.00
       cache_read: 1.25
+    cache:
+      mode: implicit
+      min_prefix_tokens: 1024
+      ttl_seconds: 3600           # OpenAI: ~1 hour
+      max_cached_tokens: 128000
+      cache_read_discount: 0.50   # 50% discount on cached tokens
+      cache_write_surcharge: 1.0
     capabilities:
       cost_tier: premium
       latency_tier: balanced
@@ -575,19 +643,46 @@ providers:
 
   # ── xAI / Grok ──────────────────────────────────────────────────────────
   # Auth: XAI_API_KEY
-  #xai-grok:
+  # Docs: https://docs.x.ai/api
+  # Community hook: hooks/grok-wrapper.py — auto-routes "grok-*" model names
+  #grok-xai:
   #  backend: openai-compat
   #  base_url: "${XAI_BASE_URL:-https://api.x.ai/v1}"
   #  api_key: "${XAI_API_KEY}"
   #  model: "grok-3"
-  #  max_tokens: 8000
-  #  tier: default
+  #  max_tokens: 8192
+  #  tier: mid
   #  timeout:
   #    connect_s: 10
-  #    read_s: 60
+  #    read_s: 90
   #  pricing:
   #    input: 3.00
   #    output: 15.00
+  #  cache:
+  #    mode: none
+  #  capabilities:
+  #    cost_tier: standard
+  #    latency_tier: balanced
+  #    reasoning: true
+  #    cloud: true
+  #    local: false
+  #  lane:
+  #    name: reasoning
+  #    family: xai
+  #    canonical_model: xai/grok-3
+  #    cluster: quality-coding
+  #    benchmark_cluster: quality-coding
+  #    quality_tier: high
+  #    reasoning_strength: high
+  #    context_strength: high
+  #    tool_strength: mid
+  #    route_type: direct
+  #    same_model_group: xai/grok-3
+  #    degrade_to: ["openai/gpt-4o", "anthropic/claude-sonnet"]
+  #    last_reviewed: "2026-03-24"
+  #    freshness_status: fresh
+  #    review_age_days: 0
+  #    freshness_hint: "Added at v1.10.0; verify pricing at docs.x.ai"
 
   # ── Mistral ─────────────────────────────────────────────────────────────
   # Auth: MISTRAL_API_KEY
@@ -1132,20 +1227,28 @@ client_profiles:
 #   prefer-provider-header  -> x-faigate-prefer-provider
 #   locality-header         -> x-faigate-locality: local-only | cloud-only
 #   profile-override-header -> x-faigate-profile
+#   mode-override-header    -> x-faigate-mode: eco | premium | free | auto
 #
-# Hook hints run after policy/static/heuristic rules and before client-profile
-# defaults. Keep them opt-in and request-scoped.
+# Community hooks (v1.10.0+):
+#   Set community_hooks_dir to a directory of *.py hook files.
+#   Each file must expose: def register(register_fn) -> None
+#   Example: hooks/grok-wrapper.py (routes grok-* models to grok-xai provider)
+#   Install: cp hooks/grok-wrapper.py ~/.config/faigate/hooks/
+#
 # on_error:
 #   continue -> record hook errors and continue routing
 #   fail     -> reject the request when a hook fails
 request_hooks:
   enabled: false
   on_error: continue
+  # community_hooks_dir: ~/.config/faigate/hooks   # set to enable community hooks
   hooks: []
   # hooks:
   #   - prefer-provider-header
   #   - locality-header
   #   - profile-override-header
+  #   - mode-override-header
+  #   - grok-wrapper   # requires grok-wrapper.py in community_hooks_dir + grok-xai provider
 
 
 # ── Layer 1: Statische Regeln ──────────────────────────────────────────────

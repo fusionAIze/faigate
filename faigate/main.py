@@ -27,7 +27,13 @@ from starlette.datastructures import UploadFile
 from . import __version__
 from .adaptation import AdaptiveRouteState
 from .config import Config, load_config
-from .hooks import AppliedHooks, HookExecutionError, RequestHookContext, apply_request_hooks
+from .hooks import (
+    AppliedHooks,
+    HookExecutionError,
+    RequestHookContext,
+    apply_request_hooks,
+    get_community_hooks_loaded,
+)
 from .lane_registry import get_provider_lane_binding, get_route_add_recommendations
 from .metrics import MetricsStore, calc_cost
 from .provider_catalog import (
@@ -1657,6 +1663,10 @@ async def lifespan(app: FastAPI):
     if _config.metrics.get("enabled"):
         _metrics.init()
 
+    community_hooks = get_community_hooks_loaded()
+    if community_hooks:
+        logger.info("Community hooks loaded: %s", ", ".join(community_hooks))
+
     logger.info(
         "fusionAIze Gate ready on %s:%s",
         _config.server.get("host", "127.0.0.1"),
@@ -1675,7 +1685,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="fusionAIze Gate",
-    version="1.9.2",
+    version="1.10.0",
     description="Local OpenAI-compatible routing gateway for OpenClaw and other clients.",
     lifespan=lifespan,
 )
@@ -1739,6 +1749,7 @@ async def health():
         "request_readiness": readiness,
         "coverage": _build_capability_coverage(),
         "providers": providers,
+        "community_hooks": get_community_hooks_loaded(),
     }
 
 
@@ -1985,6 +1996,52 @@ async def operator_events(
     }
 
 
+def _build_cache_intelligence(
+    provider_name: str,
+    request_dims: dict[str, Any],
+) -> dict[str, Any]:
+    """Return cache activation forecast for the selected provider and request shape."""
+    provider = _providers.get(provider_name)
+    if not provider:
+        return {"provider": provider_name, "cache_mode": "none", "cache_expected": False}
+
+    cache = provider.cache or {}
+    mode = str(cache.get("mode") or "none")
+    min_prefix = int(cache.get("min_prefix_tokens") or 0)
+    max_cached = int(cache.get("max_cached_tokens") or 0)
+    ttl_seconds = int(cache.get("ttl_seconds") or 0)
+    read_discount = float(cache.get("cache_read_discount") or 1.0)
+    write_surcharge = float(cache.get("cache_write_surcharge") or 1.0)
+
+    estimated_tokens = int(request_dims.get("estimated_input_tokens") or 0)
+    stable_prefix = int(request_dims.get("stable_prefix_tokens") or 0)
+
+    threshold = max(64, min_prefix)
+    cache_expected = mode != "none" and stable_prefix >= threshold
+    exceeds_max = max_cached > 0 and estimated_tokens > max_cached
+
+    # Estimate savings: cached tokens * (1 - read_discount) * input_rate
+    pricing = dict(getattr(provider, "pricing", {}) or {})
+    input_rate = float(pricing.get("input") or 0)
+    cached_tokens = min(estimated_tokens, stable_prefix) if cache_expected else 0
+    estimated_savings_usd = round(cached_tokens * input_rate * (1.0 - read_discount) / 1_000_000, 6)
+
+    return {
+        "provider": provider_name,
+        "cache_mode": mode,
+        "cache_expected": cache_expected and not exceeds_max,
+        "stable_prefix_tokens": stable_prefix,
+        "min_prefix_tokens": min_prefix,
+        "ttl_seconds": ttl_seconds,
+        "max_cached_tokens": max_cached,
+        "exceeds_max_cached": exceeds_max,
+        "cache_read_discount": read_discount,
+        "cache_write_surcharge": write_surcharge,
+        "estimated_cached_tokens": cached_tokens,
+        "estimated_savings_usd": estimated_savings_usd,
+    }
+
+
 @app.post("/api/route")
 async def preview_route(request: Request):
     """Dry-run one routing decision without sending a provider request."""
@@ -2011,6 +2068,7 @@ async def preview_route(request: Request):
     except HookExecutionError as exc:
         return _request_hook_error_response(exc)
 
+    request_dims = _estimate_request_dimensions(effective_body)
     return {
         "requested_model": model_requested,
         "resolved_mode": resolved_mode,
@@ -2025,12 +2083,13 @@ async def preview_route(request: Request):
             "modality": "chat",
             "model": effective_body.get("model", "auto"),
             "has_tools": bool(effective_body.get("tools")),
-            **_estimate_request_dimensions(effective_body),
+            **request_dims,
         },
         "decision": decision.to_dict(),
         "route_summary": _build_route_summary(decision),
         "selected_provider": _serialize_provider(decision.provider_name),
         "attempt_order": [_serialize_provider(name) for name in attempt_order],
+        "cache_intelligence": _build_cache_intelligence(decision.provider_name, request_dims),
     }
 
 
