@@ -205,6 +205,7 @@ providers:
       streaming: true
     lane:
       canonical_model: anthropic/haiku-3.5
+      route_type: direct
       cluster: fast-workhorse
       family: anthropic
       name: fast
@@ -239,6 +240,7 @@ providers:
       streaming: true
     lane:
       canonical_model: anthropic/sonnet-4.6
+      route_type: direct
       cluster: quality-workhorse
       family: anthropic
       name: balanced
@@ -305,6 +307,7 @@ providers:
       reasoning: true
     lane:
       canonical_model: google/gemini-pro-high
+      route_type: direct
       cluster: quality-workhorse
       family: google
       name: pro
@@ -337,6 +340,7 @@ providers:
       latency_tier: balanced
     lane:
       canonical_model: openai/gpt-4o
+      route_type: direct
       cluster: quality-workhorse
       family: openai
       name: balanced

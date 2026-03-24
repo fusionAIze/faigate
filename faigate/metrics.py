@@ -169,11 +169,11 @@ class MetricsStore:
         last_recovered_issue_type: str = "",
         decision_details: dict[str, Any] | None = None,
         attempt_order: list[str] | None = None,
-    ) -> None:
+    ) -> int | None:
         if not self._conn:
-            return
+            return None
         try:
-            self._conn.execute(
+            cur = self._conn.execute(
                 """INSERT INTO requests
                    (timestamp,provider,model,layer,rule_name,
                    prompt_tok,compl_tok,cache_hit,cache_miss,
@@ -216,8 +216,10 @@ class MetricsStore:
                 ),
             )
             self._conn.commit()
+            return cur.lastrowid
         except Exception as e:
             logger.warning("Metrics write failed: %s", e)
+            return None
 
     def log_operator_event(
         self,

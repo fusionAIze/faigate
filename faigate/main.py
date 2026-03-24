@@ -14,6 +14,7 @@ import logging
 import os
 import re
 import time
+import uuid
 from base64 import b64encode
 from contextlib import asynccontextmanager
 from hashlib import sha256
@@ -2146,8 +2147,9 @@ async def image_generations(request: Request):
                 if isinstance(result, dict)
                 else 0.0,
             )
+            trace_id: str | None = None
             if _config.metrics.get("enabled") and isinstance(result, dict):
-                _metrics.log_request(
+                row_id = _metrics.log_request(
                     provider=provider_name,
                     model=provider.model,
                     layer=decision.layer,
@@ -2166,6 +2168,7 @@ async def image_generations(request: Request):
                     ),
                     attempt_order=attempt_order,
                 )
+                trace_id = str(row_id) if row_id is not None else str(uuid.uuid4())
 
             resp = JSONResponse(result)
             resp.headers["X-faigate-Provider"] = provider_name
@@ -2178,6 +2181,7 @@ async def image_generations(request: Request):
             resp.headers["X-faigate-Rule"] = decision.rule_name
             resp.headers["X-faigate-Hooks"] = ",".join(hook_state.applied_hooks)
             resp.headers["X-faigate-Hook-Errors"] = str(len(hook_state.errors))
+            resp.headers["x-faigate-trace-id"] = trace_id or str(uuid.uuid4())
             return resp
         except ProviderError as exc:
             _adaptive_state.record_failure(provider_name, error=exc.detail[:500])
@@ -2293,8 +2297,9 @@ async def image_edits(request: Request):
                 if isinstance(result, dict)
                 else 0.0,
             )
+            trace_id: str | None = None
             if _config.metrics.get("enabled") and isinstance(result, dict):
-                _metrics.log_request(
+                row_id = _metrics.log_request(
                     provider=provider_name,
                     model=provider.model,
                     layer=decision.layer,
@@ -2313,6 +2318,7 @@ async def image_edits(request: Request):
                     ),
                     attempt_order=attempt_order,
                 )
+                trace_id = str(row_id) if row_id is not None else str(uuid.uuid4())
 
             resp = JSONResponse(result)
             resp.headers["X-faigate-Provider"] = provider_name
@@ -2325,6 +2331,7 @@ async def image_edits(request: Request):
             resp.headers["X-faigate-Rule"] = decision.rule_name
             resp.headers["X-faigate-Hooks"] = ",".join(hook_state.applied_hooks)
             resp.headers["X-faigate-Hook-Errors"] = str(len(hook_state.errors))
+            resp.headers["x-faigate-trace-id"] = trace_id or str(uuid.uuid4())
             return resp
         except ProviderError as exc:
             _adaptive_state.record_failure(provider_name, error=exc.detail[:500])
@@ -2448,6 +2455,7 @@ async def chat_completions(request: Request):
             )
 
             # Log metrics with cost (cache-aware)
+            trace_id: str | None = None
             if _config.metrics.get("enabled") and isinstance(result, dict):
                 usage = result.get("usage", {})
                 cg = result.get("_faigate", {})
@@ -2458,7 +2466,7 @@ async def chat_completions(request: Request):
                 provider_cfg = _config.provider(provider_name)
                 pricing = provider_cfg.get("pricing", {}) if provider_cfg else {}
                 cost = calc_cost(pt, ct, pricing, cache_hit=ch, cache_miss=cm)
-                _metrics.log_request(
+                row_id = _metrics.log_request(
                     provider=provider_name,
                     model=provider.model,
                     layer=decision.layer,
@@ -2482,6 +2490,7 @@ async def chat_completions(request: Request):
                     ),
                     attempt_order=attempt_order,
                 )
+                trace_id = str(row_id) if row_id is not None else str(uuid.uuid4())
 
             if stream:
                 return StreamingResponse(
@@ -2492,6 +2501,7 @@ async def chat_completions(request: Request):
                         "X-faigate-Profile": client_profile,
                         "X-faigate-Hooks": ",".join(hook_state.applied_hooks),
                         "X-faigate-Hook-Errors": str(len(hook_state.errors)),
+                        "x-faigate-trace-id": trace_id or str(uuid.uuid4()),
                     },
                 )
 
@@ -2507,6 +2517,7 @@ async def chat_completions(request: Request):
             resp.headers["X-faigate-Rule"] = decision.rule_name
             resp.headers["X-faigate-Hooks"] = ",".join(hook_state.applied_hooks)
             resp.headers["X-faigate-Hook-Errors"] = str(len(hook_state.errors))
+            resp.headers["x-faigate-trace-id"] = trace_id or str(uuid.uuid4())
             return resp
 
         except ProviderError as e:
