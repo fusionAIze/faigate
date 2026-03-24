@@ -1,0 +1,373 @@
+================================================================================
+  FUSIONAIZE GATE - COMPREHENSIVE KNOWLEDGE GRAPH ANALYSIS
+  Generated: 2026-03-24 | Commit: db0925b | Version: 1.9.2
+================================================================================
+
+PROJECT OVERVIEW
+================================================================================
+Name:           fusionAIze Gate
+Type:           OpenAI-compatible routing gateway
+Language:       Python (17,558 LOC across 17 modules)
+Frameworks:     FastAPI, AsyncIO, OpenAI API
+License:        Apache-2.0
+Purpose:        Intelligently route requests across multiple LLM providers
+
+================================================================================
+KNOWLEDGE GRAPH STATISTICS
+================================================================================
+Total Nodes:           31 (16 files, 15 concepts)
+Total Edges:           40 (imports, calls, contains, implements, uses, etc)
+Architectural Layers:  7 distinct layers
+Learning Tour Steps:   12 guided steps
+Documentation Lines:   1,574 (README + ARCHITECTURE)
+
+Node Breakdown by Type:
+  - Files:      16 (main source modules + config.yaml)
+  - Concepts:   15 (architectural patterns, design decisions)
+
+Edge Breakdown by Type:
+  - imports:    20  (module dependencies)
+  - implements: 5   (modules implement concepts)
+  - contains:   6   (layer containment relationships)
+  - uses:       4   (feature usage relationships)
+  - calls:      1   (function invocation)
+  - depends_on: 1   (dependency relationship)
+  - configures: 1   (configuration relationship)
+  - reads_from: 1   (data flow relationship)
+  - related:    2   (semantic relationships)
+
+================================================================================
+CORE ARCHITECTURE: 6-LAYER ROUTING CASCADE
+================================================================================
+
+The routing engine applies these layers sequentially; first match wins:
+
+LAYER 0: POLICY RULES (confidence 0.95)
+  ├─ Declarative rules from config.yaml
+  ├─ Match on: model_requested, headers, keywords, tokens, client_profile
+  └─ Select with: allow/deny providers, prefer tiers, require capabilities
+
+LAYER 1: STATIC RULES
+  ├─ Hardcoded pattern matching
+  ├─ Model name aliases and known patterns
+  └─ Quick fallback for common cases
+
+LAYER 2: HEURISTICS & SIGNALS
+  ├─ Message complexity detection (architecture, performance, reliability, devops, testing, security, database)
+  ├─ Device type detection (mobile/tablet)
+  ├─ Signal groups: short_message, short_complex, has_tools, knowledge_domain
+  ├─ Streaming and cache preferences
+  └─ Keyword-based complexity scoring
+
+LAYER 3: REQUEST HOOKS
+  ├─ Extensible pre-routing plugins
+  ├─ Can modify request body, override profile, inject hints
+  ├─ Registered hook functions with async support
+  └─ Configurable error handling (fail/continue)
+
+LAYER 4: CLIENT PROFILES
+  ├─ Named routing personas: openclaw, n8n, cli, generic
+  ├─ Header-based activation (x-faigate-client, x-openclaw-source)
+  ├─ Preset select constraints and tier preferences
+  └─ Profile-specific defaults and overrides
+
+LAYER 5: LLM CLASSIFIER
+  ├─ Optional ML-based classification (disabled by default)
+  ├─ Adds latency; recommended only for specialized scenarios
+  └─ Future ML-based routing intelligence
+
+FALLBACK: DEFAULT PROVIDER (confidence 0.3)
+  ├─ First provider in fallback_chain
+  ├─ Guaranteed routing even if all layers fail
+  └─ Last resort option
+
+================================================================================
+SIGNAL GROUPS & HEURISTICS
+================================================================================
+
+SHORT_MESSAGE      → Simple queries → Fast/budget provider
+SHORT_COMPLEX      → Compact difficult problems → High-quality provider
+DEVICE_TYPE        → Mobile/tablet detection → Smaller/faster model
+HAS_TOOLS          → Function calling needed → Tools-capable provider
+OPENCODE_COMPLEXITY → Architecture/design → Reasoning-capable provider
+KNOWLEDGE_DOMAIN   → Database, DevOps, Testing, Security, Kubernetes
+STREAMING          → Client wants streaming → Streaming-capable provider
+CACHE              → Cache usage → Cache-capable provider
+
+COMPLEXITY KEYWORDS:
+  Architecture:  "architecture", "tradeoff", "system design", "design review"
+  Performance:   "bottleneck", "throughput", "queue", "race condition", "deadlock"
+  DevOps:        "kubernetes", "terraform", "ci/cd", "pipeline", "deployment"
+  Testing:       "unit test", "integration test", "test coverage", "e2e"
+  Security:      "jwt", "oauth", "xss", "sql injection", "rbac", "vulnerability"
+  Database:      "schema", "sharding", "query optimization", "replication"
+
+================================================================================
+CANONICAL MODEL LANES & QUALITY TIERS
+================================================================================
+
+ELITE-REASONING       | Tier: PREMIUM  | Reasoning: HIGH  | Example: Opus 4.6
+QUALITY-WORKHORSE    | Tier: HIGH     | Reasoning: HIGH  | Example: Sonnet 4.6, GPT-4o
+BALANCED-WORKHORSE   | Tier: MID      | Reasoning: MID   | Example: Gemini Pro Low
+FAST-WORKHORSE       | Tier: MID      | Reasoning: MID   | Example: Haiku 4.5, Gemini Flash
+BUDGET-GENERAL       | Tier: BUDGET   | Reasoning: LOW   | Example: Gemini Flash Lite
+
+Quality Tier Scores:
+  premium=10, high=8, mid=5, budget=2, free=1, variable=4, n/a=0
+
+Routing Modes:
+  eco:      Favor budget/fast providers
+  premium:  Favor quality/expensive providers
+  auto:     Balanced selection
+  free:     Only free providers
+  custom:   User-defined constraints
+
+================================================================================
+PROVIDER HEALTH & ADAPTATION
+================================================================================
+
+Issue Classifications & Cooldowns:
+
+QUOTA-EXHAUSTED      | 1800s (30 min) | Penalty: +24 | Hard disable
+AUTH-INVALID         | 1800s (30 min) | Penalty: +26 | Hard disable
+RATE-LIMITED         | 180s (3 min)   | Penalty: +16 | Soft degrade
+TIMEOUT              | 120s (2 min)   | Penalty: +8  | Soft degrade
+TRANSPORT-ERROR      | 180s (3 min)   | Penalty: +10 | Soft degrade
+ENDPOINT-MISMATCH    | 900s (15 min)  | Penalty: +20 | Hard disable
+MODEL-UNAVAILABLE    | 900s (15 min)  | Penalty: +18 | Hard disable
+
+Additional Penalties:
+  Consecutive failures: +(failures × 4, capped at 20)
+  High latency (≥4000ms): +12
+  Medium latency (≥2000ms): +6
+  Slight latency (≥1200ms): +3
+
+Higher penalty = lower ranking in provider selection
+
+================================================================================
+POLICY RULES ENGINE
+================================================================================
+
+Syntax:
+  routing_policies:
+    rules:
+      - name: "reasoning-queries"
+        match:
+          message_keywords: ["architecture", "system design"]
+          client_profile: ["openclaw"]
+        select:
+          prefer_tiers: ["premium", "high"]
+          require_capabilities: ["reasoning"]
+
+Match Conditions:
+  model_requested, system_prompt_contains, header_contains, has_tools,
+  estimated_tokens, message_keywords, client_profile, fallthrough, any, all
+
+Select Constraints:
+  allow_providers, deny_providers, prefer_providers, prefer_tiers,
+  require_capabilities, capability_values
+
+================================================================================
+REQUEST HOOKS SYSTEM
+================================================================================
+
+Hook Lifecycle:
+  1. Registry maintains _REQUEST_HOOKS dict
+  2. Config specifies enabled hooks and error handling
+  3. Hooks applied in sequence before Layer 3
+  4. Results accumulated and merged
+  5. Error modes: "fail" (raise) or "continue" (log)
+
+Hook Result:
+  body_updates:     dict (messages, model, tools, temperature, max_tokens)
+  profile_override: str (override client profile)
+  routing_hints:    dict (allow/deny/prefer providers, tiers, capabilities)
+  notes:            list (metadata)
+
+Error Handling:
+  on_error: "fail"      → Raises HookExecutionError
+  on_error: "continue"  → Logs error, proceeds to next layer
+
+================================================================================
+CLIENT PROFILES
+================================================================================
+
+OPENCLAW   | x-openclaw-source or x-faigate-client=openclaw
+           | Tiers: ["default", "reasoning"]
+           | Use: Heavy analysis & reasoning tasks
+
+N8N        | x-faigate-client=n8n
+           | Tiers: ["cheap", "default"]
+           | Use: Workflow automation with cost focus
+
+CLI        | x-faigate-client=cli,codex,claude,deepseek
+           | Tiers: ["default", "reasoning"]
+           | Use: CLI tools and code agents
+
+GENERIC    | Default if no profile matches
+           | Tiers: balanced
+           | Use: Custom applications
+
+================================================================================
+CONFIGURATION SYSTEM
+================================================================================
+
+config.yaml Structure:
+  providers:          Provider definitions (base_url, api_key, model, tier, capabilities)
+  routing_policies:   Policy rules for Layer 0
+  client_profiles:    Named routing personas
+  request_hooks:      Hook system configuration
+  routing_modes:      Named routing strategies
+  fallback_chain:     Fallback provider order
+  llm_classifier:     Optional Layer 5 config
+  metrics:            Metrics database config
+  limits:             Rate limiting, size constraints
+
+Environment Variable Expansion:
+  ${PROVIDER_BASE_URL}, ${PROVIDER_API_KEY}
+  Supports: ${VAR_NAME} syntax with fallback defaults
+
+================================================================================
+REQUEST DATA FLOW
+================================================================================
+
+CLIENT REQUEST
+  → GATEWAY API (main.py): Parse, sanitize, extract context
+  → REQUEST HOOKS (hooks.py): Modify body, override profile, inject hints
+  → ROUTING ENGINE (router.py): Apply 6 layers, select provider
+  → PROVIDER SELECTION: Check health, rank candidates
+  → REQUEST FORWARDING (providers.py): Call upstream API
+  → METRICS RECORDING (metrics.py): Write to database
+  → CLIENT RESPONSE: Format and return
+
+================================================================================
+LAYERED ARCHITECTURE
+================================================================================
+
+LAYER 1: GATEWAY API (main.py)
+  FastAPI endpoints for chat, models, health, diagnostics
+
+LAYER 2: ROUTING & DECISION (router.py, adaptation.py)
+  6-layer cascade, signal analysis, health tracking
+
+LAYER 3: CONFIGURATION & METADATA (config.py, lane_registry.py, config.yaml)
+  YAML config, environment expansion, model lanes
+
+LAYER 4: PROVIDER MANAGEMENT (providers.py, registry.py)
+  Backend abstraction, auth, model mapping, health probing
+
+LAYER 5: REQUEST PIPELINE & EXTENSIONS (hooks.py)
+  Plugin registration, body modification, hint injection
+
+LAYER 6: METRICS & ANALYTICS (metrics.py, dashboard.py, cli.py)
+  SQLite persistence, provider hotspots, client usage
+
+LAYER 7: OPERATOR TOOLS & ONBOARDING (wizard.py, onboarding.py, provider_catalog.py, updates.py)
+  Config wizard, onboarding reports, discovery, updates
+
+================================================================================
+KEY MODULES
+================================================================================
+
+router.py (2100 LOC)       Core 6-layer routing cascade, heuristics, signals
+main.py (850 LOC)          FastAPI gateway, request lifecycle
+config.py (1200 LOC)       YAML config loading, validation
+lane_registry.py (900 LOC) Model lanes, quality tiers
+adaptation.py (350 LOC)    Provider health tracking
+metrics.py (500 LOC)       Request metrics, SQLite
+wizard.py (500 LOC)        Configuration wizard
+providers.py (800 LOC)     Provider backend abstraction
+hooks.py (400 LOC)         Request hooks system
+onboarding.py (400 LOC)    Onboarding reports
+dashboard.py (400 LOC)     Monitoring dashboard
+cli.py (350 LOC)           Command-line tools
+registry.py (300 LOC)      Provider registry
+provider_catalog.py (400) Discovery & recommendations
+updates.py (250 LOC)       Update checking
+
+================================================================================
+v1.9.0 STRESS TEST FINDINGS (FIXED IN v1.9.1+)
+================================================================================
+
+ISSUE 1: ROUTING MODE RACE CONDITIONS
+  Problem: Multipliers applied inconsistently under high concurrency
+  Fix: Atomic score updates, immutable context
+  Status: FIXED in v1.9.1
+
+ISSUE 2: ECO/PREMIUM TIER SCORING BIAS
+  Problem: Eco mode favored premium instead of budget
+  Fix: Corrected multiplier logic
+  Status: FIXED in v1.9.1
+
+ISSUE 3: CACHE HEADER PARSING
+  Problem: Malformed headers caused routing failures
+  Fix: Added .strip().lower() normalization
+  Status: FIXED in v1.9.2
+
+ISSUE 4: CONCURRENT HEALTH DEGRADATION
+  Problem: Race conditions on pressure updates
+  Fix: Atomic failure counters
+  Status: FIXED in v1.9.1
+
+ISSUE 5: HOOK TIMEOUT HANDLING
+  Problem: Long-running hooks blocked routing
+  Fix: 5-second timeout with fallback
+  Status: FIXED in v1.9.2
+
+REMAINING:
+  LLM Classifier adds latency (disabled by default)
+  Provider probe varies by backend
+  SQLite contention at high load (consider Postgres)
+
+================================================================================
+GENERATED ARTIFACTS
+================================================================================
+
+knowledge-graph.json (623 lines)
+  ├─ Project metadata
+  ├─ 31 nodes (16 files + 15 concepts)
+  ├─ 40 edges
+  ├─ 7 layers
+  └─ 12-step tour
+
+ARCHITECTURE.md (542 lines)
+  ├─ Core architecture explanation
+  ├─ Data flow and configuration
+  ├─ Known gaps and stress test findings
+  ├─ Integration points
+  └─ Deployment considerations
+
+README.md (403 lines)
+  ├─ Quick start guide
+  ├─ Common tasks
+  ├─ Known issues
+  ├─ Graph format spec
+  └─ Next steps
+
+meta.json (6 lines)
+  ├─ Last analyzed timestamp
+  ├─ Git commit hash
+  ├─ Files analyzed
+  └─ Schema version
+
+================================================================================
+NEXT STEPS
+================================================================================
+
+1. READ ARCHITECTURE.md (15 min) for big picture
+2. FOLLOW 12-STEP TOUR in knowledge-graph.json for guided deep dive
+3. EXPLORE KEY MODULES: router.py, config.py, main.py, providers.py
+4. REVIEW INTEGRATION POINTS for your use case
+5. CHECK DEPLOYMENT for your scale requirements
+
+For Questions:
+  Review ARCHITECTURE.md for detailed explanations
+  Check README.md for common tasks
+  Query knowledge-graph.json with jq for programmatic access
+
+================================================================================
+Files Location: /Users/andrelange/Documents/repositories/github/faigate/.understand-anything/
+Generated: 2026-03-24
+Analyzed Commit: db0925bfa67f6421a08762e40fb8b5027d8b5f2e
+Knowledge Graph Version: 1.0.0
+================================================================================

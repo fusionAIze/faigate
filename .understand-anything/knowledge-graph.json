@@ -1,0 +1,900 @@
+{
+  "version": "1.0.0",
+  "project": {
+    "name": "fusionAIze Gate",
+    "languages": [
+      "Python"
+    ],
+    "frameworks": [
+      "FastAPI",
+      "AsyncIO",
+      "OpenAI API"
+    ],
+    "description": "Local OpenAI-compatible routing gateway that intelligently routes requests across multiple LLM providers using layered routing policies, heuristics, client profiles, and adaptive fallback chains.",
+    "analyzedAt": "2026-03-24T00:00:00Z",
+    "gitCommitHash": "db0925bfa67f6421a08762e40fb8b5027d8b5f2e"
+  },
+  "nodes": [
+    {
+      "id": "file:faigate/main.py",
+      "type": "file",
+      "name": "main.py",
+      "filePath": "faigate/main.py",
+      "summary": "FastAPI application entry point and OpenAI-compatible API endpoints. Implements /v1/chat/completions, /v1/models, /health, and diagnostic routes. Manages request lifecycle from hooks through routing to provider delegation.",
+      "tags": [
+        "api",
+        "fastapi",
+        "gateway",
+        "routing",
+        "core"
+      ],
+      "sizeLines": 850,
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:faigate/router.py",
+      "type": "file",
+      "name": "router.py",
+      "filePath": "faigate/router.py",
+      "summary": "Core layered routing engine with 6 cascading decision layers: policy rules, static rules, heuristics, request hooks, client profiles, and LLM classifier. Implements signal groups (short_message, short_complex, device_type, etc), complexity detection, and intelligent provider selection.",
+      "tags": [
+        "routing",
+        "layers",
+        "decision-engine",
+        "heuristics",
+        "scoring",
+        "core"
+      ],
+      "sizeLines": 2100,
+      "complexity": "complex"
+    },
+    {
+      "id": "file:faigate/config.py",
+      "type": "file",
+      "name": "config.py",
+      "filePath": "faigate/config.py",
+      "summary": "Configuration system with YAML parsing, environment variable expansion, validation, and runtime config object. Handles provider definitions, routing policies, client profiles, hooks configuration, and request constraints.",
+      "tags": [
+        "configuration",
+        "validation",
+        "yaml",
+        "environment",
+        "core"
+      ],
+      "sizeLines": 1200,
+      "complexity": "complex"
+    },
+    {
+      "id": "file:faigate/providers.py",
+      "type": "file",
+      "name": "providers.py",
+      "filePath": "faigate/providers.py",
+      "summary": "Provider backend abstraction supporting OpenAI-compatible, Google GenAI, and Anthropic APIs. Implements health tracking, request forwarding, model probing, and transport layer abstraction with configurable auth modes.",
+      "tags": [
+        "providers",
+        "backends",
+        "health",
+        "http",
+        "transport"
+      ],
+      "sizeLines": 800,
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:faigate/lane_registry.py",
+      "type": "file",
+      "name": "lane_registry.py",
+      "filePath": "faigate/lane_registry.py",
+      "summary": "Canonical model-lane metadata registry defining quality tiers (elite-reasoning, quality-workhorse, balanced-workhorse, fast-workhorse, budget-general), reasoning strength, context strength, preferred degradation paths, and provider transport bindings.",
+      "tags": [
+        "lanes",
+        "metadata",
+        "models",
+        "routing-modes",
+        "quality-tiers"
+      ],
+      "sizeLines": 900,
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:faigate/hooks.py",
+      "type": "file",
+      "name": "hooks.py",
+      "filePath": "faigate/hooks.py",
+      "summary": "Request hook system for pre-routing extensions. Enables plugins to modify request bodies, override client profiles, inject routing hints, and attach notes. Includes sanitization, error handling (fail-open/fail-closed), and hook registry.",
+      "tags": [
+        "hooks",
+        "extensions",
+        "request-pipeline",
+        "customization"
+      ],
+      "sizeLines": 400,
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:faigate/adaptation.py",
+      "type": "file",
+      "name": "adaptation.py",
+      "filePath": "faigate/adaptation.py",
+      "summary": "In-memory adaptive route-pressure tracking for lane-aware routing. Tracks provider health via issue types (quota-exhausted, auth-invalid, rate-limited, timeout, transport-error, endpoint-mismatch, model-unavailable), cooldown windows, degradation state, and latency metrics.",
+      "tags": [
+        "adaptation",
+        "health-tracking",
+        "pressure",
+        "degradation"
+      ],
+      "sizeLines": 350,
+      "complexity": "simple"
+    },
+    {
+      "id": "file:faigate/metrics.py",
+      "type": "file",
+      "name": "metrics.py",
+      "filePath": "faigate/metrics.py",
+      "summary": "Request metrics and cost tracking with SQLite persistence. Records routing decisions, provider selection, latency, token usage, and cost calculations. Powers analytics, dashboard, and operator visibility.",
+      "tags": [
+        "metrics",
+        "analytics",
+        "database",
+        "cost-tracking"
+      ],
+      "sizeLines": 500,
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:faigate/provider_catalog.py",
+      "type": "file",
+      "name": "provider_catalog.py",
+      "filePath": "faigate/provider_catalog.py",
+      "summary": "Provider discovery and catalog management. Generates provider recommendations, detects stale model choices, produces catalog reports with signup links, and guides provider refresh and setup.",
+      "tags": [
+        "catalog",
+        "discovery",
+        "provider-management"
+      ],
+      "sizeLines": 400,
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:faigate/registry.py",
+      "type": "file",
+      "name": "registry.py",
+      "filePath": "faigate/registry.py",
+      "summary": "High-level provider registry and lifecycle management. Manages provider initialization, probing, health verification, and fallback chain construction.",
+      "tags": [
+        "registry",
+        "lifecycle",
+        "initialization"
+      ],
+      "sizeLines": 300,
+      "complexity": "simple"
+    },
+    {
+      "id": "file:faigate/updates.py",
+      "type": "file",
+      "name": "updates.py",
+      "filePath": "faigate/updates.py",
+      "summary": "Update checking, version management, and maintenance window enforcement. Checks for new releases, enforces pre/post-update verification, applies maintenance window guardrails.",
+      "tags": [
+        "updates",
+        "versioning",
+        "maintenance"
+      ],
+      "sizeLines": 250,
+      "complexity": "simple"
+    },
+    {
+      "id": "file:faigate/dashboard.py",
+      "type": "file",
+      "name": "dashboard.py",
+      "filePath": "faigate/dashboard.py",
+      "summary": "Interactive web dashboard for real-time monitoring. Displays request volume, success rates, latency, provider hotspots, client hotspots, routing decisions, and actionable alerts.",
+      "tags": [
+        "dashboard",
+        "ui",
+        "monitoring"
+      ],
+      "sizeLines": 400,
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:faigate/cli.py",
+      "type": "file",
+      "name": "cli.py",
+      "filePath": "faigate/cli.py",
+      "summary": "Command-line interface tools for stats, metrics, reports, and operator commands. Powers faigate-stats and dashboard CLI entry points.",
+      "tags": [
+        "cli",
+        "tools",
+        "operator-facing"
+      ],
+      "sizeLines": 350,
+      "complexity": "simple"
+    },
+    {
+      "id": "file:faigate/wizard.py",
+      "type": "file",
+      "name": "wizard.py",
+      "filePath": "faigate/wizard.py",
+      "summary": "Interactive configuration wizard for initial setup and provider onboarding. Guides users through provider selection, API key configuration, routing mode selection, and client integration.",
+      "tags": [
+        "wizard",
+        "setup",
+        "onboarding"
+      ],
+      "sizeLines": 500,
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:faigate/onboarding.py",
+      "type": "file",
+      "name": "onboarding.py",
+      "filePath": "faigate/onboarding.py",
+      "summary": "Onboarding report generation, validation, and operator guidance. Produces readiness reports, client integration guides, and configuration validation reports in markdown/JSON formats.",
+      "tags": [
+        "onboarding",
+        "reports",
+        "validation"
+      ],
+      "sizeLines": 400,
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:config.yaml",
+      "type": "file",
+      "name": "config.yaml",
+      "filePath": "config.yaml",
+      "summary": "Master configuration file defining providers, routing policies, client profiles, request hooks, routing modes, capability definitions, and operational settings.",
+      "tags": [
+        "configuration",
+        "providers",
+        "policies"
+      ],
+      "sizeLines": 1100,
+      "complexity": "moderate"
+    },
+    {
+      "id": "concept:routing-layers",
+      "type": "concept",
+      "name": "Routing Layers",
+      "summary": "6-layer cascade decision engine: Layer 0 (Policy Rules) \u2192 Layer 1 (Static Rules) \u2192 Layer 2 (Heuristics) \u2192 Layer 3 (Request Hooks) \u2192 Layer 4 (Client Profiles) \u2192 Layer 5 (LLM Classifier). Each layer can make a decision, blocking subsequent layers. Falls back to first provider in fallback chain if no layer matches.",
+      "tags": [
+        "architecture",
+        "routing",
+        "decision-engine"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "concept:canonical-lanes",
+      "type": "concept",
+      "name": "Canonical Model Lanes",
+      "summary": "Semantic groupings of models by capability cluster: elite-reasoning (Opus, advanced reasoning), quality-workhorse (Sonnet, GPT-4o), balanced-workhorse (mid-tier models), fast-workhorse (Haiku, Flash), budget-general (free/cheap). Each lane has quality_tier, reasoning_strength, context_strength, tool_strength, and preferred_degrades list.",
+      "tags": [
+        "lanes",
+        "models",
+        "routing-strategy"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "concept:signal-groups",
+      "type": "concept",
+      "name": "Signal Groups and Heuristics",
+      "summary": "Message classification signals for routing: short_message (simple queries), short_complex (compact but hard problems), device_type (phone/mobile detection), has_tools (tool/function calling), opencode_complexity (architecture/design/debugging keywords), knowledge_domain (database, devops, testing, security, etc), streaming_preference, and cache_preference.",
+      "tags": [
+        "heuristics",
+        "classification",
+        "signals"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "concept:quality-tiers",
+      "type": "concept",
+      "name": "Quality Tier Scoring",
+      "summary": "Quality tier mapping to numeric scores: premium (10), high (8), mid (5), budget (2), free (1), variable (4). Combined with cluster posture scoring and heuristic matching to rank provider candidates. Eco vs premium routing modes apply different scoring multipliers.",
+      "tags": [
+        "scoring",
+        "routing-modes",
+        "quality"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "concept:provider-health",
+      "type": "concept",
+      "name": "Provider Health and Adaptation",
+      "summary": "Runtime health tracking with issue classification: quota-exhausted (1800s cooldown), auth-invalid (1800s), rate-limited (180s), timeout (120s), transport-error (180s), endpoint-mismatch (900s), model-unavailable (900s). Applies penalty scoring, soft degradation, and recovery windows. Tracks consecutive failures, latency averages, and last error.",
+      "tags": [
+        "health",
+        "adaptation",
+        "fallback"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "concept:client-profiles",
+      "type": "concept",
+      "name": "Client Profiles",
+      "summary": "Named routing personas with preset select constraints. Presets include 'openclaw' (prefer reasoning), 'n8n' (prefer cheap), 'cli' (prefer reasoning/default). Profiles match via header inspection (x-faigate-client, x-openclaw-source) and can override routing decisions or inject hints.",
+      "tags": [
+        "profiles",
+        "customization",
+        "routing"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "concept:request-hooks",
+      "type": "concept",
+      "name": "Request Hooks System",
+      "summary": "Plugin extension points for pre-routing logic. Hooks can modify request body (messages, model, tools, temperature, max_tokens, etc), override client_profile, inject routing_hints (allow/deny/prefer providers), attach notes. Registry pattern with async support, configurable error handling (fail/continue).",
+      "tags": [
+        "hooks",
+        "extensions",
+        "customization"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "concept:fallback-chain",
+      "type": "concept",
+      "name": "Fallback Chain and Provider Selection",
+      "summary": "Ordered list of providers to use when no routing layer matches. First provider in chain is default fallback. Health tracking and adaptation pressure scores influence provider ranking. Capability filtering and policy constraints apply to all selections.",
+      "tags": [
+        "fallback",
+        "provider-selection",
+        "reliability"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "concept:routing-modes",
+      "type": "concept",
+      "name": "Routing Modes",
+      "summary": "Named routing strategies with scoring modifiers: 'auto' (balanced by default), 'eco' (favor budget/fast providers), 'premium' (favor quality/expensive), 'free' (only free providers), 'custom' (user-defined select constraints). Applied as client profile defaults or via policy rules.",
+      "tags": [
+        "routing",
+        "modes",
+        "strategy"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "concept:data-flow",
+      "type": "concept",
+      "name": "Request Data Flow",
+      "summary": "Pipeline: client request \u2192 hooks.apply_request_hooks() \u2192 router.route() \u2192 provider_backend.forward() \u2192 response. Hooks modify body/profile/hints before routing. Router applies 6 layers of decision logic. Provider handles transport, auth, model mapping, and response formatting.",
+      "tags": [
+        "data-flow",
+        "pipeline",
+        "request-lifecycle"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "concept:configuration-system",
+      "type": "concept",
+      "name": "Configuration System",
+      "summary": "YAML-based config.yaml with environment variable expansion (${VAR_NAME}). Defines providers (base_url, api_key, model, tier, capabilities), routing_policies (rules with match/select constraints), client_profiles (header matching, preset definitions), request_hooks (enabled/on_error/hooks list), and fallback_chain.",
+      "tags": [
+        "configuration",
+        "yaml",
+        "environment"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "concept:complexity-detection",
+      "type": "concept",
+      "name": "Complexity Detection",
+      "summary": "Keyword-based classification of request complexity for routing. Groups include: architecture (design, tradeoff, system design), performance (bottleneck, throughput, queue), reliability (consistency, race condition, deadlock), devops (kubernetes, terraform, ci/cd), testing, security (jwt, sql injection, rbac), database (schema, sharding, query optimization).",
+      "tags": [
+        "classification",
+        "heuristics",
+        "complexity"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "concept:policy-rules",
+      "type": "concept",
+      "name": "Policy Rules Engine",
+      "summary": "First-layer routing using declarative rules with match conditions and select constraints. Match conditions: model_requested, system_prompt_contains, header_contains, has_tools, estimated_tokens, message_keywords, client_profile, fallthrough. Select constraints: allow_providers, deny_providers, prefer_providers, prefer_tiers, require_capabilities, capability_values.",
+      "tags": [
+        "policies",
+        "rules",
+        "routing"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "concept:capability-routing",
+      "type": "concept",
+      "name": "Capability-based Routing",
+      "summary": "Selects providers with required capabilities (vision, image_generation, tools, reasoning, long_context). Used for non-chat endpoints. Policy rules and heuristics apply with capability constraints. Falls back to first capable provider if no policy matches.",
+      "tags": [
+        "capabilities",
+        "routing",
+        "constraint"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "concept:v1.9-stress-test-findings",
+      "type": "concept",
+      "name": "v1.9.0 Stress Test Findings",
+      "summary": "Known issues from v1.9.0 stress testing: (1) routing_mode pipeline under high concurrency - fixed in v1.9.1; (2) eco/premium tier scoring bias - corrected in v1.9.1; (3) cache header parsing edge cases - hardened in v1.9.2; (4) concurrent health degradation race conditions - mitigated with atomic updates; (5) hook timeout handling under load - added timeout guards.",
+      "tags": [
+        "testing",
+        "reliability",
+        "stress-testing"
+      ],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:faigate/main.py",
+      "target": "file:faigate/router.py",
+      "type": "imports",
+      "weight": 0.9,
+      "direction": "forward"
+    },
+    {
+      "source": "file:faigate/main.py",
+      "target": "file:faigate/config.py",
+      "type": "imports",
+      "weight": 0.9,
+      "direction": "forward"
+    },
+    {
+      "source": "file:faigate/main.py",
+      "target": "file:faigate/providers.py",
+      "type": "imports",
+      "weight": 0.9,
+      "direction": "forward"
+    },
+    {
+      "source": "file:faigate/main.py",
+      "target": "file:faigate/hooks.py",
+      "type": "imports",
+      "weight": 0.8,
+      "direction": "forward"
+    },
+    {
+      "source": "file:faigate/main.py",
+      "target": "file:faigate/metrics.py",
+      "type": "imports",
+      "weight": 0.8,
+      "direction": "forward"
+    },
+    {
+      "source": "file:faigate/router.py",
+      "target": "file:faigate/config.py",
+      "type": "imports",
+      "weight": 0.9,
+      "direction": "forward"
+    },
+    {
+      "source": "file:faigate/router.py",
+      "target": "file:faigate/lane_registry.py",
+      "type": "imports",
+      "weight": 0.8,
+      "direction": "forward"
+    },
+    {
+      "source": "file:faigate/router.py",
+      "target": "concept:routing-layers",
+      "type": "implements",
+      "weight": 1.0,
+      "direction": "forward"
+    },
+    {
+      "source": "file:faigate/router.py",
+      "target": "concept:signal-groups",
+      "type": "depends_on",
+      "weight": 0.9,
+      "direction": "forward"
+    },
+    {
+      "source": "file:faigate/router.py",
+      "target": "concept:quality-tiers",
+      "type": "depends_on",
+      "weight": 0.9,
+      "direction": "forward"
+    },
+    {
+      "source": "file:faigate/router.py",
+      "target": "concept:complexity-detection",
+      "type": "depends_on",
+      "weight": 0.8,
+      "direction": "forward"
+    },
+    {
+      "source": "file:faigate/config.py",
+      "target": "file:faigate/hooks.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:faigate/config.py",
+      "target": "file:faigate/lane_registry.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:faigate/providers.py",
+      "target": "file:faigate/lane_registry.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:faigate/adaptation.py",
+      "target": "concept:provider-health",
+      "type": "implements",
+      "weight": 1.0,
+      "direction": "forward"
+    },
+    {
+      "source": "file:faigate/metrics.py",
+      "target": "file:faigate/providers.py",
+      "type": "reads_from",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "file:faigate/main.py",
+      "target": "file:faigate/adaptation.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:faigate/hooks.py",
+      "target": "concept:request-hooks",
+      "type": "implements",
+      "weight": 1.0,
+      "direction": "forward"
+    },
+    {
+      "source": "file:faigate/main.py",
+      "target": "file:faigate/provider_catalog.py",
+      "type": "imports",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "file:faigate/main.py",
+      "target": "file:faigate/registry.py",
+      "type": "imports",
+      "weight": 0.8,
+      "direction": "forward"
+    },
+    {
+      "source": "file:faigate/registry.py",
+      "target": "file:faigate/providers.py",
+      "type": "calls",
+      "weight": 0.8,
+      "direction": "forward"
+    },
+    {
+      "source": "file:faigate/main.py",
+      "target": "file:faigate/updates.py",
+      "type": "imports",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "file:faigate/config.py",
+      "target": "concept:configuration-system",
+      "type": "implements",
+      "weight": 1.0,
+      "direction": "forward"
+    },
+    {
+      "source": "file:config.yaml",
+      "target": "file:faigate/config.py",
+      "type": "configures",
+      "weight": 1.0,
+      "direction": "forward"
+    },
+    {
+      "source": "concept:routing-layers",
+      "target": "concept:policy-rules",
+      "type": "contains",
+      "weight": 0.9,
+      "direction": "forward"
+    },
+    {
+      "source": "concept:routing-layers",
+      "target": "concept:signal-groups",
+      "type": "contains",
+      "weight": 0.9,
+      "direction": "forward"
+    },
+    {
+      "source": "concept:routing-layers",
+      "target": "concept:request-hooks",
+      "type": "contains",
+      "weight": 0.8,
+      "direction": "forward"
+    },
+    {
+      "source": "concept:routing-layers",
+      "target": "concept:client-profiles",
+      "type": "contains",
+      "weight": 0.8,
+      "direction": "forward"
+    },
+    {
+      "source": "concept:data-flow",
+      "target": "concept:request-hooks",
+      "type": "contains",
+      "weight": 0.9,
+      "direction": "forward"
+    },
+    {
+      "source": "concept:data-flow",
+      "target": "concept:routing-layers",
+      "type": "contains",
+      "weight": 1.0,
+      "direction": "forward"
+    },
+    {
+      "source": "concept:canonical-lanes",
+      "target": "concept:quality-tiers",
+      "type": "related",
+      "weight": 0.8,
+      "direction": "forward"
+    },
+    {
+      "source": "concept:provider-health",
+      "target": "concept:fallback-chain",
+      "type": "related",
+      "weight": 0.8,
+      "direction": "forward"
+    },
+    {
+      "source": "file:faigate/router.py",
+      "target": "concept:canonical-lanes",
+      "type": "depends_on",
+      "weight": 0.8,
+      "direction": "forward"
+    },
+    {
+      "source": "file:faigate/main.py",
+      "target": "concept:data-flow",
+      "type": "implements",
+      "weight": 0.9,
+      "direction": "forward"
+    },
+    {
+      "source": "file:faigate/wizard.py",
+      "target": "file:faigate/config.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:faigate/onboarding.py",
+      "target": "file:faigate/config.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:faigate/onboarding.py",
+      "target": "file:faigate/provider_catalog.py",
+      "type": "imports",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "file:faigate/dashboard.py",
+      "target": "file:faigate/metrics.py",
+      "type": "imports",
+      "weight": 0.8,
+      "direction": "forward"
+    },
+    {
+      "source": "file:faigate/cli.py",
+      "target": "file:faigate/metrics.py",
+      "type": "imports",
+      "weight": 0.8,
+      "direction": "forward"
+    },
+    {
+      "source": "file:faigate/main.py",
+      "target": "file:faigate/dashboard.py",
+      "type": "imports",
+      "weight": 0.6,
+      "direction": "forward"
+    }
+  ],
+  "layers": [
+    {
+      "id": "layer:gateway-api",
+      "name": "Gateway API Layer",
+      "description": "FastAPI endpoints implementing OpenAI-compatible chat completions, model discovery, health checks, and diagnostic routes. Handles request parsing, response formatting, error handling, and HTTP protocol compliance.",
+      "nodeIds": [
+        "file:faigate/main.py"
+      ]
+    },
+    {
+      "id": "layer:routing-engine",
+      "name": "Routing & Decision Layer",
+      "description": "Core routing logic with 6-layer cascade (policies, static rules, heuristics, hooks, profiles, LLM classifier). Performs signal analysis, complexity detection, provider scoring, and ranking.",
+      "nodeIds": [
+        "file:faigate/router.py",
+        "file:faigate/adaptation.py"
+      ]
+    },
+    {
+      "id": "layer:configuration",
+      "name": "Configuration & Metadata Layer",
+      "description": "Configuration loading, validation, and runtime state management. Canonical model lanes, quality tiers, provider metadata, and policy definitions.",
+      "nodeIds": [
+        "file:faigate/config.py",
+        "file:faigate/lane_registry.py",
+        "config.yaml"
+      ]
+    },
+    {
+      "id": "layer:provider-management",
+      "name": "Provider Management Layer",
+      "description": "Provider backend abstraction, health tracking, request forwarding, and transport layer. Supports OpenAI-compatible, Google GenAI, and Anthropic APIs.",
+      "nodeIds": [
+        "file:faigate/providers.py",
+        "file:faigate/registry.py"
+      ]
+    },
+    {
+      "id": "layer:request-pipeline",
+      "name": "Request Pipeline & Extensions",
+      "description": "Request hooks system for pre-routing customization. Enables body modifications, profile overrides, routing hints injection, and plugin integration.",
+      "nodeIds": [
+        "file:faigate/hooks.py"
+      ]
+    },
+    {
+      "id": "layer:metrics-analytics",
+      "name": "Metrics & Analytics Layer",
+      "description": "Request tracking, cost calculation, latency measurement, and operator visibility. SQLite-based persistence for historical analysis and reporting.",
+      "nodeIds": [
+        "file:faigate/metrics.py",
+        "file:faigate/dashboard.py",
+        "file:faigate/cli.py"
+      ]
+    },
+    {
+      "id": "layer:operator-tools",
+      "name": "Operator Tools & Onboarding",
+      "description": "CLI tools, configuration wizards, onboarding reports, provider discovery, and validation helpers. Powers setup automation and operator guidance.",
+      "nodeIds": [
+        "file:faigate/wizard.py",
+        "file:faigate/onboarding.py",
+        "file:faigate/provider_catalog.py",
+        "file:faigate/updates.py"
+      ]
+    }
+  ],
+  "tour": [
+    {
+      "order": 1,
+      "title": "Gateway Entry Point",
+      "description": "Start with the FastAPI application in main.py. This is where HTTP requests arrive as OpenAI-compatible /v1/chat/completions, /v1/models, and /health endpoints. The app is the traffic controller and response formatter.",
+      "nodeIds": [
+        "file:faigate/main.py"
+      ]
+    },
+    {
+      "order": 2,
+      "title": "Request Hook Pipeline",
+      "description": "Before routing, requests pass through optional request hooks (hooks.py). Hooks can modify the request body, override the client profile, or inject routing hints. This is where operator-defined extensions integrate into the request lifecycle.",
+      "nodeIds": [
+        "file:faigate/hooks.py",
+        "concept:request-hooks"
+      ]
+    },
+    {
+      "order": 3,
+      "title": "Configuration Foundation",
+      "description": "All routing logic depends on config.yaml and the Config object. This defines providers, policies, client profiles, request hooks, quality tiers, and fallback chains. Understanding the schema is essential to understanding how routing decisions are made.",
+      "nodeIds": [
+        "config.yaml",
+        "file:faigate/config.py",
+        "concept:configuration-system"
+      ]
+    },
+    {
+      "order": 4,
+      "title": "The 6-Layer Routing Cascade",
+      "description": "The router.py implements the core decision engine with 6 layers applied in sequence. Each layer can make a routing decision, short-circuiting subsequent layers. Layers are: Policy Rules \u2192 Static Rules \u2192 Heuristics \u2192 Request Hooks \u2192 Client Profiles \u2192 LLM Classifier.",
+      "nodeIds": [
+        "file:faigate/router.py",
+        "concept:routing-layers"
+      ]
+    },
+    {
+      "order": 5,
+      "title": "Policy Rules (Layer 0)",
+      "description": "The first routing layer evaluates declarative policy rules from config.yaml. Rules match on model_requested, system_prompt_contains, headers, has_tools, tokens, and keywords. When matched, they apply select constraints to rank providers.",
+      "nodeIds": [
+        "concept:policy-rules"
+      ],
+      "languageLesson": "Policy rules are the operator's first opportunity to make explicit routing decisions before heuristics engage."
+    },
+    {
+      "order": 6,
+      "title": "Static & Heuristic Rules (Layers 1-2)",
+      "description": "If no policy matches, static rules check fixed patterns (model name aliases). Heuristics then analyze message content: complexity detection using keyword groups (architecture, performance, reliability, devops, testing, security, database), device type detection, short-message simplicity, and complexity scoring.",
+      "nodeIds": [
+        "concept:signal-groups",
+        "concept:complexity-detection"
+      ]
+    },
+    {
+      "order": 7,
+      "title": "Canonical Lanes & Quality Tiers",
+      "description": "The lane_registry.py defines semantic groupings of models (elite-reasoning, quality-workhorse, balanced-workhorse, fast-workhorse, budget-general) with metadata about quality, reasoning strength, context strength, and tool support. Quality tier scores (premium=10, high=8, mid=5, budget=2, free=1) drive provider ranking.",
+      "nodeIds": [
+        "file:faigate/lane_registry.py",
+        "concept:canonical-lanes",
+        "concept:quality-tiers"
+      ]
+    },
+    {
+      "order": 8,
+      "title": "Client Profiles (Layer 4)",
+      "description": "Client profiles (openclaw, n8n, cli) can override routing with preset select constraints. Profiles match via request headers (x-faigate-client, x-openclaw-source) and can enforce prefer_tiers or other constraints. This layer applies client-specific defaults after hooks but before LLM classification.",
+      "nodeIds": [
+        "concept:client-profiles"
+      ]
+    },
+    {
+      "order": 9,
+      "title": "Provider Selection & Health Adaptation",
+      "description": "Once a routing layer selects a provider, the provider object is retrieved from the registry. The adaptation.py tracks provider health with issue classification (quota-exhausted, auth-invalid, rate-limited, etc), cooldown windows, latency averages, and applies penalty scoring. Unhealthy providers are deprioritized.",
+      "nodeIds": [
+        "file:faigate/providers.py",
+        "file:faigate/adaptation.py",
+        "file:faigate/registry.py",
+        "concept:provider-health"
+      ]
+    },
+    {
+      "order": 10,
+      "title": "Request Forwarding & Response",
+      "description": "The selected provider backend (ProviderBackend) forwards the request to the upstream API (OpenAI, Google, etc). It handles auth, transport, model mapping, and parses the response. On failure, health status is updated. The response is formatted back to OpenAI-compatible format for the client.",
+      "nodeIds": [
+        "file:faigate/providers.py"
+      ]
+    },
+    {
+      "order": 11,
+      "title": "Metrics & Observability",
+      "description": "All routing decisions and provider calls are recorded in the metrics database. metrics.py tracks routing choice, provider used, latency, tokens, cost, and success/failure. This powers the dashboard (dashboard.py), CLI stats (cli.py), and operator visibility into request patterns.",
+      "nodeIds": [
+        "file:faigate/metrics.py",
+        "file:faigate/dashboard.py",
+        "file:faigate/cli.py"
+      ]
+    },
+    {
+      "order": 12,
+      "title": "Operator Tools & Onboarding",
+      "description": "operator-facing utilities including the configuration wizard (wizard.py), onboarding report generator (onboarding.py), provider catalog and discovery (provider_catalog.py), and update checker (updates.py). These tools guide setup, validation, and operational readiness.",
+      "nodeIds": [
+        "file:faigate/wizard.py",
+        "file:faigate/onboarding.py",
+        "file:faigate/provider_catalog.py",
+        "file:faigate/updates.py"
+      ]
+    }
+  ]
+}

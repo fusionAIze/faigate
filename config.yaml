@@ -181,6 +181,238 @@ providers:
       cache_read: 0.07
 
   # ────────────────────────────────────────────────────────────────────────
+  # C. OPERATOR-ACTIVATED PROVIDERS (require matching API keys in faigate.env)
+  # ────────────────────────────────────────────────────────────────────────
+
+  # ── Anthropic: fast lane ─────────────────────────────────────────────────
+  anthropic-haiku:
+    backend: anthropic-compat
+    base_url: "${ANTHROPIC_BASE_URL:-https://api.anthropic.com/v1}"
+    api_key: "${ANTHROPIC_API_KEY}"
+    model: "claude-haiku-3-5"
+    max_tokens: 8096
+    tier: default
+    timeout:
+      connect_s: 10
+      read_s: 45
+    pricing:
+      input: 0.80
+      output: 4.00
+      cache_read: 0.08
+    capabilities:
+      cost_tier: cheap
+      latency_tier: fast
+      streaming: true
+    lane:
+      canonical_model: anthropic/haiku-3.5
+      cluster: fast-workhorse
+      family: anthropic
+      name: fast
+      quality_tier: mid
+      reasoning_strength: mid
+      context_strength: mid
+      tool_strength: medium
+      benchmark_cluster: balanced-coding
+      degrade_to: ["deepseek/chat", "google/gemini-flash"]
+      freshness_status: fresh
+      last_reviewed: "2026-03-24"
+
+  # ── Anthropic: balanced lane ──────────────────────────────────────────────
+  anthropic-sonnet:
+    backend: anthropic-compat
+    base_url: "${ANTHROPIC_BASE_URL:-https://api.anthropic.com/v1}"
+    api_key: "${ANTHROPIC_API_KEY}"
+    model: "claude-sonnet-4-6"
+    max_tokens: 16000
+    tier: mid
+    timeout:
+      connect_s: 10
+      read_s: 90
+    pricing:
+      input: 3.00
+      output: 15.00
+      cache_read: 0.30
+    capabilities:
+      cost_tier: standard
+      latency_tier: balanced
+      reasoning: true
+      streaming: true
+    lane:
+      canonical_model: anthropic/sonnet-4.6
+      cluster: quality-workhorse
+      family: anthropic
+      name: balanced
+      quality_tier: high
+      reasoning_strength: high
+      context_strength: high
+      tool_strength: high
+      benchmark_cluster: quality-coding
+      degrade_to: ["anthropic/haiku-3.5", "deepseek/chat"]
+      freshness_status: fresh
+      last_reviewed: "2026-03-24"
+
+  # ── Anthropic: elite reasoning lane ──────────────────────────────────────
+  anthropic-claude:
+    backend: anthropic-compat
+    base_url: "${ANTHROPIC_BASE_URL:-https://api.anthropic.com/v1}"
+    api_key: "${ANTHROPIC_API_KEY}"
+    model: "claude-opus-4-6"
+    max_tokens: 64000
+    tier: mid
+    timeout:
+      connect_s: 10
+      read_s: 120
+    pricing:
+      input: 15.00
+      output: 75.00
+      cache_read: 1.50
+    capabilities:
+      cost_tier: premium
+      latency_tier: quality
+      reasoning: true
+    lane:
+      canonical_model: anthropic/opus-4.6
+      cluster: elite-reasoning
+      family: anthropic
+      name: quality
+      quality_tier: premium
+      reasoning_strength: high
+      context_strength: high
+      tool_strength: medium
+      benchmark_cluster: quality-coding
+      degrade_to: ["anthropic/sonnet-4.6", "openai/gpt-4o", "deepseek/reasoner"]
+      freshness_status: fresh
+      last_reviewed: "2026-03-22"
+
+  # ── Google Gemini Pro ─────────────────────────────────────────────────────
+  gemini-pro:
+    backend: google-genai
+    base_url: "${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta}"
+    api_key: "${GEMINI_API_KEY}"
+    model: "gemini-2.5-pro"
+    max_tokens: 65536
+    tier: mid
+    timeout:
+      connect_s: 10
+      read_s: 120
+    pricing:
+      input: 1.25
+      output: 10.00
+      cache_read: 0.31
+    capabilities:
+      cost_tier: premium
+      latency_tier: balanced
+      reasoning: true
+    lane:
+      canonical_model: google/gemini-pro-high
+      cluster: quality-workhorse
+      family: google
+      name: pro
+      quality_tier: high
+      reasoning_strength: high
+      context_strength: high
+      tool_strength: high
+      benchmark_cluster: quality-coding
+      degrade_to: ["google/gemini-flash", "deepseek/reasoner"]
+      freshness_status: fresh
+      last_reviewed: "2026-03-24"
+
+  # ── OpenAI GPT-4o ────────────────────────────────────────────────────────
+  openai-gpt4o:
+    backend: openai-compat
+    base_url: "${OPENAI_BASE_URL:-https://api.openai.com/v1}"
+    api_key: "${OPENAI_API_KEY}"
+    model: "gpt-4o"
+    max_tokens: 8192
+    tier: mid
+    timeout:
+      connect_s: 10
+      read_s: 60
+    pricing:
+      input: 2.50
+      output: 10.00
+      cache_read: 1.25
+    capabilities:
+      cost_tier: premium
+      latency_tier: balanced
+    lane:
+      canonical_model: openai/gpt-4o
+      cluster: quality-workhorse
+      family: openai
+      name: balanced
+      quality_tier: high
+      reasoning_strength: high
+      context_strength: high
+      tool_strength: high
+      benchmark_cluster: quality-coding
+      degrade_to: ["openai/gpt-4o-mini", "google/gemini-pro-high"]
+      freshness_status: fresh
+      last_reviewed: "2026-03-22"
+
+  # ── Kilo Code Gateway (free aggregator) ──────────────────────────────────
+  kilocode:
+    backend: openai-compat
+    base_url: "${KILOCODE_BASE_URL:-https://api.kilo.ai/api/gateway/v1}"
+    api_key: "${KILOCODE_API_KEY}"
+    model: "kilo/glm-5-free"
+    max_tokens: 8000
+    tier: fallback
+    timeout:
+      connect_s: 10
+      read_s: 60
+    pricing:
+      input: 0.00
+      output: 0.00
+    capabilities:
+      cost_tier: free
+      latency_tier: balanced
+    lane:
+      canonical_model: aggregator/kilo-glm5-free
+      cluster: budget-general
+      family: kilo
+      name: free
+      quality_tier: free
+      reasoning_strength: mid
+      context_strength: mid
+      tool_strength: medium
+      benchmark_cluster: free-coding
+      degrade_to: ["aggregator/blackbox-grok-code-fast", "google/gemini-flash-lite"]
+      freshness_status: fresh
+      last_reviewed: "2026-03-22"
+
+  # ── BlackBox AI Free ──────────────────────────────────────────────────────
+  blackbox-free:
+    backend: openai-compat
+    base_url: "${BLACKBOX_BASE_URL:-https://api.blackbox.ai}"
+    api_key: "${BLACKBOX_API_KEY}"
+    model: "blackboxai/x-ai/grok-code-fast-1:free"
+    max_tokens: 8000
+    tier: fallback
+    timeout:
+      connect_s: 10
+      read_s: 60
+    pricing:
+      input: 0.00
+      output: 0.00
+    capabilities:
+      cost_tier: free
+      latency_tier: fast
+    lane:
+      canonical_model: aggregator/blackbox-grok-code-fast
+      cluster: budget-general
+      family: blackbox
+      name: free-burst
+      quality_tier: free
+      reasoning_strength: mid
+      context_strength: mid
+      tool_strength: mid
+      benchmark_cluster: free-coding
+      degrade_to: ["aggregator/kilo-glm5-free", "google/gemini-flash-lite"]
+      route_type: aggregator
+      freshness_status: fresh
+      last_reviewed: "2026-03-22"
+
+  # ────────────────────────────────────────────────────────────────────────
   # B. BUILT-IN PROVIDERS (pi-ai catalog)
   #    Uncomment + set the env var to activate.
   # ────────────────────────────────────────────────────────────────────────
@@ -665,9 +897,16 @@ providers:
 # decision fails. Keep at least one guaranteed-available provider here.
 fallback_chain:
   - deepseek-chat
-  - deepseek-reasoner
+  - anthropic-haiku
   - gemini-flash
+  - deepseek-reasoner
+  - anthropic-sonnet
+  - gemini-pro
+  - openai-gpt4o
   - openrouter-fallback
+  - anthropic-claude
+  - kilocode
+  - blackbox-free
 
 
 # ── Routing Modes (optional) ──────────────────────────────────────────────
@@ -682,7 +921,7 @@ fallback_chain:
 # select:
 #   same selector keys as routing_policies.select
 routing_modes:
-  enabled: false
+  enabled: true
   default: auto
   modes:
     auto:
@@ -698,14 +937,28 @@ routing_modes:
       savings: "Aggressive savings"
       aliases: []
       select:
+        prefer_providers: ["anthropic-haiku", "gemini-flash-lite", "gemini-flash", "deepseek-chat"]
         prefer_tiers: ["cheap", "fallback", "default"]
+        capability_values:
+          cost_tier: ["free", "cheap", "standard"]
+    free:
+      description: "Free tier only"
+      best_for: "Zero-cost routing"
+      savings: "100%"
+      aliases: []
+      select:
+        allow_providers: ["kilocode", "blackbox-free"]
+        prefer_providers: ["kilocode", "blackbox-free"]
+        capability_values:
+          cost_tier: ["free"]
     premium:
       description: "Best quality"
       best_for: "Mission-critical work"
       savings: "Lowest savings"
       aliases: []
       select:
-        prefer_providers: ["deepseek-reasoner", "gemini-flash"]
+        prefer_providers: ["anthropic-sonnet", "openai-gpt4o", "gemini-pro", "anthropic-claude", "deepseek-reasoner"]
+        prefer_tiers: ["high", "premium", "reasoning"]
 
 
 # ── Model Shortcuts (optional) ────────────────────────────────────────────
@@ -780,6 +1033,19 @@ client_profiles:
     opencode:
       routing_mode: auto
       prefer_tiers: ["default", "mid", "high", "reasoning"]
+    # ── opencode named profiles (selectable as model in opencode UI) ─────────
+    coding:
+      routing_mode: auto
+      prefer_providers: ["deepseek-reasoner", "deepseek-chat", "anthropic-haiku"]
+      prefer_tiers: ["reasoning", "default", "mid"]
+    coding-free:
+      routing_mode: free
+      prefer_providers: ["kilocode", "blackbox-free", "gemini-flash-lite"]
+      prefer_tiers: ["free", "cheap"]
+    research:
+      routing_mode: auto
+      prefer_providers: ["gemini-pro", "anthropic-sonnet", "anthropic-claude"]
+      prefer_tiers: ["high", "premium", "mid"]
     # ── faigrid CLI integrations ──────────────────────────────────────────
     claude:
       routing_mode: auto
@@ -808,6 +1074,18 @@ client_profiles:
       match:
         header_contains:
           x-faigate-client: ["opencode"]
+    - profile: coding
+      match:
+        header_contains:
+          x-faigate-client: ["coding", "coding-auto"]
+    - profile: coding-free
+      match:
+        header_contains:
+          x-faigate-client: ["coding-free", "free"]
+    - profile: research
+      match:
+        header_contains:
+          x-faigate-client: ["research"]
     - profile: claude
       match:
         header_contains:
