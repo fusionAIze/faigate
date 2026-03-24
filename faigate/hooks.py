@@ -235,7 +235,16 @@ def _sanitize_routing_hints(hints: dict[str, Any]) -> tuple[dict[str, Any], list
             if cap_values:
                 sanitized["capability_values"] = cap_values
 
-    unknown = sorted(set(hints) - (_LIST_HINT_KEYS | {"capability_values"}))
+    if "routing_mode" in hints:
+        raw_mode = hints["routing_mode"]
+        if isinstance(raw_mode, str) and raw_mode.strip():
+            sanitized["routing_mode"] = raw_mode.strip().lower()
+        else:
+            errors.append(
+                "ignored invalid routing_hints.routing_mode (expected a non-empty string)"
+            )
+
+    unknown = sorted(set(hints) - (_LIST_HINT_KEYS | {"capability_values", "routing_mode"}))
     for key in unknown:
         errors.append(f"ignored unsupported routing_hints field '{key}'")
 
@@ -259,6 +268,9 @@ def _merge_routing_hints(target: dict[str, Any], incoming: dict[str, Any]) -> No
             for value in values:
                 if value not in target["capability_values"][capability]:
                     target["capability_values"][capability].append(value)
+
+    if "routing_mode" in incoming:
+        target["routing_mode"] = incoming["routing_mode"]
 
 
 def _hook_prefer_provider_header(context: RequestHookContext) -> RequestHookResult | None:

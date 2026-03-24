@@ -4,6 +4,27 @@ All notable changes to fusionAIze Gate should be documented here.
 
 The format is intentionally lightweight and human-readable. Group entries by release and focus on user-visible behavior, operational changes, and compatibility notes.
 
+## v1.9.2 - 2026-03-24
+
+### Fixed
+
+- Fixed `routing_mode` from request hooks being silently discarded — `_sanitize_routing_hints` now accepts and preserves `routing_mode` as a first-class hint field; `_merge_routing_hints` propagates it through the hook pipeline so `X-faigate-Mode` header overrides correctly reach the scoring layer
+- Fixed `X-faigate-Mode: eco` and `X-faigate-Mode: premium` being ignored on short prompts — `_evaluate_heuristic_match` now bypasses `short-message` and `general-default` rules when an explicit `routing_mode` hint is present, allowing mode-specific scoring to run regardless of token count
+
+### Added
+
+- Three new providers using existing API keys — no new credentials required:
+  - `anthropic-sonnet`: Claude Sonnet 4.6 (`claude-sonnet-4-6`) — quality-workhorse lane, `cost_tier: standard` (~$3/MTok input), high reasoning and tool strength, degrade-to: haiku → deepseek-chat
+  - `anthropic-haiku`: Claude Haiku 3.5 (`claude-haiku-3-5`) — fast-workhorse lane, `cost_tier: cheap` (~$0.80/MTok input), degrade-to: deepseek-chat → gemini-flash
+  - `gemini-pro`: Gemini 2.5 Pro (`gemini-2.5-pro`) — quality-workhorse lane, `cost_tier: premium`, high reasoning and context strength (1M token context window), degrade-to: gemini-flash → deepseek-reasoner
+- Added proper `lane:` metadata block to `gemini-flash-lite` (was missing, preventing correct cluster-based scoring)
+- Updated global `fallback_chain` to reflect full provider depth: deepseek-chat → anthropic-haiku → gemini-flash → deepseek-reasoner → anthropic-sonnet → gemini-pro → openai-gpt4o → openrouter-fallback → anthropic-claude → kilocode → blackbox-free
+- Updated `routing_modes.eco` to explicitly prefer anthropic-haiku, gemini-flash-lite, gemini-flash, deepseek-chat
+- Updated `routing_modes.premium` to prefer anthropic-sonnet, openai-gpt4o, gemini-pro, anthropic-claude, deepseek-reasoner
+- Updated `opencode` client profile to include `high` quality tier so Sonnet/Gemini Pro are reachable in auto mode
+- Added `anthropic-sonnet`, `anthropic-haiku`, `gemini-pro` to `model_shortcuts`
+- Enabled `routing_modes` (was `enabled: false`)
+
 ## v1.9.1 - 2026-03-24
 
 ### Fixed

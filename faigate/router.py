@@ -2065,11 +2065,17 @@ class Router:
         if match.get("fallthrough"):
             ri = dict(getattr(ctx, "request_insights", {}) or {})
             hook_hints = dict(getattr(ctx, "hook_hints", {}) or {})
-            if ri.get("short_complex") or hook_hints.get("prefer_providers"):
+            routing_mode = str(hook_hints.get("routing_mode") or "").strip()
+            _EXPLICIT_MODES = {"eco", "premium", "free", "quality", "save", "cheap"}
+            if (
+                ri.get("short_complex")
+                or hook_hints.get("prefer_providers")
+                or routing_mode in _EXPLICIT_MODES
+            ):
                 return False, {
                     "rule_name": rule_name,
                     "fallthrough": True,
-                    "bypassed_for": "short_complex_or_prefer_providers",
+                    "bypassed_for": "short_complex_or_prefer_providers_or_routing_mode",
                 }
             return True, {"rule_name": rule_name, "fallthrough": True}
 
@@ -2108,6 +2114,15 @@ class Router:
                 hook_hints = dict(getattr(ctx, "hook_hints", {}) or {})
                 if hook_hints.get("prefer_providers"):
                     return False, {**details, "bypassed_for": "prefer_providers"}
+            # routing_mode bypass: an explicit eco/premium/free mode set via
+            # X-faigate-Mode header should bypass token-count heuristics so
+            # the scoring layer can apply the correct provider preferences.
+            if "less_than" in tok_match:
+                hook_hints = dict(getattr(ctx, "hook_hints", {}) or {})
+                routing_mode = str(hook_hints.get("routing_mode") or "").strip()
+                _EXPLICIT_MODES = {"eco", "premium", "free", "quality", "save", "cheap"}
+                if routing_mode in _EXPLICIT_MODES:
+                    return False, {**details, "bypassed_for": "routing_mode"}
 
         # message_keywords
         if "message_keywords" in match:
