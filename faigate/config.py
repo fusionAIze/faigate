@@ -1723,6 +1723,49 @@ def _normalize_provider_source_refresh(data: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
+def _normalize_anthropic_bridge(data: dict[str, Any]) -> dict[str, Any]:
+    """Validate the optional Anthropic-compatible bridge surface."""
+
+    raw = data.get("anthropic_bridge") or {}
+    if not isinstance(raw, dict):
+        raise ConfigError("'anthropic_bridge' must be a mapping")
+
+    enabled = raw.get("enabled", False)
+    if not isinstance(enabled, bool):
+        raise ConfigError("'anthropic_bridge.enabled' must be a boolean")
+
+    route_prefix = str(raw.get("route_prefix", "/v1") or "").strip()
+    if not route_prefix.startswith("/"):
+        raise ConfigError("'anthropic_bridge.route_prefix' must start with '/'")
+
+    allow_claude_code_hints = raw.get("allow_claude_code_hints", True)
+    if not isinstance(allow_claude_code_hints, bool):
+        raise ConfigError("'anthropic_bridge.allow_claude_code_hints' must be a boolean")
+
+    model_aliases = raw.get("model_aliases", {})
+    if model_aliases is None:
+        model_aliases = {}
+    if not isinstance(model_aliases, dict):
+        raise ConfigError("'anthropic_bridge.model_aliases' must be a mapping")
+
+    normalized_aliases: dict[str, str] = {}
+    for key, value in model_aliases.items():
+        alias = str(key or "").strip()
+        target = str(value or "").strip()
+        if not alias or not target:
+            raise ConfigError("'anthropic_bridge.model_aliases' keys and values must be non-empty")
+        normalized_aliases[alias] = target
+
+    normalized = dict(data)
+    normalized["anthropic_bridge"] = {
+        "enabled": enabled,
+        "route_prefix": route_prefix.rstrip("/") or "/v1",
+        "allow_claude_code_hints": allow_claude_code_hints,
+        "model_aliases": normalized_aliases,
+    }
+    return normalized
+
+
 class Config:
     """Holds the parsed and expanded configuration."""
 
@@ -1885,6 +1928,18 @@ class Config:
             },
         )
 
+    @property
+    def anthropic_bridge(self) -> dict:
+        return self._data.get(
+            "anthropic_bridge",
+            {
+                "enabled": False,
+                "route_prefix": "/v1",
+                "allow_claude_code_hints": True,
+                "model_aliases": {},
+            },
+        )
+
     def provider(self, name: str) -> dict | None:
         return self.providers.get(name)
 
@@ -1935,17 +1990,19 @@ def load_config(path: str | Path | None = None) -> Config:
         raw = yaml.safe_load(f)
 
     expanded = _normalize_provider_source_refresh(
-        _normalize_provider_catalog_check(
-            _normalize_security(
-                _normalize_auto_update(
-                    _normalize_update_check(
-                        _normalize_request_hooks(
-                            _validate_routing_mode_references(
-                                _normalize_model_shortcuts(
-                                    _normalize_routing_modes(
-                                        _normalize_client_profiles(
-                                            _normalize_routing_policies(
-                                                _normalize_providers(_walk_expand(raw))
+        _normalize_anthropic_bridge(
+            _normalize_provider_catalog_check(
+                _normalize_security(
+                    _normalize_auto_update(
+                        _normalize_update_check(
+                            _normalize_request_hooks(
+                                _validate_routing_mode_references(
+                                    _normalize_model_shortcuts(
+                                        _normalize_routing_modes(
+                                            _normalize_client_profiles(
+                                                _normalize_routing_policies(
+                                                    _normalize_providers(_walk_expand(raw))
+                                                )
                                             )
                                         )
                                     )

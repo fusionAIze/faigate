@@ -363,6 +363,42 @@ metrics:
         load_config(path)
 
 
+def test_anthropic_bridge_defaults_are_exposed():
+    cfg = load_config(Path(__file__).parent.parent / "config.yaml")
+    assert cfg.anthropic_bridge == {
+        "enabled": False,
+        "route_prefix": "/v1",
+        "allow_claude_code_hints": True,
+        "model_aliases": {},
+    }
+
+
+def test_anthropic_bridge_rejects_invalid_route_prefix(tmp_path):
+    path = tmp_path / "config.yaml"
+    path.write_text(
+        """
+server:
+  host: "127.0.0.1"
+  port: 8090
+providers:
+  cloud-default:
+    backend: openai-compat
+    base_url: "https://api.example.com/v1"
+    api_key: "secret"
+    model: "chat-model"
+anthropic_bridge:
+  enabled: true
+  route_prefix: v1
+fallback_chain: []
+metrics:
+  enabled: false
+"""
+    )
+
+    with pytest.raises(ConfigError, match="anthropic_bridge.route_prefix"):
+        load_config(path)
+
+
 def test_security_rejects_invalid_limit_values(tmp_path):
     path = tmp_path / "config.yaml"
     path.write_text(
