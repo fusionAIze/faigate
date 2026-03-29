@@ -42,6 +42,118 @@ class RefreshResult:
     error: str = ""
 
 
+_SEVERITY_RANK = {
+    "critical": 3,
+    "warning": 2,
+    "notice": 1,
+    "info": 0,
+}
+
+
+def _source_refresh_suggestion(item: dict[str, Any]) -> str:
+    provider_id = str(item.get("provider_id") or "provider")
+    if item.get("last_error"):
+        return (
+            "Run faigate-provider-catalog --refresh "
+            f"--provider {provider_id} and verify the source URL, parser, or "
+            "auth assumptions before trusting catalog data here."
+        )
+    return (
+        f"Refresh {provider_id} before relying on older model, pricing, or free-tier assumptions."
+    )
+
+
+def _catalog_change_suggestion(event: dict[str, Any]) -> str:
+    change_type = str(event.get("change_type") or "")
+    provider_id = str(event.get("provider_id") or "provider")
+    if change_type == "model-removed":
+        return (
+            f"Review configured model ids and fallback mirrors for {provider_id}; "
+            "one catalog entry disappeared."
+        )
+    if change_type == "field-changed":
+        return (
+            f"Recheck pricing, context, and routing weights for {provider_id}; "
+            "a tracked field changed."
+        )
+    if change_type == "model-added":
+        return (
+            f"Review whether the newly listed {provider_id} model belongs in "
+            "route additions or scenarios."
+        )
+    return f"Review recent provider catalog changes for {provider_id}."
+
+
+def build_catalog_alerts(
+    summary: dict[str, Any],
+    *,
+    limit: int = 8,
+) -> list[dict[str, Any]]:
+    """Return structured provider source alerts ordered by urgency."""
+    alerts: list[dict[str, Any]] = []
+    for item in list(summary.get("items") or []):
+        provider_id = str(item.get("provider_id") or "")
+        status = str(item.get("status") or "")
+        if status == "error":
+            alerts.append(
+                {
+                    "kind": "source-refresh-error",
+                    "severity": "warning",
+                    "provider_id": provider_id,
+                    "headline": f"Provider source refresh failing for {provider_id}",
+                    "detail": (
+                        f"{provider_id} source snapshots are stale because the "
+                        "latest refresh failed: "
+                        f"{item.get('last_error') or 'unknown error'}"
+                    ),
+                    "suggestion": _source_refresh_suggestion(item),
+                    "source_kind": "source",
+                }
+            )
+        elif status == "due":
+            alerts.append(
+                {
+                    "kind": "source-refresh-due",
+                    "severity": "notice",
+                    "provider_id": provider_id,
+                    "headline": f"Provider source refresh due for {provider_id}",
+                    "detail": (
+                        f"{provider_id} catalog data is due for refresh after "
+                        f"{int(float(item.get('seconds_since_success') or 0.0))}s."
+                    ),
+                    "suggestion": _source_refresh_suggestion(item),
+                    "source_kind": "source",
+                }
+            )
+    for event in list(summary.get("recent_events") or []):
+        alerts.append(
+            {
+                "kind": "catalog-change",
+                "severity": str(event.get("severity") or "notice"),
+                "provider_id": str(event.get("provider_id") or ""),
+                "headline": (
+                    f"Catalog change detected for {event.get('provider_id')}: "
+                    f"{event.get('change_type')}"
+                ),
+                "detail": str(event.get("message") or "").strip()
+                or "A provider catalog change was detected.",
+                "suggestion": _catalog_change_suggestion(event),
+                "source_kind": str(event.get("source_kind") or ""),
+                "change_type": str(event.get("change_type") or ""),
+                "model_id": str(event.get("model_id") or ""),
+            }
+        )
+    alerts.sort(
+        key=lambda alert: (
+            _SEVERITY_RANK.get(str(alert.get("severity") or "notice"), 1),
+            1 if alert.get("kind") == "source-refresh-error" else 0,
+            str(alert.get("provider_id") or ""),
+        ),
+        reverse=True,
+    )
+    return alerts[:limit]
+
+
 def build_catalog_summary(
     store: ProviderCatalogStore,
     *,
@@ -100,8 +212,9 @@ def build_catalog_summary(
             }
         )
 
+    selected_provider_id = provider_ids[0] if provider_ids and len(provider_ids) == 1 else None
     recent_events = store.get_recent_change_events(
-        provider_id=provider_ids[0] if provider_ids and len(provider_ids) == 1 else None,
+        provider_id=selected_provider_id,
         limit=20,
     )
     priority_next = {}
@@ -128,7 +241,7 @@ def build_catalog_summary(
     elif recent_events:
         priority_next = {
             "path": "Provider Catalog Review",
-            "why": "recent provider catalog changes were detected and should be reviewed.",
+            "why": ("recent provider catalog changes were detected and should be reviewed."),
         }
 
     return {
@@ -195,9 +308,15 @@ def render_catalog_summary_text(
         lines.append("  recent changes:")
         for event in events[:5]:
             lines.append(
-                "    - "
-                + f"{event['provider_id']} / {event['source_kind']} / {event['change_type']}: "
-                + f"{event['message']}"
+                "    - " + f"{event['provider_id']} / {event['source_kind']} / "
+                f"{event['change_type']}: " + f"{event['message']}"
+            )
+    alerts = list(summary.get("alerts") or build_catalog_alerts(summary, limit=5))
+    if alerts:
+        lines.append("  alerts:")
+        for alert in alerts[:5]:
+            lines.append(
+                "    - " + f"[{alert['severity']}] {alert['provider_id']}: {alert['headline']}"
             )
     priority_next = dict(summary.get("priority_next") or {})
     if priority_next:
@@ -319,7 +438,7 @@ def parse_regex_model_refs(
     model_prefixes: list[str] | None = None,
     model_patterns: list[str] | None = None,
 ) -> list[dict[str, Any]]:
-    """Extract model ids from unstructured docs text using prefixes and regex patterns."""
+    """Extract model ids from docs text using prefixes and regex patterns."""
     found: set[str] = set()
     rows: list[dict[str, Any]] = []
     prefix_patterns = [
@@ -404,7 +523,7 @@ def _diff_model_sets(
                 "field_name": "model_id",
                 "old_value": "",
                 "new_value": model_id,
-                "message": f"{provider_id}: model '{model_id}' appeared in {source_kind}.",
+                "message": (f"{provider_id}: model '{model_id}' appeared in {source_kind}."),
             }
         )
     for model_id in sorted(previous_by_id.keys() - current_by_id.keys()):
@@ -419,7 +538,7 @@ def _diff_model_sets(
                 "field_name": "model_id",
                 "old_value": model_id,
                 "new_value": "",
-                "message": f"{provider_id}: model '{model_id}' disappeared from {source_kind}.",
+                "message": (f"{provider_id}: model '{model_id}' disappeared from {source_kind}."),
             }
         )
     for model_id in sorted(current_by_id.keys() & previous_by_id.keys()):
@@ -441,7 +560,8 @@ def _diff_model_sets(
                     "new_value": str(current_item.get(field_name) or ""),
                     "message": (
                         f"{provider_id}: {field_name} for '{model_id}' changed from "
-                        f"{previous_item.get(field_name)} to {current_item.get(field_name)}."
+                        f"{previous_item.get(field_name)} to "
+                        f"{current_item.get(field_name)}."
                     ),
                 }
             )
@@ -476,7 +596,10 @@ class ProviderCatalogRefresher:
                 if not url or not kind:
                     continue
                 try:
-                    text = self._fetcher.fetch_text(url, timeout_seconds=timeout_seconds)
+                    text = self._fetcher.fetch_text(
+                        url,
+                        timeout_seconds=timeout_seconds,
+                    )
                     parsed = _parse_endpoint(endpoint, text)
                     raw_hash = _hash_text(text)
                     normalized = [
@@ -502,7 +625,11 @@ class ProviderCatalogRefresher:
                         )
                     )
                 except Exception as exc:  # pragma: no cover - defensive runtime path
-                    self._store.mark_source_check(provider_id, success=False, error=str(exc))
+                    self._store.mark_source_check(
+                        provider_id,
+                        success=False,
+                        error=str(exc),
+                    )
                     results.append(
                         RefreshResult(
                             provider_id=provider_id,

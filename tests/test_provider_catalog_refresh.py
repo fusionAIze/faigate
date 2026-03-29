@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from faigate.provider_catalog_refresh import (
     ProviderCatalogRefresher,
+    build_catalog_alerts,
     build_catalog_summary,
     due_provider_ids,
     parse_markdown_pricing_table,
@@ -111,6 +112,43 @@ def test_catalog_summary_marks_due_and_error_sources(tmp_path):
     assert summary["tracked_sources"] >= 1
     assert summary["error_sources"] >= 1
     assert summary["priority_next"]["path"] == "Provider Catalog Refresh"
+
+
+def test_build_catalog_alerts_prioritizes_source_failures_and_changes():
+    summary = {
+        "items": [
+            {
+                "provider_id": "blackbox",
+                "status": "error",
+                "last_error": "404 from pricing source",
+                "seconds_since_success": 3600,
+            },
+            {
+                "provider_id": "kilo",
+                "status": "due",
+                "last_error": "",
+                "seconds_since_success": 25000,
+            },
+        ],
+        "recent_events": [
+            {
+                "provider_id": "openai",
+                "source_kind": "pricing",
+                "change_type": "field-changed",
+                "severity": "notice",
+                "model_id": "openai/gpt-4.1",
+                "message": "openai: input_cost for 'openai/gpt-4.1' changed from 2.0 to 2.5.",
+            }
+        ],
+    }
+
+    alerts = build_catalog_alerts(summary)
+
+    assert alerts[0]["kind"] == "source-refresh-error"
+    assert alerts[0]["provider_id"] == "blackbox"
+    assert alerts[1]["kind"] == "catalog-change"
+    assert alerts[2]["kind"] == "source-refresh-due"
+    assert "pricing, context, and routing weights" in alerts[1]["suggestion"]
 
 
 def test_due_provider_ids_returns_sources_without_recent_success(tmp_path):

@@ -43,7 +43,12 @@ from .provider_catalog import (
     build_provider_discovery_view,
     build_provider_refresh_guidance,
 )
-from .provider_catalog_refresh import ProviderCatalogRefresher, due_provider_ids
+from .provider_catalog_refresh import (
+    ProviderCatalogRefresher,
+    build_catalog_alerts,
+    build_catalog_summary,
+    due_provider_ids,
+)
 from .provider_catalog_store import ProviderCatalogStore
 from .provider_sources import list_provider_sources
 from .providers import ProviderBackend, ProviderError
@@ -1890,7 +1895,28 @@ async def provider_inventory(
 @app.get("/api/provider-catalog")
 async def provider_catalog():
     """Return curated provider-catalog drift and freshness alerts."""
-    return build_provider_catalog_report(_config)
+    report = build_provider_catalog_report(_config)
+    source_catalog: dict[str, Any] = {
+        "tracked_sources": 0,
+        "error_sources": 0,
+        "due_sources": 0,
+        "recent_changes": 0,
+        "items": [],
+        "recent_events": [],
+        "alerts": [],
+        "priority_next": {},
+    }
+    if _provider_catalog_store is not None:
+        source_catalog = build_catalog_summary(
+            _provider_catalog_store,
+            provider_ids=list(_config.provider_source_refresh.get("providers") or []),
+        )
+        source_catalog["alerts"] = build_catalog_alerts(source_catalog)
+    return {
+        **report,
+        "source_catalog": source_catalog,
+        "source_alerts": list(source_catalog.get("alerts") or []),
+    }
 
 
 @app.get("/api/provider-discovery")
