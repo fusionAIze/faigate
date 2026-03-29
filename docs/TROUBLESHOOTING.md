@@ -202,7 +202,7 @@ If Homebrew still warns about `pydantic_core`, update the tap and reinstall:
 
 ```bash
 brew update
-brew reinstall fusionAIze/faigate/faigate
+brew reinstall fusionAIze/homebrew-tap/faigate
 ```
 
 ## Update checks fail or show unavailable

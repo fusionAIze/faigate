@@ -45,14 +45,14 @@ See [WORKSTATIONS.md](./WORKSTATIONS.md) for the path layout and OS-specific run
 
 ### Homebrew On macOS
 
-For macOS workstations, fusionAIze Gate now also ships a project-owned formula under [`Formula/faigate.rb`](../Formula/faigate.rb).
+For macOS workstations, fusionAIze Gate now also ships a project-owned formula in [`fusionAIze/homebrew-tap`](https://github.com/fusionAIze/homebrew-tap/blob/main/Formula/faigate.rb).
 
 Typical flow:
 
 ```bash
-brew tap fusionAIze/faigate https://github.com/fusionAIze/faigate
-brew install fusionAIze/faigate/faigate
-brew services start fusionAIze/faigate/faigate
+brew tap fusionAIze/homebrew-tap https://github.com/fusionAIze/homebrew-tap
+brew install fusionAIze/homebrew-tap/faigate
+brew services start fusionAIze/homebrew-tap/faigate
 ```
 
 That path keeps config under `$(brew --prefix)/etc/faigate`, state under `$(brew --prefix)/var/lib/faigate`, and logs under `$(brew --prefix)/var/log/faigate`.

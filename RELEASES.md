@@ -16,7 +16,7 @@ This repo does not require a heavy release process. Use lightweight tags plus Gi
 8. Confirm that README plus the relevant docs pages still match the shipped runtime behavior.
 9. If packaging or Docker changed shortly before the release, run the publish dry run first.
 10. For hardening-heavy releases, keep the API functional tests green alongside unit and config coverage.
-11. If the Homebrew formula changed, bump [`Formula/faigate.rb`](./Formula/faigate.rb) to the new release tag and update its `sha256`.
+11. If the Homebrew formula changed, bump `Formula/faigate.rb` in the separate [`fusionAIze/homebrew-tap`](https://github.com/fusionAIze/homebrew-tap) repo to the new release tag and update its `sha256`.
 
 ## Example
 
@@ -28,6 +28,16 @@ git push origin v1.8.0
 ```
 
 Then open GitHub Releases and publish a release for `v1.8.0`.
+
+If the release changes the Homebrew package, follow it with a tap update in [`fusionAIze/homebrew-tap`](https://github.com/fusionAIze/homebrew-tap):
+
+```bash
+git clone https://github.com/fusionAIze/homebrew-tap.git
+cd homebrew-tap
+# update Formula/faigate.rb to the new tag and sha256
+git commit -am "chore(formula): bump faigate to v1.8.0"
+git push origin main
+```
 
 ## Automation Baseline
 
@@ -78,6 +88,11 @@ The repo also includes [publish-dry-run](./.github/workflows/publish-dry-run.yml
 - `v1.7.0` establishes the internal-drilldown baseline: parameterized client, provider, and dashboard views now open directly inside Gate, and scenario templates explain provider roles and family coverage more explicitly instead of only listing flat recommendation sets.
 - `v1.7.1` is the immediate polish follow-up: the wordmark now renders without accidental spacer gaps in interactive menus, and applying a client scenario cleanly returns control to the caller instead of repainting the same chooser screen.
 - `v1.8.0` establishes the adaptive-lane-routing foundation: canonical model lanes, direct-versus-aggregator route metadata, same-lane-route fallback preference, early runtime pressure adaptation, and richer route explainability now shape both routing decisions and operator visibility.
+- `v1.9.0` establishes the short-complex routing baseline: brief but risky `opencode` prompts now escape cheap fallthrough heuristics earlier, and route previews explain why cheaper alternatives lost on reasoning fit, freshness, or runtime pressure.
+- `v1.10.0` establishes the cache- and hook-aware runtime baseline: provider-specific cache economics, community hook loading, and the first Grok bridge path now influence both routing cost estimates and extensibility.
+- `v1.10.1` is the first `v1.10` follow-up: the Grok adapter path and virtual-provider registration line are stable enough to ship as a public release.
+- `v1.11.0` establishes the modern model-registry baseline: Gemini 3 / 3.1 lanes, dynamic model labels, and the first release-helper automation now move together instead of being hardcoded across the router, wizard, and catalog.
+- `v1.11.2` is the release-reliability follow-up: Python 3.10 compatibility for the update helpers is restored and version surfaces are realigned so package metadata, CLI version output, and API version reporting stay in sync.
 
 ## Planned Publishing Path
 
@@ -99,7 +114,7 @@ The repo also includes [publish-dry-run](./.github/workflows/publish-dry-run.yml
 
 The npm package stays separate from the Python gateway core. It is meant for CLI-facing integrations, not for rewriting the service runtime.
 
-`v1.2.0` started the project-owned Homebrew path through [`Formula/faigate.rb`](./Formula/faigate.rb), intended for a dedicated tap or direct tap-by-URL workflow on macOS.
+`v1.2.0` started the project-owned Homebrew path. The formula now lives in the separate [`fusionAIze/homebrew-tap`](https://github.com/fusionAIze/homebrew-tap) repo instead of this runtime repo, which keeps release tagging and tap publishing loosely coupled.
 
 ## Scheduled Deployment Examples
 
