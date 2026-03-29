@@ -61,6 +61,25 @@ def test_release_script_updates_changelog_header(tmp_path, monkeypatch):
     assert "### Added" in content
 
 
+def test_release_script_promotes_existing_version_unreleased_section(tmp_path, monkeypatch):
+    module = _load_release_module()
+    changelog = tmp_path / "CHANGELOG.md"
+    changelog.write_text(
+        "# Changelog\n\n## v1.12.0 - Unreleased\n\n### Added\n\n- Keep going\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(module, "CHANGELOG", changelog)
+
+    changed = module.update_changelog("1.12.0")
+
+    content = changelog.read_text(encoding="utf-8")
+    assert changed is True
+    assert "## v1.12.0 - Unreleased" not in content
+    assert "## v1.12.0 -" in content
+    assert content.count("## v1.12.0 -") == 1
+
+
 def test_release_script_next_steps_reference_tap_repo():
     module = _load_release_module()
 

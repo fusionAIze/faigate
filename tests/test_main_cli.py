@@ -8,6 +8,10 @@ import pytest
 import faigate.main as main_module
 
 
+def test_fastapi_app_version_matches_package_version():
+    assert main_module.app.version == main_module.__version__
+
+
 def test_main_uses_explicit_config_arg(monkeypatch):
     captured: dict[str, object] = {}
 
