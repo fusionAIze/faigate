@@ -9,6 +9,7 @@ through a 3-layer classification engine to the optimal provider.
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import logging
 import os
@@ -16,7 +17,7 @@ import re
 import time
 import uuid
 from base64 import b64encode
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from hashlib import sha256
 from typing import Any
 
@@ -42,6 +43,15 @@ from .provider_catalog import (
     build_provider_discovery_view,
     build_provider_refresh_guidance,
 )
+from .provider_catalog_refresh import (
+    ProviderCatalogRefresher,
+    build_catalog_alert_summary,
+    build_catalog_alerts,
+    build_catalog_summary,
+    due_provider_ids,
+)
+from .provider_catalog_store import ProviderCatalogStore
+from .provider_sources import list_provider_sources
 from .providers import ProviderBackend, ProviderError
 from .router import Router, RoutingDecision
 from .updates import (
@@ -60,6 +70,8 @@ _router: Router
 _metrics: MetricsStore
 _update_checker: UpdateChecker
 _adaptive_state: AdaptiveRouteState = AdaptiveRouteState()
+_provider_catalog_store: ProviderCatalogStore | None = None
+_provider_catalog_refresh_task: asyncio.Task[None] | None = None
 
 
 class PayloadTooLargeError(ValueError):
@@ -164,6 +176,64 @@ async def _refresh_local_worker_probes(force: bool = False) -> None:
             provider.name,
             "healthy" if ok else "unhealthy",
         )
+
+
+async def _refresh_provider_source_catalog(*, force: bool = False) -> list[dict[str, Any]]:
+    """Refresh provider source snapshots without blocking gateway startup or runtime."""
+    if _provider_catalog_store is None:
+        return []
+    source_refresh_cfg = _config.provider_source_refresh
+    if not source_refresh_cfg.get("enabled"):
+        return []
+
+    provider_ids = list(source_refresh_cfg.get("providers") or [])
+    for source in list_provider_sources(provider_ids):
+        _provider_catalog_store.upsert_source(source)
+
+    target_ids = (
+        provider_ids
+        if force
+        else due_provider_ids(_provider_catalog_store, provider_ids=provider_ids)
+    )
+    if not target_ids:
+        return []
+
+    refresher = ProviderCatalogRefresher(_provider_catalog_store)
+    refresh_results = await asyncio.to_thread(
+        refresher.refresh,
+        provider_ids=target_ids,
+        timeout_seconds=float(source_refresh_cfg.get("timeout_seconds") or 10.0),
+    )
+    ok_count = sum(1 for item in refresh_results if item.ok)
+    logger.info(
+        "Provider source refresh completed: %s/%s source endpoints succeeded (%s)",
+        ok_count,
+        len(refresh_results),
+        "startup" if force else "scheduled",
+    )
+    return [
+        {
+            "provider_id": item.provider_id,
+            "endpoint_kind": item.endpoint_kind,
+            "ok": item.ok,
+            "changes_count": item.changes_count,
+            "error": item.error,
+        }
+        for item in refresh_results
+    ]
+
+
+async def _provider_source_refresh_loop() -> None:
+    """Run conservative background source refreshes on a long interval."""
+    interval_seconds = int(_config.provider_source_refresh.get("interval_seconds") or 21600)
+    while True:
+        await asyncio.sleep(interval_seconds)
+        try:
+            await _refresh_provider_source_catalog(force=False)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Provider source catalog scheduled refresh skipped: %s", exc)
 
 
 def _collect_routing_headers(request: Request) -> dict[str, str]:
@@ -739,6 +809,9 @@ def _alternative_loss_reasons(
     if alternative_benchmark < selected_benchmark and signal_groups:
         reasons.append("Benchmark cluster matched fewer request signals than the selected lane.")
 
+    if int(alternative.get("kilo_score") or 0) < int(selected.get("kilo_score") or 0):
+        reasons.append("Kilo lane strategy fit was weaker for this request shape.")
+
     if (
         str(alternative.get("freshness_status") or "") == "stale"
         and str(selected.get("freshness_status") or "") != "stale"
@@ -786,6 +859,9 @@ def _build_route_summary(decision: RoutingDecision) -> dict[str, Any]:
         "benchmark_request_score": int(selected_row.get("benchmark_request_score") or 0),
         "cost_tier": str(details.get("cost_tier") or selected_row.get("cost_tier") or ""),
         "estimated_request_cost_usd": float(selected_row.get("estimated_request_cost_usd") or 0.0),
+        "kilo_score": int(selected_row.get("kilo_score") or 0),
+        "kilo_mode": str(selected_row.get("kilo_mode") or ""),
+        "kilo_reasons": list(selected_row.get("kilo_reasons") or []),
         "freshness_status": str(
             details.get("freshness_status") or selected_row.get("freshness_status") or ""
         ),
@@ -834,6 +910,10 @@ def _build_route_summary(decision: RoutingDecision) -> dict[str, Any]:
             + f"${selected['estimated_request_cost_usd']:.6f}"
             + f" on the {selected.get('cost_tier') or 'current'} cost lane."
         )
+    if selected.get("kilo_mode"):
+        why_selected.append(f"Kilo frontier fit favored {selected['kilo_mode']} for this request.")
+    for note in selected.get("kilo_reasons") or []:
+        why_selected.append(str(note))
     if selected.get("freshness_status"):
         freshness_text = str(selected["freshness_status"])
         if selected.get("review_age_days", -1) >= 0:
@@ -885,6 +965,9 @@ def _build_route_summary(decision: RoutingDecision) -> dict[str, Any]:
                 "benchmark_request_score": int(row.get("benchmark_request_score") or 0),
                 "cost_tier": str(row.get("cost_tier") or ""),
                 "estimated_request_cost_usd": float(row.get("estimated_request_cost_usd") or 0.0),
+                "kilo_score": int(row.get("kilo_score") or 0),
+                "kilo_mode": str(row.get("kilo_mode") or ""),
+                "kilo_reasons": list(row.get("kilo_reasons") or []),
                 "freshness_status": str(row.get("freshness_status") or ""),
                 "review_age_days": int(row.get("review_age_days") or -1),
                 "runtime_penalty": int(row.get("runtime_penalty") or 0),
@@ -1627,6 +1710,7 @@ async def _resolve_image_route_preview(
 async def lifespan(app: FastAPI):
     """Startup / shutdown lifecycle."""
     global _config, _providers, _router, _metrics, _update_checker, _adaptive_state
+    global _provider_catalog_store, _provider_catalog_refresh_task
 
     logging.basicConfig(
         level=logging.INFO,
@@ -1679,6 +1763,22 @@ async def lifespan(app: FastAPI):
     _metrics = MetricsStore(db_path=_config.metrics["db_path"])
     if _config.metrics.get("enabled"):
         _metrics.init()
+    try:
+        _provider_catalog_store = ProviderCatalogStore(_config.metrics["db_path"])
+        _provider_catalog_store.init()
+        source_refresh_cfg = _config.provider_source_refresh
+        if source_refresh_cfg.get("enabled") and source_refresh_cfg.get("on_startup"):
+            await _refresh_provider_source_catalog(force=True)
+        if (
+            source_refresh_cfg.get("enabled")
+            and int(source_refresh_cfg.get("interval_seconds") or 0) > 0
+        ):
+            _provider_catalog_refresh_task = asyncio.create_task(
+                _provider_source_refresh_loop(),
+                name="faigate-provider-source-refresh",
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Provider source catalog startup refresh skipped: %s", exc)
 
     community_hooks = get_community_hooks_loaded()
     if community_hooks:
@@ -1697,6 +1797,14 @@ async def lifespan(app: FastAPI):
         await p.close()
     await _update_checker.close()
     _metrics.close()
+    if _provider_catalog_refresh_task is not None:
+        _provider_catalog_refresh_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await _provider_catalog_refresh_task
+        _provider_catalog_refresh_task = None
+    if _provider_catalog_store is not None:
+        _provider_catalog_store.close()
+        _provider_catalog_store = None
     logger.info("fusionAIze Gate shut down")
 
 
@@ -1788,7 +1896,32 @@ async def provider_inventory(
 @app.get("/api/provider-catalog")
 async def provider_catalog():
     """Return curated provider-catalog drift and freshness alerts."""
-    return build_provider_catalog_report(_config)
+    report = build_provider_catalog_report(_config)
+    source_catalog: dict[str, Any] = {
+        "tracked_sources": 0,
+        "error_sources": 0,
+        "due_sources": 0,
+        "recent_changes": 0,
+        "items": [],
+        "recent_events": [],
+        "alerts": [],
+        "priority_next": {},
+    }
+    if _provider_catalog_store is not None:
+        source_catalog = build_catalog_summary(
+            _provider_catalog_store,
+            provider_ids=list(_config.provider_source_refresh.get("providers") or []),
+        )
+        source_catalog["alerts"] = build_catalog_alerts(source_catalog)
+        source_catalog["alert_summary"] = build_catalog_alert_summary(
+            list(source_catalog.get("alerts") or [])
+        )
+    return {
+        **report,
+        "source_catalog": source_catalog,
+        "source_alerts": list(source_catalog.get("alerts") or []),
+        "source_alert_summary": dict(source_catalog.get("alert_summary") or {}),
+    }
 
 
 @app.get("/api/provider-discovery")

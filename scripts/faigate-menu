@@ -161,14 +161,23 @@ EOF
 
 dynamic_operator_followups() {
   local snapshot_output line route_gaps refresh_now review_soon top_refresh_provider top_add_provider
+  local catalog_errors catalog_due catalog_changes top_catalog_provider
+  local catalog_fix_now catalog_review_now top_catalog_action
   snapshot_output="$(collect_runtime_snapshot)"
   while IFS= read -r line; do
     case "$line" in
       route_gaps=*) route_gaps="${line#route_gaps=}" ;;
       refresh_now=*) refresh_now="${line#refresh_now=}" ;;
       review_soon=*) review_soon="${line#review_soon=}" ;;
+      catalog_errors=*) catalog_errors="${line#catalog_errors=}" ;;
+      catalog_due=*) catalog_due="${line#catalog_due=}" ;;
+      catalog_changes=*) catalog_changes="${line#catalog_changes=}" ;;
+      catalog_fix_now=*) catalog_fix_now="${line#catalog_fix_now=}" ;;
+      catalog_review_now=*) catalog_review_now="${line#catalog_review_now=}" ;;
       top_refresh_provider=*) top_refresh_provider="${line#top_refresh_provider=}" ;;
       top_add_provider=*) top_add_provider="${line#top_add_provider=}" ;;
+      top_catalog_provider=*) top_catalog_provider="${line#top_catalog_provider=}" ;;
+      top_catalog_action=*) top_catalog_action="${line#top_catalog_action=}" ;;
     esac
   done <<EOF
 $snapshot_output
@@ -182,11 +191,18 @@ EOF
   elif [ "${review_soon:-0}" -gt 0 ]; then
     printf '%s\n' "Review aging route assumptions soon${top_refresh_provider:+, starting with ${top_refresh_provider}}."
   fi
+  if [ "${catalog_fix_now:-0}" -gt 0 ]; then
+    printf '%s\n' "Refresh provider source catalog now to repair high-priority source drift or lookup failures${top_catalog_provider:+, starting with ${top_catalog_provider}}${top_catalog_action:+ (${top_catalog_action})}."
+  elif [ "${catalog_review_now:-0}" -gt 0 ]; then
+    printf '%s\n' "Review provider source catalog freshness before leaning on older pricing or model assumptions${top_catalog_provider:+, starting with ${top_catalog_provider}}."
+  fi
 }
 
 recommended_quick_setup_action() {
   local snapshot_output line health_state providers_count providers_ready providers_missing_keys
   local route_gaps refresh_now review_soon next_client top_refresh_provider top_refresh_action top_add_provider
+  local catalog_errors catalog_due catalog_changes top_catalog_provider
+  local catalog_fix_now catalog_review_now top_catalog_action
   local key label reason choice
   snapshot_output="$(collect_runtime_snapshot)"
   while IFS= read -r line; do
@@ -198,10 +214,17 @@ recommended_quick_setup_action() {
       route_gaps=*) route_gaps="${line#route_gaps=}" ;;
       refresh_now=*) refresh_now="${line#refresh_now=}" ;;
       review_soon=*) review_soon="${line#review_soon=}" ;;
+      catalog_errors=*) catalog_errors="${line#catalog_errors=}" ;;
+      catalog_due=*) catalog_due="${line#catalog_due=}" ;;
+      catalog_changes=*) catalog_changes="${line#catalog_changes=}" ;;
+      catalog_fix_now=*) catalog_fix_now="${line#catalog_fix_now=}" ;;
+      catalog_review_now=*) catalog_review_now="${line#catalog_review_now=}" ;;
       next_client=*) next_client="${line#next_client=}" ;;
       top_refresh_provider=*) top_refresh_provider="${line#top_refresh_provider=}" ;;
       top_refresh_action=*) top_refresh_action="${line#top_refresh_action=}" ;;
       top_add_provider=*) top_add_provider="${line#top_add_provider=}" ;;
+      top_catalog_provider=*) top_catalog_provider="${line#top_catalog_provider=}" ;;
+      top_catalog_action=*) top_catalog_action="${line#top_catalog_action=}" ;;
     esac
   done <<EOF
 $snapshot_output
@@ -227,6 +250,16 @@ EOF
     choice="1"
     label="Provider Setup -> Guided Route Additions"
     reason="Recommended lane mirrors are still missing. Close those route gaps next${top_add_provider:+, starting with ${top_add_provider}}."
+  elif [ "${catalog_fix_now:-0}" -gt 0 ]; then
+    key="provider-catalog"
+    choice="10"
+    label="Provider Catalog"
+    reason="Provider source evidence needs intervention before we lean on it. Revalidate source URLs, parsers, or overdue refreshes next${top_catalog_provider:+, starting with ${top_catalog_provider}}${top_catalog_action:+ (${top_catalog_action})}."
+  elif [ "${catalog_review_now:-0}" -gt 0 ]; then
+    key="provider-catalog"
+    choice="10"
+    label="Provider Catalog"
+    reason="Provider source snapshots need review before we trust older route economics${top_catalog_provider:+, starting with ${top_catalog_provider}}."
   elif [ "${refresh_now:-0}" -gt 0 ]; then
     key="provider-probe"
     choice="3"
@@ -312,6 +345,7 @@ EOF
   case "${key:-}" in
     provider-setup) run_provider_setup_with_handoff ;;
     guided-routes) run_and_pause bash "${script_dir}/faigate-provider-setup" --recommended --interactive ;;
+    provider-catalog) run_and_pause bash "${script_dir}/faigate-provider-catalog" --refresh ;;
     api-keys) run_and_pause bash "${script_dir}/faigate-api-keys" ;;
     provider-probe) run_and_pause bash "${script_dir}/faigate-provider-probe" ;;
     validate) run_and_pause bash "${script_dir}/faigate-doctor" ;;
@@ -364,13 +398,23 @@ run_provider_setup_with_handoff() {
 }
 
 menu_snapshot() {
-  FAIGATE_MENU_CONFIG="$config_file" FAIGATE_MENU_ENV="$env_file" "$python_bin" - <<'PY'
+  local menu_db_explicit="0"
+  if [ -n "${FAIGATE_DB_PATH:-}" ]; then
+    menu_db_explicit="1"
+  fi
+  FAIGATE_MENU_CONFIG="$config_file" \
+  FAIGATE_MENU_ENV="$env_file" \
+  FAIGATE_MENU_DB="$db_path" \
+  FAIGATE_MENU_DB_EXPLICIT="$menu_db_explicit" \
+  "$python_bin" - <<'PY'
 from pathlib import Path
 import os
 import re
 
 import yaml
 from faigate.provider_catalog import build_provider_refresh_guidance
+from faigate.provider_catalog_refresh import build_catalog_alert_summary, build_catalog_summary
+from faigate.provider_catalog_store import ProviderCatalogStore
 from faigate.wizard import build_route_add_setup_plan
 
 config_path = Path(os.environ["FAIGATE_MENU_CONFIG"])
@@ -435,6 +479,8 @@ elif len(presets) > 1:
 provider_names = [
     name for name, payload in providers.items() if isinstance(payload, dict) and str(name).strip()
 ]
+provider_source_refresh = raw.get("provider_source_refresh") or {}
+tracked_catalog_providers = provider_source_refresh.get("providers") or ["blackbox", "kilo", "openai"]
 route_plan = build_route_add_setup_plan(
     config_path=config_path,
     env_file=env_path,
@@ -456,6 +502,38 @@ top_refresh = refresh_guidance[0] if refresh_guidance else {}
 top_add = (
     (route_plan.get("actionable_additions") or [{}])[0]
     if route_plan.get("actionable_additions")
+    else {}
+)
+catalog_summary = {}
+metrics_cfg = raw.get("metrics") or {}
+configured_db_path = str(metrics_cfg.get("db_path") or "").strip() if isinstance(metrics_cfg, dict) else ""
+if configured_db_path:
+    db_path = Path(configured_db_path)
+elif os.environ.get("FAIGATE_MENU_DB_EXPLICIT") == "1":
+    db_path = Path(os.environ["FAIGATE_MENU_DB"])
+else:
+    db_path = Path("")
+if str(db_path):
+    try:
+        store = ProviderCatalogStore(str(db_path))
+        store.init()
+        try:
+            catalog_summary = build_catalog_summary(
+                store,
+                provider_ids=list(tracked_catalog_providers),
+            )
+        finally:
+            store.close()
+    except Exception:
+        catalog_summary = {}
+
+catalog_alert_summary = dict(
+    catalog_summary.get("alert_summary")
+    or build_catalog_alert_summary(list(catalog_summary.get("alerts") or []))
+)
+top_catalog_alert = (
+    (catalog_summary.get("alerts") or [{}])[0]
+    if catalog_summary.get("alerts")
     else {}
 )
 
@@ -480,9 +558,18 @@ print(
     "review_soon="
     + str(sum(1 for item in refresh_guidance if str(item.get("action") or "") == "review-soon"))
 )
+print(f"catalog_tracked={int(catalog_summary.get('tracked_sources') or 0)}")
+print(f"catalog_errors={int(catalog_summary.get('error_sources') or 0)}")
+print(f"catalog_due={int(catalog_summary.get('due_sources') or 0)}")
+print(f"catalog_changes={int(catalog_summary.get('recent_changes') or 0)}")
+print(f"catalog_alert_status={str(catalog_alert_summary.get('status') or 'clear')}")
+print(f"catalog_fix_now={int(catalog_alert_summary.get('fix_now') or 0)}")
+print(f"catalog_review_now={int(catalog_alert_summary.get('review_now') or 0)}")
 print(f"top_refresh_provider={top_refresh.get('provider', '')}")
 print(f"top_refresh_action={top_refresh.get('action_label', '')}")
 print(f"top_add_provider={top_add.get('setup_provider_name') or top_add.get('provider_name') or ''}")
+print(f"top_catalog_provider={str(top_catalog_alert.get('provider_id') or '')}")
+print(f"top_catalog_action={str(top_catalog_alert.get('action') or '')}")
 PY
 }
 
@@ -491,6 +578,8 @@ collect_runtime_snapshot() {
   local fallback_count default_mode default_profile profile_count preset_count
   local preset_summary next_client route_gaps route_gaps_ready route_gaps_manual
   local refresh_now review_soon top_refresh_provider top_refresh_action top_add_provider
+  local catalog_tracked catalog_errors catalog_due catalog_changes top_catalog_provider
+  local catalog_alert_status catalog_fix_now catalog_review_now top_catalog_action
   state="$(faigate_service_state)"
   if faigate_is_healthy; then
     health_state="healthy"
@@ -524,9 +613,18 @@ collect_runtime_snapshot() {
       route_gaps_manual=*) route_gaps_manual="${line#route_gaps_manual=}" ;;
       refresh_now=*) refresh_now="${line#refresh_now=}" ;;
       review_soon=*) review_soon="${line#review_soon=}" ;;
+      catalog_tracked=*) catalog_tracked="${line#catalog_tracked=}" ;;
+      catalog_errors=*) catalog_errors="${line#catalog_errors=}" ;;
+      catalog_due=*) catalog_due="${line#catalog_due=}" ;;
+      catalog_changes=*) catalog_changes="${line#catalog_changes=}" ;;
+      catalog_alert_status=*) catalog_alert_status="${line#catalog_alert_status=}" ;;
+      catalog_fix_now=*) catalog_fix_now="${line#catalog_fix_now=}" ;;
+      catalog_review_now=*) catalog_review_now="${line#catalog_review_now=}" ;;
       top_refresh_provider=*) top_refresh_provider="${line#top_refresh_provider=}" ;;
       top_refresh_action=*) top_refresh_action="${line#top_refresh_action=}" ;;
       top_add_provider=*) top_add_provider="${line#top_add_provider=}" ;;
+      top_catalog_provider=*) top_catalog_provider="${line#top_catalog_provider=}" ;;
+      top_catalog_action=*) top_catalog_action="${line#top_catalog_action=}" ;;
     esac
   done <<EOF
 $snapshot_output
@@ -550,15 +648,25 @@ EOF
   printf 'route_gaps_manual=%s\n' "${route_gaps_manual:-0}"
   printf 'refresh_now=%s\n' "${refresh_now:-0}"
   printf 'review_soon=%s\n' "${review_soon:-0}"
+  printf 'catalog_tracked=%s\n' "${catalog_tracked:-0}"
+  printf 'catalog_errors=%s\n' "${catalog_errors:-0}"
+  printf 'catalog_due=%s\n' "${catalog_due:-0}"
+  printf 'catalog_changes=%s\n' "${catalog_changes:-0}"
+  printf 'catalog_alert_status=%s\n' "${catalog_alert_status:-clear}"
+  printf 'catalog_fix_now=%s\n' "${catalog_fix_now:-0}"
+  printf 'catalog_review_now=%s\n' "${catalog_review_now:-0}"
   printf 'top_refresh_provider=%s\n' "${top_refresh_provider:-}"
   printf 'top_refresh_action=%s\n' "${top_refresh_action:-}"
   printf 'top_add_provider=%s\n' "${top_add_provider:-}"
+  printf 'top_catalog_provider=%s\n' "${top_catalog_provider:-}"
+  printf 'top_catalog_action=%s\n' "${top_catalog_action:-}"
 }
 
 render_summary_cards() {
   local snapshot_output line state health_state bind providers_count providers_ready providers_missing_keys
   local fallback_count default_mode default_profile profile_count preset_count preset_summary next_client
-  local route_gaps refresh_now review_soon
+  local route_gaps refresh_now review_soon catalog_tracked catalog_errors catalog_due catalog_changes
+  local catalog_alert_status catalog_fix_now catalog_review_now top_catalog_provider top_catalog_action
   snapshot_output="$(collect_runtime_snapshot)"
   while IFS= read -r line; do
     case "$line" in
@@ -578,6 +686,15 @@ render_summary_cards() {
       route_gaps=*) route_gaps="${line#route_gaps=}" ;;
       refresh_now=*) refresh_now="${line#refresh_now=}" ;;
       review_soon=*) review_soon="${line#review_soon=}" ;;
+      catalog_tracked=*) catalog_tracked="${line#catalog_tracked=}" ;;
+      catalog_errors=*) catalog_errors="${line#catalog_errors=}" ;;
+      catalog_due=*) catalog_due="${line#catalog_due=}" ;;
+      catalog_changes=*) catalog_changes="${line#catalog_changes=}" ;;
+      catalog_alert_status=*) catalog_alert_status="${line#catalog_alert_status=}" ;;
+      catalog_fix_now=*) catalog_fix_now="${line#catalog_fix_now=}" ;;
+      catalog_review_now=*) catalog_review_now="${line#catalog_review_now=}" ;;
+      top_catalog_provider=*) top_catalog_provider="${line#top_catalog_provider=}" ;;
+      top_catalog_action=*) top_catalog_action="${line#top_catalog_action=}" ;;
     esac
   done <<EOF
 $snapshot_output
@@ -605,6 +722,20 @@ EOF
     printf "  %-18s %s\n" "Refresh now" "$refresh_now"
   elif [ "${review_soon:-0}" -gt 0 ]; then
     printf "  %-18s %s\n" "Review soon" "$review_soon"
+  fi
+  if [ "${catalog_tracked:-0}" -gt 0 ]; then
+    printf "  %-18s %s\n" "Catalog tracked" "$catalog_tracked"
+    printf "  %-18s %s\n" "Catalog status" "${catalog_alert_status:-clear}"
+    printf "  %-18s %s\n" "Catalog fix now" "${catalog_fix_now:-0}"
+    printf "  %-18s %s\n" "Catalog review" "${catalog_review_now:-0}"
+    printf "  %-18s %s\n" "Catalog errors" "${catalog_errors:-0}"
+    printf "  %-18s %s\n" "Catalog due" "${catalog_due:-0}"
+    if [ "${catalog_changes:-0}" -gt 0 ]; then
+      printf "  %-18s %s\n" "Catalog changes" "${catalog_changes:-0}"
+    fi
+    if [ -n "${top_catalog_provider:-}" ]; then
+      printf "  %-18s %s\n" "Catalog focus" "${top_catalog_provider}${top_catalog_action:+ (${top_catalog_action})}"
+    fi
   fi
   echo ""
   printf "  %bClients%b\n" "$FAIGATE_UI_BOLD" "$FAIGATE_UI_RESET"
@@ -942,6 +1073,7 @@ status_menu() {
 quick_setup_menu() {
   local provider_setup_label api_keys_label provider_probe_label full_config_label
   local validate_label restart_label scenarios_label quickstarts_label current_config_label
+  local provider_catalog_label
   while true; do
     faigate_ui_header "fusionAIze Gate Quick Setup" "Fastest path from first keys to first healthy client"
     render_summary_cards
@@ -956,6 +1088,7 @@ quick_setup_menu() {
     scenarios_label="$(quick_setup_option_text 7 "Client Scenarios")"
     quickstarts_label="$(quick_setup_option_text 8 "Client Quickstarts")"
     current_config_label="$(quick_setup_option_text 9 "Current Config")"
+    provider_catalog_label="$(quick_setup_option_text 10 "Provider Catalog")"
     echo ""
     printf "    1)  %-28s %s\n" "$provider_setup_label" "Add providers, local workers, or route mirrors"
     printf "    2)  %-28s %s\n" "$api_keys_label" "Set provider keys in the env file"
@@ -966,6 +1099,7 @@ quick_setup_menu() {
     printf "    7)  %-28s %s\n" "$scenarios_label" "Apply client-specific templates like opencode/eco"
     printf "    8)  %-28s %s\n" "$quickstarts_label" "Show client-specific next steps"
     printf "    9)  %-28s %s\n" "$current_config_label" "Review the current config snapshot"
+    printf "   10)  %-28s %s\n" "$provider_catalog_label" "Refresh mirrored model, pricing, and source metadata"
     printf "\n"
     printf "    r)  Recommended path             Open the highest-priority next step now\n"
     printf "    c)  Cancel\n"
@@ -1006,6 +1140,11 @@ quick_setup_menu() {
         "Return to Quick Setup when you want the shortest path again." \
         bash "${script_dir}/faigate-client-integrations" --recommended ;;
       9) run_and_pause bash "${script_dir}/faigate-config-overview" ;;
+      10) run_and_pause_with_priority_receipt "Provider catalog refreshed." 3 \
+        "Review refresh errors before trusting stale provider docs or pricing assumptions." \
+        "Provider Probe is the next step when one route still does not look request-ready after the catalog refresh." \
+        "Return to Quick Setup when you want the next recommended operator path again." \
+        bash "${script_dir}/faigate-provider-catalog" --refresh ;;
       r|R) run_recommended_quick_setup_action ;;
       c|C|"") return 0 ;;
       q|Q) exit 0 ;;
@@ -1096,13 +1235,14 @@ configure_direct_menu() {
 explore_menu() {
   while true; do
     faigate_ui_header "fusionAIze Gate Explore" "Providers, discovery links, and exposed models"
-    faigate_ui_tip "Start with Provider Probe when you want a readiness view. Use Provider Discovery drilldowns after that to inspect one source at a time."
+    faigate_ui_tip "Start with Provider Probe when you want a readiness view. Use Provider Catalog when you want to refresh mirrored docs and pricing before drilling into one source."
     echo ""
     printf "    1)  Provider Probe       Probe configured sources against config, env, and /health\n"
     printf "    2)  Provider Discovery   Browse provider links, offer tracks, and one-provider detail views\n"
-    printf "    3)  Provider Discovery   JSON export\n"
-    printf "    4)  Models               List exposed model ids\n"
-    printf "    5)  Health Check         Query /health\n"
+    printf "    3)  Provider Catalog     Refresh mirrored docs, models, and pricing sources\n"
+    printf "    4)  Provider Discovery   JSON export\n"
+    printf "    5)  Models               List exposed model ids\n"
+    printf "    6)  Health Check         Query /health\n"
     printf "\n"
     printf "    c)  Cancel\n"
     printf "    q)  Quit\n\n"
@@ -1111,9 +1251,10 @@ explore_menu() {
     case "$choice" in
       1) run_and_pause bash "${script_dir}/faigate-provider-probe" ;;
       2) run_and_pause bash "${script_dir}/faigate-provider-discovery" --interactive ;;
-      3) run_and_pause bash "${script_dir}/faigate-provider-discovery" --json ;;
-      4) run_and_pause show_models ;;
-      5) run_and_pause bash "${script_dir}/faigate-health" ;;
+      3) run_and_pause bash "${script_dir}/faigate-provider-catalog" --refresh ;;
+      4) run_and_pause bash "${script_dir}/faigate-provider-discovery" --json ;;
+      5) run_and_pause show_models ;;
+      6) run_and_pause bash "${script_dir}/faigate-health" ;;
       c|C|"") return 0 ;;
       q|Q) exit 0 ;;
       *) faigate_ui_warn "Invalid choice."; faigate_ui_pause ;;

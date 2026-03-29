@@ -12,6 +12,12 @@ from typing import Any
 from .lane_registry import get_route_add_recommendations
 from .metrics import MetricsStore
 from .provider_catalog import build_provider_refresh_guidance
+from .provider_catalog_refresh import (
+    build_catalog_alert_summary,
+    build_catalog_alerts,
+    build_catalog_summary,
+)
+from .provider_catalog_store import ProviderCatalogStore
 
 
 def _safe_int(value: Any) -> int:
@@ -168,6 +174,41 @@ def _request_readiness_breakdown(rows: list[dict[str, Any]]) -> dict[str, int]:
         category = _readiness_category(str(request_readiness.get("status") or "degraded"))
         counts[category] = counts.get(category, 0) + 1
     return counts
+
+
+def _provider_catalog_summary(db_path: str) -> dict[str, Any]:
+    path = Path(db_path)
+    if not path.exists():
+        return {
+            "tracked_sources": 0,
+            "error_sources": 0,
+            "due_sources": 0,
+            "recent_changes": 0,
+            "items": [],
+            "recent_events": [],
+            "alerts": [],
+            "alert_summary": {
+                "status": "clear",
+                "total": 0,
+                "fix_now": 0,
+                "review_now": 0,
+                "inspect": 0,
+                "severity": {"critical": 0, "warning": 0, "notice": 0, "info": 0},
+                "top_headline": "",
+                "top_suggestion": "",
+            },
+            "priority_next": {},
+        }
+
+    store = ProviderCatalogStore(str(path))
+    store.init()
+    try:
+        summary = build_catalog_summary(store)
+        summary["alerts"] = build_catalog_alerts(summary)
+        summary["alert_summary"] = build_catalog_alert_summary(list(summary.get("alerts") or []))
+        return summary
+    finally:
+        store.close()
 
 
 def _lane_family_summary(
@@ -450,6 +491,42 @@ def _render_refresh_guidance_block(report: dict[str, Any], *, limit: int = 3) ->
     return lines
 
 
+def _render_provider_catalog_block(report: dict[str, Any], *, limit: int = 3) -> list[str]:
+    summary = dict(report.get("provider_catalog") or {})
+    if not summary:
+        return []
+    lines = ["Provider source catalog"]
+    lines.append(
+        f"- tracked={_safe_int(summary.get('tracked_sources'))} | "
+        f"errors={_safe_int(summary.get('error_sources'))} | "
+        f"due={_safe_int(summary.get('due_sources'))} | "
+        f"changes={_safe_int(summary.get('recent_changes'))}"
+    )
+    for item in list(summary.get("items") or [])[:limit]:
+        lines.append(
+            f"- {item.get('provider_id')}: {item.get('status')} | "
+            f"models={_safe_int(item.get('models_count'))} | "
+            f"pricing={_safe_int(item.get('pricing_count'))}"
+        )
+    for alert in list(summary.get("alerts") or [])[:limit]:
+        lines.append(
+            f"- [{alert.get('severity')}] {alert.get('provider_id')}: {alert.get('headline')}"
+        )
+    alert_summary = dict(summary.get("alert_summary") or {})
+    if alert_summary:
+        lines.append(
+            "- alert status: "
+            + f"{alert_summary.get('status') or 'clear'} | "
+            + f"fix-now={_safe_int(alert_summary.get('fix_now'))} | "
+            + f"review-now={_safe_int(alert_summary.get('review_now'))} | "
+            + f"inspect={_safe_int(alert_summary.get('inspect'))}"
+        )
+    priority_next = dict(summary.get("priority_next") or {})
+    if priority_next:
+        lines.append(f"- next: {priority_next.get('path')} | {priority_next.get('why')}")
+    return lines
+
+
 def _build_priority_next(
     *,
     route_additions: list[dict[str, Any]],
@@ -562,6 +639,9 @@ def build_dashboard_report(
     if not lane_families:
         lane_families = _lane_family_summary(providers, inventory_provider_map)
     selection_paths = _selection_path_summary_from_stats(stats.get("selection_paths") or [])
+    provider_catalog = _provider_catalog_summary(db_path)
+    provider_catalog_alerts = list(provider_catalog.get("alerts") or [])
+    provider_catalog_alert_summary = dict(provider_catalog.get("alert_summary") or {})
     readiness_breakdown = _request_readiness_breakdown(
         list(inventory_provider_map.values()) if inventory_provider_map else providers
     )
@@ -862,6 +942,40 @@ def build_dashboard_report(
             f"and should be {top_refresh['action_label']}"
             + (f" via {top_refresh['refresh_url']}." if top_refresh.get("refresh_url") else ".")
         )
+    for catalog_alert in provider_catalog_alerts[:3]:
+        alerts.append(
+            {
+                "level": str(catalog_alert.get("severity") or "notice"),
+                "headline": str(catalog_alert.get("headline") or "Provider catalog alert"),
+                "detail": str(catalog_alert.get("detail") or "").strip()
+                or "Provider source catalog requires review.",
+                "suggestion": str(
+                    catalog_alert.get("suggestion") or "Review provider catalog state."
+                ),
+            }
+        )
+    if not provider_catalog_alerts and _safe_int(provider_catalog.get("due_sources")) > 0:
+        hints.append(
+            f"{_safe_int(provider_catalog.get('due_sources'))} provider source snapshot(s) are due for refresh."
+        )
+    if _safe_int(provider_catalog.get("recent_changes")) > 0:
+        decision_support.append(
+            f"Provider source catalog has {_safe_int(provider_catalog.get('recent_changes'))} recent change event(s). Review model or pricing drift before assuming old route economics still hold."
+        )
+    if provider_catalog_alerts:
+        top_catalog_alert = provider_catalog_alerts[0]
+        decision_support.append(
+            f"Catalog alert: {top_catalog_alert.get('headline')} "
+            f"Follow up via {top_catalog_alert.get('suggestion')}"
+        )
+    if provider_catalog_alert_summary.get("status") == "intervention-needed":
+        hints.append(
+            "Provider source catalog needs intervention now before stale parser or URL assumptions hide routing drift."
+        )
+    elif provider_catalog_alert_summary.get("status") == "review-needed":
+        hints.append(
+            "Provider source catalog has review-needed drift; refresh pricing and model assumptions before leaning harder on those routes."
+        )
     if route_additions:
         top_addition = route_additions[0]
         decision_support.append(
@@ -897,6 +1011,9 @@ def build_dashboard_report(
         "lane_families": lane_families,
         "route_additions": route_additions,
         "refresh_guidance": refresh_guidance,
+        "provider_catalog": provider_catalog,
+        "provider_catalog_alerts": provider_catalog_alerts,
+        "provider_catalog_alert_summary": provider_catalog_alert_summary,
         "clients": client_totals,
         "routing": routing,
         "routing_paths": routing_paths,
@@ -952,6 +1069,17 @@ def build_dashboard_report(
                 "stale_routes": freshness.get("stale", 0),
                 "refresh_now": refresh_summary.get("refresh_now", 0),
                 "review_soon": refresh_summary.get("review_soon", 0),
+            },
+            "provider_catalog": {
+                "tracked_sources": _safe_int(provider_catalog.get("tracked_sources")),
+                "error_sources": _safe_int(provider_catalog.get("error_sources")),
+                "due_sources": _safe_int(provider_catalog.get("due_sources")),
+                "recent_changes": _safe_int(provider_catalog.get("recent_changes")),
+                "alerts": len(provider_catalog_alerts),
+                "alert_status": provider_catalog_alert_summary.get("status") or "clear",
+                "fix_now": _safe_int(provider_catalog_alert_summary.get("fix_now")),
+                "review_now": _safe_int(provider_catalog_alert_summary.get("review_now")),
+                "inspect": _safe_int(provider_catalog_alert_summary.get("inspect")),
             },
             "drivers": {
                 "top_provider": top_provider,
@@ -1041,6 +1169,16 @@ def _render_overview(report: dict[str, Any]) -> str:
             lines.append(
                 f"  Next add           {top_addition.get('add_provider')} ({top_addition.get('strategy')})"
             )
+    lines.extend(
+        [
+            "",
+            "Source catalog",
+            f"  Tracked sources    {_safe_int(report['cards']['provider_catalog']['tracked_sources'])}",
+            f"  Refresh errors     {_safe_int(report['cards']['provider_catalog']['error_sources'])}",
+            f"  Refresh due        {_safe_int(report['cards']['provider_catalog']['due_sources'])}",
+            f"  Recent changes     {_safe_int(report['cards']['provider_catalog']['recent_changes'])}",
+        ]
+    )
     if report["alerts"]:
         alert = report["alerts"][0]
         lines.extend(
@@ -1138,6 +1276,10 @@ def _render_providers(report: dict[str, Any]) -> str:
     if refresh_block:
         lines.append("")
         lines.extend(refresh_block)
+    catalog_block = _render_provider_catalog_block(report)
+    if catalog_block:
+        lines.append("")
+        lines.extend(catalog_block)
     if report["decision_support"]:
         lines.append("")
         lines.append("Budget + routing hints")
@@ -1214,6 +1356,10 @@ def _render_activity(report: dict[str, Any]) -> str:
     if refresh_block:
         lines.append("")
         lines.extend(refresh_block)
+    catalog_block = _render_provider_catalog_block(report)
+    if catalog_block:
+        lines.append("")
+        lines.extend(catalog_block)
     priority_next = report.get("priority_next") or {}
     if priority_next:
         lines.extend(
@@ -1261,6 +1407,9 @@ def _render_alerts(report: dict[str, Any]) -> str:
     refresh_block = _render_refresh_guidance_block(report)
     if refresh_block:
         lines.extend(refresh_block)
+    catalog_block = _render_provider_catalog_block(report)
+    if catalog_block:
+        lines.extend(catalog_block)
     for hint in report["hints"][:5]:
         lines.append(f"- {hint}")
     path_block = _render_selection_path_block(report)

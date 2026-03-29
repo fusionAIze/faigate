@@ -61,7 +61,7 @@ Recommended baseline:
 The repo now ships a starter plist:
 
 - [examples/com.fusionaize.faigate.plist](./examples/com.fusionaize.faigate.plist)
-- [`Formula/faigate.rb`](../Formula/faigate.rb)
+- [`fusionAIze/homebrew-tap`](https://github.com/fusionAIze/homebrew-tap/blob/main/Formula/faigate.rb)
 
 The standard helper scripts now understand macOS directly:
 
@@ -96,18 +96,18 @@ Use `launchctl print "gui/$(id -u)/com.fusionaize.faigate"` to inspect the loade
 
 If you prefer a packaged macOS path, fusionAIze Gate now ships a project-owned Homebrew formula:
 
-- [`Formula/faigate.rb`](../Formula/faigate.rb)
+- [`fusionAIze/homebrew-tap`](https://github.com/fusionAIze/homebrew-tap/blob/main/Formula/faigate.rb)
 
 Typical flow:
 
 ```bash
-brew tap fusionAIze/faigate https://github.com/fusionAIze/faigate
-brew install fusionAIze/faigate/faigate
+brew tap fusionAIze/homebrew-tap https://github.com/fusionAIze/homebrew-tap
+brew install fusionAIze/homebrew-tap/faigate
 # or, after the tap is present and the name stays unique:
 brew install faigate
 $EDITOR "$(brew --prefix)/etc/faigate/config.yaml"
 $EDITOR "$(brew --prefix)/etc/faigate/faigate.env"
-brew services start fusionAIze/faigate/faigate
+brew services start fusionAIze/homebrew-tap/faigate
 ```
 
 Useful paths for the formula-driven install:

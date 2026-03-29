@@ -194,10 +194,20 @@ _PROVIDER_ROLE_TAXONOMY: dict[str, dict[str, str]] = {
         "slot": "free",
         "role": "free coding coverage",
     },
+    "kilo-sonnet": {
+        "family": "Kilo",
+        "slot": "workhorse",
+        "role": "paid coding workhorse",
+    },
+    "kilo-opus": {
+        "family": "Kilo",
+        "slot": "quality",
+        "role": "premium reasoning lane",
+    },
     "blackbox-free": {
         "family": "BLACKBOX",
         "slot": "free",
-        "role": "free coding burst lane",
+        "role": "budget coding burst lane",
     },
     "openrouter-fallback": {
         "family": "OpenRouter",
@@ -362,7 +372,7 @@ _PROVIDER_FACTORIES: dict[str, ProviderFactory] = {
         "base_url_env": "KILOCODE_BASE_URL",
         "provider": {
             "backend": "openai-compat",
-            "base_url": "${KILOCODE_BASE_URL:-https://api.kilo.ai/api/gateway/v1}",
+            "base_url": "${KILOCODE_BASE_URL:-https://api.kilo.ai/api/gateway}",
             "api_key": "${KILOCODE_API_KEY}",
             "model": "z-ai/glm-5:free",
             "max_tokens": 8000,
@@ -378,6 +388,52 @@ _PROVIDER_FACTORIES: dict[str, ProviderFactory] = {
             "aliases": ["kilo", "glm5"],
         },
     },
+    "kilo-sonnet": {
+        "env": "KILOCODE_API_KEY",
+        "base_url_env": "KILOCODE_BASE_URL",
+        "provider": {
+            "backend": "openai-compat",
+            "base_url": "${KILOCODE_BASE_URL:-https://api.kilo.ai/api/gateway}",
+            "api_key": "${KILOCODE_API_KEY}",
+            "model": "anthropic/claude-sonnet-4.6",
+            "max_tokens": 16000,
+            "tier": "mid",
+            "timeout": {"connect_s": 10, "read_s": 90},
+            "capabilities": {
+                "reasoning": True,
+                "streaming": True,
+                "cost_tier": "standard",
+                "latency_tier": "balanced",
+            },
+        },
+        "shortcut": {
+            "description": "Kilo paid Sonnet workhorse",
+            "aliases": ["kilo-sonnet", "ksonnet"],
+        },
+    },
+    "kilo-opus": {
+        "env": "KILOCODE_API_KEY",
+        "base_url_env": "KILOCODE_BASE_URL",
+        "provider": {
+            "backend": "openai-compat",
+            "base_url": "${KILOCODE_BASE_URL:-https://api.kilo.ai/api/gateway}",
+            "api_key": "${KILOCODE_API_KEY}",
+            "model": "anthropic/claude-opus-4.6",
+            "max_tokens": 32000,
+            "tier": "mid",
+            "timeout": {"connect_s": 10, "read_s": 120},
+            "capabilities": {
+                "reasoning": True,
+                "streaming": True,
+                "cost_tier": "premium",
+                "latency_tier": "quality",
+            },
+        },
+        "shortcut": {
+            "description": "Kilo paid Opus premium route",
+            "aliases": ["kilo-opus", "kopus"],
+        },
+    },
     "blackbox-free": {
         "env": "BLACKBOX_API_KEY",
         "base_url_env": "BLACKBOX_BASE_URL",
@@ -385,17 +441,17 @@ _PROVIDER_FACTORIES: dict[str, ProviderFactory] = {
             "backend": "openai-compat",
             "base_url": "${BLACKBOX_BASE_URL:-https://api.blackbox.ai}",
             "api_key": "${BLACKBOX_API_KEY}",
-            "model": "blackboxai/x-ai/grok-code-fast-1:free",
+            "model": "blackboxai/x-ai/grok-code-fast-1",
             "max_tokens": 8000,
             "tier": "fallback",
             "timeout": {"connect_s": 10, "read_s": 60},
             "capabilities": {
-                "cost_tier": "free",
+                "cost_tier": "cheap",
                 "latency_tier": "fast",
             },
         },
         "shortcut": {
-            "description": "BLACKBOX free-tier route",
+            "description": "BLACKBOX budget burst route (legacy id)",
             "aliases": ["blackbox", "bb"],
         },
     },
@@ -1835,8 +1891,10 @@ def _scenario_provider_selection_for_spec(spec: dict[str, Any]) -> list[str]:
             ],
             "auto": [
                 "deepseek-reasoner",
+                "kilo-sonnet",
                 "deepseek-chat",
                 "anthropic-claude",
+                "kilo-opus",
                 "openai-gpt4o",
                 "gemini-flash",
                 "kilocode",
@@ -1845,8 +1903,10 @@ def _scenario_provider_selection_for_spec(spec: dict[str, Any]) -> list[str]:
             ],
             "premium": [
                 "anthropic-claude",
+                "kilo-opus",
                 "openai-gpt4o",
                 "deepseek-reasoner",
+                "kilo-sonnet",
                 "deepseek-chat",
                 "gemini-flash",
                 "openrouter-fallback",
@@ -1867,9 +1927,9 @@ def _scenario_provider_selection_for_spec(spec: dict[str, Any]) -> list[str]:
 
 def _scenario_provider_lanes(provider_names: list[str]) -> list[tuple[str, list[str]]]:
     lane_order = [
-        ("quality-first", ["anthropic-claude", "openai-gpt4o"]),
+        ("quality-first", ["anthropic-claude", "kilo-opus", "openai-gpt4o"]),
         ("reasoning", ["deepseek-reasoner"]),
-        ("balanced workhorses", ["deepseek-chat", "gemini-flash"]),
+        ("balanced workhorses", ["deepseek-chat", "gemini-flash", "kilo-sonnet"]),
         ("budget / free", ["gemini-flash-lite", "kilocode", "blackbox-free"]),
         ("fallback safety", ["openrouter-fallback"]),
     ]
@@ -1960,6 +2020,10 @@ def _scenario_family_coverage(provider_names: list[str]) -> list[str]:
         )
     if "deepseek-reasoner" in provider_set and "deepseek-chat" in provider_set:
         coverage.append("DeepSeek: reasoning + workhorse lanes active")
+    if {"kilo-opus", "kilo-sonnet", "kilocode"} <= provider_set:
+        coverage.append("Kilo: premium + workhorse + free lanes active")
+    elif {"kilo-opus", "kilo-sonnet"} & provider_set:
+        coverage.append("Kilo: paid lanes active")
     if {"kilocode", "blackbox-free"} & provider_set:
         coverage.append("Free lane: aggregator-backed budget coverage is active")
     return coverage
@@ -1980,6 +2044,12 @@ def _scenario_family_hint(provider_names: list[str]) -> str | None:
             "lane. Add more OpenAI family variants if you want sharper "
             "quality vs speed splits there too."
         )
+    if "kilocode" in provider_set and not ({"kilo-opus", "kilo-sonnet"} & provider_set):
+        hints.append(
+            "Kilo is currently represented only by its free lane. Add explicit "
+            "Kilo Sonnet or Opus providers if you want Kilo credits to absorb "
+            "balanced or premium traffic."
+        )
     if hints:
         return " ".join(hints)
     return None
@@ -1996,6 +2066,8 @@ def _scenario_deemphasized_providers(provider_names: list[str]) -> list[str]:
             "deepseek-chat",
             "gemini-flash",
             "gemini-flash-lite",
+            "kilo-opus",
+            "kilo-sonnet",
             "kilocode",
             "blackbox-free",
             "openrouter-fallback",
@@ -2527,17 +2599,21 @@ def _preferred_fallback_chain(available: list[str], *, purpose: str) -> list[str
         "general": [
             "deepseek-chat",
             "deepseek-reasoner",
+            "kilo-sonnet",
             "gemini-flash",
             "openai-gpt4o",
             "anthropic-claude",
+            "kilo-opus",
             "openrouter-fallback",
             "kilocode",
             "blackbox-free",
         ],
         "coding": [
             "deepseek-reasoner",
+            "kilo-sonnet",
             "deepseek-chat",
             "anthropic-claude",
+            "kilo-opus",
             "openai-gpt4o",
             "gemini-flash",
             "openrouter-fallback",
@@ -2546,8 +2622,10 @@ def _preferred_fallback_chain(available: list[str], *, purpose: str) -> list[str
         ],
         "quality": [
             "anthropic-claude",
+            "kilo-opus",
             "openai-gpt4o",
             "deepseek-reasoner",
+            "kilo-sonnet",
             "deepseek-chat",
             "gemini-flash",
             "openrouter-fallback",
@@ -2584,8 +2662,10 @@ def _preferred_provider_set(available: list[str], *, purpose: str, client: str) 
             for name in (
                 "deepseek-chat",
                 "deepseek-reasoner",
+                "kilo-sonnet",
                 "gemini-flash",
                 "openai-gpt4o",
+                "kilo-opus",
             )
             if name in available
         ]
@@ -2594,8 +2674,10 @@ def _preferred_provider_set(available: list[str], *, purpose: str, client: str) 
             name
             for name in (
                 "deepseek-reasoner",
+                "kilo-sonnet",
                 "deepseek-chat",
                 "anthropic-claude",
+                "kilo-opus",
                 "openai-gpt4o",
             )
             if name in available
@@ -3161,6 +3243,13 @@ def build_initial_config(
             "warn_on_unofficial_sources": True,
             "warn_on_volatile_offers": True,
             "max_catalog_age_days": 30,
+        },
+        "provider_source_refresh": {
+            "enabled": True,
+            "on_startup": True,
+            "timeout_seconds": 10.0,
+            "interval_seconds": 21600,
+            "providers": ["blackbox", "kilo", "openai"],
         },
         "providers": providers,
         "fallback_chain": fallback_chain,
