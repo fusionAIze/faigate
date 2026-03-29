@@ -196,3 +196,40 @@ def test_due_provider_ids_returns_sources_without_recent_success(tmp_path):
 
     assert "blackbox" in due
     assert "kilo" in due
+
+
+def test_build_catalog_alerts_include_local_availability_mismatches():
+    summary = {
+        "items": [
+            {
+                "provider_id": "blackbox",
+                "status": "current",
+                "last_error": "",
+                "seconds_since_success": 10,
+                "local_availability": {
+                    "key_model_mismatches": [
+                        {
+                            "route_name": "blackbox-free",
+                            "model_id": "x-ai/grok-code-fast-1:free",
+                            "visible_model_count": 1,
+                        }
+                    ],
+                    "configured_models_missing_globally": ["x-ai/grok-code-fast-1:free"],
+                    "local_only_models": ["x-ai/grok-code-fast-1"],
+                    "models_endpoint_routes": 1,
+                    "free_models_visible_locally": 0,
+                    "global_free_models": ["x-ai/grok-code-fast-1:free"],
+                },
+            }
+        ],
+        "recent_events": [],
+    }
+
+    alerts = build_catalog_alerts(summary)
+    alert_summary = build_catalog_alert_summary(alerts)
+
+    kinds = [alert["kind"] for alert in alerts]
+    assert "local-model-availability" in kinds
+    assert "catalog-route-mismatch" in kinds
+    assert "free-model-unavailable" in kinds
+    assert alert_summary["status"] == "intervention-needed"

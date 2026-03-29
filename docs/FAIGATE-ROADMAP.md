@@ -37,29 +37,31 @@ The detailed design lives in [Adaptive model orchestration](./ADAPTIVE-ORCHESTRA
 
 The next block should stay disciplined: build on the workstation baseline, keep packaging practical, and avoid turning fusionAIze Gate into a sprawling platform.
 
-## Current release target: `v1.12.0`
+## Current release target: `v1.13.0`
 
-The next release should land as a clean operational release, not as another loose pile of runtime slices.
+`v1.12.0` closed the first operator-facing catalog and release-hardening loop. The
+next release should make that catalog meaningfully more alive instead of merely
+more visible.
 
-`v1.12.0` should close around three themes that now fit together:
+`v1.13.0` should close around three tightly related themes:
 
-- provider source cataloging and alerting as a first-class operator surface
-- clearer aggregator behavior for Kilo and BLACKBOX, especially where "free", "budget", "wallet", and explicit paid lanes are easy to conflate
-- hardened release automation after the `v1.11.x` release failures
+- provider source catalog moves from mirrored docs pages to a more living operator dataset
+- local key and route visibility are overlaid against global provider source snapshots
+- provider drift gets classified more clearly as global docs drift, key-specific access drift, or route-level mismatch
 
 The release should feel coherent from an operator point of view:
 
-- Quick Setup, Doctor, Provider Probe, Dashboard, and route preview all explain drift or route pressure using the same language
-- Kilo explicit Sonnet/Opus lanes are visible as deliberate routing choices instead of hidden aggregator magic
-- release prep, tag validation, and publish dry-runs are boring and repeatable again
+- Doctor, Provider Probe, Dashboard, Quick Setup, and `/api/provider-catalog` tell the same story about what changed globally and what is only true for this key or route
+- free-tier, paid-tier, wallet, and BYOK assumptions are treated as per-key operational facts instead of being inferred blindly from public pricing tables
+- the provider source catalog becomes a trustworthy early-warning surface before route selection starts leaning on outdated assumptions
 
-What is intentionally not in scope for `v1.12.0`:
+What is intentionally not in scope for `v1.13.0`:
 
 - the virtual key layer
 - gateway-level response caching
-- fully automated external provider-source crawling on a long-running schedule
+- a large new bridge or client-surface expansion
 
-Those stay as follow-on tracks once the operator surfaces, release path, and aggregator semantics are stable enough to trust.
+Those stay as follow-on tracks once the provider catalog and route-availability overlay are stable enough to trust under real operator workflows.
 
 ## Shipped: `v1.8.0` – `v1.9.1`
 

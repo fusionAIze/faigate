@@ -86,3 +86,31 @@ def test_provider_catalog_store_persists_snapshots_and_events(tmp_path):
 
     events = store.get_recent_change_events(provider_id="blackbox")
     assert events[0]["change_type"] == "model-added"
+
+
+def test_provider_catalog_store_returns_latest_availability_by_source(tmp_path):
+    db_path = tmp_path / "faigate.db"
+    store = ProviderCatalogStore(str(db_path))
+    store.init()
+    store.record_availability_snapshot(
+        "blackbox",
+        "blackbox-free",
+        source_name="route-state",
+        model_id="x-ai/grok-code-fast-1:free",
+        request_ready=False,
+        checked_at=1.0,
+    )
+    store.record_availability_snapshot(
+        "blackbox",
+        "blackbox-free",
+        source_name="models-endpoint",
+        model_id="x-ai/grok-code-fast-1:free",
+        available_for_key=False,
+        metadata={"visible_models": ["x-ai/grok-code-fast-1"]},
+        checked_at=2.0,
+    )
+
+    rows = store.get_latest_availability(provider_id="blackbox")
+
+    assert len(rows) == 2
+    assert {row["source_name"] for row in rows} == {"route-state", "models-endpoint"}

@@ -38,6 +38,10 @@ from .hooks import (
 )
 from .lane_registry import get_provider_lane_binding, get_route_add_recommendations
 from .metrics import MetricsStore, calc_cost
+from .provider_availability import (
+    record_availability_from_config,
+    refresh_local_model_availability,
+)
 from .provider_catalog import (
     build_provider_catalog_report,
     build_provider_discovery_view,
@@ -72,6 +76,10 @@ _update_checker: UpdateChecker
 _adaptive_state: AdaptiveRouteState = AdaptiveRouteState()
 _provider_catalog_store: ProviderCatalogStore | None = None
 _provider_catalog_refresh_task: asyncio.Task[None] | None = None
+
+
+def _provider_catalog_config_path() -> str:
+    return str(os.environ.get("FAIGATE_CONFIG_FILE") or "config.yaml")
 
 
 class PayloadTooLargeError(ValueError):
@@ -201,6 +209,21 @@ async def _refresh_provider_source_catalog(*, force: bool = False) -> list[dict[
     refresher = ProviderCatalogRefresher(_provider_catalog_store)
     refresh_results = await asyncio.to_thread(
         refresher.refresh,
+        provider_ids=target_ids,
+        timeout_seconds=float(source_refresh_cfg.get("timeout_seconds") or 10.0),
+    )
+    await asyncio.to_thread(
+        record_availability_from_config,
+        _provider_catalog_store,
+        config_path=_provider_catalog_config_path(),
+        health_payload={
+            "providers": {item["name"]: item for item in _build_provider_inventory()}
+        },
+    )
+    await asyncio.to_thread(
+        refresh_local_model_availability,
+        _provider_catalog_store,
+        config_path=_provider_catalog_config_path(),
         provider_ids=target_ids,
         timeout_seconds=float(source_refresh_cfg.get("timeout_seconds") or 10.0),
     )
@@ -1908,6 +1931,14 @@ async def provider_catalog():
         "priority_next": {},
     }
     if _provider_catalog_store is not None:
+        await asyncio.to_thread(
+            record_availability_from_config,
+            _provider_catalog_store,
+            config_path=_provider_catalog_config_path(),
+            health_payload={
+                "providers": {item["name"]: item for item in _build_provider_inventory()}
+            },
+        )
         source_catalog = build_catalog_summary(
             _provider_catalog_store,
             provider_ids=list(_config.provider_source_refresh.get("providers") or []),

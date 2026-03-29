@@ -10,6 +10,7 @@ from typing import Any, Protocol
 
 import httpx
 
+from .provider_availability import build_provider_availability_overlay
 from .provider_catalog_store import ProviderCatalogStore
 from .provider_sources import list_provider_sources
 
@@ -52,7 +53,10 @@ _SEVERITY_RANK = {
 
 def _source_due_severity(item: dict[str, Any]) -> str:
     """Escalate overdue source drift when it has lingered well past refresh cadence."""
-    refresh_interval_seconds = max(int(item.get("refresh_interval_seconds") or 21600), 1)
+    refresh_interval_seconds = max(
+        int(item.get("refresh_interval_seconds") or 21600),
+        1,
+    )
     seconds_since_success = item.get("seconds_since_success")
     last_success_at = float(item.get("last_success_at") or 0.0)
 
@@ -93,7 +97,8 @@ def _source_refresh_suggestion(item: dict[str, Any]) -> str:
             "auth assumptions before trusting catalog data here."
         )
     return (
-        f"Refresh {provider_id} before relying on older model, pricing, or free-tier assumptions."
+        f"Refresh {provider_id} before relying on older model, pricing, "
+        "or free-tier assumptions."
     )
 
 
@@ -128,6 +133,7 @@ def build_catalog_alerts(
     for item in list(summary.get("items") or []):
         provider_id = str(item.get("provider_id") or "")
         status = str(item.get("status") or "")
+        local_availability = dict(item.get("local_availability") or {})
         if status == "error":
             action = _catalog_alert_action(
                 kind="source-refresh-error",
@@ -172,6 +178,114 @@ def build_catalog_alerts(
                     ),
                     "suggestion": _source_refresh_suggestion(item),
                     "source_kind": "source",
+                }
+            )
+        if list(local_availability.get("key_model_mismatches") or []):
+            mismatches = list(local_availability.get("key_model_mismatches") or [])
+            mismatch = mismatches[0]
+            alerts.append(
+                {
+                    "kind": "local-model-availability",
+                    "severity": "warning",
+                    "action": "fix-now",
+                    "provider_id": provider_id,
+                    "headline": (
+                        f"Configured route model not visible for local "
+                        f"{provider_id} key"
+                    ),
+                    "detail": (
+                        f"{mismatch.get('route_name')} expects "
+                        f"{mismatch.get('model_id')}, but the latest local "
+                        f"models endpoint did not list it "
+                        f"({mismatch.get('visible_model_count')} visible models)."
+                    ),
+                    "suggestion": (
+                        "Verify the configured model id and local key for "
+                        f"{mismatch.get('route_name')} "
+                        "before trusting this route as request-ready."
+                    ),
+                    "source_kind": "local-availability",
+                }
+            )
+        if list(local_availability.get("configured_models_missing_globally") or []):
+            missing_model = str(
+                local_availability["configured_models_missing_globally"][0]
+            )
+            alerts.append(
+                {
+                    "kind": "catalog-route-mismatch",
+                    "severity": "warning",
+                    "action": "review-now",
+                    "provider_id": provider_id,
+                    "headline": (
+                        f"Configured {provider_id} model missing from mirrored "
+                        "global catalog"
+                    ),
+                    "detail": (
+                        f"The configured model '{missing_model}' is not present "
+                        "in the latest "
+                        f"mirrored {provider_id} source snapshot."
+                    ),
+                    "suggestion": (
+                        f"Review whether {missing_model} is still the intended "
+                        "model id or "
+                        "whether the provider source mirror needs to be refreshed."
+                    ),
+                    "source_kind": "local-availability",
+                }
+            )
+        if list(local_availability.get("local_only_models") or []):
+            local_only = str(local_availability["local_only_models"][0])
+            alerts.append(
+                {
+                    "kind": "local-model-drift",
+                    "severity": "notice",
+                    "action": "inspect",
+                    "provider_id": provider_id,
+                    "headline": (
+                        f"Local {provider_id} key exposes models missing from "
+                        "mirrored docs"
+                    ),
+                    "detail": (
+                        f"The local models endpoint exposed '{local_only}', "
+                        "which is not in the "
+                        "latest mirrored global source snapshot."
+                    ),
+                    "suggestion": (
+                        f"Inspect whether {provider_id} docs are lagging or "
+                        "whether the local key "
+                        "is on a newer provider track."
+                    ),
+                    "source_kind": "local-availability",
+                }
+            )
+        if (
+            int(local_availability.get("models_endpoint_routes") or 0) > 0
+            and int(local_availability.get("free_models_visible_locally") or 0) == 0
+            and list(local_availability.get("global_free_models") or [])
+        ):
+            free_model = str(local_availability["global_free_models"][0])
+            alerts.append(
+                {
+                    "kind": "free-model-unavailable",
+                    "severity": "notice",
+                    "action": "review-now",
+                    "provider_id": provider_id,
+                    "headline": (
+                        f"Free {provider_id} catalog entries are not visible "
+                        "for this key"
+                    ),
+                    "detail": (
+                        f"The mirrored global catalog still lists '{free_model}' "
+                        "as free, but the latest local models endpoint did not "
+                        "expose any mirrored free model."
+                    ),
+                    "suggestion": (
+                        f"Treat free-tier assumptions for {provider_id} as "
+                        "key-specific and verify "
+                        "whether this route should stay in low-cost fallback chains."
+                    ),
+                    "source_kind": "local-availability",
                 }
             )
     for event in list(summary.get("recent_events") or []):
@@ -261,6 +375,22 @@ def build_catalog_summary(
         latest_models = store.get_latest_models(provider_id, "models")
         latest_pricing = store.get_latest_models(provider_id, "pricing")
         latest_docs_index = store.get_latest_models(provider_id, "docs-index")
+        global_catalog_model_ids = {
+            str(item.get("model_id") or "").strip()
+            for item in latest_models + latest_pricing
+            if str(item.get("model_id") or "").strip()
+        }
+        global_free_model_ids = {
+            str(item.get("model_id") or "").strip()
+            for item in latest_pricing
+            if bool(item.get("is_free")) and str(item.get("model_id") or "").strip()
+        }
+        local_availability = build_provider_availability_overlay(
+            store,
+            provider_id=provider_id,
+            global_model_ids=global_catalog_model_ids,
+            global_free_model_ids=global_free_model_ids,
+        )
         last_success_at = float(source.get("last_success_at") or 0)
         last_checked_at = float(source.get("last_checked_at") or 0)
         refresh_interval_seconds = int(source.get("refresh_interval_seconds") or 21600)
@@ -294,12 +424,15 @@ def build_catalog_summary(
                     str(item.get("model_id") or "")
                     for item in (latest_pricing or latest_models)[:5]
                 ],
+                "local_availability": local_availability,
                 "billing_notes": str(source.get("billing_notes") or ""),
                 "account_profile": store.get_account_profile(provider_id),
             }
         )
 
-    selected_provider_id = provider_ids[0] if provider_ids and len(provider_ids) == 1 else None
+    selected_provider_id = (
+        provider_ids[0] if provider_ids and len(provider_ids) == 1 else None
+    )
     recent_events = store.get_recent_change_events(
         provider_id=selected_provider_id,
         limit=20,
@@ -328,7 +461,10 @@ def build_catalog_summary(
     elif recent_events:
         priority_next = {
             "path": "Provider Catalog Review",
-            "why": ("recent provider catalog changes were detected and should be reviewed."),
+            "why": (
+                "recent provider catalog changes were detected and should "
+                "be reviewed."
+            ),
         }
 
     alerts = build_catalog_alerts(
@@ -392,10 +528,13 @@ def render_catalog_summary_text(
         if item.get("billing_notes"):
             lines.append(f"    billing: {item['billing_notes']}")
         if item.get("refresh_interval_seconds"):
-            lines.append(f"    refresh interval: {int(item['refresh_interval_seconds'])}s")
+            lines.append(
+                f"    refresh interval: {int(item['refresh_interval_seconds'])}s"
+            )
         if item.get("seconds_since_success") is not None:
             lines.append(
-                f"    age: {int(float(item['seconds_since_success']))}s since last success"
+                f"    age: {int(float(item['seconds_since_success']))}s "
+                "since last success"
             )
         profile = dict(item.get("account_profile") or {})
         if profile:
@@ -406,7 +545,41 @@ def render_catalog_summary_text(
                 profile_bits.append(f"window={profile['quota_window']}")
             if profile.get("quota_remaining") is not None:
                 profile_bits.append(f"remaining={profile['quota_remaining']}")
-            lines.append("    local account: " + " | ".join(bit for bit in profile_bits if bit))
+            lines.append(
+                "    local account: "
+                + " | ".join(bit for bit in profile_bits if bit)
+            )
+        local_availability = dict(item.get("local_availability") or {})
+        if local_availability:
+            lines.append(
+                "    local availability: "
+                + f"routes={int(local_availability.get('local_routes') or 0)} | "
+                + f"ready={int(local_availability.get('request_ready_routes') or 0)} | "
+                + "models-endpoint="
+                + f"{int(local_availability.get('models_endpoint_routes') or 0)} | "
+                + "visible-models="
+                + f"{int(local_availability.get('visible_model_count') or 0)}"
+            )
+            if local_availability.get("configured_models_missing_globally"):
+                lines.append(
+                    "    catalog mismatch: "
+                    + ", ".join(
+                        local_availability["configured_models_missing_globally"][:3]
+                    )
+                )
+            if local_availability.get("key_model_mismatches"):
+                lines.append(
+                    "    key mismatch: "
+                    + ", ".join(
+                        f"{item['route_name']} -> {item['model_id']}"
+                        for item in local_availability["key_model_mismatches"][:3]
+                    )
+                )
+            if local_availability.get("local_only_models"):
+                lines.append(
+                    "    local-only models: "
+                    + ", ".join(local_availability["local_only_models"][:3])
+                )
         if item.get("last_error"):
             lines.append(f"    last error: {item['last_error']}")
     events = list(summary.get("recent_events") or [])
@@ -633,7 +806,9 @@ def _diff_model_sets(
                 "field_name": "model_id",
                 "old_value": "",
                 "new_value": model_id,
-                "message": (f"{provider_id}: model '{model_id}' appeared in {source_kind}."),
+                "message": (
+                    f"{provider_id}: model '{model_id}' appeared in {source_kind}."
+                ),
             }
         )
     for model_id in sorted(previous_by_id.keys() - current_by_id.keys()):
@@ -648,7 +823,9 @@ def _diff_model_sets(
                 "field_name": "model_id",
                 "old_value": model_id,
                 "new_value": "",
-                "message": (f"{provider_id}: model '{model_id}' disappeared from {source_kind}."),
+                "message": (
+                    f"{provider_id}: model '{model_id}' disappeared from {source_kind}."
+                ),
             }
         )
     for model_id in sorted(current_by_id.keys() & previous_by_id.keys()):
