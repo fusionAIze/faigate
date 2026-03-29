@@ -1,5 +1,12 @@
 # fusionAIze Gate Changelog
 
+## v1.11.2 - 2026-03-29
+
+### Changed
+
+- Restored Python 3.10 compatibility for the release update helpers by falling back cleanly when `datetime.UTC` is unavailable, which fixes the release CI collection failure that blocked the `v1.11.x` line
+- Realigned the runtime version surfaces so package metadata, `faigate --version`, and the FastAPI app version all move together again instead of reporting mixed `1.10.1` / `1.11.x` values
+
 ## v1.11.1 - 2026-03-29
 
 ### Added
