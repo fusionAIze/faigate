@@ -1,0 +1,210 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/faigate-service-lib.sh"
+
+config_file="$(faigate_config_file)"
+python_bin="$(faigate_python_bin)"
+mode="text"
+refresh="0"
+provider=""
+timeout_seconds="10.0"
+health_payload=""
+
+usage() {
+  cat <<'EOF'
+Usage:
+  ./scripts/faigate-provider-catalog [--json|--text] [--refresh] [--provider NAME] [--timeout SECONDS]
+
+Inspect or refresh the provider source catalog snapshots that back model, pricing,
+and local availability overlays.
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --json)
+      mode="json"
+      shift
+      ;;
+    --text)
+      mode="text"
+      shift
+      ;;
+    --refresh)
+      refresh="1"
+      shift
+      ;;
+    --provider)
+      provider="${2:-}"
+      if [[ -z "$provider" ]]; then
+        usage >&2
+        exit 2
+      fi
+      shift 2
+      ;;
+    --timeout)
+      timeout_seconds="${2:-}"
+      if [[ -z "$timeout_seconds" ]]; then
+        usage >&2
+        exit 2
+      fi
+      shift 2
+      ;;
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    *)
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+if payload="$(curl -fsS -m 2 "$(faigate_health_url)" 2>/dev/null)"; then
+  health_payload="$payload"
+fi
+
+FAIGATE_PROVIDER_CATALOG_CONFIG="$config_file" \
+FAIGATE_PROVIDER_CATALOG_MODE="$mode" \
+FAIGATE_PROVIDER_CATALOG_PROVIDER="$provider" \
+FAIGATE_PROVIDER_CATALOG_REFRESH="$refresh" \
+FAIGATE_PROVIDER_CATALOG_TIMEOUT="$timeout_seconds" \
+FAIGATE_PROVIDER_CATALOG_HEALTH="$health_payload" \
+"$python_bin" - <<'PY'
+import json
+import os
+
+from faigate.config import load_config
+from faigate.provider_availability import load_health_payload, record_availability_from_health
+from faigate.provider_catalog_refresh import ProviderCatalogRefresher
+from faigate.provider_catalog_store import ProviderCatalogStore
+from faigate.provider_sources import list_provider_sources
+
+config = load_config(os.environ["FAIGATE_PROVIDER_CATALOG_CONFIG"])
+db_path = str(config.metrics.get("db_path") or "")
+store = ProviderCatalogStore(db_path)
+store.init()
+
+provider = os.environ.get("FAIGATE_PROVIDER_CATALOG_PROVIDER", "").strip()
+provider_ids = [provider] if provider else None
+
+for item in list_provider_sources(provider_ids):
+    store.upsert_source(item)
+
+refresh_results = []
+if os.environ.get("FAIGATE_PROVIDER_CATALOG_REFRESH") == "1":
+    refresher = ProviderCatalogRefresher(store)
+    refresh_results = [
+        {
+            "provider_id": item.provider_id,
+            "endpoint_kind": item.endpoint_kind,
+            "url": item.url,
+            "ok": item.ok,
+            "models_count": item.models_count,
+            "changes_count": item.changes_count,
+            "error": item.error,
+        }
+        for item in refresher.refresh(
+            provider_ids=provider_ids,
+            timeout_seconds=float(os.environ.get("FAIGATE_PROVIDER_CATALOG_TIMEOUT") or "10.0"),
+        )
+    ]
+
+health_payload = load_health_payload(os.environ.get("FAIGATE_PROVIDER_CATALOG_HEALTH", ""))
+availability_rows = record_availability_from_health(store, health_payload=health_payload)
+sources = store.list_sources()
+if provider:
+    sources = [item for item in sources if item["provider_id"] == provider]
+
+summary = []
+for source in sources:
+    provider_id = source["provider_id"]
+    latest_models = store.get_latest_models(provider_id, "models")
+    latest_pricing = store.get_latest_models(provider_id, "pricing")
+    account_profile = store.get_account_profile(provider_id)
+    summary.append(
+        {
+            "provider_id": provider_id,
+            "display_name": source["display_name"],
+            "last_checked_at": source["last_checked_at"],
+            "last_success_at": source["last_success_at"],
+            "last_error": source["last_error"],
+            "models_count": len(latest_models),
+            "pricing_count": len(latest_pricing),
+            "sample_models": [item["model_id"] for item in (latest_pricing or latest_models)[:5]],
+            "billing_notes": source["billing_notes"],
+            "billing_profile": account_profile,
+            "availability_rows": [
+                row for row in availability_rows if row["provider_id"] == provider_id
+            ],
+        }
+    )
+
+payload = {
+    "db_path": db_path,
+    "refresh_results": refresh_results,
+    "sources": sources,
+    "summary": summary,
+    "recent_events": store.get_recent_change_events(provider_id=provider or None, limit=20),
+}
+
+if os.environ["FAIGATE_PROVIDER_CATALOG_MODE"] == "json":
+    print(json.dumps(payload, indent=2, sort_keys=True))
+else:
+    print("fusionAIze Gate Provider Catalog")
+    print()
+    print(f"DB: {db_path}")
+    if refresh_results:
+        print()
+        print("Refresh")
+        for item in refresh_results:
+            status = "ok" if item["ok"] else "fail"
+            detail = f"{item['provider_id']} / {item['endpoint_kind']} -> {status}"
+            if item["ok"]:
+                detail += (
+                    f" ({item['models_count']} entries, {item['changes_count']} changes)"
+                )
+            elif item["error"]:
+                detail += f" ({item['error']})"
+            print(f"  {detail}")
+    if summary:
+        print()
+        print("Providers")
+        for item in summary:
+            print(
+                f"  - {item['provider_id']}: models={item['models_count']} "
+                f"pricing={item['pricing_count']}"
+            )
+            if item["sample_models"]:
+                print("    sample: " + ", ".join(item["sample_models"]))
+            if item["billing_notes"]:
+                print(f"    billing: {item['billing_notes']}")
+            profile = item["billing_profile"]
+            if profile:
+                details = [str(profile.get("billing_mode") or "")]
+                if profile.get("subscription_name"):
+                    details.append(str(profile["subscription_name"]))
+                if profile.get("quota_window"):
+                    details.append(f"window={profile['quota_window']}")
+                if profile.get("quota_remaining") is not None:
+                    details.append(f"remaining={profile['quota_remaining']}")
+                print("    local account: " + " | ".join(bit for bit in details if bit))
+            if item["availability_rows"]:
+                formatted = ", ".join(
+                    f"{row['route_name']}={row['status']}" for row in item["availability_rows"]
+                )
+                print(f"    local availability: {formatted}")
+            if item["last_error"]:
+                print(f"    last error: {item['last_error']}")
+    events = payload["recent_events"]
+    if events:
+        print()
+        print("Recent Changes")
+        for item in events[:10]:
+            print(
+                f"  - {item['provider_id']} / {item['source_kind']} / {item['change_type']}: "
+                f"{item['message']}"
+            )
+PY

@@ -74,6 +74,18 @@ curl -fsS http://127.0.0.1:8090/v1/models
 Then use the onboarding helpers to move from “the server starts” to “real clients are ready”:
 
 ```bash
+./scripts/faigate-provider-catalog --refresh
+./scripts/faigate-doctor --refresh-catalog
+./scripts/faigate-provider-probe --refresh-catalog
+```
+
+`faigate-provider-catalog` mirrors selected official provider sources into the
+local Gate DB so operators can compare global model/pricing snapshots against
+local key and route readiness. The same summary now shows up in Dashboard and
+Quick Setup, and Gate can re-check due sources on a conservative background
+interval.
+
+```bash
 ./scripts/faigate-menu
 ./scripts/faigate-config-wizard --help
 ./scripts/faigate-config-wizard --purpose general --client generic > config.yaml

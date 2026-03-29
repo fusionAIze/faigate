@@ -8,16 +8,18 @@ env_file="$(faigate_env_file)"
 python_bin="$(faigate_python_bin)"
 mode="text"
 live_probe="0"
+refresh_catalog="0"
 timeout_seconds="2.0"
 
 usage() {
   cat <<'EOF'
 Usage:
-  ./scripts/faigate-provider-probe [--json|--text] [--live] [--timeout SECONDS]
+  ./scripts/faigate-provider-probe [--json|--text] [--live] [--refresh-catalog] [--timeout SECONDS]
 
 Probe configured provider sources against the current config, env file, and
 local /health payload when available. Use --live to run shallow transport-aware
-request probes directly against the configured providers.
+request probes directly against the configured providers. Use --refresh-catalog
+to refresh provider source snapshots before rendering the report.
 EOF
 }
 
@@ -33,6 +35,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --live)
       live_probe="1"
+      shift
+      ;;
+    --refresh-catalog)
+      refresh_catalog="1"
       shift
       ;;
     --timeout)
@@ -64,15 +70,38 @@ FAIGATE_PROVIDER_PROBE_ENV="$env_file" \
 FAIGATE_PROVIDER_PROBE_MODE="$mode" \
 FAIGATE_PROVIDER_PROBE_HEALTH="$health_payload" \
 FAIGATE_PROVIDER_PROBE_LIVE="$live_probe" \
+FAIGATE_PROVIDER_PROBE_REFRESH_CATALOG="$refresh_catalog" \
 FAIGATE_PROVIDER_PROBE_TIMEOUT="$timeout_seconds" \
 "$python_bin" - <<'PY'
 import json
 import os
 
+from faigate.config import load_config
+from faigate.provider_availability import record_availability_from_health
+from faigate.provider_catalog_refresh import (
+    ProviderCatalogRefresher,
+    build_catalog_summary,
+    render_catalog_summary_text,
+)
+from faigate.provider_catalog_store import ProviderCatalogStore
 from faigate.wizard import build_provider_probe_report, render_provider_probe_text
 
 health_raw = os.environ.get("FAIGATE_PROVIDER_PROBE_HEALTH", "").strip()
 health_payload = json.loads(health_raw) if health_raw else None
+config = load_config(os.environ["FAIGATE_PROVIDER_PROBE_CONFIG"])
+store = ProviderCatalogStore(str(config.metrics.get("db_path") or ""))
+store.init()
+if os.environ.get("FAIGATE_PROVIDER_PROBE_REFRESH_CATALOG") == "1":
+    refresher = ProviderCatalogRefresher(store)
+    refresher.refresh(
+        provider_ids=list(config.provider_source_refresh.get("providers") or []),
+        timeout_seconds=float(os.environ.get("FAIGATE_PROVIDER_PROBE_TIMEOUT") or "2.0"),
+    )
+record_availability_from_health(store, health_payload=health_payload)
+catalog_summary = build_catalog_summary(
+    store,
+    provider_ids=list(config.provider_source_refresh.get("providers") or []),
+)
 report = build_provider_probe_report(
     config_path=os.environ["FAIGATE_PROVIDER_PROBE_CONFIG"],
     env_file=os.environ["FAIGATE_PROVIDER_PROBE_ENV"],
@@ -82,7 +111,12 @@ report = build_provider_probe_report(
 )
 
 if os.environ["FAIGATE_PROVIDER_PROBE_MODE"] == "json":
-    print(json.dumps(report, indent=2, sort_keys=True))
+    payload = {
+        "catalog_summary": catalog_summary,
+        "probe_report": report,
+    }
+    print(json.dumps(payload, indent=2, sort_keys=True))
 else:
+    print(render_catalog_summary_text(catalog_summary, heading="Provider source catalog"), end="")
     print(render_provider_probe_text(report), end="")
 PY

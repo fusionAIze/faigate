@@ -327,6 +327,42 @@ def test_provider_catalog_check_defaults_are_exposed():
     }
 
 
+def test_provider_source_refresh_defaults_are_exposed():
+    cfg = load_config(Path(__file__).parent.parent / "config.yaml")
+    assert cfg.provider_source_refresh == {
+        "enabled": True,
+        "on_startup": True,
+        "timeout_seconds": 10.0,
+        "interval_seconds": 21600,
+        "providers": ["blackbox", "kilo", "openai"],
+    }
+
+
+def test_provider_source_refresh_rejects_invalid_interval(tmp_path):
+    path = tmp_path / "config.yaml"
+    path.write_text(
+        """
+server:
+  host: "127.0.0.1"
+  port: 8090
+providers:
+  cloud-default:
+    backend: openai-compat
+    base_url: "https://api.example.com/v1"
+    api_key: "secret"
+    model: "chat-model"
+provider_source_refresh:
+  interval_seconds: 0
+fallback_chain: []
+metrics:
+  enabled: false
+"""
+    )
+
+    with pytest.raises(ConfigError, match="provider_source_refresh.interval_seconds"):
+        load_config(path)
+
+
 def test_security_rejects_invalid_limit_values(tmp_path):
     path = tmp_path / "config.yaml"
     path.write_text(

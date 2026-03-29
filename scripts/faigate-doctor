@@ -7,7 +7,7 @@ case "${1:-}" in
   --help|-h)
     cat <<'EOF'
 Usage:
-  ./scripts/faigate-doctor
+  ./scripts/faigate-doctor [--refresh-catalog]
 
 Run local operator checks for config/env presence, provider env coverage,
 catalog alerts, and reachability of /health and /v1/models.
@@ -16,6 +16,11 @@ EOF
     ;;
 esac
 
+refresh_catalog="0"
+if [[ "${1:-}" == "--refresh-catalog" ]]; then
+  refresh_catalog="1"
+fi
+
 env_file="$(faigate_env_file)"
 config_file="$(faigate_config_file)"
 python_bin="$(faigate_python_bin)"
@@ -23,6 +28,7 @@ status=0
 
 export FAIGATE_ENV_FILE="$env_file"
 export FAIGATE_CONFIG_FILE="$config_file"
+export FAIGATE_DOCTOR_REFRESH_CATALOG="$refresh_catalog"
 health_payload=""
 
 ok() {
@@ -84,6 +90,9 @@ from pathlib import Path
 import yaml
 from faigate.onboarding import collect_provider_env_requirements
 from faigate.provider_catalog import build_provider_catalog_report, build_provider_refresh_guidance
+from faigate.provider_availability import record_availability_from_health
+from faigate.provider_catalog_refresh import ProviderCatalogRefresher, build_catalog_summary
+from faigate.provider_catalog_store import ProviderCatalogStore
 from faigate.config import ConfigError, load_config
 from faigate.lane_registry import (
     get_canonical_model_routes,
@@ -118,6 +127,25 @@ except ConfigError as exc:
     print(f"[fail] config invalid: {exc}")
     sys.exit(1)
 configured_provider_names = set(config.providers.keys())
+store = ProviderCatalogStore(str(config.metrics.get("db_path") or ""))
+store.init()
+if os.environ.get("FAIGATE_DOCTOR_REFRESH_CATALOG") == "1":
+    refresher = ProviderCatalogRefresher(store)
+    refresh_results = refresher.refresh(
+        provider_ids=list(config.provider_source_refresh.get("providers") or []),
+        timeout_seconds=float(config.provider_source_refresh.get("timeout_seconds") or 10.0),
+    )
+    for result in refresh_results:
+        label = "ok" if result.ok else "warn"
+        detail = (
+            f"{result.provider_id} / {result.endpoint_kind} -> "
+            + (
+                f"{result.models_count} entries, {result.changes_count} changes"
+                if result.ok
+                else result.error
+            )
+        )
+        print(f"[{label}] provider source refresh: {detail}")
 
 catalog = build_provider_catalog_report(config)
 if catalog["alert_count"] == 0:
@@ -142,6 +170,7 @@ for item in catalog.get("items", []):
 health_raw = os.environ.get("FAIGATE_HEALTH_PAYLOAD", "").strip()
 if health_raw:
     health_payload = json.loads(health_raw)
+    record_availability_from_health(store, health_payload=health_payload)
     providers = (health_payload.get("providers") or {})
     ready = 0
     total = 0
@@ -465,6 +494,27 @@ if health_raw:
                 "[ok] request-ready priority next: Client Scenarios or Client Quickstarts -> "
                 "the provider layer looks ready enough to move on to client defaults and wiring"
             )
+
+catalog_summary = build_catalog_summary(
+    store,
+    provider_ids=list(config.provider_source_refresh.get("providers") or []),
+)
+print(
+    "[ok] provider source catalog: "
+    f"{int(catalog_summary.get('tracked_sources') or 0)} tracked sources"
+)
+for item in catalog_summary.get("items", [])[:5]:
+    print(
+        f"[ok] provider source snapshot: {item['provider_id']} -> "
+        f"models={item['models_count']} pricing={item['pricing_count']} docs={item['docs_index_count']}"
+    )
+    if item.get("last_error"):
+        print(f"[warn] provider source snapshot: {item['provider_id']} -> {item['last_error']}")
+for event in catalog_summary.get("recent_events", [])[:3]:
+    print(
+        f"[ok] provider source change: {event['provider_id']} / {event['source_kind']} / "
+        f"{event['change_type']} -> {event['message']}"
+    )
 PY
 then
   status=1

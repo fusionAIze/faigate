@@ -362,9 +362,35 @@ The repo ships ready-to-copy examples under [`docs/examples`](./examples):
 Use these before rolling out a new provider or client:
 
 ```bash
+./scripts/faigate-provider-catalog --refresh
 ./scripts/faigate-doctor
+./scripts/faigate-doctor --refresh-catalog
+./scripts/faigate-provider-probe --refresh-catalog
 ./scripts/faigate-onboarding-report
 ./scripts/faigate-onboarding-validate
 ```
 
 These helpers catch missing env placeholders, rollout blockers, provider capability gaps, and profile issues before live traffic hits the gateway.
+
+## Provider Source Refresh
+
+Gate can mirror selected provider source pages into the local DB and refresh
+them conservatively on startup.
+
+```yaml
+provider_source_refresh:
+  enabled: true
+  on_startup: true
+  timeout_seconds: 10.0
+  interval_seconds: 21600
+  providers:
+    - blackbox
+    - kilo
+    - openai
+```
+
+Notes:
+- startup refresh is best-effort and should not block the service if docs are unavailable
+- `interval_seconds` controls the conservative background refresh loop after startup
+- source snapshots live in the same local DB as metrics
+- local billing overlays such as subscription or quota windows belong in the local account profile layer, not in the global provider snapshot

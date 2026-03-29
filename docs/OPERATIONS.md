@@ -96,6 +96,8 @@ The runtime-control helpers now auto-detect Linux vs macOS:
 | `faigate-config-overview` | current config snapshot for bind, providers, modes, and profiles |
 | `faigate-bootstrap` | local bootstrap convenience flow |
 | `faigate-doctor` | validate env and config readiness |
+| `faigate-provider-catalog` | mirror provider source docs, pricing, and model snapshots into the local DB |
+| `faigate-provider-probe` | inspect live request-readiness plus provider source context |
 | `faigate-onboarding-report` | summarize rollout readiness |
 | `faigate-onboarding-validate` | fail fast on onboarding blockers |
 | `faigate-update-check` | release-status and guardrail check |
@@ -111,8 +113,31 @@ Examples:
 ./scripts/faigate-logs --lines 80
 ./scripts/faigate-restart --timeout 15
 ./scripts/faigate-health
+./scripts/faigate-provider-catalog --refresh
+./scripts/faigate-provider-probe --refresh-catalog
 ./scripts/faigate-update-check
 ```
+
+### Provider Source Catalog
+
+Gate can mirror selected official provider sources into the local DB and compare
+them with local route readiness.
+
+Operational notes:
+- `faigate-menu` and `faigate-dashboard` now surface provider catalog errors, due refreshes, and recent source changes directly in their summaries
+- startup refresh is best-effort, and the periodic refresh loop should warn instead of breaking runtime startup if source URLs are unavailable
+
+Current first-wave providers:
+- `blackbox`
+- `kilo`
+- `openai`
+
+The source catalog is intentionally separate from local availability:
+- source catalog: what the provider documents globally
+- availability overlay: what your configured keys and routes can actually use
+
+This matters for cases like BLACKBOX free vs. paid variants, or Kilo wallet vs.
+BYOK-like execution behavior.
 
 ## Update Checks And Auto-Update
 

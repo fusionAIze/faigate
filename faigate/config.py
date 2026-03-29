@@ -1684,6 +1684,45 @@ def _normalize_provider_catalog_check(data: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
+def _normalize_provider_source_refresh(data: dict[str, Any]) -> dict[str, Any]:
+    """Validate provider source refresh scheduling and scope."""
+    raw = data.get("provider_source_refresh") or {}
+    if raw in (None, ""):
+        raw = {}
+    if not isinstance(raw, dict):
+        raise ConfigError("'provider_source_refresh' must be a mapping")
+
+    timeout_seconds = raw.get("timeout_seconds", 10.0)
+    if isinstance(timeout_seconds, bool) or not isinstance(timeout_seconds, (int, float)):
+        raise ConfigError("'provider_source_refresh.timeout_seconds' must be a number")
+    if float(timeout_seconds) <= 0:
+        raise ConfigError("'provider_source_refresh.timeout_seconds' must be positive")
+
+    interval_seconds = raw.get("interval_seconds", 21600)
+    if isinstance(interval_seconds, bool) or not isinstance(interval_seconds, int):
+        raise ConfigError("'provider_source_refresh.interval_seconds' must be an integer")
+    if interval_seconds <= 0:
+        raise ConfigError("'provider_source_refresh.interval_seconds' must be positive")
+
+    providers = raw.get("providers", ["blackbox", "kilo", "openai"])
+    if providers in (None, ""):
+        providers = ["blackbox", "kilo", "openai"]
+    if not isinstance(providers, list) or any(
+        not isinstance(item, str) or not item.strip() for item in providers
+    ):
+        raise ConfigError("'provider_source_refresh.providers' must be a list of names")
+
+    normalized = dict(data)
+    normalized["provider_source_refresh"] = {
+        "enabled": bool(raw.get("enabled", True)),
+        "on_startup": bool(raw.get("on_startup", True)),
+        "timeout_seconds": float(timeout_seconds),
+        "interval_seconds": interval_seconds,
+        "providers": [item.strip() for item in providers],
+    }
+    return normalized
+
+
 class Config:
     """Holds the parsed and expanded configuration."""
 
@@ -1833,6 +1872,19 @@ class Config:
             },
         )
 
+    @property
+    def provider_source_refresh(self) -> dict:
+        return self._data.get(
+            "provider_source_refresh",
+            {
+                "enabled": True,
+                "on_startup": True,
+                "timeout_seconds": 10.0,
+                "interval_seconds": 21600,
+                "providers": ["blackbox", "kilo", "openai"],
+            },
+        )
+
     def provider(self, name: str) -> dict | None:
         return self.providers.get(name)
 
@@ -1882,17 +1934,19 @@ def load_config(path: str | Path | None = None) -> Config:
     with path.open() as f:
         raw = yaml.safe_load(f)
 
-    expanded = _normalize_provider_catalog_check(
-        _normalize_security(
-            _normalize_auto_update(
-                _normalize_update_check(
-                    _normalize_request_hooks(
-                        _validate_routing_mode_references(
-                            _normalize_model_shortcuts(
-                                _normalize_routing_modes(
-                                    _normalize_client_profiles(
-                                        _normalize_routing_policies(
-                                            _normalize_providers(_walk_expand(raw))
+    expanded = _normalize_provider_source_refresh(
+        _normalize_provider_catalog_check(
+            _normalize_security(
+                _normalize_auto_update(
+                    _normalize_update_check(
+                        _normalize_request_hooks(
+                            _validate_routing_mode_references(
+                                _normalize_model_shortcuts(
+                                    _normalize_routing_modes(
+                                        _normalize_client_profiles(
+                                            _normalize_routing_policies(
+                                                _normalize_providers(_walk_expand(raw))
+                                            )
                                         )
                                     )
                                 )
