@@ -8,7 +8,12 @@ from datetime import date
 from typing import Any
 
 from .config import Config
-from .lane_registry import get_canonical_model_catalog, get_provider_lane_binding
+from .lane_registry import (
+    get_active_model_id,
+    get_active_model_label,
+    get_canonical_model_catalog,
+    get_provider_lane_binding,
+)
 
 _COMMUNITY_WATCHLIST = {
     "label": "free-llm-api-resources",
@@ -22,8 +27,8 @@ _DISCOVERY_DISCLOSURE = (
 
 _CATALOG: dict[str, dict[str, Any]] = {
     "deepseek-chat": {
-        "recommended_model": "deepseek-chat",
-        "aliases": ["deepseek-chat"],
+        "recommended_model": get_active_model_id("deepseek/chat"),
+        "aliases": ["deepseek-chat", "ds-v3"],
         "track": "stable",
         "offer_track": "direct",
         "provider_type": "direct",
@@ -33,12 +38,12 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "official_source_url": "https://api-docs.deepseek.com/",
         "signup_url": "https://platform.deepseek.com/",
         "watch_sources": [],
-        "notes": "Balanced DeepSeek chat default",
-        "last_reviewed": "2026-03-19",
+        "notes": get_active_model_label("deepseek/chat"),
+        "last_reviewed": "2026-03-29",
     },
     "deepseek-reasoner": {
-        "recommended_model": "deepseek-reasoner",
-        "aliases": ["deepseek-reasoner"],
+        "recommended_model": get_active_model_id("deepseek/reasoner"),
+        "aliases": ["deepseek-reasoner", "r1"],
         "track": "stable",
         "offer_track": "direct",
         "provider_type": "direct",
@@ -48,12 +53,12 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "official_source_url": "https://api-docs.deepseek.com/",
         "signup_url": "https://platform.deepseek.com/",
         "watch_sources": [],
-        "notes": "Reasoning-heavy DeepSeek path",
-        "last_reviewed": "2026-03-19",
+        "notes": get_active_model_label("deepseek/reasoner"),
+        "last_reviewed": "2026-03-29",
     },
     "gemini-flash-lite": {
-        "recommended_model": "gemini-2.5-flash-lite",
-        "aliases": ["gemini-2.5-flash-lite"],
+        "recommended_model": get_active_model_id("google/gemini-flash-lite"),
+        "aliases": ["gemini-2.5-flash-lite", "gemini-3-flash-lite"],
         "track": "stable",
         "offer_track": "direct",
         "provider_type": "direct",
@@ -63,12 +68,12 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "official_source_url": "https://ai.google.dev/gemini-api/docs/models",
         "signup_url": "https://aistudio.google.com/",
         "watch_sources": [],
-        "notes": "Cheap Gemini default",
-        "last_reviewed": "2026-03-19",
+        "notes": get_active_model_label("google/gemini-flash-lite"),
+        "last_reviewed": "2026-03-29",
     },
     "gemini-flash": {
-        "recommended_model": "gemini-2.5-flash",
-        "aliases": ["gemini-2.5-flash"],
+        "recommended_model": get_active_model_id("google/gemini-flash"),
+        "aliases": ["gemini-2.5-flash", "gemini-3-flash"],
         "track": "stable",
         "offer_track": "direct",
         "provider_type": "direct",
@@ -78,8 +83,8 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "official_source_url": "https://ai.google.dev/gemini-api/docs/models",
         "signup_url": "https://aistudio.google.com/",
         "watch_sources": [],
-        "notes": "Balanced Gemini default",
-        "last_reviewed": "2026-03-19",
+        "notes": get_active_model_label("google/gemini-flash"),
+        "last_reviewed": "2026-03-29",
     },
     "openrouter-fallback": {
         "recommended_model": "openrouter/auto",

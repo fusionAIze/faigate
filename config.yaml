@@ -46,7 +46,7 @@ client_profiles:
       prefer_providers:
       - gemini-flash-lite
       - gemini-flash
-      - gemini-pro
+      - gemini-pro-high
       prefer_tiers:
       - cheap
       - default
@@ -80,7 +80,7 @@ client_profiles:
       prefer_providers:
       - gemini-flash
       - gemini-flash-lite
-      - gemini-pro
+      - gemini-pro-high
       prefer_tiers:
       - cheap
       - default
@@ -127,7 +127,7 @@ client_profiles:
       routing_mode: free
     research:
       prefer_providers:
-      - gemini-pro
+      - gemini-pro-high
       - anthropic-sonnet
       - anthropic-claude
       prefer_tiers:
@@ -206,7 +206,7 @@ fallback_chain:
 - gemini-flash
 - deepseek-reasoner
 - anthropic-sonnet
-- gemini-pro
+- gemini-pro-high
 - openai-gpt4o
 - openrouter-fallback
 - anthropic-claude
@@ -373,9 +373,14 @@ model_shortcuts:
     gemini-pro:
       aliases:
       - pro
-      - gemini-pro
-      description: Gemini 2.5 Pro (quality)
-      target: gemini-pro
+      - gemini-pro-high
+      description: Gemini 3.1 Pro (High) (quality)
+      target: gemini-pro-high
+    gemini-pro-low:
+      aliases:
+      - pro-low
+      description: Gemini 3.1 Pro (Low) (balanced)
+      target: gemini-pro-low
     blackbox-free:
       aliases:
       - blackbox
@@ -395,7 +400,7 @@ model_shortcuts:
     flash:
       aliases:
       - gemini
-      description: Gemini Flash
+      description: Gemini 3 Flash
       target: gemini-flash
     gemini-flash:
       aliases: []
@@ -673,7 +678,7 @@ providers:
       same_model_group: google/gemini-flash
       tool_strength: medium
     max_tokens: 8000
-    model: gemini-2.5-flash
+    model: gemini-3-flash
     tier: mid
     timeout:
       connect_s: 10
@@ -705,7 +710,7 @@ providers:
       same_model_group: google/gemini-flash-lite
       tool_strength: low
     max_tokens: 8000
-    model: gemini-2.5-flash-lite
+    model: gemini-3-flash-lite
     pricing:
       cache_read: 0.02
       input: 0.075
@@ -714,7 +719,7 @@ providers:
     timeout:
       connect_s: 10
       read_s: 30
-  gemini-pro:
+  gemini-pro-high:
     api_key: ${GEMINI_API_KEY}
     backend: google-genai
     base_url: ${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta}
@@ -728,13 +733,14 @@ providers:
       cluster: quality-workhorse
       context_strength: high
       degrade_to:
+      - google/gemini-pro-low
       - google/gemini-flash
       - deepseek/reasoner
       family: google
       freshness_hint: benchmark and cost assumptions were reviewed recently
       freshness_status: fresh
-      last_reviewed: '2026-03-24'
-      name: pro
+      last_reviewed: '2026-03-29'
+      name: pro-high
       quality_tier: high
       reasoning_strength: high
       review_age_days: 0
@@ -742,7 +748,7 @@ providers:
       same_model_group: google/gemini-pro-high
       tool_strength: high
     max_tokens: 65536
-    model: gemini-2.5-pro
+    model: gemini-3.1-pro
     pricing:
       cache_read: 0.31
       input: 1.25
@@ -751,6 +757,43 @@ providers:
     timeout:
       connect_s: 10
       read_s: 120
+  gemini-pro-low:
+    api_key: ${GEMINI_API_KEY}
+    backend: google-genai
+    base_url: ${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta}
+    capabilities:
+      cost_tier: premium
+      latency_tier: balanced
+      reasoning: true
+    lane:
+      benchmark_cluster: balanced-coding
+      canonical_model: google/gemini-pro-low
+      cluster: balanced-workhorse
+      context_strength: high
+      degrade_to:
+      - google/gemini-flash
+      - deepseek/chat
+      family: google
+      freshness_hint: benchmark and cost assumptions were reviewed recently
+      freshness_status: fresh
+      last_reviewed: '2026-03-29'
+      name: pro-low
+      quality_tier: mid
+      reasoning_strength: mid
+      review_age_days: 0
+      route_type: direct
+      same_model_group: google/gemini-pro-low
+      tool_strength: medium
+    max_tokens: 65536
+    model: gemini-3.1-pro
+    pricing:
+      cache_read: 0.20
+      input: 0.80
+      output: 4.0
+    tier: mid
+    timeout:
+      connect_s: 10
+      read_s: 90
   kilocode:
     api_key: ${KILOCODE_API_KEY}
     backend: openai-compat
@@ -933,7 +976,7 @@ routing_modes:
         prefer_providers:
         - anthropic-sonnet
         - openai-gpt4o
-        - gemini-pro
+        - gemini-pro-high
         - anthropic-claude
         - deepseek-reasoner
         prefer_tiers:

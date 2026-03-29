@@ -41,12 +41,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
+import pathlib
 import sys
 import time
 import uuid
-import pathlib
-import logging
 
 # ── Grok-Api path resolution ────────────────────────────────────────────────
 
@@ -65,9 +65,9 @@ except ImportError:
 
 # ── FastAPI ──────────────────────────────────────────────────────────────────
 
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException  # noqa: E402
+from fastapi.responses import JSONResponse, StreamingResponse  # noqa: E402
+from pydantic import BaseModel  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(message)s")
 _logger = logging.getLogger("grok-adapter")

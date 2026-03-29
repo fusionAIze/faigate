@@ -6,10 +6,48 @@ from copy import deepcopy
 from datetime import date
 from typing import Any
 
+_ACTIVE_MODEL_VERSIONS: dict[str, str] = {
+    "google/gemini-flash": "gemini-3-flash",
+    "google/gemini-flash-lite": "gemini-3-flash-lite",
+    "google/gemini-pro-high": "gemini-3.1-pro",
+    "google/gemini-pro-low": "gemini-3.1-pro",
+    "anthropic/opus-4.6": "claude-3-opus-20240229",
+    "anthropic/sonnet-4.6": "claude-3-5-sonnet-20241022",
+    "openai/gpt-4o": "gpt-4o",
+    "deepseek/reasoner": "deepseek-reasoner",
+    "deepseek/chat": "deepseek-chat",
+}
+
+_MODEL_VERSION_LABELS: dict[str, str] = {
+    "google/gemini-flash": "Gemini 3 Flash",
+    "google/gemini-flash-lite": "Gemini 3 Flash-Lite",
+    "google/gemini-pro-high": "Gemini 3.1 Pro (High)",
+    "google/gemini-pro-low": "Gemini 3.1 Pro (Low)",
+    "anthropic/opus-4.6": "Claude 3 Opus",
+    "anthropic/sonnet-4.6": "Claude 3.5 Sonnet",
+    "openai/gpt-4o": "GPT-4o",
+    "deepseek/reasoner": "DeepSeek R1 (Reasoner)",
+    "deepseek/chat": "DeepSeek V3 (Chat)",
+}
+
+
+def get_active_model_id(canonical_id: str) -> str:
+    """Return the currently preferred concrete model ID for a canonical lane."""
+    return _ACTIVE_MODEL_VERSIONS.get(canonical_id, canonical_id.split("/")[-1])
+
+
+def get_active_model_label(canonical_id: str) -> str:
+    """Return the currently preferred human label for a canonical lane."""
+    label = _MODEL_VERSION_LABELS.get(canonical_id)
+    if label:
+        return label
+    return canonical_id.split("/")[-1].replace("-", " ").title()
+
+
 _CANONICAL_MODEL_LANES: dict[str, dict[str, Any]] = {
     "anthropic/opus-4.6": {
         "family": "anthropic",
-        "name": "quality",
+        "name": _MODEL_VERSION_LABELS["anthropic/opus-4.6"],
         "cluster": "elite-reasoning",
         "benchmark_cluster": "quality-coding",
         "quality_tier": "premium",
@@ -21,7 +59,7 @@ _CANONICAL_MODEL_LANES: dict[str, dict[str, Any]] = {
     },
     "anthropic/sonnet-4.6": {
         "family": "anthropic",
-        "name": "workhorse",
+        "name": _MODEL_VERSION_LABELS["anthropic/sonnet-4.6"],
         "cluster": "quality-workhorse",
         "benchmark_cluster": "quality-coding",
         "quality_tier": "high",
@@ -45,7 +83,7 @@ _CANONICAL_MODEL_LANES: dict[str, dict[str, Any]] = {
     },
     "google/gemini-pro-high": {
         "family": "google",
-        "name": "quality",
+        "name": _MODEL_VERSION_LABELS["google/gemini-pro-high"],
         "cluster": "quality-workhorse",
         "benchmark_cluster": "quality-coding",
         "quality_tier": "high",
@@ -53,11 +91,11 @@ _CANONICAL_MODEL_LANES: dict[str, dict[str, Any]] = {
         "context_strength": "high",
         "tool_strength": "medium",
         "preferred_degrades": ["google/gemini-pro-low", "google/gemini-flash"],
-        "last_reviewed": "2026-03-22",
+        "last_reviewed": "2026-03-29",
     },
     "google/gemini-pro-low": {
         "family": "google",
-        "name": "balanced",
+        "name": _MODEL_VERSION_LABELS["google/gemini-pro-low"],
         "cluster": "balanced-workhorse",
         "benchmark_cluster": "balanced-coding",
         "quality_tier": "mid",
@@ -65,11 +103,11 @@ _CANONICAL_MODEL_LANES: dict[str, dict[str, Any]] = {
         "context_strength": "high",
         "tool_strength": "medium",
         "preferred_degrades": ["google/gemini-flash", "deepseek/chat"],
-        "last_reviewed": "2026-03-22",
+        "last_reviewed": "2026-03-29",
     },
     "google/gemini-flash": {
         "family": "google",
-        "name": "fast",
+        "name": _MODEL_VERSION_LABELS["google/gemini-flash"],
         "cluster": "fast-workhorse",
         "benchmark_cluster": "fast-general",
         "quality_tier": "mid",
@@ -77,11 +115,11 @@ _CANONICAL_MODEL_LANES: dict[str, dict[str, Any]] = {
         "context_strength": "mid",
         "tool_strength": "medium",
         "preferred_degrades": ["google/gemini-flash-lite", "deepseek/chat"],
-        "last_reviewed": "2026-03-22",
+        "last_reviewed": "2026-03-29",
     },
     "google/gemini-flash-lite": {
         "family": "google",
-        "name": "cheap",
+        "name": _MODEL_VERSION_LABELS["google/gemini-flash-lite"],
         "cluster": "budget-general",
         "benchmark_cluster": "budget-chat",
         "quality_tier": "budget",
@@ -93,7 +131,7 @@ _CANONICAL_MODEL_LANES: dict[str, dict[str, Any]] = {
     },
     "openai/gpt-4o": {
         "family": "openai",
-        "name": "balanced",
+        "name": _MODEL_VERSION_LABELS["openai/gpt-4o"],
         "cluster": "quality-workhorse",
         "benchmark_cluster": "quality-coding",
         "quality_tier": "high",
@@ -105,7 +143,7 @@ _CANONICAL_MODEL_LANES: dict[str, dict[str, Any]] = {
     },
     "openai/gpt-4o-mini": {
         "family": "openai",
-        "name": "fast",
+        "name": "GPT-4o mini",
         "cluster": "fast-workhorse",
         "benchmark_cluster": "fast-general",
         "quality_tier": "mid",
@@ -129,7 +167,7 @@ _CANONICAL_MODEL_LANES: dict[str, dict[str, Any]] = {
     },
     "deepseek/reasoner": {
         "family": "deepseek",
-        "name": "reasoning",
+        "name": _MODEL_VERSION_LABELS["deepseek/reasoner"],
         "cluster": "elite-reasoning",
         "benchmark_cluster": "reasoning-coding",
         "quality_tier": "high",
@@ -141,7 +179,7 @@ _CANONICAL_MODEL_LANES: dict[str, dict[str, Any]] = {
     },
     "deepseek/chat": {
         "family": "deepseek",
-        "name": "workhorse",
+        "name": _MODEL_VERSION_LABELS["deepseek/chat"],
         "cluster": "balanced-workhorse",
         "benchmark_cluster": "balanced-coding",
         "quality_tier": "mid",

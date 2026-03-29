@@ -1,0 +1,129 @@
+#!/usr/bin/env python3
+"""
+faigate-release: Automate the version bump and documentation updates for fusionAIze Gate.
+
+Usage:
+    ./scripts/faigate-release [--version <new_version>] [--dry-run]
+"""
+
+import argparse
+import os
+import re
+import sys
+from datetime import date
+from pathlib import Path
+
+# Paths
+ROOT = Path(__file__).parent.parent.resolve()
+PYPROJECT = ROOT / "pyproject.toml"
+CHANGELOG = ROOT / "CHANGELOG.md"
+FORMULA = ROOT / "Formula" / "faigate.rb"
+
+
+def get_current_version():
+    content = PYPROJECT.read_text(encoding="utf-8")
+    match = re.search(r'version = "([^"]+)"', content)
+    if not match:
+        raise ValueError("Could not find version in pyproject.toml")
+    return match.group(1)
+
+
+def bump_version(new_version, dry_run=False):
+    print(f"Bumping version in pyproject.toml to {new_version}...")
+    content = PYPROJECT.read_text(encoding="utf-8")
+    new_content = re.sub(r'version = "[^"]+"', f'version = "{new_version}"', content)
+    if not dry_run:
+        PYPROJECT.write_text(new_content, encoding="utf-8")
+    else:
+        print("[DRY RUN] Would write pyproject.toml")
+
+
+def update_changelog(new_version, dry_run=False):
+    print(f"Updating CHANGELOG.md for {new_version}...")
+    today = date.today().isoformat()
+    content = CHANGELOG.read_text(encoding="utf-8")
+
+    # Look for a placeholder or the latest version section
+    # If v1.11.0 is already there (manually added), we just ensure the date is correct
+    version_pattern = rf"## v{re.escape(new_version)} - \d{{4}}-\d{{2}}-\d{{2}}"
+    if re.search(version_pattern, content):
+        new_content = re.sub(version_pattern, f"## v{new_version} - {today}", content)
+    else:
+        # Insert a new section at the top (after the header)
+        header_end = content.find("\n\n") + 2
+        new_section = f"## v{new_version} - {today}\n\n### Added\n\n- (New release baseline)\n\n"
+        new_content = content[:header_end] + new_section + content[header_end:]
+
+    if not dry_run:
+        CHANGELOG.write_text(new_content, encoding="utf-8")
+    else:
+        print("[DRY RUN] Would write CHANGELOG.md")
+
+
+def update_formula(new_version, dry_run=False):
+    if not FORMULA.exists():
+        print(f"Skipping formula update: {FORMULA} not found")
+        return
+
+    print(f"Updating Homebrew formula to {new_version}...")
+    content = FORMULA.read_text(encoding="utf-8")
+    
+    # Update version
+    new_content = re.sub(r'version "([^"]+)"', f'version "{new_version}"', content)
+    # Update URL (assuming standard tag URL)
+    new_content = re.sub(
+        r'url "https://github.com/fusionAIze/faigate/archive/refs/tags/v[^"]+\.tar\.gz"',
+        f'url "https://github.com/fusionAIze/faigate/archive/refs/tags/v{new_version}.tar.gz"',
+        new_content
+    )
+    # Note: sha256 update usually requires a downloaded tarball from the future tag.
+    # We will leave a comment reminder.
+    if 'sha256' in new_content:
+        new_content = re.sub(r'(sha256 "[^"]+")', r'\1 # IMPORTANT: Update this after tagging!', new_content, count=1)
+
+    if not dry_run:
+        FORMULA.write_text(new_content, encoding="utf-8")
+    else:
+        print("[DRY RUN] Would write Formula/faigate.rb")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="faigate release tool")
+    parser.add_argument("--version", help="New version number (e.g., 1.11.0)")
+    parser.add_argument("--dry-run", action="store_true", help="Don't write any files")
+    args = parser.parse_args()
+
+    try:
+        current = get_current_version()
+        print(f"Current version: {current}")
+
+        if not args.version:
+            # Simple auto-bump (patch) if no version provided
+            parts = current.split(".")
+            parts[-1] = str(int(parts[-1]) + 1)
+            new_version = ".".join(parts)
+            print(f"No version provided, proposing auto-bump: {new_version}")
+        else:
+            new_version = args.version
+
+        print(f"Target version: {new_version}")
+
+        bump_version(new_version, args.dry_run)
+        update_changelog(new_version, args.dry_run)
+        update_formula(new_version, args.dry_run)
+
+        print("\nRelease preparation complete.")
+        print("Next steps:")
+        print(f"1. git add .")
+        print(f"2. git commit -m \"chore: release v{new_version}\"")
+        print(f"3. git tag v{new_version}")
+        print(f"4. git push origin main --tags")
+        print(f"5. Update the sha256 in Formula/faigate.rb after the archive is available.")
+
+    except Exception as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

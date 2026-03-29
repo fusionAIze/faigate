@@ -40,3 +40,4 @@ venv/
 # local agent workdirs / tool state
 .claude/
 .codex/
+.understand-anything/

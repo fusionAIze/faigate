@@ -14,6 +14,8 @@ import yaml
 from dotenv import dotenv_values
 
 from .lane_registry import (
+    get_active_model_id,
+    get_active_model_label,
     get_canonical_model_routes,
     get_provider_lane_binding,
     get_provider_transport_binding,
@@ -167,6 +169,16 @@ _PROVIDER_ROLE_TAXONOMY: dict[str, dict[str, str]] = {
         "slot": "balanced",
         "role": "day-to-day coding workhorse",
     },
+    "gemini-pro-high": {
+        "family": "Gemini",
+        "slot": "quality",
+        "role": "architecture / high-quality review",
+    },
+    "gemini-pro-low": {
+        "family": "Gemini",
+        "slot": "balanced",
+        "role": "balanced reasoning workhorse",
+    },
     "gemini-flash": {
         "family": "Gemini",
         "slot": "balanced",
@@ -248,7 +260,7 @@ _PROVIDER_FACTORIES: dict[str, ProviderFactory] = {
             "backend": "google-genai",
             "base_url": "${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta}",
             "api_key": "${GEMINI_API_KEY}",
-            "model": "gemini-2.5-flash-lite",
+            "model": get_active_model_id("google/gemini-flash-lite"),
             "max_tokens": 8000,
             "tier": "cheap",
             "timeout": {"connect_s": 10, "read_s": 45},
@@ -258,7 +270,7 @@ _PROVIDER_FACTORIES: dict[str, ProviderFactory] = {
             },
         },
         "shortcut": {
-            "description": "Gemini Flash-Lite",
+            "description": get_active_model_label("google/gemini-flash-lite"),
             "aliases": ["lite", "flash-lite"],
         },
     },
@@ -269,7 +281,7 @@ _PROVIDER_FACTORIES: dict[str, ProviderFactory] = {
             "backend": "google-genai",
             "base_url": "${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta}",
             "api_key": "${GEMINI_API_KEY}",
-            "model": "gemini-2.5-flash",
+            "model": get_active_model_id("google/gemini-flash"),
             "max_tokens": 8000,
             "tier": "mid",
             "timeout": {"connect_s": 10, "read_s": 60},
@@ -279,8 +291,52 @@ _PROVIDER_FACTORIES: dict[str, ProviderFactory] = {
             },
         },
         "shortcut": {
-            "description": "Gemini Flash",
+            "description": get_active_model_label("google/gemini-flash"),
             "aliases": ["flash", "gemini"],
+        },
+    },
+    "gemini-pro-high": {
+        "env": "GEMINI_API_KEY",
+        "base_url_env": "GEMINI_BASE_URL",
+        "provider": {
+            "backend": "google-genai",
+            "base_url": "${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta}",
+            "api_key": "${GEMINI_API_KEY}",
+            "model": get_active_model_id("google/gemini-pro-high"),
+            "max_tokens": 65536,
+            "tier": "quality",
+            "timeout": {"connect_s": 10, "read_s": 120},
+            "capabilities": {
+                "reasoning": True,
+                "cost_tier": "premium",
+                "latency_tier": "quality",
+            },
+        },
+        "shortcut": {
+            "description": get_active_model_label("google/gemini-pro-high"),
+            "aliases": ["pro-high", "quality"],
+        },
+    },
+    "gemini-pro-low": {
+        "env": "GEMINI_API_KEY",
+        "base_url_env": "GEMINI_BASE_URL",
+        "provider": {
+            "backend": "google-genai",
+            "base_url": "${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta}",
+            "api_key": "${GEMINI_API_KEY}",
+            "model": get_active_model_id("google/gemini-pro-low"),
+            "max_tokens": 65536,
+            "tier": "mid",
+            "timeout": {"connect_s": 10, "read_s": 90},
+            "capabilities": {
+                "reasoning": True,
+                "cost_tier": "premium",
+                "latency_tier": "balanced",
+            },
+        },
+        "shortcut": {
+            "description": get_active_model_label("google/gemini-pro-low"),
+            "aliases": ["pro-low", "balanced"],
         },
     },
     "openrouter-fallback": {
@@ -350,7 +406,7 @@ _PROVIDER_FACTORIES: dict[str, ProviderFactory] = {
             "backend": "openai-compat",
             "base_url": "${OPENAI_BASE_URL:-https://api.openai.com/v1}",
             "api_key": "${OPENAI_API_KEY}",
-            "model": "gpt-4o",
+            "model": get_active_model_id("openai/gpt-4o"),
             "max_tokens": 8192,
             "tier": "mid",
             "timeout": {"connect_s": 10, "read_s": 60},
@@ -360,7 +416,7 @@ _PROVIDER_FACTORIES: dict[str, ProviderFactory] = {
             },
         },
         "shortcut": {
-            "description": "OpenAI GPT-4o",
+            "description": get_active_model_label("openai/gpt-4o"),
             "aliases": ["gpt4o", "gpt-4o"],
         },
     },
@@ -397,7 +453,7 @@ _PROVIDER_FACTORIES: dict[str, ProviderFactory] = {
             "backend": "anthropic-compat",
             "base_url": "${ANTHROPIC_BASE_URL:-https://api.anthropic.com/v1}",
             "api_key": "${ANTHROPIC_API_KEY}",
-            "model": "claude-opus-4-6",
+            "model": get_active_model_id("anthropic/sonnet-4.6"),
             "max_tokens": 64000,
             "tier": "mid",
             "timeout": {"connect_s": 10, "read_s": 120},
@@ -408,8 +464,8 @@ _PROVIDER_FACTORIES: dict[str, ProviderFactory] = {
             },
         },
         "shortcut": {
-            "description": "Anthropic Claude Opus",
-            "aliases": ["opus", "claude", "br-sonnet"],
+            "description": get_active_model_label("anthropic/sonnet-4.6"),
+            "aliases": ["sonnet", "sonnet-3-5", "claude"],
         },
     },
 }

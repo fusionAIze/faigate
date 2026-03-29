@@ -4,6 +4,28 @@ All notable changes to fusionAIze Gate should be documented here.
 
 The format is intentionally lightweight and human-readable. Group entries by release and focus on user-visible behavior, operational changes, and compatibility notes.
 
+## v1.11.0 - 2026-03-29
+
+### Added
+
+- **Gemini 3 / 3.1 Modernization** — full rollout of Google Gemini 3 Flash and Gemini 3.1 Pro (High/Low) models across all surfaces:
+  - `google/gemini-flash` now resolves to `gemini-3-flash`
+  - `google/gemini-flash-lite` now resolves to `gemini-3-flash-lite`
+  - `google/gemini-pro-high` and `google/gemini-pro-low` added for high-reasoning and balanced Gemini 3.1 Pro lanes
+- **Flexible Model Labels** — centralized model version mapping in `lane_registry.py`:
+  - New `_ACTIVE_MODEL_VERSIONS` and `_MODEL_VERSION_LABELS` lookup tables
+  - Decouples canonical lanes (e.g. `openai/gpt-4o`) from concrete provider strings (e.g. `gpt-4o`)
+  - Ensures consistent labels and IDs across config, catalog, wizard, and dashboard
+- **Updated Catalog & Wizard** — `provider_catalog.py` and `wizard.py` refactored to use dynamic model helpers:
+  - Removes hardcoded Gemini 2.5 strings from recommendation logic
+  - Synchronizes curated aliases and notes with the new versioned metadata
+- **Release Automation** — new `scripts/faigate-release` Python tool to automate version bumping, changelog updates, and Homebrew formula syncing.
+
+### Changed
+
+- `lane_registry.py` now exports `get_active_model_id(canonical_id)` and `get_active_model_label(canonical_id)` for shared use.
+- Anthropic default model in wizard updated to `claude-3-5-sonnet-20241022` (Sonnet 4.6).
+
 ## v1.10.1 - 2026-03-25
 
 ### Added
