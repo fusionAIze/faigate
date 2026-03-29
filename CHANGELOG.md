@@ -1,6 +1,6 @@
 # fusionAIze Gate Changelog
 
-## v1.12.0 - Unreleased
+## v1.12.0 - 2026-03-29
 
 ### Added
 
