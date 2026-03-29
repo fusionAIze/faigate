@@ -298,6 +298,22 @@ fusionAIze Gate supports two lightweight extension seams:
   - bounded pre-routing hint injection
   - can fail closed depending on `request_hooks.on_error`
 
+For optional Claude-Code-/Anthropic-bridge routing refinement, you can load the
+community hook shipped in this repo:
+
+```yaml
+request_hooks:
+  enabled: true
+  community_hooks_dir: "./hooks/community"
+  hooks:
+    - claude-code-router
+```
+
+The hook stays optional and only adds routing hints for bridge traffic. It does
+not perform protocol translation. By default it treats Anthropic bridge traffic
+as `coding-default`, and it also understands bridge metadata such as
+`claude_code_profile: premium` or `claude_code_profile: fast`.
+
 Use the onboarding docs and starter examples when introducing a new client instead of hand-authoring these sections from scratch.
 
 ## Config Wizard

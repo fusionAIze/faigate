@@ -116,6 +116,33 @@ metrics:
         with pytest.raises(ConfigError, match="unknown hook"):
             load_config(path)
 
+    def test_accepts_claude_code_community_hook(self, tmp_path):
+        community_dir = Path(__file__).parent.parent / "hooks" / "community"
+        path = _write_config(
+            tmp_path,
+            f"""
+server:
+  host: "127.0.0.1"
+  port: 8090
+providers:
+  default-provider:
+    backend: openai-compat
+    base_url: "https://api.example.com/v1"
+    api_key: "secret"
+    model: "chat-model"
+request_hooks:
+  enabled: true
+  community_hooks_dir: "{community_dir}"
+  hooks: ["claude-code-router"]
+fallback_chain: []
+metrics:
+  enabled: false
+""",
+        )
+
+        cfg = load_config(path)
+        assert cfg.request_hooks["hooks"] == ["claude-code-router"]
+
 
 @pytest.fixture
 def hook_config(tmp_path, monkeypatch):
@@ -216,6 +243,203 @@ class TestRequestHookRouting:
         assert attempt_order == ["local-worker", "cloud-default"]
         assert hook_state.applied_hooks == ["prefer-provider-header"]
         assert effective_body["model"] == "auto"
+
+    @pytest.mark.asyncio
+    async def test_claude_code_router_prefers_coding_ready_routes(self, tmp_path, monkeypatch):
+        community_dir = Path(__file__).parent.parent / "hooks" / "community"
+        cfg = load_config(
+            _write_config(
+                tmp_path,
+                f"""
+server:
+  host: "127.0.0.1"
+  port: 8090
+providers:
+  cheap-basic:
+    backend: openai-compat
+    base_url: "https://api.example.com/v1"
+    api_key: "secret"
+    model: "cheap-chat"
+    tier: cheap
+  coding-default-provider:
+    backend: openai-compat
+    base_url: "https://api.example.com/v1"
+    api_key: "secret"
+    model: "coding-chat"
+    tier: default
+  premium-coder:
+    backend: openai-compat
+    base_url: "https://api.example.com/v1"
+    api_key: "secret"
+    model: "premium-chat"
+    tier: reasoning
+request_hooks:
+  enabled: true
+  community_hooks_dir: "{community_dir}"
+  hooks: ["claude-code-router"]
+fallback_chain:
+  - cheap-basic
+  - coding-default-provider
+  - premium-coder
+metrics:
+  enabled: false
+""",
+            )
+        )
+        monkeypatch.setattr(main_module, "_config", cfg, raising=False)
+        monkeypatch.setattr(main_module, "_router", Router(cfg), raising=False)
+        monkeypatch.setattr(
+            main_module,
+            "_providers",
+            {
+                "cheap-basic": _ProviderStub(
+                    name="cheap-basic",
+                    model="cheap-chat",
+                    tier="cheap",
+                    capabilities={"tools": False, "long_context": False, "cloud": True},
+                ),
+                "coding-default-provider": _ProviderStub(
+                    name="coding-default-provider",
+                    model="coding-chat",
+                    tier="default",
+                    capabilities={"tools": True, "long_context": True, "cloud": True},
+                ),
+                "premium-coder": _ProviderStub(
+                    name="premium-coder",
+                    model="premium-chat",
+                    tier="reasoning",
+                    capabilities={"tools": True, "long_context": True, "cloud": True},
+                ),
+            },
+            raising=False,
+        )
+
+        (
+            decision,
+            _profile_name,
+            _client_tag,
+            _attempt_order,
+            _model_requested,
+            _resolved_mode,
+            _resolved_shortcut,
+            hook_state,
+            _effective_body,
+        ) = await _resolve_route_preview(
+            {
+                "model": "auto",
+                "messages": [{"role": "user", "content": "help with this refactor"}],
+                "metadata": {
+                    "source": "claude-code",
+                    "bridge_surface": "anthropic-messages",
+                },
+            },
+            {"x-faigate-client": "claude-code", "x-faigate-surface": "anthropic-messages"},
+        )
+
+        assert hook_state.applied_hooks == ["claude-code-router"]
+        assert hook_state.routing_hints["require_capabilities"] == ["tools"]
+        assert hook_state.routing_hints["capability_values"]["tools"] == [True]
+        assert hook_state.routing_hints["capability_values"]["long_context"] == [True]
+        assert hook_state.routing_hints["prefer_tiers"] == ["default", "reasoning"]
+        assert any(
+            "Claude Code router hook applied profile: coding-default" in note
+            for note in hook_state.notes
+        )
+
+    @pytest.mark.asyncio
+    async def test_claude_code_router_supports_premium_profile(self, tmp_path, monkeypatch):
+        community_dir = Path(__file__).parent.parent / "hooks" / "community"
+        cfg = load_config(
+            _write_config(
+                tmp_path,
+                f"""
+server:
+  host: "127.0.0.1"
+  port: 8090
+providers:
+  coding-default-provider:
+    backend: openai-compat
+    base_url: "https://api.example.com/v1"
+    api_key: "secret"
+    model: "coding-chat"
+    tier: default
+  premium-coder:
+    backend: openai-compat
+    base_url: "https://api.example.com/v1"
+    api_key: "secret"
+    model: "premium-chat"
+    tier: reasoning
+request_hooks:
+  enabled: true
+  community_hooks_dir: "{community_dir}"
+  hooks: ["claude-code-router"]
+routing_modes:
+  enabled: true
+  default: auto
+  modes:
+    premium:
+      select:
+        prefer_tiers: ["reasoning"]
+fallback_chain:
+  - coding-default-provider
+  - premium-coder
+metrics:
+  enabled: false
+""",
+            )
+        )
+        monkeypatch.setattr(main_module, "_config", cfg, raising=False)
+        monkeypatch.setattr(main_module, "_router", Router(cfg), raising=False)
+        monkeypatch.setattr(
+            main_module,
+            "_providers",
+            {
+                "coding-default-provider": _ProviderStub(
+                    name="coding-default-provider",
+                    model="coding-chat",
+                    tier="default",
+                    capabilities={"tools": True, "long_context": True, "cloud": True},
+                ),
+                "premium-coder": _ProviderStub(
+                    name="premium-coder",
+                    model="premium-chat",
+                    tier="reasoning",
+                    capabilities={"tools": True, "long_context": True, "cloud": True},
+                ),
+            },
+            raising=False,
+        )
+
+        (
+            decision,
+            _profile_name,
+            _client_tag,
+            _attempt_order,
+            _model_requested,
+            _resolved_mode,
+            _resolved_shortcut,
+            hook_state,
+            _effective_body,
+        ) = await _resolve_route_preview(
+            {
+                "model": "auto",
+                "messages": [{"role": "user", "content": "deep architectural review"}],
+                "metadata": {
+                    "source": "claude-code",
+                    "bridge_surface": "anthropic-messages",
+                    "claude_code_profile": "premium",
+                },
+            },
+            {"x-faigate-client": "claude-code"},
+        )
+
+        assert hook_state.applied_hooks == ["claude-code-router"]
+        assert hook_state.routing_hints["routing_mode"] == "premium"
+        assert hook_state.routing_hints["prefer_tiers"] == ["reasoning", "default"]
+        assert any(
+            "Claude Code router hook applied profile: premium" in note
+            for note in hook_state.notes
+        )
 
     @pytest.mark.asyncio
     async def test_locality_and_profile_hooks_shape_one_request(self, hook_config):
