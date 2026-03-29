@@ -334,7 +334,7 @@ def test_provider_source_refresh_defaults_are_exposed():
         "on_startup": True,
         "timeout_seconds": 10.0,
         "interval_seconds": 21600,
-        "providers": ["blackbox", "kilo", "openai"],
+        "providers": ["anthropic", "blackbox", "deepseek", "google", "kilo", "openai"],
     }
 
 

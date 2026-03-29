@@ -90,7 +90,10 @@ from pathlib import Path
 import yaml
 from faigate.onboarding import collect_provider_env_requirements
 from faigate.provider_catalog import build_provider_catalog_report, build_provider_refresh_guidance
-from faigate.provider_availability import record_availability_from_health
+from faigate.provider_availability import (
+    record_availability_from_health,
+    refresh_local_model_availability,
+)
 from faigate.provider_catalog_refresh import ProviderCatalogRefresher, build_catalog_summary
 from faigate.provider_catalog_refresh import build_catalog_alert_summary
 from faigate.provider_catalog_store import ProviderCatalogStore
@@ -177,7 +180,18 @@ for item in catalog.get("items", []):
 health_raw = os.environ.get("FAIGATE_HEALTH_PAYLOAD", "").strip()
 if store is not None and health_raw:
     health_payload = json.loads(health_raw)
-    record_availability_from_health(store, health_payload=health_payload)
+    record_availability_from_health(
+        store,
+        config_path=os.environ.get("FAIGATE_CONFIG_FILE", ""),
+        health_payload=health_payload,
+    )
+    if os.environ.get("FAIGATE_DOCTOR_REFRESH_CATALOG") == "1":
+        refresh_local_model_availability(
+            store,
+            config_path=os.environ.get("FAIGATE_CONFIG_FILE", ""),
+            provider_ids=list(config.provider_source_refresh.get("providers") or []),
+            timeout_seconds=float(config.provider_source_refresh.get("timeout_seconds") or 10.0),
+        )
     providers = (health_payload.get("providers") or {})
     ready = 0
     total = 0

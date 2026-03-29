@@ -1,5 +1,17 @@
 # fusionAIze Gate Changelog
 
+## v1.13.0 - Unreleased
+
+### Added
+
+- Expanded the provider source catalog scope beyond `blackbox`, `kilo`, and `openai` so Gate can also track mirrored official source data for `anthropic`, `deepseek`, and `google`
+- Added local models-endpoint overlays per configured route, which lets Gate compare what a specific key can really see against the mirrored global provider catalog
+
+### Changed
+
+- Provider source alerts now distinguish more clearly between global catalog drift and key-specific route/model visibility drift
+- Catalog summaries now include local route counts, local visible model counts, and route-vs-catalog mismatch hints instead of only source freshness and change counts
+
 ## v1.12.0 - 2026-03-29
 
 ### Added

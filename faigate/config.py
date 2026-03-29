@@ -1704,9 +1704,10 @@ def _normalize_provider_source_refresh(data: dict[str, Any]) -> dict[str, Any]:
     if interval_seconds <= 0:
         raise ConfigError("'provider_source_refresh.interval_seconds' must be positive")
 
-    providers = raw.get("providers", ["blackbox", "kilo", "openai"])
+    default_providers = ["anthropic", "blackbox", "deepseek", "google", "kilo", "openai"]
+    providers = raw.get("providers", default_providers)
     if providers in (None, ""):
-        providers = ["blackbox", "kilo", "openai"]
+        providers = default_providers
     if not isinstance(providers, list) or any(
         not isinstance(item, str) or not item.strip() for item in providers
     ):
@@ -1881,7 +1882,14 @@ class Config:
                 "on_startup": True,
                 "timeout_seconds": 10.0,
                 "interval_seconds": 21600,
-                "providers": ["blackbox", "kilo", "openai"],
+                "providers": [
+                    "anthropic",
+                    "blackbox",
+                    "deepseek",
+                    "google",
+                    "kilo",
+                    "openai",
+                ],
             },
         )
 
