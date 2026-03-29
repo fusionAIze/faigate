@@ -1,160 +1,212 @@
 #!/usr/bin/env python3
-"""
-faigate-release: Automate the version bump and documentation updates for fusionAIze Gate.
+"""Prepare a fusionAIze Gate release bump in a repeatable, testable way."""
 
-Usage:
-    ./scripts/faigate-release [--version <new_version>] [--dry-run]
-"""
+from __future__ import annotations
 
 import argparse
-import os
 import re
 import subprocess
 import sys
 from datetime import date
 from pathlib import Path
 
-# Paths
 ROOT = Path(__file__).parent.parent.resolve()
 PYPROJECT = ROOT / "pyproject.toml"
+PACKAGE_INIT = ROOT / "faigate" / "__init__.py"
 CHANGELOG = ROOT / "CHANGELOG.md"
-FORMULA = ROOT / "Formula" / "faigate.rb"
+VERIFY_SCRIPT = ROOT / "scripts" / "faigate-verify"
+TAP_REPO_URL = "https://github.com/fusionAIze/homebrew-tap"
+SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+$")
 
 
-def get_current_version():
-    content = PYPROJECT.read_text(encoding="utf-8")
-    match = re.search(r'version = "([^"]+)"', content)
-    if not match:
+def validate_version(version: str) -> str:
+    token = str(version or "").strip()
+    if not SEMVER_RE.fullmatch(token):
+        raise ValueError(f"Invalid version '{version}'. Expected x.y.z.")
+    return token
+
+
+def _replace_first(pattern: str, replacement: str, content: str, *, path: Path) -> str:
+    updated, count = re.subn(pattern, replacement, content, count=1, flags=re.MULTILINE)
+    if count != 1:
+        raise ValueError(f"Could not update expected version field in {path}")
+    return updated
+
+
+def read_project_versions() -> dict[str, str]:
+    pyproject_content = PYPROJECT.read_text(encoding="utf-8")
+    package_content = PACKAGE_INIT.read_text(encoding="utf-8")
+
+    pyproject_match = re.search(r'^version = "([^"]+)"$', pyproject_content, flags=re.MULTILINE)
+    package_match = re.search(
+        r'^__version__ = "([^"]+)"$',
+        package_content,
+        flags=re.MULTILINE,
+    )
+    if not pyproject_match:
         raise ValueError("Could not find version in pyproject.toml")
-    return match.group(1)
+    if not package_match:
+        raise ValueError("Could not find __version__ in faigate/__init__.py")
+    return {
+        "pyproject": pyproject_match.group(1),
+        "package": package_match.group(1),
+    }
 
 
-def bump_version(new_version, dry_run=False):
-    print(f"Bumping version in pyproject.toml to {new_version}...")
-    lines = PYPROJECT.read_text(encoding="utf-8").splitlines()
-    new_lines = []
-    found = False
-    for i, line in enumerate(lines):
-        # Only replace 'version' in the first 15 lines (package metadata)
-        if not found and line.startswith('version = "') and i < 15:
-            new_lines.append(f'version = "{new_version}"')
-            found = True
-        else:
-            new_lines.append(line)
-
-    if not dry_run:
-        PYPROJECT.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
-    else:
-        print("[DRY RUN] Would write pyproject.toml")
+def ensure_version_alignment() -> str:
+    versions = read_project_versions()
+    if versions["pyproject"] != versions["package"]:
+        raise ValueError(
+            "Version mismatch: pyproject.toml has "
+            f"{versions['pyproject']}, but faigate/__init__.py has {versions['package']}."
+        )
+    return versions["pyproject"]
 
 
-def update_changelog(new_version, dry_run=False):
-    print(f"Updating CHANGELOG.md for {new_version}...")
+def sync_version_files(new_version: str, *, dry_run: bool = False) -> list[Path]:
+    changed: list[Path] = []
+    pyproject_content = PYPROJECT.read_text(encoding="utf-8")
+    package_content = PACKAGE_INIT.read_text(encoding="utf-8")
+
+    new_pyproject = _replace_first(
+        r'^version = "[^"]+"$',
+        f'version = "{new_version}"',
+        pyproject_content,
+        path=PYPROJECT,
+    )
+    new_package = _replace_first(
+        r'^__version__ = "[^"]+"$',
+        f'__version__ = "{new_version}"',
+        package_content,
+        path=PACKAGE_INIT,
+    )
+
+    if new_pyproject != pyproject_content:
+        changed.append(PYPROJECT)
+        if not dry_run:
+            PYPROJECT.write_text(new_pyproject, encoding="utf-8")
+    if new_package != package_content:
+        changed.append(PACKAGE_INIT)
+        if not dry_run:
+            PACKAGE_INIT.write_text(new_package, encoding="utf-8")
+    return changed
+
+
+def update_changelog(new_version: str, *, dry_run: bool = False) -> bool:
     today = date.today().isoformat()
     content = CHANGELOG.read_text(encoding="utf-8")
-
-    # Look for a placeholder or the latest version section
-    # If v1.11.0 is already there (manually added), we just ensure the date is correct
     version_pattern = rf"## v{re.escape(new_version)} - \d{{4}}-\d{{2}}-\d{{2}}"
     if re.search(version_pattern, content):
         new_content = re.sub(version_pattern, f"## v{new_version} - {today}", content)
     else:
-        # Insert a new section at the top (after the header)
-        header_end = content.find("\n\n") + 2
+        header_end = content.find("\n\n")
+        if header_end == -1:
+            raise ValueError("CHANGELOG.md is missing the expected intro header block")
+        header_end += 2
         new_section = f"## v{new_version} - {today}\n\n### Added\n\n- (New release baseline)\n\n"
         new_content = content[:header_end] + new_section + content[header_end:]
 
+    if new_content == content:
+        return False
     if not dry_run:
         CHANGELOG.write_text(new_content, encoding="utf-8")
-    else:
-        print("[DRY RUN] Would write CHANGELOG.md")
+    return True
 
 
-def update_formula(new_version, dry_run=False):
-    if not FORMULA.exists():
-        print(f"Skipping formula update: {FORMULA} not found")
-        return
-
-    print(f"Updating Homebrew formula to {new_version}...")
-    content = FORMULA.read_text(encoding="utf-8")
-    
-    # Update version
-    new_content = re.sub(r'version "([^"]+)"', f'version "{new_version}"', content)
-    # Update URL (assuming standard tag URL)
-    new_content = re.sub(
-        r'url "https://github.com/fusionAIze/faigate/archive/refs/tags/v[^"]+\.tar\.gz"',
-        f'url "https://github.com/fusionAIze/faigate/archive/refs/tags/v{new_version}.tar.gz"',
-        new_content
+def is_worktree_dirty() -> bool:
+    result = subprocess.run(
+        ["git", "status", "--short"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
     )
-    # Note: sha256 update usually requires a downloaded tarball from the future tag.
-    # We will leave a comment reminder.
-    if 'sha256' in new_content:
-        new_content = re.sub(r'(sha256 "[^"]+")', r'\1 # IMPORTANT: Update this after tagging!', new_content, count=1)
-
-    if not dry_run:
-        FORMULA.write_text(new_content, encoding="utf-8")
-    else:
-        print("[DRY RUN] Would write Formula/faigate.rb")
+    return bool(result.stdout.strip())
 
 
-def verify_local(dry_run=False):
-    if dry_run:
-        print("[DRY RUN] Skipping local verification")
+def verify_local(*, dry_run: bool = False, skip_verify: bool = False) -> bool:
+    if dry_run or skip_verify:
+        return True
+    if not VERIFY_SCRIPT.exists():
+        print("Warning: scripts/faigate-verify not found; skipping local verification.")
         return True
 
-    print("Running local verification script...")
-    verify_script = ROOT / "scripts" / "faigate-verify"
-    if not verify_script.exists():
-        print("Warning: faigate-verify script not found!")
-        return True
-
-    # Use sys.executable to ensure we use the same python environment
-    result = subprocess.run([sys.executable, str(verify_script)], cwd=ROOT)
+    result = subprocess.run([sys.executable, str(VERIFY_SCRIPT)], cwd=ROOT)
     return result.returncode == 0
 
 
-def main():
-    parser = argparse.ArgumentParser(description="faigate release tool")
-    parser.add_argument("--version", help="New version number (e.g., 1.11.0)")
-    parser.add_argument("--dry-run", action="store_true", help="Don't write any files")
-    args = parser.parse_args()
+def render_next_steps(new_version: str) -> list[str]:
+    return [
+        f"git add {PYPROJECT.relative_to(ROOT)} {PACKAGE_INIT.relative_to(ROOT)} {CHANGELOG.relative_to(ROOT)}",
+        f'git commit -m "chore: release v{new_version}"',
+        f'git tag -a v{new_version} -m "fusionAIze Gate v{new_version}"',
+        "git push origin main --tags",
+        f"Publish the GitHub Release for v{new_version}; notify-tap will dispatch the Homebrew update to {TAP_REPO_URL}.",
+    ]
 
-    try:
-        current = get_current_version()
-        print(f"Current version: {current}")
 
-        if not args.version:
-            # Simple auto-bump (patch) if no version provided
-            parts = current.split(".")
-            parts[-1] = str(int(parts[-1]) + 1)
-            new_version = ".".join(parts)
-            print(f"No version provided, proposing auto-bump: {new_version}")
-        else:
-            new_version = args.version
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Prepare a fusionAIze Gate release bump.")
+    parser.add_argument("--version", help="New version number (for example 1.11.3)")
+    parser.add_argument("--dry-run", action="store_true", help="Print changes without writing files")
+    parser.add_argument(
+        "--allow-dirty",
+        action="store_true",
+        help="Allow release prep to run even when the git worktree is dirty",
+    )
+    parser.add_argument(
+        "--skip-verify",
+        action="store_true",
+        help="Skip the local release verification helper",
+    )
+    return parser.parse_args()
 
-        print(f"Target version: {new_version}")
 
-        # Safety check first!
-        if not verify_local(args.dry_run):
-            print("\n❌ Local verification failed! Aborting release.")
-            sys.exit(1)
+def main() -> int:
+    args = parse_args()
+    current_version = ensure_version_alignment()
+    print(f"Current version: {current_version}")
 
-        bump_version(new_version, args.dry_run)
-        update_changelog(new_version, args.dry_run)
-        update_formula(new_version, args.dry_run)
+    if not args.version:
+        parts = current_version.split(".")
+        parts[-1] = str(int(parts[-1]) + 1)
+        new_version = ".".join(parts)
+        print(f"No version provided, proposing patch bump: {new_version}")
+    else:
+        new_version = args.version
+    new_version = validate_version(new_version)
+    print(f"Target version: {new_version}")
 
-        print("\nRelease preparation complete.")
-        print("Next steps:")
-        print(f"1. git add .")
-        print(f"2. git commit -m \"chore: release v{new_version}\"")
-        print(f"3. git tag v{new_version}")
-        print(f"4. git push origin main --tags")
-        print(f"5. Update the sha256 in Formula/faigate.rb after the archive is available.")
+    if is_worktree_dirty() and not (args.allow_dirty or args.dry_run):
+        raise SystemExit(
+            "Refusing to prepare a release from a dirty worktree. Commit or stash changes, "
+            "or rerun with --allow-dirty if you really intend that."
+        )
 
-    except Exception as e:
-        print(f"Error: {e}")
-        sys.exit(1)
+    if not verify_local(dry_run=args.dry_run, skip_verify=args.skip_verify):
+        raise SystemExit("Local verification failed; aborting release preparation.")
+
+    changed_files = sync_version_files(new_version, dry_run=args.dry_run)
+    changelog_changed = update_changelog(new_version, dry_run=args.dry_run)
+
+    if args.dry_run:
+        print("[DRY RUN] Would update:")
+        for path in changed_files:
+            print(f"  - {path.relative_to(ROOT)}")
+        if changelog_changed:
+            print(f"  - {CHANGELOG.relative_to(ROOT)}")
+    else:
+        print("Updated:")
+        for path in changed_files:
+            print(f"  - {path.relative_to(ROOT)}")
+        if changelog_changed:
+            print(f"  - {CHANGELOG.relative_to(ROOT)}")
+
+    print("\nNext steps:")
+    for index, step in enumerate(render_next_steps(new_version), start=1):
+        print(f"{index}. {step}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

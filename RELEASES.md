@@ -16,7 +16,8 @@ This repo does not require a heavy release process. Use lightweight tags plus Gi
 8. Confirm that README plus the relevant docs pages still match the shipped runtime behavior.
 9. If packaging or Docker changed shortly before the release, run the publish dry run first.
 10. For hardening-heavy releases, keep the API functional tests green alongside unit and config coverage.
-11. If the Homebrew formula changed, bump `Formula/faigate.rb` in the separate [`fusionAIze/homebrew-tap`](https://github.com/fusionAIze/homebrew-tap) repo to the new release tag and update its `sha256`.
+11. Publish the GitHub Release so [`notify-tap`](./.github/workflows/notify-tap.yml) can dispatch the Homebrew tap update automatically.
+12. If the tap dispatch fails or the formula needs manual follow-up, bump `Formula/faigate.rb` in the separate [`fusionAIze/homebrew-tap`](https://github.com/fusionAIze/homebrew-tap) repo to the new release tag and update its `sha256`.
 
 ## Example
 
@@ -29,7 +30,7 @@ git push origin v1.8.0
 
 Then open GitHub Releases and publish a release for `v1.8.0`.
 
-If the release changes the Homebrew package, follow it with a tap update in [`fusionAIze/homebrew-tap`](https://github.com/fusionAIze/homebrew-tap):
+Publishing the GitHub Release should trigger the tap notification automatically. If the tap still needs a manual follow-up, use [`fusionAIze/homebrew-tap`](https://github.com/fusionAIze/homebrew-tap):
 
 ```bash
 git clone https://github.com/fusionAIze/homebrew-tap.git
@@ -43,15 +44,19 @@ git push origin main
 
 Tagged releases now trigger [release-artifacts](./.github/workflows/release-artifacts.yml):
 
+- validate that the Git tag matches both `pyproject.toml` and `faigate/__init__.py`
 - always build `sdist` and `wheel`
+- run `twine check dist/*` before artifacts are uploaded or published
 - push the container image to GHCR
 - publish to PyPI only when `PYPI_PUBLISH=true` is set and GitHub trusted publishing is configured for the `pypi` environment
+- publish the already-built `python-dist` artifact to PyPI instead of rebuilding it in a second job
 
 The repo also includes [publish-dry-run](./.github/workflows/publish-dry-run.yml):
 
 - build Python distributions without publishing them
 - run `twine check`
 - build the GHCR image without pushing it
+- exercise `scripts/faigate-release --dry-run` when release automation files change
 
 ## Versioning Guidance
 

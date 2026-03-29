@@ -8,12 +8,27 @@ on:
       - "Dockerfile"
       - ".dockerignore"
       - "pyproject.toml"
+      - "faigate/__init__.py"
       - "README.md"
       - "RELEASES.md"
+      - "docs/PUBLISHING.md"
+      - "scripts/faigate-release"
+      - "scripts/faigate-verify"
+      - ".github/workflows/notify-tap.yml"
       - ".github/workflows/publish-dry-run.yml"
       - ".github/workflows/release-artifacts.yml"
 
 jobs:
+  release-helper-dry-run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Exercise release helper in dry-run mode
+        run: python scripts/faigate-release --dry-run --version 9.9.9
+
   python-publish-dry-run:
     runs-on: ubuntu-latest
     steps:

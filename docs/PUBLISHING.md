@@ -24,12 +24,14 @@ The repo includes [publish-dry-run](../.github/workflows/publish-dry-run.yml):
 - builds the Python package
 - runs `twine check dist/*`
 - builds the container image through `docker/build-push-action`
+- exercises `scripts/faigate-release --dry-run`
 - does not push to GHCR
 - does not publish to PyPI
 
 ### Local
 
 ```bash
+python scripts/faigate-release --dry-run --version 1.11.3
 python -m pip install --upgrade build twine
 python -m build
 python -m twine check dist/*
@@ -41,12 +43,22 @@ docker build -t faigate:dry-run .
 The real publish flow stays tag-driven through [release-artifacts](../.github/workflows/release-artifacts.yml):
 
 1. cut the release PR and merge it to `main`
-2. tag the release from `main`
-3. push the tag
-4. let `release-artifacts` build Python distributions and the GHCR image
-5. publish the GitHub Release
-6. optionally allow PyPI publication through trusted publishing
-7. publish the separate npm CLI package only when you are ready to version the Node-facing surface independently
+2. run `python scripts/faigate-release --version x.y.z`
+3. tag the release from `main`
+4. push the tag
+5. let `release-artifacts` validate the tag/version match, build Python distributions, and push the GHCR image
+6. publish the GitHub Release
+7. let `notify-tap` dispatch the Homebrew update to [`fusionAIze/homebrew-tap`](https://github.com/fusionAIze/homebrew-tap)
+8. optionally allow PyPI publication through trusted publishing
+9. publish the separate npm CLI package only when you are ready to version the Node-facing surface independently
+
+The local release helper now updates:
+
+- `pyproject.toml`
+- `faigate/__init__.py`
+- `CHANGELOG.md`
+
+It no longer rewrites a Homebrew formula inside this repo because the tap lives in the separate [`fusionAIze/homebrew-tap`](https://github.com/fusionAIze/homebrew-tap) repository.
 
 ## Trust Boundaries
 

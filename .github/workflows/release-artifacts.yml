@@ -6,7 +6,41 @@ on:
       - "v*"
 
 jobs:
+  validate-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate release tag matches package version
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PYPROJECT_VERSION="$(python - <<'PY'
+          import re
+          from pathlib import Path
+          content = Path("pyproject.toml").read_text(encoding="utf-8")
+          match = re.search(r'^version = "([^"]+)"$', content, flags=re.MULTILINE)
+          if not match:
+              raise SystemExit("pyproject.toml version not found")
+          print(match.group(1))
+          PY
+          )"
+          PACKAGE_VERSION="$(python - <<'PY'
+          import re
+          from pathlib import Path
+          content = Path("faigate/__init__.py").read_text(encoding="utf-8")
+          match = re.search(r'^__version__ = "([^"]+)"$', content, flags=re.MULTILINE)
+          if not match:
+              raise SystemExit("faigate/__init__.py version not found")
+          print(match.group(1))
+          PY
+          )"
+          test "$TAG_VERSION" = "$PYPROJECT_VERSION"
+          test "$TAG_VERSION" = "$PACKAGE_VERSION"
+
   python-dist:
+    needs: validate-release
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,6 +51,10 @@ jobs:
         run: |
           python -m pip install --upgrade pip build
           python -m build
+      - name: Validate Python artifacts
+        run: |
+          python -m pip install --upgrade twine
+          python -m twine check dist/*
       - name: Upload Python artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -24,6 +62,7 @@ jobs:
           path: dist/*
 
   ghcr:
+    needs: validate-release
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -53,19 +92,21 @@ jobs:
 
   pypi:
     if: ${{ vars.PYPI_PUBLISH == 'true' }}
+    needs:
+      - validate-release
+      - python-dist
     runs-on: ubuntu-latest
     permissions:
       id-token: write
     environment:
       name: pypi
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Download built Python artifacts
+        uses: actions/download-artifact@v4
         with:
-          python-version: "3.12"
-      - name: Build sdist and wheel
-        run: |
-          python -m pip install --upgrade pip build
-          python -m build
+          name: python-dist
+          path: dist
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist

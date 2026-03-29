@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""
-faigate-verify: Simulate GitHub Actions checks locally.
-"""
+"""Run the local checks that should stay aligned with release publishing."""
 
-import os
+from __future__ import annotations
+
+import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -11,89 +12,83 @@ from pathlib import Path
 ROOT = Path(__file__).parent.parent.resolve()
 
 
-def run(cmd, cwd=ROOT, env=None):
+def run(cmd: list[str], *, cwd: Path = ROOT) -> bool:
     print(f"Running: {' '.join(cmd)}")
-    result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, env=env)
-    if result.returncode != 0:
-        print(f"FAILED: {' '.join(cmd)}")
-        if result.stdout:
-            print(result.stdout)
-        if result.stderr:
-            print(result.stderr)
-        return False
-    return True
+    result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
+    if result.returncode == 0:
+        return True
+    print(f"FAILED: {' '.join(cmd)}")
+    if result.stdout:
+        print(result.stdout)
+    if result.stderr:
+        print(result.stderr)
+    return False
 
 
-def check_repo_safety():
-    print("Checking repo safety (forbidden files)...")
-    # Simulation of repo-safety.yml
-    # git ls-files | egrep '(^\.ssh/|\.db($|-)|\.sqlite|\.log$)'
+def check_repo_safety() -> bool:
+    print("Checking repo safety (forbidden tracked files)...")
     try:
         files = subprocess.check_output(["git", "ls-files"], cwd=ROOT, text=True).splitlines()
-        forbidden_patterns = [r"^\.ssh/", r"\.db($|-)", r"\.sqlite", r"\.log$"]
-        import re
-        
-        failed = False
-        for f in files:
-            for p in forbidden_patterns:
-                if re.search(p, f):
-                    print(f"ERROR: Forbidden file tracked: {f}")
-                    failed = True
-        return not failed
-    except Exception as e:
-        print(f"Error checking repo safety: {e}")
+    except Exception as exc:
+        print(f"Error checking repo safety: {exc}")
         return False
 
+    forbidden_patterns = [r"^\.ssh/", r"\.db($|-)", r"\.sqlite", r"\.log$"]
+    failed = False
+    for path in files:
+        for pattern in forbidden_patterns:
+            if re.search(pattern, path):
+                print(f"ERROR: Forbidden file tracked: {path}")
+                failed = True
+    return not failed
 
-def main():
+
+def main() -> int:
     success = True
 
-    # 1. Ruff check
-    if not run(["ruff", "check", "."]):
-        success = False
+    python = sys.executable
+    dist_dir = ROOT / "dist"
+    shutil.rmtree(dist_dir, ignore_errors=True)
 
-    # 2. Ruff format check
-    if not run(["ruff", "format", "--check", "."]):
-        success = False
-
-    # 3. Pytest
-    env = os.environ.copy()
-    env["PYTHONPATH"] = str(ROOT)
-    if not run(["pytest", "tests/"], env=env):
-        success = False
-
-    # 4. Bash syntax check
-    scripts = list((ROOT / "scripts").glob("*"))
-    for s in scripts:
-        if not s.is_file():
-            continue
-            
-        # Skip Python files (by extension or shebang)
-        if s.suffix == ".py":
-            continue
-            
-        try:
-            with open(s, "r") as f:
-                first_line = f.readline()
-                if "python" in first_line:
-                    continue
-        except Exception:
-            pass
-
-        if not run(["bash", "-n", str(s)]):
+    commands = [
+        [python, "-m", "ruff", "check", "."],
+        [python, "-m", "ruff", "format", "--check", "."],
+        [python, "-m", "pytest", "tests/"],
+        [python, "-m", "build"],
+    ]
+    for command in commands:
+        if not run(command):
             success = False
 
-    # 5. Repo safety
+    dist_files = sorted(str(path) for path in dist_dir.glob("*"))
+    if dist_files:
+        if not run([python, "-m", "twine", "check", *dist_files]):
+            success = False
+    else:
+        print("FAILED: python -m twine check dist/*")
+        print("dist/ is empty after build")
+        success = False
+
+    for script in sorted((ROOT / "scripts").iterdir()):
+        if not script.is_file():
+            continue
+        if script.suffix == ".py":
+            continue
+        first_line = script.read_text(encoding="utf-8", errors="ignore").splitlines()[:1]
+        if first_line and "python" in first_line[0]:
+            continue
+        if not run(["bash", "-n", str(script)]):
+            success = False
+
     if not check_repo_safety():
         success = False
 
     if success:
-        print("\n✅ All checks passed locally!")
-        sys.exit(0)
-    else:
-        print("\n❌ Some checks failed. Please fix them before committing.")
-        sys.exit(1)
+        print("\nAll release verification checks passed.")
+        return 0
+    print("\nRelease verification failed.")
+    return 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
