@@ -173,3 +173,48 @@ def test_anthropic_messages_rejects_non_text_blocks(anthropic_api_client):
     assert body["type"] == "error"
     assert body["error"]["type"] == "invalid_request_error"
     assert "text content blocks" in body["error"]["message"]
+
+
+def test_anthropic_count_tokens_returns_estimate_with_headers(anthropic_api_client):
+    client, _provider = anthropic_api_client
+
+    response = client.post(
+        "/v1/messages/count_tokens",
+        json={
+            "model": "claude-sonnet",
+            "system": "Be concise",
+            "messages": [{"role": "user", "content": "Count these tokens please"}],
+            "tools": [
+                {
+                    "name": "lookup_doc",
+                    "description": "Load one doc",
+                    "input_schema": {"type": "object", "properties": {"id": {"type": "string"}}},
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert isinstance(body["input_tokens"], int)
+    assert body["input_tokens"] > 0
+    assert response.headers["x-faigate-token-count-exact"] == "false"
+    assert response.headers["x-faigate-token-count-method"] == "estimated-char-v1"
+
+
+def test_anthropic_count_tokens_rejects_invalid_payload(anthropic_api_client):
+    client, _provider = anthropic_api_client
+
+    response = client.post(
+        "/v1/messages/count_tokens",
+        json={
+            "model": "claude-sonnet",
+            "messages": "not-a-list",
+        },
+    )
+
+    assert response.status_code == 400
+    body = response.json()
+    assert body["type"] == "error"
+    assert body["error"]["type"] == "invalid_request_error"
+    assert "messages" in body["error"]["message"]

@@ -30,7 +30,11 @@ from starlette.datastructures import UploadFile
 from . import __version__
 from .adaptation import AdaptiveRouteState
 from .api.anthropic.models import AnthropicBridgeError, parse_anthropic_messages_request
-from .bridges.anthropic import anthropic_request_to_canonical, canonical_response_to_anthropic
+from .bridges.anthropic import (
+    anthropic_request_to_canonical,
+    canonical_response_to_anthropic,
+    dispatch_anthropic_count_tokens,
+)
 from .canonical import CanonicalChatRequest, CanonicalChatResponse, CanonicalResponseMessage
 from .config import Config, load_config
 from .hooks import (
@@ -3007,6 +3011,50 @@ async def anthropic_messages(request: Request):
     response.headers["X-faigate-Hook-Errors"] = str(len(execution.hook_state.errors))
     response.headers["x-faigate-trace-id"] = execution.trace_id or str(uuid.uuid4())
     return response
+
+
+@app.post("/v1/messages/count_tokens")
+async def anthropic_count_tokens(request: Request):
+    """Anthropic-compatible token counting endpoint.
+
+    v1 uses a deterministic local estimate. The JSON body stays compatible with
+    Anthropic's minimal response shape, while headers make the approximation
+    explicit.
+    """
+
+    if not _config.anthropic_bridge.get("enabled", False):
+        return _anthropic_error_response(
+            "Anthropic bridge is disabled",
+            error_type="not_found_error",
+            status_code=404,
+        )
+
+    try:
+        body = await _read_json_body(request, operation="Anthropic count_tokens")
+    except PayloadTooLargeError:
+        return _anthropic_error_response(
+            "Anthropic count_tokens request is too large",
+            error_type="request_too_large",
+            status_code=413,
+        )
+    except ValueError:
+        return _anthropic_error_response(
+            "Invalid Anthropic count_tokens request",
+            error_type="invalid_request_error",
+            status_code=400,
+        )
+
+    headers = _collect_anthropic_bridge_headers(request)
+    try:
+        result, extra_headers = dispatch_anthropic_count_tokens(payload=body, headers=headers)
+    except AnthropicBridgeError as exc:
+        return _anthropic_error_response(
+            str(exc),
+            error_type="invalid_request_error",
+            status_code=400,
+        )
+
+    return JSONResponse(asdict(result), headers=extra_headers)
 
 
 # ── CLI entry point ────────────────────────────────────────────

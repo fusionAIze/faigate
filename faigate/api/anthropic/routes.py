@@ -7,7 +7,7 @@ from dataclasses import asdict
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from ...bridges.anthropic import dispatch_anthropic_messages
+from ...bridges.anthropic import dispatch_anthropic_count_tokens, dispatch_anthropic_messages
 from ...canonical import CanonicalChatExecutor
 
 
@@ -32,15 +32,12 @@ def build_anthropic_router(*, executor: CanonicalChatExecutor) -> APIRouter:
         return JSONResponse(asdict(response))
 
     @router.post("/v1/messages/count_tokens")
-    async def anthropic_count_tokens() -> JSONResponse:
-        return JSONResponse(
-            {
-                "error": {
-                    "message": "Anthropic count_tokens bridge is not implemented yet",
-                    "type": "not_implemented",
-                }
-            },
-            status_code=501,
+    async def anthropic_count_tokens(request: Request) -> JSONResponse:
+        payload = await request.json()
+        response, extra_headers = dispatch_anthropic_count_tokens(
+            payload=payload,
+            headers={key.lower(): value for key, value in request.headers.items()},
         )
+        return JSONResponse(asdict(response), headers=extra_headers)
 
     return router

@@ -17,7 +17,10 @@ from ...api.anthropic.models import (
     AnthropicMessage,
     AnthropicMessagesRequest,
     AnthropicMessagesResponse,
+    AnthropicTokenCountRequest,
+    AnthropicTokenCountResponse,
     parse_anthropic_messages_request,
+    parse_anthropic_token_count_request,
 )
 from ...canonical import (
     CanonicalChatExecutor,
@@ -74,6 +77,26 @@ def canonical_to_openai_body(request: CanonicalChatRequest) -> dict[str, Any]:
     return request.to_openai_body()
 
 
+def anthropic_count_tokens_request_to_canonical(
+    request: AnthropicTokenCountRequest,
+    *,
+    headers: dict[str, str] | None = None,
+) -> CanonicalChatRequest:
+    """Map a count_tokens request to the same canonical request model."""
+
+    return anthropic_request_to_canonical(
+        AnthropicMessagesRequest(
+            model=request.model,
+            system=request.system,
+            messages=request.messages,
+            tools=request.tools,
+            stream=False,
+            metadata=dict(request.metadata),
+        ),
+        headers=headers,
+    )
+
+
 def canonical_response_to_anthropic(
     response: CanonicalChatResponse,
     *,
@@ -111,6 +134,65 @@ async def dispatch_anthropic_messages(
     )
 
 
+def dispatch_anthropic_count_tokens(
+    *,
+    payload: dict[str, Any],
+    headers: dict[str, str],
+) -> tuple[AnthropicTokenCountResponse, dict[str, str]]:
+    """Run the bridge flow for a local v1 token-count estimate.
+
+    v1 deliberately favors a stable local estimate over provider-specific token
+    accounting. The response remains Anthropic-compatible while the headers make
+    the approximation explicit for operators and advanced clients.
+    """
+
+    wire_request = parse_anthropic_token_count_request(payload)
+    canonical_request = anthropic_count_tokens_request_to_canonical(
+        wire_request,
+        headers=headers,
+    )
+    input_tokens, method = approximate_anthropic_input_tokens(canonical_request)
+    return (
+        AnthropicTokenCountResponse(input_tokens=input_tokens),
+        {
+            "X-faigate-Token-Count-Exact": "false",
+            "X-faigate-Token-Count-Method": method,
+        },
+    )
+
+
+def approximate_anthropic_input_tokens(request: CanonicalChatRequest) -> tuple[int, str]:
+    """Return a lightweight token estimate for Anthropic bridge requests.
+
+    The gateway does not yet maintain provider-specific tokenizers or a stable
+    upstream counting path for every routed provider. For v1 we therefore use a
+    deterministic character-byte heuristic with small structural overheads.
+    """
+
+    total = 3
+    if isinstance(request.system, str):
+        total += 4 + _estimate_text_tokens(request.system)
+    elif isinstance(request.system, list):
+        for item in request.system:
+            if isinstance(item, str):
+                total += 4 + _estimate_text_tokens(item)
+
+    for message in request.messages:
+        total += 4
+        total += _estimate_text_tokens(message.role)
+        total += _estimate_message_content_tokens(message.content)
+
+    for tool in request.tools:
+        total += 12
+        total += _estimate_text_tokens(tool.name)
+        total += _estimate_text_tokens(tool.description)
+        total += _estimate_text_tokens(
+            json.dumps(tool.input_schema, sort_keys=True, separators=(",", ":"))
+        )
+
+    return max(total, 1), "estimated-char-v1"
+
+
 def _message_to_canonical(message: AnthropicMessage) -> CanonicalMessage:
     if any(block.type != "text" for block in message.content):
         raise AnthropicBridgeError(
@@ -136,6 +218,30 @@ def _anthropic_block_to_payload(block: AnthropicContentBlock) -> dict[str, Any]:
     if block.metadata:
         payload["metadata"] = dict(block.metadata)
     return payload
+
+
+def _estimate_message_content_tokens(content: Any) -> int:
+    if isinstance(content, str):
+        return _estimate_text_tokens(content)
+    if isinstance(content, list):
+        total = 0
+        for item in content:
+            if isinstance(item, str):
+                total += _estimate_text_tokens(item)
+            elif isinstance(item, dict):
+                total += _estimate_text_tokens(json.dumps(item, sort_keys=True))
+            else:
+                total += _estimate_text_tokens(str(item))
+        return total
+    return _estimate_text_tokens(str(content or ""))
+
+
+def _estimate_text_tokens(text: str) -> int:
+    cleaned = str(text or "")
+    if not cleaned:
+        return 0
+    byte_count = len(cleaned.encode("utf-8"))
+    return max(1, (byte_count + 3) // 4)
 
 
 def _canonical_content_to_anthropic_blocks(

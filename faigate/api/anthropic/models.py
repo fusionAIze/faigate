@@ -64,6 +64,13 @@ class AnthropicTokenCountRequest:
 
 
 @dataclass(frozen=True)
+class AnthropicTokenCountResponse:
+    """Minimal Anthropic-compatible token-count response."""
+
+    input_tokens: int
+
+
+@dataclass(frozen=True)
 class AnthropicMessagesResponse:
     """Minimal response model for the Anthropic bridge."""
 
@@ -126,6 +133,19 @@ def parse_anthropic_messages_request(payload: Mapping[str, Any]) -> AnthropicMes
         tools=tools,
         stream=stream,
         metadata=dict(metadata),
+    )
+
+
+def parse_anthropic_token_count_request(payload: Mapping[str, Any]) -> AnthropicTokenCountRequest:
+    """Parse the v1 count_tokens payload using the same basic request shape."""
+
+    request = parse_anthropic_messages_request(payload)
+    return AnthropicTokenCountRequest(
+        model=request.model,
+        system=request.system,
+        messages=request.messages,
+        tools=request.tools,
+        metadata=dict(request.metadata),
     )
 
 
@@ -204,4 +224,3 @@ def _parse_tool(raw: Any) -> AnthropicToolDefinition:
         description=str(raw.get("description", "") or "").strip(),
         input_schema=dict(input_schema),
     )
-
