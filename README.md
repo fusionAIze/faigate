@@ -324,6 +324,12 @@ Local smoke test:
 ./docs/examples/anthropic-bridge-smoke.sh
 ```
 
+Client-near validation before release:
+
+```bash
+./docs/examples/anthropic-bridge-validation.sh
+```
+
 For a fuller operator view, see [docs/anthropic-bridge.md](./docs/anthropic-bridge.md) and [docs/API.md](./docs/API.md).
 
 ## API Surface

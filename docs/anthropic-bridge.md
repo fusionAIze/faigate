@@ -133,6 +133,20 @@ This covers:
 - `POST /v1/messages`
 - `POST /v1/messages/count_tokens`
 
+For a client-near validation pass before release, run:
+
+```bash
+./docs/examples/anthropic-bridge-validation.sh
+```
+
+That broader check adds:
+
+- bridge headers and Anthropic version/beta tolerance
+- basic `tool_use` / `tool_result` flow shape
+- doctor and provider-probe output after the same config is live
+
+For the explicit release gate, see [Anthropic Bridge Release Readiness](./anthropic-bridge-release-readiness.md).
+
 ## Known v1 Limits
 
 - non-streaming only
