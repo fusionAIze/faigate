@@ -188,6 +188,33 @@ def test_anthropic_messages_applies_model_aliases(anthropic_api_client):
     assert response.headers["x-faigate-bridge-model-resolved"] == "premium"
 
 
+def test_anthropic_messages_preserve_version_headers(anthropic_api_client):
+    client, provider = anthropic_api_client
+
+    response = client.post(
+        "/v1/messages",
+        headers={
+            "anthropic-client": "claude-desktop",
+            "anthropic-version": "2023-06-01",
+            "anthropic-beta": "tools-2024-04-04",
+            "user-agent": "Claude-Code/1.0",
+        },
+        json={
+            "model": "claude-sonnet",
+            "messages": [{"role": "user", "content": "hello"}],
+        },
+    )
+
+    assert response.status_code == 200
+    bridge_headers = provider.calls[0]["extra_body"]["metadata"]["bridge_headers"]
+    assert bridge_headers["anthropic-version"] == "2023-06-01"
+    assert bridge_headers["anthropic-beta"] == "tools-2024-04-04"
+    assert bridge_headers["user-agent"] == "Claude-Code/1.0"
+    assert response.headers["x-faigate-bridge-source"] == "claude-desktop"
+    assert response.headers["x-faigate-bridge-anthropic-version"] == "2023-06-01"
+    assert response.headers["x-faigate-bridge-anthropic-beta"] == "tools-2024-04-04"
+
+
 def test_anthropic_messages_rejects_non_text_blocks(anthropic_api_client):
     client, _provider = anthropic_api_client
 
@@ -238,6 +265,26 @@ def test_anthropic_count_tokens_returns_estimate_with_headers(anthropic_api_clie
     assert response.headers["x-faigate-token-count-method"] == "estimated-char-v1"
     assert response.headers["x-faigate-bridge-surface"] == "anthropic-messages"
     assert response.headers["x-faigate-bridge-model-requested"] == "claude-sonnet"
+
+
+def test_anthropic_count_tokens_preserve_version_headers(anthropic_api_client):
+    client, _provider = anthropic_api_client
+
+    response = client.post(
+        "/v1/messages/count_tokens",
+        headers={
+            "anthropic-version": "2023-06-01",
+            "anthropic-beta": "tools-2024-04-04",
+        },
+        json={
+            "model": "claude-sonnet",
+            "messages": [{"role": "user", "content": "Count these tokens please"}],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["x-faigate-bridge-anthropic-version"] == "2023-06-01"
+    assert response.headers["x-faigate-bridge-anthropic-beta"] == "tools-2024-04-04"
 
 
 def test_anthropic_count_tokens_rejects_invalid_payload(anthropic_api_client):

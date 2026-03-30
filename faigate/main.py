@@ -180,6 +180,8 @@ def _anthropic_bridge_response_headers(
     source: str,
     requested_model: str,
     resolved_model: str | None = None,
+    anthropic_version: str | None = None,
+    anthropic_beta: str | None = None,
 ) -> dict[str, str]:
     """Return bounded response headers that make bridge behavior visible."""
 
@@ -195,6 +197,18 @@ def _anthropic_bridge_response_headers(
     if resolved_model and resolved_model != requested_model:
         headers["X-faigate-Bridge-Model-Resolved"] = _sanitize_token(
             resolved_model,
+            default="unknown",
+            max_chars=96,
+        )
+    if anthropic_version:
+        headers["X-faigate-Bridge-Anthropic-Version"] = _sanitize_token(
+            anthropic_version,
+            default="unknown",
+            max_chars=64,
+        )
+    if anthropic_beta:
+        headers["X-faigate-Bridge-Anthropic-Beta"] = _sanitize_token(
+            anthropic_beta,
             default="unknown",
             max_chars=96,
         )
@@ -370,6 +384,10 @@ def _collect_anthropic_bridge_headers(request: Request) -> dict[str, str]:
     )
     headers.setdefault("x-faigate-client", bridge_source)
     headers.setdefault("x-faigate-surface", "anthropic-messages")
+    for header_name in ("anthropic-version", "anthropic-beta", "user-agent"):
+        value = request.headers.get(header_name)
+        if value:
+            headers[header_name] = _sanitize_header_value(value, max_chars=max_chars)
     return headers
 
 
@@ -3111,6 +3129,8 @@ async def anthropic_messages(request: Request):
             canonical_request.metadata.get("requested_model_original") or wire_request.model
         ),
         resolved_model=str(canonical_request.requested_model or wire_request.model),
+        anthropic_version=str(headers.get("anthropic-version") or "") or None,
+        anthropic_beta=str(headers.get("anthropic-beta") or "") or None,
     ).items():
         response.headers[key] = value
     return response
@@ -3159,6 +3179,8 @@ async def anthropic_count_tokens(request: Request):
     bridge_headers = _anthropic_bridge_response_headers(
         source=str(headers.get("x-faigate-client") or "claude-code"),
         requested_model=str(body.get("model") or "unknown"),
+        anthropic_version=str(headers.get("anthropic-version") or "") or None,
+        anthropic_beta=str(headers.get("anthropic-beta") or "") or None,
     )
     return JSONResponse(asdict(result), headers={**extra_headers, **bridge_headers})
 
