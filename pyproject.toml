@@ -54,7 +54,7 @@ Documentation = "https://github.com/fusionAIze/faigate#readme"
 include = ["faigate*"]
 
 [tool.setuptools.package-data]
-faigate = ["vendor/*.js", "vendor/*.css"]
+faigate = ["vendor/*.js", "vendor/*.css", "assets/brand/*.svg"]
 
 [tool.ruff]
 line-length = 100

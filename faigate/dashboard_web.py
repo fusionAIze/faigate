@@ -1,10 +1,12 @@
 """Built-in operator dashboard HTML for fusionAIze Gate."""
 
+import re
 from pathlib import Path
 
 # ruff: noqa: E501
 
 _VENDOR_DIR = Path(__file__).resolve().parent / "vendor"
+_ASSET_DIR = Path(__file__).resolve().parent / "assets" / "brand"
 
 
 def _read_vendor_asset(name: str) -> str:
@@ -14,6 +16,26 @@ def _read_vendor_asset(name: str) -> str:
         return (_VENDOR_DIR / name).read_text(encoding="utf-8")
     except OSError:
         return ""
+
+
+def _read_brand_asset(name: str) -> str:
+    """Return one brand asset as text."""
+
+    try:
+        return (_ASSET_DIR / name).read_text(encoding="utf-8")
+    except OSError:
+        return ""
+
+
+def _inline_svg(name: str) -> str:
+    """Return one SVG asset sanitized for inline HTML embedding."""
+
+    svg = _read_brand_asset(name)
+    if not svg:
+        return ""
+    svg = svg.replace('<?xml version="1.0" encoding="UTF-8"?>', "").strip()
+    svg = re.sub(r"<!--.*?-->", "", svg, flags=re.DOTALL).strip()
+    return svg
 
 DASHBOARD_HTML = '''<!DOCTYPE html>
 <html lang="en">
@@ -112,44 +134,42 @@ button:hover{transform:translateY(-1px)}
   background:linear-gradient(90deg, transparent, rgba(84,171,238,.35), transparent);
 }
 .brand{
+  display:grid;
+  gap:12px;
+  margin-bottom:24px;
+}
+.brand-lockup{
   display:flex;
   align-items:flex-start;
-  gap:14px;
-  margin-bottom:26px;
+  gap:12px;
 }
-.brand-mark{
-  width:48px;
-  height:48px;
-  border-radius:16px;
-  background:
-    radial-gradient(circle at 30% 30%, rgba(84,171,238,.95), rgba(0,82,204,.55) 42%, rgba(13,23,48,.2) 70%),
-    linear-gradient(135deg, rgba(196,217,0,.18), rgba(0,82,204,.1));
-  box-shadow:0 0 0 1px rgba(84,171,238,.14), 0 0 26px rgba(0,82,204,.35);
-  position:relative;
+.brand-wordmark{
+  display:flex;
+  align-items:center;
+  min-height:28px;
 }
-.brand-mark::before,
-.brand-mark::after{
-  content:"";
-  position:absolute;
-  inset:9px;
-  border-radius:12px;
-  border:1px solid rgba(225,233,243,.18);
+.brand-wordmark svg{
+  display:block;
+  width:166px;
+  height:auto;
 }
-.brand-mark::after{
-  inset:17px;
-  border-color:rgba(196,217,0,.3);
-}
-.brand-copy h1{
-  margin:2px 0 6px;
-  font:700 1.32rem/1 var(--display);
-  letter-spacing:.04em;
+.brand-gate{
+  display:inline-flex;
+  align-items:center;
+  min-height:28px;
+  padding:0 10px;
+  border-radius:999px;
+  border:1px solid rgba(84,171,238,.16);
+  background:rgba(255,255,255,.03);
+  color:#f6fbff;
+  font:700 .74rem/1 var(--mono);
+  letter-spacing:.16em;
   text-transform:uppercase;
 }
-.brand-copy h1 .accent{color:var(--lime)}
 .brand-copy p{
   margin:0;
   color:var(--muted);
-  font-size:.88rem;
+  font-size:.82rem;
   line-height:1.45;
 }
 .rail-meta{
@@ -226,36 +246,60 @@ button:hover{transform:translateY(-1px)}
 .hero{
   position:relative;
   overflow:hidden;
-  padding:24px 24px 22px;
+  padding:18px 20px;
   border:1px solid rgba(84,171,238,.16);
   border-radius:var(--radius-xl);
   background:
     linear-gradient(145deg, rgba(18,34,68,.96), rgba(9,17,31,.96)),
-    radial-gradient(circle at top right, rgba(84,171,238,.2), transparent 30%);
+    radial-gradient(circle at top right, rgba(84,171,238,.14), transparent 28%);
   box-shadow:var(--shadow);
 }
 .hero::before{
   content:"";
   position:absolute;
   inset:0;
-  background:linear-gradient(90deg, rgba(84,171,238,.08), transparent 26%, transparent 74%, rgba(196,217,0,.06));
+  background:linear-gradient(90deg, rgba(84,171,238,.06), transparent 24%, transparent 76%, rgba(196,217,0,.04));
   pointer-events:none;
 }
 .hero-top{
   display:flex;
-  align-items:flex-start;
+  align-items:flex-end;
   justify-content:space-between;
-  gap:20px;
-  margin-bottom:18px;
+  gap:16px;
+  margin-bottom:14px;
   flex-wrap:wrap;
+}
+.hero-head{
+  display:grid;
+  gap:8px;
+}
+.hero-headline{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  flex-wrap:wrap;
+}
+.hero-brand{
+  display:inline-flex;
+  align-items:center;
+}
+.hero-brand svg{
+  display:block;
+  width:150px;
+  height:auto;
+  opacity:.95;
+}
+.hero-brand-sep{
+  width:1px;
+  height:22px;
+  background:rgba(84,171,238,.18);
 }
 .eyebrow{
   display:inline-flex;
   align-items:center;
   gap:10px;
-  margin-bottom:12px;
   color:var(--muted);
-  font:600 .73rem/1 var(--mono);
+  font:600 .68rem/1 var(--mono);
   letter-spacing:.16em;
   text-transform:uppercase;
 }
@@ -274,24 +318,25 @@ button:hover{transform:translateY(-1px)}
 }
 .hero h2{
   margin:0;
-  max-width:13ch;
-  font:700 clamp(2rem, 4vw, 3.3rem)/.96 var(--display);
+  max-width:none;
+  font:700 clamp(1.4rem, 2vw, 2rem)/1 var(--display);
   text-transform:uppercase;
-  letter-spacing:.03em;
+  letter-spacing:.05em;
 }
 .hero h2 .accent{color:var(--lime)}
 .hero p{
-  margin:14px 0 0;
-  max-width:72ch;
+  margin:0;
+  max-width:58ch;
   color:var(--muted);
-  line-height:1.6;
-  font-size:1rem;
+  line-height:1.45;
+  font-size:.92rem;
 }
 .hero-actions{
   display:flex;
   flex-wrap:wrap;
   gap:10px;
-  align-items:center;
+  align-items:flex-end;
+  justify-content:flex-end;
 }
 .btn{
   display:inline-flex;
@@ -317,15 +362,18 @@ button:hover{transform:translateY(-1px)}
 }
 .hero-ribbon{
   display:grid;
-  grid-template-columns:1.35fr .9fr;
+  grid-template-columns:1.1fr .9fr;
   gap:16px;
 }
 .ribbon-panel{
-  padding:18px;
+  padding:16px;
   border-radius:20px;
   border:1px solid rgba(84,171,238,.14);
   background:rgba(7,16,29,.48);
   backdrop-filter:blur(10px);
+}
+.ribbon-panel.attention{
+  background:linear-gradient(160deg, rgba(17,29,56,.72), rgba(9,17,31,.72));
 }
 .ribbon-title{
   margin-bottom:12px;
@@ -355,7 +403,7 @@ button:hover{transform:translateY(-1px)}
   letter-spacing:.12em;
 }
 .priority-path{
-  font:700 1.1rem/1.2 var(--display);
+  font:700 1rem/1.18 var(--display);
   text-transform:uppercase;
   letter-spacing:.05em;
 }
@@ -385,9 +433,16 @@ button:hover{transform:translateY(-1px)}
   background:linear-gradient(135deg, var(--brand-2), var(--lime));
   flex:0 0 auto;
 }
+.priority-actions{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  margin-top:14px;
+}
 .stats-rack{
   display:grid;
   gap:10px;
+  margin-top:14px;
 }
 .rack-row{
   display:grid;
@@ -407,36 +462,54 @@ button:hover{transform:translateY(-1px)}
 }
 .toolbar{
   display:grid;
-  gap:16px;
-  padding:18px 20px;
+  gap:12px;
+  padding:16px 18px;
   border:1px solid rgba(84,171,238,.12);
   border-radius:var(--radius-lg);
-  background:var(--panel);
+  background:linear-gradient(180deg, rgba(13,24,48,.92), rgba(8,16,31,.92));
   box-shadow:var(--shadow);
 }
 .toolbar-head{
   display:flex;
-  align-items:flex-start;
+  align-items:flex-end;
   justify-content:space-between;
   gap:16px;
   flex-wrap:wrap;
 }
+.toolbar-head-right{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+}
 .toolbar-copy strong{
   display:block;
-  margin-bottom:6px;
-  font:700 1rem/1.1 var(--display);
+  margin-bottom:4px;
+  font:700 .76rem/1 var(--mono);
   text-transform:uppercase;
-  letter-spacing:.08em;
+  letter-spacing:.16em;
+  color:var(--muted-soft);
 }
 .toolbar-copy p{
   margin:0;
+  color:var(--text);
+  font:700 1.05rem/1.2 var(--display);
+  letter-spacing:.05em;
+  text-transform:uppercase;
+}
+.toolbar-copy p .accent{
+  color:var(--lime);
+}
+.toolbar-copy .toolbar-subline{
+  margin-top:6px;
   color:var(--muted);
-  line-height:1.5;
-  max-width:72ch;
+  font:500 .88rem/1.45 var(--body);
+  text-transform:none;
+  letter-spacing:0;
 }
 .filters{
   display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(170px,1fr));
+  grid-template-columns:repeat(auto-fit,minmax(146px,1fr));
   gap:12px;
 }
 .field{
@@ -452,7 +525,7 @@ button:hover{transform:translateY(-1px)}
 .field input,
 .field select{
   width:100%;
-  min-height:42px;
+  min-height:40px;
   padding:0 12px;
   color:var(--text);
   background:rgba(9,17,31,.58);
@@ -476,10 +549,45 @@ button:hover{transform:translateY(-1px)}
   color:var(--muted);
   font-size:.9rem;
 }
+.toolbar-summary strong{
+  color:var(--text);
+}
 .toolbar-actions{
   display:flex;
   gap:10px;
   flex-wrap:wrap;
+}
+.toolbar-chips{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.chip.active-filter{
+  background:rgba(0,82,204,.12);
+  border-color:rgba(84,171,238,.22);
+  color:#dff0ff;
+}
+.saved-view{
+  min-width:170px;
+}
+.saved-view select{
+  min-height:42px;
+  padding:0 12px;
+  border-radius:999px;
+  border:1px solid rgba(84,171,238,.16);
+  background:rgba(255,255,255,.04);
+  color:var(--text);
+}
+.attention-grid{
+  display:grid;
+  grid-template-columns:1.05fr .95fr;
+  gap:18px;
+}
+.overview-actions{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  margin-top:14px;
 }
 .view-panel{
   display:none;
@@ -587,6 +695,11 @@ button:hover{transform:translateY(-1px)}
 }
 .cards-3{
   grid-template-columns:repeat(3,minmax(0,1fr));
+}
+.cards-2{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:12px;
 }
 .focus-card,.integration-card,.catalog-card{
   padding:16px;
@@ -809,10 +922,18 @@ tr:hover td{background:rgba(84,171,238,.045)}
 }
 .empty{
   display:grid;
-  place-items:center;
-  padding:28px 18px;
+  gap:6px;
+  justify-items:start;
+  padding:22px 18px;
   color:var(--muted-soft);
   font-size:.9rem;
+  border-radius:16px;
+  background:rgba(9,17,31,.4);
+  border:1px dashed rgba(84,171,238,.16);
+}
+.empty strong{
+  color:var(--text);
+  font-size:.95rem;
 }
 .code{
   display:block;
@@ -839,7 +960,7 @@ tr:hover td{background:rgba(84,171,238,.045)}
     height:auto;
   }
   .metrics-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .columns,.hero-ribbon,.cards-3{grid-template-columns:1fr}
+  .columns,.hero-ribbon,.cards-3,.cards-2,.attention-grid{grid-template-columns:1fr}
 }
 @media (max-width: 720px){
   .shell{padding:14px}
@@ -847,6 +968,8 @@ tr:hover td{background:rgba(84,171,238,.045)}
   .toolbar,.panel{padding:16px}
   .metrics-grid{grid-template-columns:1fr}
   .nav{grid-template-columns:1fr 1fr}
+  .hero-headline{align-items:flex-start}
+  .hero-actions{justify-content:flex-start}
 }
 </style>
 </head>
@@ -854,10 +977,12 @@ tr:hover td{background:rgba(84,171,238,.045)}
 <div class="shell">
   <aside class="rail">
     <div class="brand">
-      <div class="brand-mark" aria-hidden="true"></div>
+      <div class="brand-lockup">
+        <div class="brand-wordmark" aria-label="fusionAIze">__BRAND_LOGO_WHITE__</div>
+        <span class="brand-gate">Gate</span>
+      </div>
       <div class="brand-copy">
-        <h1>fusion<span class="accent">AI</span>ze Gate</h1>
-        <p>Local-first routing cockpit for direct providers, aggregators, and agent-native clients.</p>
+        <p>Local-first routing cockpit.</p>
       </div>
     </div>
     <div class="rail-meta" id="rail-meta">
@@ -892,31 +1017,29 @@ tr:hover td{background:rgba(84,171,238,.045)}
   <main class="content">
     <section class="hero">
       <div class="hero-top">
-        <div>
+        <div class="hero-head">
           <div class="eyebrow"><span class="pulse" id="status-pulse"></span><span id="hero-status">Gateway health is loading</span></div>
-          <h2>Dark-mode <span class="accent">operator cockpit</span></h2>
-          <p>fusionAIze Gate now reads more like a live routing desk than a local admin page: health confidence first, spend pressure second, explainability always visible, and setup guidance close to the traffic it affects.</p>
+          <div class="hero-headline">
+            <div class="hero-brand" aria-hidden="true">__BRAND_LOGO_WHITE__</div>
+            <div class="hero-brand-sep" aria-hidden="true"></div>
+            <h2><span id="page-title-prefix">Gate</span> <span class="accent" id="page-title">Operator Cockpit</span></h2>
+          </div>
+          <p id="page-subtitle">Live routing health, spend pressure, and operator guidance.</p>
         </div>
         <div class="hero-actions">
+          <label class="saved-view">
+            <select id="saved-view">
+              <option value="">Saved view</option>
+              <option value="all-traffic">All traffic</option>
+              <option value="claude-coding">Claude coding</option>
+              <option value="premium-pressure">Premium pressure</option>
+              <option value="catalog-review">Catalog review</option>
+              <option value="fallback-inspection">Fallback inspection</option>
+            </select>
+          </label>
           <button class="btn primary" type="button" id="refresh-btn">Refresh now</button>
-          <button class="btn secondary" type="button" id="apply-btn">Apply filters</button>
           <button class="btn ghost" type="button" id="clear-btn">Clear filters</button>
           <span class="chip">Updated <strong id="ago">—</strong></span>
-        </div>
-      </div>
-      <div class="hero-ribbon">
-        <div class="ribbon-panel">
-          <div class="priority-title">
-            <strong>Priority next</strong>
-            <span class="state" id="priority-state">loading</span>
-          </div>
-          <div class="priority-path" id="priority-path">Loading priority path</div>
-          <div class="priority-why" id="priority-why">The gateway is calculating the next safest operator move.</div>
-          <div class="priority-list" id="priority-list"></div>
-        </div>
-        <div class="ribbon-panel">
-          <div class="ribbon-title">Snapshot</div>
-          <div class="stats-rack" id="snapshot-rack"></div>
         </div>
       </div>
     </section>
@@ -924,10 +1047,13 @@ tr:hover td{background:rgba(84,171,238,.045)}
     <section class="toolbar">
       <div class="toolbar-head">
         <div class="toolbar-copy">
-          <strong>Filters and live scope</strong>
-          <p>Narrow the cockpit to one provider, one client family, one layer, or one success state. The same filter scope drives overview, tables, traces, and request history.</p>
+          <strong>Command bar</strong>
+          <p>Operator scope</p>
+          <div class="toolbar-subline">Filters are live. Narrow to one provider, client family, route layer, or status without leaving the cockpit.</div>
         </div>
-        <span class="chip" id="scope-chip">All traffic</span>
+        <div class="toolbar-head-right">
+          <span class="chip" id="scope-chip">All traffic</span>
+        </div>
       </div>
       <div class="filters">
         <label class="field"><span>Provider</span><input id="filter-provider" placeholder="kilo-sonnet"></label>
@@ -964,6 +1090,7 @@ tr:hover td{background:rgba(84,171,238,.045)}
       </div>
       <div class="toolbar-meta">
         <div class="toolbar-summary" id="filter-summary">No active filters</div>
+        <div class="toolbar-chips" id="active-filter-chips"></div>
         <div class="toolbar-actions">
           <button class="btn secondary" type="button" data-target-view="providers">Go to providers</button>
           <button class="btn secondary" type="button" data-target-view="integrations">Open integrations</button>
@@ -973,25 +1100,61 @@ tr:hover td{background:rgba(84,171,238,.045)}
 
     <section class="view-panel active" id="view-overview">
       <div class="metrics-grid" id="overview-cards"></div>
-      <div class="columns">
+      <div class="attention-grid">
         <div class="panel">
           <div class="panel-header">
             <div>
               <h3>What needs attention</h3>
-              <p>High-signal guidance from health, route pressure, catalog freshness, and operator events.</p>
+              <p>High-signal issues first. Open the surface that most likely explains drift, risk, or waste.</p>
             </div>
             <span class="chip" id="focus-chip">Loading</span>
           </div>
           <div class="alert-stack" id="overview-alerts"></div>
+          <div class="overview-actions">
+            <button class="btn secondary" type="button" data-target-view="providers">Open providers</button>
+            <button class="btn secondary" type="button" data-target-view="routes">Inspect route pressure</button>
+            <button class="btn secondary" type="button" data-target-view="catalog">Review catalog drift</button>
+          </div>
         </div>
         <div class="panel">
           <div class="panel-header">
             <div>
+              <h3>Priority next</h3>
+              <p>One next move, then the smallest evidence set you need to act with confidence.</p>
+            </div>
+          </div>
+          <div class="priority-title">
+            <strong id="priority-ribbon">Operator focus</strong>
+            <span class="state" id="priority-state">loading</span>
+          </div>
+          <div class="priority-path" id="priority-path">Loading priority path</div>
+          <div class="priority-why" id="priority-why">The gateway is calculating the next safest operator move.</div>
+          <div class="priority-list" id="priority-list"></div>
+          <div class="priority-actions">
+            <button class="btn secondary" type="button" id="priority-action-primary" data-target-view="providers">Open providers</button>
+            <button class="btn secondary" type="button" id="priority-action-secondary" data-target-view="routes">Inspect routes</button>
+          </div>
+          <div class="stats-rack" id="snapshot-rack"></div>
+        </div>
+      </div>
+      <div class="columns">
+        <div class="panel">
+          <div class="panel-header">
+            <div>
               <h3>Spend and traffic</h3>
-              <p>Lightweight built-in charts keep the overview tactile without introducing a frontend build stack.</p>
+              <p>Cost and request pulse first. Use this row to spot spikes before you dive into tables.</p>
             </div>
           </div>
           <div id="overview-trends"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <h3>Recent request log</h3>
+              <p>The shortest path from “something feels off” to one concrete request, route, and outcome.</p>
+            </div>
+          </div>
+          <div class="table-wrap"><table id="overview-recent"><thead><tr><th>Time</th><th>Provider</th><th>Lane</th><th>Client</th><th>Latency</th><th>Cost</th><th>Status</th></tr></thead><tbody></tbody></table></div>
         </div>
       </div>
       <div class="columns">
@@ -999,7 +1162,7 @@ tr:hover td{background:rgba(84,171,238,.045)}
           <div class="panel-header">
             <div>
               <h3>Lane families</h3>
-              <p>Which canonical families are carrying traffic, under cooldown pressure, or due for strengthening.</p>
+              <p>See which canonical families carry volume, absorb fallback pressure, or need tuning next.</p>
             </div>
           </div>
           <div class="bar-list" id="overview-families"></div>
@@ -1007,22 +1170,42 @@ tr:hover td{background:rgba(84,171,238,.045)}
         <div class="panel">
           <div class="panel-header">
             <div>
-              <h3>Recent request log</h3>
-              <p>The shortest path from “something feels off” to a specific request, route, and status.</p>
+              <h3>Operator evidence</h3>
+              <p>Small but useful reminders that help you hold the cheapest-capable line without guessing.</p>
             </div>
           </div>
-          <div class="table-wrap"><table id="overview-recent"><thead><tr><th>Time</th><th>Provider</th><th>Lane</th><th>Client</th><th>Latency</th><th>Cost</th><th>Status</th></tr></thead><tbody></tbody></table></div>
+          <div class="cards-2" id="overview-evidence"></div>
         </div>
       </div>
     </section>
 
     <section class="view-panel" id="view-providers">
-      <div class="cards-3" id="providers-summary"></div>
+      <div class="metrics-grid" id="providers-kpis"></div>
+      <div class="columns">
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <h3>Provider warnings</h3>
+              <p>Readiness blockers, unresolved runtime state, and premium risk first.</p>
+            </div>
+          </div>
+          <div class="alert-stack" id="providers-alerts"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <h3>Remediation guidance</h3>
+              <p>Use this before editing routes. Fix health, keys, and quota coupling in that order.</p>
+            </div>
+          </div>
+          <div class="cards-3" id="providers-summary"></div>
+        </div>
+      </div>
       <div class="panel">
         <div class="panel-header">
           <div>
             <h3>Provider fleet</h3>
-            <p>Request-readiness, billing mode, quota coupling, runtime penalties, and lane context in one table.</p>
+            <p>Sorted for operator relevance: health, readiness, quota coupling, spend relevance, and latency.</p>
           </div>
           <span class="chip" id="providers-chip">Inventory</span>
         </div>
@@ -1031,12 +1214,13 @@ tr:hover td{background:rgba(84,171,238,.045)}
     </section>
 
     <section class="view-panel" id="view-clients">
+      <div class="metrics-grid" id="clients-kpis"></div>
       <div class="cards-3" id="clients-highlights"></div>
       <div class="panel">
         <div class="panel-header">
           <div>
             <h3>Client posture</h3>
-            <p>See which tools are expensive, slow, or failure-heavy, then decide where `coding-auto`, `eco`, or `premium` should really land.</p>
+            <p>Find the clients bypassing cheapest-capable, carrying premium drift, or concentrating failures.</p>
           </div>
         </div>
         <div class="table-wrap"><table id="clients-table"><thead><tr><th>Client</th><th>Profile</th><th>Requests</th><th>Success</th><th>Tokens</th><th>Cost</th><th>Cost / req</th><th>Latency</th><th>Providers</th></tr></thead><tbody></tbody></table></div>
@@ -1044,12 +1228,13 @@ tr:hover td{background:rgba(84,171,238,.045)}
     </section>
 
     <section class="view-panel" id="view-routes">
+      <div class="metrics-grid" id="routes-kpis"></div>
       <div class="columns">
         <div class="panel">
           <div class="panel-header">
             <div>
               <h3>Selection paths</h3>
-              <p>Same-lane, same-cluster, and fallback-chain behavior should be legible, not magical.</p>
+              <p>See which lane was selected, which fallback path stayed available, and where routing changed.</p>
             </div>
           </div>
           <div class="bar-list" id="routes-selection"></div>
@@ -1058,7 +1243,7 @@ tr:hover td{background:rgba(84,171,238,.045)}
           <div class="panel-header">
             <div>
               <h3>Route pressure</h3>
-              <p>Cooldown and recovery signals reveal where resilience is real and where it still depends on operator help.</p>
+              <p>Cooldown, failure, premium pressure, and quota coupling in one operator read.</p>
             </div>
           </div>
           <div class="bar-list" id="routes-pressure"></div>
@@ -1068,7 +1253,7 @@ tr:hover td{background:rgba(84,171,238,.045)}
         <div class="panel-header">
           <div>
             <h3>Routing breakdown</h3>
-            <p>Chosen rule, selected provider, canonical lane, and observed runtime state for successful traffic.</p>
+            <p>Chosen rule, selected provider, lane family, and observed selection path for successful traffic.</p>
           </div>
         </div>
         <div class="table-wrap"><table id="routes-table"><thead><tr><th>Layer</th><th>Rule</th><th>Provider</th><th>Lane family</th><th>Selection path</th><th>Requests</th><th>Cost</th><th>Latency</th></tr></thead><tbody></tbody></table></div>
@@ -1076,6 +1261,7 @@ tr:hover td{background:rgba(84,171,238,.045)}
     </section>
 
     <section class="view-panel" id="view-analytics">
+      <div class="metrics-grid" id="analytics-kpis"></div>
       <div class="columns">
         <div class="panel">
           <div class="panel-header">
@@ -1119,13 +1305,14 @@ tr:hover td{background:rgba(84,171,238,.045)}
     </section>
 
     <section class="view-panel" id="view-catalog">
+      <div class="metrics-grid" id="catalog-kpis"></div>
       <div class="cards-3" id="catalog-summary"></div>
       <div class="columns">
         <div class="panel">
           <div class="panel-header">
             <div>
               <h3>Catalog alerts</h3>
-              <p>Freshness drift, source issues, and model mismatches should stay visible before they become routing debt.</p>
+              <p>Stale assumptions, evidence issues, and model mismatches before they become routing debt.</p>
             </div>
           </div>
           <div class="alert-stack" id="catalog-alerts"></div>
@@ -1134,7 +1321,7 @@ tr:hover td{background:rgba(84,171,238,.045)}
           <div class="panel-header">
             <div>
               <h3>Refresh guidance</h3>
-              <p>Where to review now, what to refresh soon, and which assumptions are still trustworthy.</p>
+              <p>What to review now, what can wait, and which assumptions are still trustworthy enough to route on.</p>
             </div>
           </div>
           <div class="bar-list" id="catalog-guidance"></div>
@@ -1152,6 +1339,7 @@ tr:hover td{background:rgba(84,171,238,.045)}
     </section>
 
     <section class="view-panel" id="view-integrations">
+      <div class="metrics-grid" id="integrations-kpis"></div>
       <div class="integration-grid">
         <div class="integration-card">
           <strong>Claude Code</strong>
@@ -1182,8 +1370,8 @@ manual hard task   -> premium</code>
         <div class="panel">
           <div class="panel-header">
             <div>
-              <h3>Why this surface is different</h3>
-              <p>Not hosted-first. Not black-box stacks. Not provider-string roulette.</p>
+              <h3>Quick connect posture</h3>
+              <p>Connect, validate, and route safely without turning this into provider-string roulette.</p>
             </div>
           </div>
           <div class="cards-3">
@@ -1221,9 +1409,26 @@ manual hard task   -> premium</code>
 const $ = s => document.querySelector(s);
 const $$ = s => Array.from(document.querySelectorAll(s));
 const VIEW_IDS = ['overview','providers','clients','routes','analytics','catalog','integrations'];
+const VIEW_META = {
+  overview: {title: 'Overview', subtitle: 'Live routing health, spend pressure, and operator guidance.'},
+  providers: {title: 'Providers', subtitle: 'Provider health, request-readiness, quota coupling, and remediation.'},
+  clients: {title: 'Clients', subtitle: 'Client posture, premium drift, and cheapest-capable entry discipline.'},
+  routes: {title: 'Routes', subtitle: 'Selection paths, fallback pressure, and explainable routing evidence.'},
+  analytics: {title: 'Analytics', subtitle: 'Spend, latency, token flow, and operator event evidence.'},
+  catalog: {title: 'Catalog', subtitle: 'Trust posture, freshness drift, and tracked routing assumptions.'},
+  integrations: {title: 'Integrations', subtitle: 'Connect, validate, and route safely across local and agent-native tools.'},
+};
+const SAVED_VIEWS = {
+  'all-traffic': {view: 'overview'},
+  'claude-coding': {view: 'clients', client_profile: 'claude'},
+  'premium-pressure': {view: 'clients', client_profile: 'premium'},
+  'catalog-review': {view: 'catalog'},
+  'fallback-inspection': {view: 'routes'},
+};
 let currentView = 'overview';
 const chartRegistry = new Map();
 let latestBundle = null;
+let loadTimer = null;
 
 const fmt = (n, d = 2) => n != null ? Number(n).toLocaleString('en', {minimumFractionDigits:d, maximumFractionDigits:d}) : '—';
 const fmtUsd = n => n != null ? (Number(n) <= 0 ? '$0.00' : '$' + fmt(n, Number(n) < 0.01 ? 4 : 2)) : '—';
@@ -1249,12 +1454,19 @@ function currentFilters() {
     client_tag: $('#filter-client').value.trim(),
     layer: $('#filter-layer').value.trim(),
     success: $('#filter-success').value.trim(),
+    saved_view: $('#saved-view').value.trim(),
     view: currentView,
   };
   Object.entries(mapping).forEach(([key, value]) => {
     if (value) params.set(key, value);
   });
   return params;
+}
+
+function updateHeaderForView() {
+  const meta = VIEW_META[currentView] || VIEW_META.overview;
+  $('#page-title').textContent = meta.title;
+  $('#page-subtitle').textContent = meta.subtitle;
 }
 
 function syncStateFromUrl() {
@@ -1265,16 +1477,29 @@ function syncStateFromUrl() {
   $('#filter-client').value = params.get('client_tag') || '';
   $('#filter-layer').value = params.get('layer') || '';
   $('#filter-success').value = params.get('success') || '';
+  $('#saved-view').value = params.get('saved_view') || '';
   setView(params.get('view') || 'overview', false);
 }
 
 function describeFilters(params) {
   const parts = [];
+  const chips = [];
+  const labels = {
+    provider: 'Provider',
+    modality: 'Modality',
+    client_profile: 'Profile',
+    client_tag: 'Client',
+    layer: 'Layer',
+    success: 'Status',
+  };
   for (const [key, value] of params.entries()) {
-    if (key === 'view') continue;
-    parts.push(key + '=' + value);
+    if (key === 'view' || key === 'saved_view') continue;
+    const label = labels[key] || key;
+    parts.push(label.toLowerCase() + ' ' + value);
+    chips.push('<span class="chip active-filter">' + esc(label) + ' <strong>' + esc(value) + '</strong></span>');
   }
-  $('#filter-summary').textContent = parts.length ? 'Active scope: ' + parts.join(', ') : 'No active filters';
+  $('#filter-summary').innerHTML = parts.length ? '<strong>Scoped:</strong> ' + esc(parts.join(' · ')) : 'No active filters';
+  $('#active-filter-chips').innerHTML = chips.join('');
   $('#scope-chip').textContent = parts.length ? parts.join(' · ') : 'All traffic';
 }
 
@@ -1287,6 +1512,7 @@ function persistState(params) {
 
 function setView(view, persist = true) {
   currentView = VIEW_IDS.includes(view) ? view : 'overview';
+  updateHeaderForView();
   VIEW_IDS.forEach(id => {
     const panel = $('#view-' + id);
     if (panel) panel.classList.toggle('active', id === currentView);
@@ -1299,8 +1525,28 @@ function applyFilters() {
   load();
 }
 
+function scheduleLoad() {
+  window.clearTimeout(loadTimer);
+  loadTimer = window.setTimeout(() => load(), 220);
+}
+
+function applySavedView(name) {
+  const preset = SAVED_VIEWS[name];
+  if (!preset) return;
+  ['#filter-provider', '#filter-modality', '#filter-profile', '#filter-client', '#filter-layer', '#filter-success'].forEach(sel => { $(sel).value = ''; });
+  if (preset.provider) $('#filter-provider').value = preset.provider;
+  if (preset.modality) $('#filter-modality').value = preset.modality;
+  if (preset.client_profile) $('#filter-profile').value = preset.client_profile;
+  if (preset.client_tag) $('#filter-client').value = preset.client_tag;
+  if (preset.layer) $('#filter-layer').value = preset.layer;
+  if (preset.success) $('#filter-success').value = preset.success;
+  setView(preset.view || 'overview', false);
+  scheduleLoad();
+}
+
 function clearFilters() {
   ['#filter-provider', '#filter-modality', '#filter-profile', '#filter-client', '#filter-layer', '#filter-success'].forEach(sel => { $(sel).value = ''; });
+  $('#saved-view').value = '';
   load();
 }
 
@@ -1308,12 +1554,12 @@ function pill(label, kind = 'subtle') {
   return '<span class="pill ' + kind + '">' + esc(label) + '</span>';
 }
 
-function empty(label) {
-  return '<div class="empty">' + esc(label) + '</div>';
+function empty(label, suggestion = 'Try All traffic or clear filters.') {
+  return '<div class="empty"><strong>' + esc(label) + '</strong><span>' + esc(suggestion) + '</span></div>';
 }
 
-function tableEmpty(colspan, label) {
-  return '<tr><td colspan="' + colspan + '" class="empty">' + esc(label) + '</td></tr>';
+function tableEmpty(colspan, label, suggestion = 'Clear filters or switch to All traffic.') {
+  return '<tr><td colspan="' + colspan + '"><div class="empty"><strong>' + esc(label) + '</strong><span>' + esc(suggestion) + '</span></div></td></tr>';
 }
 
 function toneByAlertLevel(level) {
@@ -1610,38 +1856,79 @@ function render(bundle) {
   const priority = derivePriority(bundle);
   const alerts = topAlertBundle(bundle);
   const readiness = bundle.inventory.request_readiness || {};
+  const topCost = bundle.stats.client_highlights ? bundle.stats.client_highlights.top_cost : null;
+  const slowest = bundle.stats.client_highlights ? bundle.stats.client_highlights.slowest_client : null;
+  const failureHeavy = bundle.stats.client_highlights ? bundle.stats.client_highlights.highest_failure_rate : null;
+  const fallbackShare = (selectionPaths.filter(row => String(row.selection_path || '').includes('fallback')).reduce((sum, row) => sum + (Number(row.requests) || 0), 0) / Math.max(1, Number(totals.total_requests || 1))) * 100;
+  const unhealthyProviders = providers.filter(row => row.healthy === false);
+  const unresolvedProviders = providers.filter(row => (row.request_readiness || {}).status && !String((row.request_readiness || {}).status).startsWith('ready'));
+  const premiumRoutes = providers.filter(row => ['premium', 'subscription'].includes(((row.transport || {}).billing_mode || '').toLowerCase()));
+  const quotaCoupled = providers.filter(row => (row.transport || {}).quota_group);
+  const sortedProviders = [...providers].sort((a, b) => {
+    const aBlocked = String(((a.request_readiness || {}).status || '')).startsWith('ready') ? 0 : 1;
+    const bBlocked = String(((b.request_readiness || {}).status || '')).startsWith('ready') ? 0 : 1;
+    const aUnhealthy = a.healthy === false ? 1 : 0;
+    const bUnhealthy = b.healthy === false ? 1 : 0;
+    const aCost = Number((providerMetrics[a.name] || {}).cost_usd || 0);
+    const bCost = Number((providerMetrics[b.name] || {}).cost_usd || 0);
+    return (bBlocked - aBlocked) || (bUnhealthy - aUnhealthy) || (bCost - aCost) || String(a.name || '').localeCompare(String(b.name || ''));
+  });
+  const sortedClients = [...clientTotals].sort((a, b) => (Number(b.cost_usd || 0) - Number(a.cost_usd || 0)) || (Number(b.failures || 0) - Number(a.failures || 0)) || (Number(b.requests || 0) - Number(a.requests || 0)));
+  const sortedRouting = [...routing].sort((a, b) => (Number(b.cost_usd || 0) - Number(a.cost_usd || 0)) || (Number(b.requests || 0) - Number(a.requests || 0)));
 
-  $('#hero-status').textContent = (bundle.health.summary && bundle.health.summary.providers_unhealthy === 0) ? 'Gateway health looks stable' : 'Gateway has live pressure to inspect';
+  let primaryAction = {target: 'providers', label: 'Open providers'};
+  let secondaryAction = {target: 'routes', label: 'Inspect routes'};
+  if (priority.path.startsWith('Clients')) {
+    primaryAction = {target: 'clients', label: 'Open clients'};
+    secondaryAction = {target: 'routes', label: 'Inspect route pressure'};
+  } else if (priority.path.startsWith('Routes')) {
+    primaryAction = {target: 'routes', label: 'Inspect routes'};
+    secondaryAction = {target: 'providers', label: 'Open providers'};
+  } else if (priority.path.startsWith('Catalog') || priority.path.startsWith('Review top alert')) {
+    primaryAction = {target: 'catalog', label: 'Review catalog'};
+    secondaryAction = {target: 'providers', label: 'Open providers'};
+  }
+
+  $('#hero-status').textContent = (bundle.health.summary && bundle.health.summary.providers_unhealthy === 0) ? 'System healthy enough to optimize for cost posture' : 'Risk or drift detected. Start with the attention layer';
   $('#ago').textContent = ago(totals.last_request);
+  $('#priority-ribbon').textContent = priority.ribbon || 'Operator focus';
   $('#priority-state').textContent = priority.state;
   $('#priority-path').textContent = priority.path;
   $('#priority-why').textContent = priority.why;
   $('#priority-list').innerHTML = priority.list.map(item => '<div class="priority-item">' + esc(item) + '</div>').join('');
+  $('#priority-action-primary').dataset.targetView = primaryAction.target;
+  $('#priority-action-primary').textContent = primaryAction.label;
+  $('#priority-action-secondary').dataset.targetView = secondaryAction.target;
+  $('#priority-action-secondary').textContent = secondaryAction.label;
   $('#rail-readiness').textContent = (readiness.providers_ready || 0) + '/' + (readiness.providers_total || providers.length) + ' ready';
   $('#rail-pressure').textContent = alerts[0] ? alerts[0].headline : 'No active pressure';
   $('#rail-next').textContent = priority.path;
   $('#snapshot-rack').innerHTML = [
     ['Request-ready', (readiness.providers_ready || 0) + ' / ' + (readiness.providers_total || providers.length)],
     ['Healthy providers', (bundle.health.summary ? bundle.health.summary.providers_healthy : providers.filter(row => row.healthy).length) + ' / ' + providers.length],
-    ['Fallback share', fmtPct(((selectionPaths.filter(row => String(row.selection_path || '').includes('fallback')).reduce((sum, row) => sum + (Number(row.requests) || 0), 0)) / Math.max(1, Number(totals.total_requests) || 1)) * 100)],
+    ['Fallback share', fmtPct(fallbackShare)],
     ['Top lane family', laneFamilies.length ? (laneFamilies[0].lane_family || 'unclassified') : '—'],
-    ['Top cost client', bundle.stats.client_highlights && bundle.stats.client_highlights.top_cost ? (bundle.stats.client_highlights.top_cost.client_tag || bundle.stats.client_highlights.top_cost.client_profile || 'generic') : '—'],
+    ['Top cost client', topCost ? (topCost.client_tag || topCost.client_profile || 'generic') : '—'],
     ['Catalog due', String(sourceCatalog.due_sources || 0)],
   ].map(([label, value]) => `<div class="rack-row"><div class="label">${esc(label)}</div><strong>${esc(value)}</strong></div>`).join('');
 
   $('#overview-cards').innerHTML = [
-    {kicker:'Requests', value:fmtTok(totals.total_requests || 0), detail:'Success ' + fmtPct(100 - ((Number(totals.total_failures || 0) / Math.max(1, Number(totals.total_requests || 1))) * 100)), tone:'blue'},
-    {kicker:'Cost', value:fmtUsd(totals.total_cost_usd || 0), detail:fmtTok((totals.total_prompt_tokens || 0) + (totals.total_compl_tokens || 0)) + ' tokens total', tone:'orange'},
+    {kicker:'Request-ready', value:(readiness.providers_ready || 0) + '/' + (readiness.providers_total || providers.length), detail:String(readiness.providers_not_ready || 0) + ' still need operator attention', tone:'blue'},
+    {kicker:'Healthy providers', value:(bundle.health.summary ? bundle.health.summary.providers_healthy : providers.filter(row => row.healthy).length) + '/' + providers.length, detail:String(unhealthyProviders.length) + ' unhealthy right now', tone:'green'},
+    {kicker:'Active alerts', value:String(alerts.length), detail:alerts[0] ? alerts[0].headline : 'No active operator alert', tone:alerts.length ? 'orange' : 'lime'},
+    {kicker:'Fallback share', value:fmtPct(fallbackShare), detail:'Requests that needed fallback selection paths', tone:fallbackShare > 10 ? 'danger' : 'blue'},
+    {kicker:'Estimated spend', value:fmtUsd(totals.total_cost_usd || 0), detail:fmtTok((totals.total_prompt_tokens || 0) + (totals.total_compl_tokens || 0)) + ' tokens total', tone:'orange'},
     {kicker:'Avg latency', value:fmtMs(totals.avg_latency_ms || 0), detail:'Last request ' + ago(totals.last_request), tone:'green'},
-    {kicker:'Cache hit rate', value:fmtPct(totals.cache_hit_pct || 0), detail:fmtTok(totals.total_cache_hit || 0) + ' hit / ' + fmtTok(totals.total_cache_miss || 0) + ' miss', tone:'lime'},
-    {kicker:'Fallback share', value:fmtPct((selectionPaths.filter(row => String(row.selection_path || '').includes('fallback')).reduce((sum, row) => sum + (Number(row.requests) || 0), 0) / Math.max(1, Number(totals.total_requests || 1))) * 100), detail:'Selection paths under fallback pressure', tone:'danger'},
-    {kicker:'Request-ready', value:(readiness.providers_ready || 0) + '/' + (readiness.providers_total || providers.length), detail:String(readiness.providers_not_ready || 0) + ' not ready', tone:'blue'},
-    {kicker:'Top client', value:esc(bundle.stats.client_highlights && bundle.stats.client_highlights.top_requests ? (bundle.stats.client_highlights.top_requests.client_tag || bundle.stats.client_highlights.top_requests.client_profile || 'generic') : '—'), detail:'Highest request volume right now', tone:'lime'},
-    {kicker:'Catalog drift', value:String(bundle.catalog.alert_count || 0), detail:String(sourceCatalog.recent_changes || 0) + ' recent source changes', tone:'orange'},
+    {kicker:'Catalog drift', value:String(bundle.catalog.alert_count || 0), detail:String(sourceCatalog.due_sources || 0) + ' source reviews due', tone:'orange'},
+    {kicker:'Top client', value:esc(bundle.stats.client_highlights && bundle.stats.client_highlights.top_requests ? (bundle.stats.client_highlights.top_requests.client_tag || bundle.stats.client_highlights.top_requests.client_profile || 'generic') : '—'), detail:'Highest request volume in current scope', tone:'lime'},
   ].map(metricCard).join('');
 
   $('#focus-chip').innerHTML = alerts.length ? '<strong>' + esc(alerts.length) + '</strong> live callouts' : 'No active alert';
   $('#overview-alerts').innerHTML = alerts.map(alertCard).join('');
+  $('#overview-evidence').innerHTML = [
+    {title:'Cheapest-capable discipline', body:topCost ? 'Top cost is currently carried by ' + (topCost.client_tag || topCost.client_profile || 'one client') + '. Confirm the entry mode is intentional.' : 'No client is carrying meaningful cost pressure yet.'},
+    {title:'Fallback posture', body:fallbackShare > 0 ? 'Fallback is active in ' + fmtPct(fallbackShare) + ' of scoped traffic. Validate whether that is resilience or drift.' : 'No route pressure detected for this scope yet.'},
+  ].map(card => `<div class="focus-card"><strong>${esc(card.title)}</strong><p>${esc(card.body)}</p></div>`).join('');
 
   const overviewDailyLabels = (bundle.stats.daily || []).map(row => row.day || '');
   const overviewHourlyLabels = (bundle.stats.hourly || []).map(row => row.hour_offset || '');
@@ -1673,27 +1960,54 @@ function render(bundle) {
     value: row => row.requests || 0,
     format: value => fmtTok(value),
     tone: 'blue',
-    empty: 'No lane family data for the current scope',
+    empty: 'No lane family data for this scope yet',
   });
   $('#overview-recent tbody').innerHTML = recentRows(recent);
 
+  $('#providers-kpis').innerHTML = [
+    {kicker:'Healthy vs total', value:(bundle.health.summary ? bundle.health.summary.providers_healthy : providers.filter(row => row.healthy).length) + '/' + providers.length, detail:String(unhealthyProviders.length) + ' unhealthy routes', tone:unhealthyProviders.length ? 'orange' : 'green'},
+    {kicker:'Request-ready', value:(readiness.providers_ready || 0) + '/' + (readiness.providers_total || providers.length), detail:String(readiness.providers_not_ready || 0) + ' blocked or degraded', tone:(readiness.providers_not_ready || 0) ? 'danger' : 'green'},
+    {kicker:'Unresolved keys', value:String(providers.filter(row => String(((row.request_readiness || {}).operator_hint || '')).toLowerCase().includes('key')).length), detail:'Runtime key and auth blockers', tone:'orange'},
+    {kicker:'Quota-coupled', value:String(quotaCoupled.length), detail:'Routes with visible quota grouping', tone:'blue'},
+    {kicker:'Aggregator-backed', value:String(providers.filter(row => ((row.lane || {}).route_type || '') === 'aggregator').length), detail:'Aggregator transport surfaces', tone:'blue'},
+    {kicker:'Premium-risk', value:String(premiumRoutes.length), detail:'Direct premium or subscription-backed routes', tone:'orange'},
+  ].map(metricCard).join('');
+  $('#providers-alerts').innerHTML = [
+    ...(unresolvedProviders.slice(0, 2).map(row => ({
+      level: 'critical',
+      headline: row.name + ' is not request-ready',
+      detail: ((row.request_readiness || {}).operator_hint) || 'The route is configured but cannot safely accept requests yet.',
+      suggestion: 'Review health, unresolved keys, and quota coupling.',
+    }))),
+    ...(unhealthyProviders.slice(0, 2).map(row => ({
+      level: 'warning',
+      headline: row.name + ' is unhealthy',
+      detail: row.last_error || 'The route is failing live checks.',
+      suggestion: 'Check provider health and recent traces before sending more traffic.',
+    }))),
+  ].slice(0, 4).map(alertCard).join('') || empty('No provider warnings in current scope', 'Open All traffic if you expected a readiness or health issue.');
   $('#providers-summary').innerHTML = [
     {title:'Healthy vs total', body:(bundle.health.summary ? bundle.health.summary.providers_healthy : providers.filter(row => row.healthy).length) + ' healthy routes across ' + providers.length + ' configured providers.'},
     {title:'Request-readiness', body:(readiness.providers_ready || 0) + ' routes are request-ready, ' + (readiness.providers_not_ready || 0) + ' still need operator attention.'},
-    {title:'Quota coupling', body:providers.filter(row => (row.transport || {}).quota_group).length + ' providers advertise quota grouping; keep coupled routes visible before they surprise the fallback chain.'},
+    {title:'Quota coupling', body:quotaCoupled.length + ' providers advertise quota grouping; keep coupled routes visible before they surprise the fallback chain.'},
   ].map(card => `<div class="catalog-card"><strong>${esc(card.title)}</strong><p>${esc(card.body)}</p></div>`).join('');
   $('#providers-chip').textContent = providers.length + ' providers';
-  $('#providers-table tbody').innerHTML = providers.length ? providers.map(row => providerRow(row, providerMetrics)).join('') : tableEmpty(9, 'No provider inventory is available');
+  $('#providers-table tbody').innerHTML = sortedProviders.length ? sortedProviders.map(row => providerRow(row, providerMetrics)).join('') : tableEmpty(9, 'No provider inventory is available', 'Open All traffic or check whether the provider inventory endpoint is returning data.');
 
-  const topCost = bundle.stats.client_highlights ? bundle.stats.client_highlights.top_cost : null;
-  const slowest = bundle.stats.client_highlights ? bundle.stats.client_highlights.slowest_client : null;
-  const failureHeavy = bundle.stats.client_highlights ? bundle.stats.client_highlights.highest_failure_rate : null;
+  $('#clients-kpis').innerHTML = [
+    {kicker:'Active clients', value:String(clientTotals.length), detail:'Distinct client tags or profiles in scope', tone:'blue'},
+    {kicker:'Premium drift', value:topCost ? fmtUsd(topCost.cost_usd || 0) : '$0.00', detail:topCost ? (topCost.client_tag || topCost.client_profile || 'top client') : 'No cost-bearing client yet', tone:'orange'},
+    {kicker:'Failure-heavy', value:failureHeavy ? fmtPct(100 - (failureHeavy.success_pct || 0)) : '0.0%', detail:failureHeavy ? (failureHeavy.client_tag || failureHeavy.client_profile || 'client') : 'No client failures yet', tone:failureHeavy ? 'danger' : 'green'},
+    {kicker:'Slowest client', value:slowest ? fmtMs(slowest.avg_latency_ms || 0) : '—', detail:slowest ? (slowest.client_tag || slowest.client_profile || 'client') : 'No latency outlier', tone:'blue'},
+    {kicker:'Highest spend', value:topCost ? (topCost.client_tag || topCost.client_profile || 'client') : '—', detail:topCost ? fmtUsd(topCost.cost_usd || 0) + ' total' : 'No cost-bearing client yet', tone:'orange'},
+    {kicker:'Fallback-active', value:String(selectionPaths.filter(row => String(row.selection_path || '').includes('fallback')).length), detail:'Client traffic that used fallback paths', tone:'lime'},
+  ].map(metricCard).join('');
   $('#clients-highlights').innerHTML = [
     {title:'Highest spend', body:topCost ? (topCost.client_tag || topCost.client_profile || 'generic') + ' at ' + fmtUsd(topCost.cost_usd || 0) + ' total.' : 'No cost-bearing client yet.'},
     {title:'Slowest client', body:slowest ? (slowest.client_tag || slowest.client_profile || 'generic') + ' averages ' + fmtMs(slowest.avg_latency_ms || 0) + '.' : 'No latency signal yet.'},
     {title:'Failure-heavy client', body:failureHeavy ? (failureHeavy.client_tag || failureHeavy.client_profile || 'generic') + ' is failing ' + fmtPct(100 - (failureHeavy.success_pct || 0)) + ' of requests.' : 'No client failures yet.'},
   ].map(card => `<div class="catalog-card"><strong>${esc(card.title)}</strong><p>${esc(card.body)}</p></div>`).join('');
-  $('#clients-table tbody').innerHTML = clientTotals.length ? clientTotals.map(row => `
+  $('#clients-table tbody').innerHTML = sortedClients.length ? sortedClients.map(row => `
     <tr>
       <td><strong>${esc(row.client_tag || row.client_profile || 'generic')}</strong></td>
       <td>${esc(row.client_profile || 'generic')}</td>
@@ -1705,15 +2019,23 @@ function render(bundle) {
       <td class="mono">${fmtMs(row.avg_latency_ms || 0)}</td>
       <td class="tiny">${esc(row.providers || '—')}</td>
     </tr>
-  `).join('') : tableEmpty(9, 'No client traffic for the current scope');
+  `).join('') : tableEmpty(9, 'No successful requests matched this scope yet', 'Clear filters or switch to All traffic.');
 
+  $('#routes-kpis').innerHTML = [
+    {kicker:'Active routes', value:String(routing.length), detail:'Routing rows in current scope', tone:'blue'},
+    {kicker:'Request-ready', value:(readiness.providers_ready || 0) + '/' + (readiness.providers_total || providers.length), detail:'Provider readiness behind current routes', tone:'green'},
+    {kicker:'Under cooldown', value:String(laneFamilies.reduce((sum, row) => sum + (row.cooldown_requests || 0), 0)), detail:'Requests under cooldown pressure', tone:'orange'},
+    {kicker:'Premium routes', value:String(premiumRoutes.length), detail:'Premium or subscription-backed transports', tone:'orange'},
+    {kicker:'Fallback-active', value:fmtPct(fallbackShare), detail:'Traffic that needed fallback selection', tone:fallbackShare > 10 ? 'danger' : 'blue'},
+    {kicker:'Recovery events', value:String(laneFamilies.reduce((sum, row) => sum + (row.recovered_requests || 0), 0)), detail:'Recovered requests across lane families', tone:'lime'},
+  ].map(metricCard).join('');
   $('#routes-selection').innerHTML = barList(selectionPaths.slice(0, 6), {
     label: row => row.selection_path || 'unclassified',
     detail: row => (row.lane_family || 'no family') + ' · ' + (row.runtime_window_state || 'clear'),
     value: row => row.requests || 0,
     format: value => fmtTok(value),
     tone: 'lime',
-    empty: 'No selection-path data for the current scope',
+    empty: 'No successful requests matched this scope yet',
   });
   $('#routes-pressure').innerHTML = barList((laneFamilies || []).slice(0, 6), {
     label: row => row.lane_family || 'unclassified',
@@ -1721,9 +2043,9 @@ function render(bundle) {
     value: row => (row.cooldown_requests || 0) + (row.degraded_requests || 0) + (row.recovered_requests || 0),
     format: value => fmtTok(value),
     tone: 'orange',
-    empty: 'No pressure data for the current scope',
+    empty: 'No route pressure detected for this scope yet',
   });
-  $('#routes-table tbody').innerHTML = routing.length ? routing.map(row => `
+  $('#routes-table tbody').innerHTML = sortedRouting.length ? sortedRouting.map(row => `
     <tr>
       <td>${pill(row.layer || 'n/a', 'subtle')}</td>
       <td class="mono">${esc(row.rule_name || '—')}</td>
@@ -1734,10 +2056,18 @@ function render(bundle) {
       <td class="mono">${fmtUsd(row.cost_usd || 0)}</td>
       <td class="mono">${fmtMs(row.avg_latency_ms || 0)}</td>
     </tr>
-  `).join('') : tableEmpty(8, 'No routing rows for the current scope');
+  `).join('') : tableEmpty(8, 'No successful requests matched this scope yet', 'Clear filters or switch to All traffic.');
 
   const analyticsDailyLabels = (bundle.stats.daily || []).map(row => row.day || '');
   const analyticsHourlyLabels = (bundle.stats.hourly || []).map(row => row.hour_offset || '');
+  $('#analytics-kpis').innerHTML = [
+    {kicker:'Requests', value:fmtTok(totals.total_requests || 0), detail:'Current filtered request volume', tone:'blue'},
+    {kicker:'Input tokens', value:fmtTok(totals.total_prompt_tokens || 0), detail:'Prompt-side token volume', tone:'blue'},
+    {kicker:'Output tokens', value:fmtTok(totals.total_compl_tokens || 0), detail:'Completion-side token volume', tone:'lime'},
+    {kicker:'Est. cost', value:fmtUsd(totals.total_cost_usd || 0), detail:'Estimated current-scope spend', tone:'orange'},
+    {kicker:'Avg latency', value:fmtMs(totals.avg_latency_ms || 0), detail:'Observed request latency', tone:'green'},
+    {kicker:'Cache hit rate', value:fmtPct(totals.cache_hit_pct || 0), detail:'Repeated requests served from cache', tone:'lime'},
+  ].map(metricCard).join('');
   $('#analytics-daily').innerHTML = trendCard('analytics-requests-plot', (bundle.stats.daily || []).map(row => row.requests || 0), {
     title:'Requests by day',
     subtitle:'30 day traffic volume',
@@ -1803,6 +2133,14 @@ function render(bundle) {
     </tr>
   `).join('') : tableEmpty(6, 'No operator actions have been recorded');
 
+  $('#catalog-kpis').innerHTML = [
+    {kicker:'Tracked providers', value:String(bundle.catalog.tracked_providers || 0), detail:'Providers currently covered by the catalog', tone:'blue'},
+    {kicker:'Refresh due', value:String(sourceCatalog.due_sources || 0), detail:'Source reviews that should happen next', tone:(sourceCatalog.due_sources || 0) ? 'orange' : 'green'},
+    {kicker:'Evidence issues', value:String(sourceCatalog.error_sources || 0), detail:'Sources with refresh or parsing errors', tone:(sourceCatalog.error_sources || 0) ? 'danger' : 'green'},
+    {kicker:'Volatile offers', value:String(catalogItems.filter(row => String(row.volatility || '').toLowerCase().includes('high')).length), detail:'Offers flagged as highly volatile', tone:'orange'},
+    {kicker:'Untracked providers', value:String(Math.max(0, (bundle.catalog.total_providers || providers.length) - (bundle.catalog.tracked_providers || 0))), detail:'Configured providers missing curated coverage', tone:'blue'},
+    {kicker:'Recent changes', value:String(sourceCatalog.recent_changes || 0), detail:'Source updates in the current review window', tone:'lime'},
+  ].map(metricCard).join('');
   $('#catalog-summary').innerHTML = [
     {title:'Tracked providers', body:String(bundle.catalog.tracked_providers || 0) + ' of ' + String(bundle.catalog.total_providers || providers.length) + ' configured routes are in the curated catalog.'},
     {title:'Source refresh due', body:String(sourceCatalog.due_sources || 0) + ' sources are due for refresh and ' + String(sourceCatalog.error_sources || 0) + ' currently have refresh errors.'},
@@ -1821,7 +2159,7 @@ function render(bundle) {
     value: row => (row.models_count || 0) + (row.pricing_count || 0),
     format: value => fmt(value, 0),
     tone: 'green',
-    empty: 'No source-catalog items available',
+    empty: 'No source-catalog guidance is available for this scope',
   });
   $('#catalog-table tbody').innerHTML = catalogItems.length ? catalogItems.map(row => `
     <tr>
@@ -1834,8 +2172,16 @@ function render(bundle) {
       <td class="mono">${esc(row.last_reviewed || '—')}</td>
       <td class="tiny">${esc(row.notes || ((row.model_matches_recommendation === false) ? 'Configured model differs from the curated recommendation.' : 'Catalog guidance is aligned.')).slice(0, 180)}</td>
     </tr>
-  `).join('') : tableEmpty(8, 'No provider catalog items are available');
+  `).join('') : tableEmpty(8, 'No provider catalog items are available', 'Review catalog tracking or widen the current scope.');
 
+  $('#integrations-kpis').innerHTML = [
+    {kicker:'Claude-ready', value:(readiness.providers_ready || 0) ? 'Yes' : 'No', detail:'Anthropic-compatible entry surface is reachable', tone:(readiness.providers_ready || 0) ? 'green' : 'orange'},
+    {kicker:'OpenAI-ready', value:providers.length ? 'Yes' : 'No', detail:'OpenAI-compatible endpoint is exposed locally', tone:providers.length ? 'green' : 'orange'},
+    {kicker:'Agent-native modes', value:'3', detail:'coding-auto, coding-fast, coding-premium', tone:'blue'},
+    {kicker:'Saved views', value:String(Object.keys(SAVED_VIEWS).length), detail:'Operator shortcuts for common scopes', tone:'lime'},
+    {kicker:'Providers visible', value:String(providers.length), detail:'Visible in current runtime inventory', tone:'blue'},
+    {kicker:'Validation posture', value:unhealthyProviders.length ? 'Review' : 'Clear', detail:unhealthyProviders.length ? 'Provider health should be checked before wider rollout' : 'No immediate integration blocker visible', tone:unhealthyProviders.length ? 'orange' : 'green'},
+  ].map(metricCard).join('');
   $('#integration-alerts').innerHTML = [
     integrationAlert('Model not found', 'Usually means the client entered through the wrong model id or the alias mapping still points at a raw provider instead of a Gate intent surface.'),
     integrationAlert('Provider unhealthy', 'Check Providers first, then Routes. Cooldown and quota-domain coupling should be visible before you chase client config.'),
@@ -1879,9 +2225,23 @@ $$('[data-target-view]').forEach(button => {
   button.addEventListener('click', () => setView(button.dataset.targetView || 'overview'));
 });
 $('#refresh-btn').addEventListener('click', load);
-$('#apply-btn').addEventListener('click', applyFilters);
 $('#clear-btn').addEventListener('click', clearFilters);
+$('#saved-view').addEventListener('change', event => {
+  const value = event.target.value;
+  if (!value) {
+    scheduleLoad();
+    return;
+  }
+  applySavedView(value);
+});
+['#filter-provider', '#filter-modality', '#filter-profile', '#filter-client', '#filter-layer', '#filter-success'].forEach(sel => {
+  const el = $(sel);
+  if (!el) return;
+  const eventName = el.tagName === 'SELECT' ? 'change' : 'input';
+  el.addEventListener(eventName, scheduleLoad);
+});
 syncStateFromUrl();
+updateHeaderForView();
 load();
 setInterval(load, 30000);
 let resizeTimer = null;
@@ -1899,4 +2259,5 @@ window.addEventListener('resize', () => {
 DASHBOARD_HTML = (
     DASHBOARD_HTML.replace("/*__UPLOT_CSS__*/", _read_vendor_asset("uPlot.min.css"))
     .replace("/*__UPLOT_JS__*/", _read_vendor_asset("uplot.iife.min.js"))
+    .replace("__BRAND_LOGO_WHITE__", _inline_svg("fusionaize-logo-white.svg"))
 )
