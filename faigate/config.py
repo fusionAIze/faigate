@@ -91,6 +91,7 @@ _SUPPORTED_PROVIDER_TRANSPORT_KEYS = {
     "compatibility",
     "probe_confidence",
     "auth_mode",
+    "billing_mode",
     "probe_strategy",
     "probe_payload_kind",
     "probe_payload_text",
@@ -101,6 +102,8 @@ _SUPPORTED_PROVIDER_TRANSPORT_KEYS = {
     "image_edit_path",
     "requires_api_key",
     "supports_models_probe",
+    "quota_group",
+    "quota_isolated",
     "notes",
 }
 _SUPPORTED_PROVIDER_TRANSPORT_AUTH_MODES = {"bearer", "query", "none"}
@@ -649,6 +652,9 @@ def _normalize_provider_transport(name: str, cfg: dict[str, Any]) -> dict[str, A
         )
     normalized["auth_mode"] = auth_mode
 
+    billing_mode = str(transport.get("billing_mode", "") or "").strip().lower()
+    normalized["billing_mode"] = billing_mode
+
     probe_strategy = str(transport.get("probe_strategy", "models") or "models").strip().lower()
     probe_strategy = probe_strategy.replace("-", "_")
     if probe_strategy not in _SUPPORTED_PROVIDER_TRANSPORT_PROBE_STRATEGIES:
@@ -702,6 +708,14 @@ def _normalize_provider_transport(name: str, cfg: dict[str, Any]) -> dict[str, A
         if not isinstance(value, bool):
             raise ConfigError(f"Provider '{name}' transport.{field_name} must be a boolean")
         normalized[field_name] = value
+
+    quota_group = str(transport.get("quota_group", "") or "").strip()
+    normalized["quota_group"] = quota_group
+
+    quota_isolated = transport.get("quota_isolated", False)
+    if not isinstance(quota_isolated, bool):
+        raise ConfigError(f"Provider '{name}' transport.quota_isolated must be a boolean")
+    normalized["quota_isolated"] = quota_isolated
 
     notes = transport.get("notes", [])
     if notes in (None, ""):

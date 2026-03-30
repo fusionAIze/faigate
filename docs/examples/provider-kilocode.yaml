@@ -13,6 +13,9 @@ providers:
     model: "anthropic/claude-sonnet-4.6"
     max_tokens: 16000
     tier: mid
+    transport:
+      billing_mode: byok
+      quota_group: anthropic-main
   kilo-opus:
     backend: openai-compat
     base_url: "${KILOCODE_BASE_URL:-https://api.kilo.ai/api/gateway}"
@@ -20,6 +23,9 @@ providers:
     model: "anthropic/claude-opus-4.6"
     max_tokens: 32000
     tier: mid
+    transport:
+      billing_mode: byok
+      quota_group: anthropic-main
 
 fallback_chain:
   - kilo-sonnet

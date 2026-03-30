@@ -263,13 +263,28 @@ def _provider_error_category(status: int, detail: str) -> str:
     return "provider_error"
 
 
-def _serialize_provider_attempt_error(provider_name: str, exc: ProviderError) -> dict[str, Any]:
+def _serialize_provider_attempt_error(
+    provider_name: str,
+    exc: ProviderError,
+    *,
+    category_override: str | None = None,
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Return a sanitized provider-attempt failure object for client responses."""
-    return {
+    payload = {
         "provider": provider_name,
         "status": exc.status,
-        "category": _provider_error_category(exc.status, exc.detail),
+        "category": category_override or _provider_error_category(exc.status, exc.detail),
     }
+    if extra:
+        payload.update(extra)
+    return payload
+
+
+def _provider_quota_group(provider: Any) -> str:
+    """Return the configured shared quota group for one route, if any."""
+
+    return str(getattr(provider, "transport", {}).get("quota_group", "") or "").strip()
 
 
 async def _refresh_local_worker_probes(force: bool = False) -> None:
@@ -1664,12 +1679,35 @@ async def _execute_chat_completion_body(
     )
 
     errors: list[dict[str, Any]] = []
+    blocked_quota_groups: dict[str, dict[str, str]] = {}
 
     for provider_name in attempt_order:
         provider = _providers.get(provider_name)
         if not provider:
             continue
         if not provider.health.healthy and provider_name != attempt_order[0]:
+            continue
+        quota_group = _provider_quota_group(provider)
+        quota_isolated = bool(getattr(provider, "transport", {}).get("quota_isolated", False))
+        blocked_group = blocked_quota_groups.get(quota_group) if quota_group else None
+        if blocked_group and not quota_isolated:
+            logger.info(
+                "Skipping provider %s because shared quota group %s was blocked by %s (%s)",
+                provider_name,
+                quota_group,
+                blocked_group["provider"],
+                blocked_group["issue_type"],
+            )
+            errors.append(
+                {
+                    "provider": provider_name,
+                    "status": 0,
+                    "category": "shared-quota-skipped",
+                    "shared_quota_group": quota_group,
+                    "blocked_by": blocked_group["provider"],
+                    "blocked_issue_type": blocked_group["issue_type"],
+                }
+            )
             continue
 
         try:
@@ -1740,7 +1778,24 @@ async def _execute_chat_completion_body(
             )
         except ProviderError as e:
             _adaptive_state.record_failure(provider_name, error=e.detail[:500])
-            errors.append(_serialize_provider_attempt_error(provider_name, e))
+            issue_type = provider.classify_runtime_issue(status=e.status, detail=e.detail)
+            errors.append(
+                _serialize_provider_attempt_error(
+                    provider_name,
+                    e,
+                    category_override=issue_type,
+                    extra={"shared_quota_group": quota_group} if quota_group else None,
+                )
+            )
+            if (
+                quota_group
+                and not quota_isolated
+                and issue_type in {"quota-exhausted", "rate-limited", "auth-invalid"}
+            ):
+                blocked_quota_groups[quota_group] = {
+                    "provider": provider_name,
+                    "issue_type": issue_type,
+                }
             logger.warning("Provider %s failed: %s, trying next...", provider_name, e.detail[:200])
             if _config.metrics.get("enabled"):
                 _metrics.log_request(

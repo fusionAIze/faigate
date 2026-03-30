@@ -91,6 +91,8 @@ Recommended pattern:
 - keep direct Anthropic routes probeable and clearly named
 - keep Anthropic-capable aggregators as explicit mirrors or secondary routes
 - do not assume a premium Anthropic mirror is independent if it uses the same exhausted account
+- mark routes that can burn the same upstream quota with a shared `transport.quota_group`
+- use `transport.billing_mode: byok` on aggregator routes when the wallet path may still collapse to your own upstream account
 - use `faigate-doctor`, `faigate-provider-probe`, `/health`, and `/api/providers` to validate which routes are actually request-ready
 
 ## Claude Code / Claude Desktop

@@ -35,8 +35,8 @@ def _write_config(tmp_path: Path, body: str) -> Path:
 
 
 class _CapturingProviderStub:
-    def __init__(self):
-        self.name = "cloud-default"
+    def __init__(self, name: str = "cloud-default", *, transport: dict[str, object] | None = None):
+        self.name = name
         self.model = "chat-model"
         self.backend_type = "openai-compat"
         self.contract = "generic"
@@ -46,6 +46,7 @@ class _CapturingProviderStub:
         self.limits = {"max_input_tokens": 128000, "max_output_tokens": 4096}
         self.cache = {"mode": "none", "read_discount": False}
         self.image = {}
+        self.transport = dict(transport or {})
         self.calls: list[dict[str, object]] = []
         self.health = types.SimpleNamespace(
             healthy=True,
@@ -78,7 +79,7 @@ class _CapturingProviderStub:
                 }
             ],
             "usage": {"prompt_tokens": 12, "completion_tokens": 6, "total_tokens": 18},
-            "_faigate": {"latency_ms": 12, "provider": "cloud-default"},
+            "_faigate": {"latency_ms": 12, "provider": self.name},
         }
 
 
@@ -88,9 +89,31 @@ class _MetricsStub:
 
 
 class _FailingProviderStub(_CapturingProviderStub):
+    def __init__(
+        self,
+        name: str = "cloud-default",
+        *,
+        status: int = 429,
+        detail: str = "rate limited upstream",
+        transport: dict[str, object] | None = None,
+    ):
+        super().__init__(name=name, transport=transport)
+        self.status = status
+        self.detail = detail
+
+    def classify_runtime_issue(self, *, status: int, detail: str) -> str:
+        lowered = detail.lower()
+        if status == 429 and "quota" in lowered:
+            return "quota-exhausted"
+        if status == 429:
+            return "rate-limited"
+        if status in {401, 403}:
+            return "auth-invalid"
+        return "degraded"
+
     async def complete(self, messages, **kwargs):
         self.calls.append({"messages": messages, **kwargs})
-        raise ProviderError("cloud-default", 429, "rate limited upstream")
+        raise ProviderError(self.name, self.status, self.detail)
 
 
 @pytest.fixture
@@ -458,3 +481,87 @@ metrics:
     body = response.json()
     assert body["type"] == "error"
     assert body["error"]["type"] == "rate_limit_error"
+
+
+def test_anthropic_messages_skip_shared_quota_group_after_quota_failure(tmp_path, monkeypatch):
+    cfg = load_config(
+        _write_config(
+            tmp_path,
+            """
+server:
+  host: "127.0.0.1"
+  port: 8090
+providers:
+  cloud-default:
+    backend: openai-compat
+    base_url: "https://api.example.com/v1"
+    api_key: "secret"
+    model: "chat-model"
+    transport:
+      quota_group: anthropic-main
+  kilo-mirror:
+    backend: openai-compat
+    base_url: "https://api.kilo.example/v1"
+    api_key: "secret"
+    model: "claude-sonnet"
+    transport:
+      quota_group: anthropic-main
+  local-worker:
+    backend: openai-compat
+    base_url: "http://127.0.0.1:11434/v1"
+    api_key: "local"
+    model: "llama3"
+fallback_chain:
+  - kilo-mirror
+  - local-worker
+anthropic_bridge:
+  enabled: true
+  model_aliases:
+    claude-sonnet: cloud-default
+metrics:
+  enabled: false
+""",
+        )
+    )
+
+    @asynccontextmanager
+    async def _noop_lifespan(_app):
+        yield
+
+    primary = _FailingProviderStub(
+        "cloud-default",
+        detail="insufficient_quota on upstream account",
+        transport={"quota_group": "anthropic-main"},
+    )
+    mirror = _CapturingProviderStub("kilo-mirror", transport={"quota_group": "anthropic-main"})
+    local = _CapturingProviderStub("local-worker")
+
+    monkeypatch.setattr(main_module, "_config", cfg, raising=False)
+    monkeypatch.setattr(main_module, "_router", Router(cfg), raising=False)
+    monkeypatch.setattr(
+        main_module,
+        "_providers",
+        {
+            "cloud-default": primary,
+            "kilo-mirror": mirror,
+            "local-worker": local,
+        },
+        raising=False,
+    )
+    monkeypatch.setattr(main_module, "_metrics", _MetricsStub(), raising=False)
+    monkeypatch.setattr(main_module.app.router, "lifespan_context", _noop_lifespan, raising=False)
+
+    with TestClient(main_module.app) as client:
+        response = client.post(
+            "/v1/messages",
+            json={
+                "model": "claude-sonnet",
+                "messages": [{"role": "user", "content": "hello"}],
+            },
+        )
+
+    assert response.status_code == 200
+    assert len(primary.calls) == 1
+    assert mirror.calls == []
+    assert len(local.calls) == 1
+    assert response.headers["x-faigate-provider"] == "local-worker"

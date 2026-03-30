@@ -358,6 +358,9 @@ Recommended operational pattern:
 - keep direct Anthropic routes, Anthropic-capable aggregators, and local workers all probeable
 - be careful with aggregator routes that may still use a BYOK Anthropic key from the same quota domain
 - prefer health checks and fallback ordering over assuming every Anthropic-shaped route is independent
+- when two routes can burn the same upstream quota, give them the same `transport.quota_group`
+- set `transport.billing_mode: byok` on routes where wallet or aggregator billing may still collapse to your own upstream key
+- only set `transport.quota_isolated: true` when you are confident that route is operationally independent
 
 For the end-to-end flow and local smoke example, see [Anthropic Bridge](./anthropic-bridge.md).
 
