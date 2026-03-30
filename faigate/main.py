@@ -34,6 +34,7 @@ from .bridges.anthropic import (
     anthropic_request_to_canonical,
     canonical_response_to_anthropic,
     dispatch_anthropic_count_tokens,
+    openai_sse_to_anthropic,
 )
 from .canonical import CanonicalChatRequest, CanonicalChatResponse, CanonicalResponseMessage
 from .config import Config, load_config
@@ -3125,12 +3126,6 @@ async def anthropic_messages(request: Request):
     headers = _collect_anthropic_bridge_headers(request)
     try:
         wire_request = parse_anthropic_messages_request(body)
-        if wire_request.stream:
-            return _anthropic_error_response(
-                "Anthropic bridge v1 does not support streaming yet",
-                error_type="not_supported_error",
-                status_code=501,
-            )
         canonical_request = anthropic_request_to_canonical(wire_request, headers=headers)
         canonical_request = _resolve_anthropic_requested_model(canonical_request)
         execution = await _execute_chat_completion_body(canonical_request.to_openai_body(), headers)
@@ -3159,11 +3154,42 @@ async def anthropic_messages(request: Request):
             status_code=execution.status_code,
         )
 
-    if execution.stream or not isinstance(execution.result, dict):
+    bridge_headers = _anthropic_bridge_response_headers(
+        source=str(canonical_request.metadata.get("source") or "claude-code"),
+        requested_model=str(
+            canonical_request.metadata.get("requested_model_original") or wire_request.model
+        ),
+        resolved_model=str(canonical_request.requested_model or wire_request.model),
+        anthropic_version=str(headers.get("anthropic-version") or "") or None,
+        anthropic_beta=str(headers.get("anthropic-beta") or "") or None,
+    )
+
+    if execution.stream:
+        return StreamingResponse(
+            openai_sse_to_anthropic(
+                execution.result,
+                requested_model=str(
+                    canonical_request.metadata.get("requested_model_original") or wire_request.model
+                ),
+                resolved_model=str(canonical_request.requested_model or wire_request.model),
+            ),
+            media_type="text/event-stream",
+            headers={
+                "X-faigate-Provider": execution.provider_name,
+                "X-faigate-Profile": execution.client_profile,
+                "X-faigate-Layer": execution.decision.layer,
+                "X-faigate-Rule": execution.decision.rule_name,
+                "X-faigate-Hooks": ",".join(execution.hook_state.applied_hooks),
+                "X-faigate-Hook-Errors": str(len(execution.hook_state.errors)),
+                "x-faigate-trace-id": execution.trace_id or str(uuid.uuid4()),
+                **bridge_headers,
+            },
+        )
+    if not isinstance(execution.result, dict):
         return _anthropic_error_response(
-            "Anthropic bridge v1 does not support streaming responses",
-            error_type="not_supported_error",
-            status_code=501,
+            "Anthropic bridge returned an unsupported upstream response shape",
+            error_type="api_error",
+            status_code=502,
         )
 
     canonical_response = _openai_result_to_canonical_response(execution.result)
@@ -3182,15 +3208,7 @@ async def anthropic_messages(request: Request):
     response.headers["X-faigate-Hooks"] = ",".join(execution.hook_state.applied_hooks)
     response.headers["X-faigate-Hook-Errors"] = str(len(execution.hook_state.errors))
     response.headers["x-faigate-trace-id"] = execution.trace_id or str(uuid.uuid4())
-    for key, value in _anthropic_bridge_response_headers(
-        source=str(canonical_request.metadata.get("source") or "claude-code"),
-        requested_model=str(
-            canonical_request.metadata.get("requested_model_original") or wire_request.model
-        ),
-        resolved_model=str(canonical_request.requested_model or wire_request.model),
-        anthropic_version=str(headers.get("anthropic-version") or "") or None,
-        anthropic_beta=str(headers.get("anthropic-beta") or "") or None,
-    ).items():
+    for key, value in bridge_headers.items():
         response.headers[key] = value
     return response
 

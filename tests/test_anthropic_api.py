@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 import sys
 import types
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -21,6 +22,7 @@ sys.modules.pop("faigate.updates", None)
 sys.modules.pop("faigate.main", None)
 
 import faigate.main as main_module  # noqa: E402
+from faigate.bridges.anthropic import openai_sse_to_anthropic  # noqa: E402
 from faigate.config import load_config  # noqa: E402
 from faigate.providers import ProviderError  # noqa: E402
 from faigate.router import Router  # noqa: E402
@@ -35,13 +37,23 @@ def _write_config(tmp_path: Path, body: str) -> Path:
 
 
 class _CapturingProviderStub:
-    def __init__(self, name: str = "cloud-default", *, transport: dict[str, object] | None = None):
+    def __init__(
+        self,
+        name: str = "cloud-default",
+        *,
+        transport: dict[str, object] | None = None,
+    ):
         self.name = name
         self.model = "chat-model"
         self.backend_type = "openai-compat"
         self.contract = "generic"
         self.tier = "default"
-        self.capabilities = {"chat": True, "local": False, "cloud": True, "network_zone": "public"}
+        self.capabilities = {
+            "chat": True,
+            "local": False,
+            "cloud": True,
+            "network_zone": "public",
+        }
         self.context_window = 128000
         self.limits = {"max_input_tokens": 128000, "max_output_tokens": 4096}
         self.cache = {"mode": "none", "read_discount": False}
@@ -116,6 +128,30 @@ class _FailingProviderStub(_CapturingProviderStub):
         raise ProviderError(self.name, self.status, self.detail)
 
 
+class _StreamingProviderStub(_CapturingProviderStub):
+    async def complete(self, messages, **kwargs):
+        self.calls.append({"messages": messages, **kwargs})
+
+        async def _iter() -> AsyncIterator[bytes]:
+            yield (
+                b'data: {"id":"chatcmpl-stream","object":"chat.completion.chunk",'
+                b'"model":"chat-model","choices":[{"index":0,"delta":{"role":"assistant",'
+                b'"content":"Hello"},"finish_reason":null}]}\n'
+            )
+            yield b"\n"
+            yield (
+                b'data: {"id":"chatcmpl-stream","object":"chat.completion.chunk",'
+                b'"model":"chat-model","choices":[{"index":0,"delta":{"content":" world"},'
+                b'"finish_reason":"stop"}],"usage":{"prompt_tokens":11,'
+                b'"completion_tokens":2,"total_tokens":13}}\n'
+            )
+            yield b"\n"
+            yield b"data: [DONE]\n"
+            yield b"\n"
+
+        return _iter()
+
+
 @pytest.fixture
 def anthropic_api_client(tmp_path, monkeypatch):
     cfg = load_config(
@@ -155,9 +191,19 @@ metrics:
 
     monkeypatch.setattr(main_module, "_config", cfg, raising=False)
     monkeypatch.setattr(main_module, "_router", Router(cfg), raising=False)
-    monkeypatch.setattr(main_module, "_providers", {"cloud-default": provider}, raising=False)
+    monkeypatch.setattr(
+        main_module,
+        "_providers",
+        {"cloud-default": provider},
+        raising=False,
+    )
     monkeypatch.setattr(main_module, "_metrics", _MetricsStub(), raising=False)
-    monkeypatch.setattr(main_module.app.router, "lifespan_context", _noop_lifespan, raising=False)
+    monkeypatch.setattr(
+        main_module.app.router,
+        "lifespan_context",
+        _noop_lifespan,
+        raising=False,
+    )
 
     with TestClient(main_module.app) as client:
         yield client, provider
@@ -181,7 +227,10 @@ def test_anthropic_messages_returns_bridge_response(anthropic_api_client):
     assert body["content"][0]["type"] == "text"
     assert body["content"][0]["text"] == "anthropic ok"
     assert provider.calls[0]["extra_body"]["metadata"]["source"] == "claude-code"
-    assert provider.calls[0]["messages"][0] == {"role": "system", "content": "Use markdown"}
+    assert provider.calls[0]["messages"][0] == {
+        "role": "system",
+        "content": "Use markdown",
+    }
     assert response.headers["x-faigate-bridge-surface"] == "anthropic-messages"
     assert response.headers["x-faigate-bridge-source"] == "claude-code"
     assert response.headers["x-faigate-bridge-model-requested"] == "claude-sonnet"
@@ -238,7 +287,9 @@ def test_anthropic_messages_preserve_version_headers(anthropic_api_client):
     assert response.headers["x-faigate-bridge-anthropic-beta"] == "tools-2024-04-04"
 
 
-def test_anthropic_messages_forward_tool_use_and_tool_result_blocks(anthropic_api_client):
+def test_anthropic_messages_forward_tool_use_and_tool_result_blocks(
+    anthropic_api_client,
+):
     client, provider = anthropic_api_client
 
     response = client.post(
@@ -306,6 +357,75 @@ def test_anthropic_messages_rejects_non_text_blocks(anthropic_api_client):
     assert "text and tool_result blocks" in body["error"]["message"]
 
 
+def test_anthropic_messages_support_streaming(tmp_path, monkeypatch):
+    cfg = load_config(
+        _write_config(
+            tmp_path,
+            """
+server:
+  host: "127.0.0.1"
+  port: 8090
+providers:
+  cloud-default:
+    backend: openai-compat
+    base_url: "https://api.example.com/v1"
+    api_key: "secret"
+    model: "chat-model"
+anthropic_bridge:
+  enabled: true
+fallback_chain:
+  - cloud-default
+metrics:
+  enabled: false
+""",
+        )
+    )
+
+    @asynccontextmanager
+    async def _noop_lifespan(_app):
+        yield
+
+    provider = _StreamingProviderStub()
+    monkeypatch.setattr(main_module, "_config", cfg, raising=False)
+    monkeypatch.setattr(main_module, "_router", Router(cfg), raising=False)
+    monkeypatch.setattr(
+        main_module,
+        "_providers",
+        {"cloud-default": provider},
+        raising=False,
+    )
+    monkeypatch.setattr(main_module, "_metrics", _MetricsStub(), raising=False)
+    monkeypatch.setattr(
+        main_module.app.router,
+        "lifespan_context",
+        _noop_lifespan,
+        raising=False,
+    )
+
+    with TestClient(main_module.app) as client:
+        with client.stream(
+            "POST",
+            "/v1/messages",
+            json={
+                "model": "claude-sonnet",
+                "stream": True,
+                "messages": [{"role": "user", "content": "hello"}],
+            },
+        ) as response:
+            body = b"".join(response.iter_bytes()).decode("utf-8")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert response.headers["x-faigate-bridge-surface"] == "anthropic-messages"
+    assert "event: message_start" in body
+    assert "event: content_block_start" in body
+    assert '"type":"text_delta","text":"Hello"' in body
+    assert '"type":"text_delta","text":" world"' in body
+    assert '"stop_reason":"end_turn"' in body
+    assert "event: message_stop" in body
+    assert provider.calls[0]["stream"] is True
+
+
 def test_anthropic_count_tokens_returns_estimate_with_headers(anthropic_api_client):
     client, _provider = anthropic_api_client
 
@@ -319,7 +439,10 @@ def test_anthropic_count_tokens_returns_estimate_with_headers(anthropic_api_clie
                 {
                     "name": "lookup_doc",
                     "description": "Load one doc",
-                    "input_schema": {"type": "object", "properties": {"id": {"type": "string"}}},
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {"id": {"type": "string"}},
+                    },
                 }
             ],
         },
@@ -412,7 +535,12 @@ metrics:
         raising=False,
     )
     monkeypatch.setattr(main_module, "_metrics", _MetricsStub(), raising=False)
-    monkeypatch.setattr(main_module.app.router, "lifespan_context", _noop_lifespan, raising=False)
+    monkeypatch.setattr(
+        main_module.app.router,
+        "lifespan_context",
+        _noop_lifespan,
+        raising=False,
+    )
 
     with TestClient(main_module.app) as client:
         response = client.post(
@@ -483,7 +611,10 @@ metrics:
     assert body["error"]["type"] == "rate_limit_error"
 
 
-def test_anthropic_messages_skip_shared_quota_group_after_quota_failure(tmp_path, monkeypatch):
+def test_anthropic_messages_skip_shared_quota_group_after_quota_failure(
+    tmp_path,
+    monkeypatch,
+):
     cfg = load_config(
         _write_config(
             tmp_path,
@@ -533,7 +664,10 @@ metrics:
         detail="insufficient_quota on upstream account",
         transport={"quota_group": "anthropic-main"},
     )
-    mirror = _CapturingProviderStub("kilo-mirror", transport={"quota_group": "anthropic-main"})
+    mirror = _CapturingProviderStub(
+        "kilo-mirror",
+        transport={"quota_group": "anthropic-main"},
+    )
     local = _CapturingProviderStub("local-worker")
 
     monkeypatch.setattr(main_module, "_config", cfg, raising=False)
@@ -549,7 +683,12 @@ metrics:
         raising=False,
     )
     monkeypatch.setattr(main_module, "_metrics", _MetricsStub(), raising=False)
-    monkeypatch.setattr(main_module.app.router, "lifespan_context", _noop_lifespan, raising=False)
+    monkeypatch.setattr(
+        main_module.app.router,
+        "lifespan_context",
+        _noop_lifespan,
+        raising=False,
+    )
 
     with TestClient(main_module.app) as client:
         response = client.post(
@@ -565,3 +704,39 @@ metrics:
     assert mirror.calls == []
     assert len(local.calls) == 1
     assert response.headers["x-faigate-provider"] == "local-worker"
+
+
+@pytest.mark.asyncio
+async def test_openai_sse_to_anthropic_maps_tool_call_deltas():
+    async def _iter() -> AsyncIterator[bytes]:
+        yield (
+            b'data: {"id":"chatcmpl-stream","object":"chat.completion.chunk",'
+            b'"model":"chat-model","choices":[{"index":0,"delta":{"tool_calls":[{'
+            b'"index":0,"id":"call_1","type":"function","function":{"name":"lookup_doc",'
+            b'"arguments":"{\\"id\\":"}}]},"finish_reason":null}]}\n'
+        )
+        yield b"\n"
+        yield (
+            b'data: {"id":"chatcmpl-stream","object":"chat.completion.chunk",'
+            b'"model":"chat-model","choices":[{"index":0,"delta":{"tool_calls":[{'
+            b'"index":0,"function":{"arguments":"\\"design-note\\"}"}}]},'
+            b'"finish_reason":"tool_calls"}]}\n'
+        )
+        yield b"\n"
+        yield b"data: [DONE]\n"
+        yield b"\n"
+
+    chunks: list[str] = []
+    async for chunk in openai_sse_to_anthropic(
+        _iter(),
+        requested_model="claude-code",
+        resolved_model="premium",
+    ):
+        chunks.append(chunk.decode("utf-8"))
+
+    body = "".join(chunks)
+    assert "event: content_block_start" in body
+    assert '"type":"tool_use","id":"call_1","name":"lookup_doc","input":{}' in body
+    assert '"type":"input_json_delta","partial_json":"{\\"id\\":' in body
+    assert '"type":"input_json_delta","partial_json":"\\"design-note\\"}"' in body
+    assert '"stop_reason":"tool_use"' in body

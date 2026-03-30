@@ -8,6 +8,7 @@ from .adapter import (
     canonical_to_openai_body,
     dispatch_anthropic_count_tokens,
     dispatch_anthropic_messages,
+    openai_sse_to_anthropic,
 )
 
 __all__ = [
@@ -18,4 +19,5 @@ __all__ = [
     "canonical_to_openai_body",
     "dispatch_anthropic_count_tokens",
     "dispatch_anthropic_messages",
+    "openai_sse_to_anthropic",
 ]
