@@ -36,6 +36,85 @@ curl -fsS http://127.0.0.1:8090/v1/chat/completions \
   }'
 ```
 
+## Optional Anthropic-Compatible Bridge
+
+The Anthropic bridge stays optional and v1 is intentionally narrow. It exists to let Claude-oriented clients keep one stable local endpoint while Gate still owns routing, health checks, fallback, and provider selection.
+
+Enable it with:
+
+```yaml
+api_surfaces:
+  anthropic_messages: true
+
+anthropic_bridge:
+  enabled: true
+```
+
+### `POST /v1/messages`
+
+Routes Anthropic-/Claude-style message requests through the same internal Gate routing path used by the OpenAI-compatible surface.
+
+- validates a small v1 subset of Anthropic `messages`
+- supports a simple `system` prompt
+- supports text content blocks
+- non-streaming only in v1
+- optional `anthropic_bridge.model_aliases` can map Claude-facing model ids onto Gate routing modes or provider ids
+
+```bash
+curl -fsS http://127.0.0.1:8090/v1/messages \
+  -H 'Content-Type: application/json' \
+  -H 'anthropic-client: claude-code' \
+  -d '{
+    "model": "claude-code",
+    "system": "Prefer concise technical explanations.",
+    "messages": [
+      {"role": "user", "content": "Summarize the current fallback path."}
+    ]
+  }'
+```
+
+Response shape is Anthropic-compatible and still carries the normal Gate response headers such as:
+
+- `X-faigate-Provider`
+- `X-faigate-Profile`
+- `X-faigate-Layer`
+- `X-faigate-Rule`
+
+### `POST /v1/messages/count_tokens`
+
+Returns a minimal Anthropic-compatible token-count response for the same request structure as `/v1/messages`.
+
+v1 uses a deterministic local estimate instead of provider-exact token accounting.
+
+```bash
+curl -fsS http://127.0.0.1:8090/v1/messages/count_tokens \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "claude-code",
+    "messages": [
+      {"role": "user", "content": "Count these tokens."}
+    ]
+  }'
+```
+
+Response body:
+
+```json
+{"input_tokens": 11}
+```
+
+Response headers make the approximation explicit:
+
+- `X-faigate-Token-Count-Exact: false`
+- `X-faigate-Token-Count-Method: estimated-char-v1`
+
+Known v1 bridge limits:
+
+- non-streaming only
+- text content blocks only
+- image or binary content blocks are rejected
+- `count_tokens` is an estimate, not provider-exact accounting
+
 ### `POST /v1/images/generations`
 
 Routes image-generation requests to providers with `capabilities.image_generation: true`.

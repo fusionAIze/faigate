@@ -23,6 +23,7 @@ Runs locally on Linux, macOS, and Windows, with first-class workstation guidance
 - [Quickstart](#quickstart)
 - [Why fusionAIze Gate](#why-fusionaize-gate)
 - [How It Works](#how-it-works)
+- [Anthropic Bridge](#anthropic-bridge-optional)
 - [API Surface](#api-surface)
 - [How fusionAIze Gate Compares](#how-fusionaize-gate-compares)
 - [Deployment](#deployment)
@@ -211,23 +212,55 @@ which -a faigate
 ## How It Works
 
 ```text
-Client (OpenClaw, n8n, CLI, custom app)
-  |
-  v
-http://127.0.0.1:8090/v1
-  |
-  +--> policy rules
-  +--> static rules
-  +--> heuristic rules
-  +--> optional request hooks
-  +--> optional routing modes (auto / eco / premium / free / custom)
-  +--> optional client profile defaults
-  +--> optional LLM classifier
-  |
-  +--> provider selection and fallback
-         |- cloud APIs
-         |- proxy providers
-         `- local workers
+                                 fusionAIze Gate
+
+    +---------------------+   +--------------------+   +--------------------+
+    | Claude-native       |   | OpenAI-native      |   | Automation / CLI   |
+    | clients             |   | clients            |   | clients            |
+    |                     |   |                    |   |                    |
+    | Claude Code         |   | OpenClaw           |   | n8n                |
+    | Claude Desktop      |   | opencode           |   | curl / scripts     |
+    | Anthropic SDK tools |   | OpenAI SDK apps    |   | custom apps        |
+    +---------------------+   +--------------------+   +--------------------+
+               \                        |                       /
+                v                       v                      v
+         +-------------------------------------------------------------+
+         | One local endpoint                                          |
+         |                                                             |
+         | http://127.0.0.1:8090                                       |
+         | OpenAI-compatible + Anthropic-compatible bridge             |
+         +-------------------------------------------------------------+
+                                        |
+                                        v
+         +-------------------------------------------------------------+
+         | Routing core - Chooses the best route for the job           |
+         |                                                             |
+         | - quality / cost / speed / heuristics / policies            |
+         | - client profiles / routing modes / hooks                   |
+         | - health / readiness / fallback                             |
+         +-------------------------------------------------------------+
+                                        |
+               +------------------------+------------------------+
+               |                        |                        |
+               v                        v                        v
++------------------------+ +------------------------+ +------------------------+
+| Direct providers       | | Aggregators / mirrors  | | Local workers / models |
+| Anthropic              | | Kilo                   | | Ollama                 |
+| OpenAI                 | | BLACKBOX               | | vLLM                   |
+| Google                 | | OpenRouter             | | LM Studio              |
+| DeepSeek               | |                        | | LAN GPU workers        |
++------------------------+ +------------------------+ +------------------------+
+
+    +----------------------------------------------------------------------+
+    | Stable session continuity                                            |
+    |                                                                      |
+    | Keep one local endpoint across Claude-native, OpenAI-native, and     |
+    | automation-driven workflows. When Anthropic quota, one provider      |
+    | account, or one route path is exhausted, Gate can continue through   |
+    | another healthy direct route, aggregator route, or local worker      |
+    | without retooling clients. Hooks, health checks, readiness, and      |
+    | fallback stay in one gateway core.                                   |
+    +----------------------------------------------------------------------+
 ```
 
 Routing is layered on purpose:
@@ -241,6 +274,58 @@ Routing is layered on purpose:
 
 For OpenClaw specifically, both one-agent and many-agent traffic can use the same endpoint. fusionAIze Gate can distinguish delegated traffic through request headers such as `x-openclaw-source` when they are present.
 
+## Anthropic Bridge (Optional)
+
+fusionAIze Gate can also expose a small Anthropic-/Claude-compatible bridge surface for clients that speak `POST /v1/messages` instead of OpenAI chat completions.
+
+The bridge stays intentionally narrow:
+
+- it validates and normalizes Anthropic-style requests
+- it maps them into Gate's internal canonical request model
+- the existing Gate core still owns hooks, policies, routing, health checks, and fallback
+- responses are mapped back into Anthropic-compatible message envelopes
+
+That makes the bridge useful when a Claude-oriented client should keep one stable local endpoint while Gate decides whether the request should stay on a direct Anthropic route, move to an Anthropic-capable aggregator, or step sideways to a similar coding-capable route or local worker.
+
+Operationally, this helps in two common cases:
+
+- Anthropic subscription or account limits are exhausted, but you still want the session to continue through another route with similar coding or context characteristics.
+- Anthropic-capable aggregator routes such as Kilo or BLACKBOX are available, but you want Gate health checks and fallback rules to decide whether they are actually usable.
+
+Do not assume every aggregator route escapes Anthropic limits. Some routes may still rely on a BYOK Anthropic key from the same account. Keep those paths probeable, degradeable, and out of the top fallback position if they share the same exhausted quota domain.
+
+The same pattern also helps when the best fallback is not Anthropic at all. Gate can route the same Claude-oriented session toward a coding-capable OpenAI-, Gemini-, DeepSeek-, or local-worker lane when that is the healthiest path with acceptable context and tool fit.
+
+Minimal bridge config:
+
+```yaml
+api_surfaces:
+  anthropic_messages: true
+
+anthropic_bridge:
+  enabled: true
+  allow_claude_code_hints: true
+  model_aliases:
+    claude-code: auto
+    claude-code-fast: eco
+    claude-code-premium: premium
+```
+
+Known v1 limits:
+
+- non-streaming only
+- text content blocks only
+- `count_tokens` is a local estimate, not provider-exact accounting
+- the optional `claude-code-router` hook only adds routing hints; it is not the protocol bridge
+
+Local smoke test:
+
+```bash
+./docs/examples/anthropic-bridge-smoke.sh
+```
+
+For a fuller operator view, see [docs/anthropic-bridge.md](./docs/anthropic-bridge.md) and [docs/API.md](./docs/API.md).
+
 ## API Surface
 
 fusionAIze Gate keeps the primary surface compact and OpenAI-compatible. The full endpoint reference lives in [docs/API.md](./docs/API.md).
@@ -250,6 +335,8 @@ fusionAIze Gate keeps the primary surface compact and OpenAI-compatible. The ful
 | `GET /health` | Service health, provider status, and capability coverage |
 | `GET /v1/models` | OpenAI-compatible model list |
 | `POST /v1/chat/completions` | OpenAI-compatible chat routing |
+| `POST /v1/messages` | Optional Anthropic-/Claude-compatible bridge route |
+| `POST /v1/messages/count_tokens` | Optional Anthropic-compatible token estimate |
 | `POST /v1/images/generations` | OpenAI-compatible image generation |
 | `POST /v1/images/edits` | OpenAI-compatible image editing |
 | `POST /api/route` | Chat routing dry-run with decision details |

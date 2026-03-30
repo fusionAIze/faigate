@@ -17,7 +17,9 @@ import re
 import time
 import uuid
 from base64 import b64encode
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
+from dataclasses import asdict, dataclass
 from hashlib import sha256
 from typing import Any
 
@@ -27,6 +29,13 @@ from starlette.datastructures import UploadFile
 
 from . import __version__
 from .adaptation import AdaptiveRouteState
+from .api.anthropic.models import AnthropicBridgeError, parse_anthropic_messages_request
+from .bridges.anthropic import (
+    anthropic_request_to_canonical,
+    canonical_response_to_anthropic,
+    dispatch_anthropic_count_tokens,
+)
+from .canonical import CanonicalChatRequest, CanonicalChatResponse, CanonicalResponseMessage
 from .config import Config, load_config
 from .hooks import (
     AppliedHooks,
@@ -78,6 +87,31 @@ class PayloadTooLargeError(ValueError):
     """Raised when one request or upload exceeds configured size limits."""
 
 
+@dataclass
+class _ChatExecutionSuccess:
+    """One successful internal chat execution."""
+
+    result: dict[str, Any] | AsyncIterator[bytes]
+    provider_name: str
+    client_profile: str
+    client_tag: str
+    decision: RoutingDecision
+    model_requested: str
+    resolved_mode: str | None
+    resolved_shortcut: str | None
+    hook_state: AppliedHooks
+    trace_id: str | None
+    stream: bool
+
+
+@dataclass
+class _ChatExecutionFailure:
+    """One structured chat execution failure."""
+
+    status_code: int
+    body: dict[str, Any]
+
+
 def _client_error_response(message: str, *, error_type: str, status_code: int) -> JSONResponse:
     """Return a client-facing JSON error without exposing internal exception details."""
     return JSONResponse({"error": message, "type": error_type}, status_code=status_code)
@@ -90,6 +124,21 @@ def _request_hook_error_response(exc: Exception) -> JSONResponse:
         "Request hook processing failed",
         error_type="request_hook_error",
         status_code=500,
+    )
+
+
+def _anthropic_error_response(message: str, *, error_type: str, status_code: int) -> JSONResponse:
+    """Return an Anthropic-compatible error envelope."""
+
+    return JSONResponse(
+        {
+            "type": "error",
+            "error": {
+                "type": error_type,
+                "message": message,
+            },
+        },
+        status_code=status_code,
     )
 
 
@@ -245,6 +294,56 @@ def _collect_routing_headers(request: Request) -> dict[str, str]:
         for k, v in request.headers.items()
         if k.lower().startswith(prefixes)
     }
+
+
+def _collect_anthropic_bridge_headers(request: Request) -> dict[str, str]:
+    """Return routing headers plus bridge-specific client/source hints."""
+
+    headers = _collect_routing_headers(request)
+    max_chars = int((_config.security or {}).get("max_header_value_chars", 160))
+    bridge_source = _sanitize_token(
+        request.headers.get("anthropic-client")
+        or request.headers.get("x-faigate-client")
+        or request.headers.get("x-claude-code-client")
+        or "claude-code",
+        default="claude-code",
+        max_chars=max_chars,
+    )
+    headers.setdefault("x-faigate-client", bridge_source)
+    headers.setdefault("x-faigate-surface", "anthropic-messages")
+    return headers
+
+
+def _anthropic_bridge_surface_enabled() -> bool:
+    """Return whether the Anthropic-compatible surface should be exposed."""
+
+    if "_config" not in globals():
+        return False
+    bridge = _config.anthropic_bridge
+    surfaces = _config.api_surfaces
+    return bool(bridge.get("enabled", False) and surfaces.get("anthropic_messages", False))
+
+
+def _resolve_anthropic_requested_model(request: CanonicalChatRequest) -> CanonicalChatRequest:
+    """Apply configured Anthropic bridge aliases without changing wire parsing."""
+
+    alias_map = _config.anthropic_bridge.get("model_aliases", {})
+    requested_model = str(alias_map.get(request.requested_model, request.requested_model))
+    if requested_model == request.requested_model:
+        return request
+    metadata = dict(request.metadata)
+    metadata.setdefault("requested_model_original", request.requested_model)
+    metadata["requested_model_resolved"] = requested_model
+    return CanonicalChatRequest(
+        client=request.client,
+        surface=request.surface,
+        requested_model=requested_model,
+        system=request.system,
+        messages=list(request.messages),
+        tools=list(request.tools),
+        stream=request.stream,
+        metadata=metadata,
+    )
 
 
 def _collect_operator_context(headers: dict[str, str]) -> tuple[str, str]:
@@ -1443,6 +1542,221 @@ async def _resolve_route_preview(
     )
 
 
+def _completion_extra_body(body: dict[str, Any]) -> dict[str, Any] | None:
+    """Return a narrow passthrough set for upstream completion calls."""
+
+    passthrough: dict[str, Any] = {}
+    for key in ("metadata", "response_format", "tool_choice", "user", "stop"):
+        value = body.get(key)
+        if value in (None, "", [], {}):
+            continue
+        passthrough[key] = value
+    return passthrough or None
+
+
+async def _execute_chat_completion_body(
+    body: dict[str, Any],
+    headers: dict[str, str],
+) -> _ChatExecutionSuccess | _ChatExecutionFailure:
+    """Run one normalized chat request through the existing provider path."""
+
+    (
+        decision,
+        client_profile,
+        client_tag,
+        attempt_order,
+        model_requested,
+        resolved_mode,
+        resolved_shortcut,
+        hook_state,
+        effective_body,
+    ) = await _resolve_route_preview(body, headers)
+    messages = effective_body.get("messages", [])
+    stream = effective_body.get("stream", False)
+    temperature = effective_body.get("temperature")
+    max_tokens = effective_body.get("max_tokens")
+    tools = effective_body.get("tools")
+    extra_body = _completion_extra_body(effective_body)
+
+    logger.info(
+        "Route: %s [%s/%s] %.1fms",
+        decision.provider_name,
+        decision.layer,
+        decision.rule_name,
+        decision.elapsed_ms,
+    )
+
+    errors: list[dict[str, Any]] = []
+
+    for provider_name in attempt_order:
+        provider = _providers.get(provider_name)
+        if not provider:
+            continue
+        if not provider.health.healthy and provider_name != attempt_order[0]:
+            continue
+
+        try:
+            result = await provider.complete(
+                messages,
+                stream=stream,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                tools=tools,
+                extra_body=extra_body,
+            )
+            _adaptive_state.record_success(
+                provider_name,
+                latency_ms=(result.get("_faigate") or {}).get("latency_ms", 0)
+                if isinstance(result, dict)
+                else 0.0,
+            )
+
+            trace_id: str | None = None
+            if _config.metrics.get("enabled") and isinstance(result, dict):
+                usage = result.get("usage", {})
+                cg = result.get("_faigate", {})
+                pt = usage.get("prompt_tokens", 0)
+                ct = usage.get("completion_tokens", 0)
+                ch = cg.get("cache_hit_tokens", 0)
+                cm = cg.get("cache_miss_tokens", 0)
+                provider_cfg = _config.provider(provider_name)
+                pricing = provider_cfg.get("pricing", {}) if provider_cfg else {}
+                cost = calc_cost(pt, ct, pricing, cache_hit=ch, cache_miss=cm)
+                row_id = _metrics.log_request(
+                    provider=provider_name,
+                    model=provider.model,
+                    layer=decision.layer,
+                    rule_name=decision.rule_name,
+                    prompt_tokens=pt,
+                    completion_tokens=ct,
+                    cache_hit=ch,
+                    cache_miss=cm,
+                    cost_usd=cost,
+                    latency_ms=cg.get("latency_ms", 0),
+                    requested_model=model_requested,
+                    modality="chat",
+                    client_profile=client_profile,
+                    client_tag=client_tag,
+                    decision_reason=decision.reason,
+                    confidence=decision.confidence,
+                    **_attempt_metric_fields(
+                        decision,
+                        provider_name,
+                        attempt_order=attempt_order,
+                    ),
+                    attempt_order=attempt_order,
+                )
+                trace_id = str(row_id) if row_id is not None else str(uuid.uuid4())
+
+            return _ChatExecutionSuccess(
+                result=result,
+                provider_name=provider_name,
+                client_profile=client_profile,
+                client_tag=client_tag,
+                decision=decision,
+                model_requested=model_requested,
+                resolved_mode=resolved_mode,
+                resolved_shortcut=resolved_shortcut,
+                hook_state=hook_state,
+                trace_id=trace_id,
+                stream=bool(stream),
+            )
+        except ProviderError as e:
+            _adaptive_state.record_failure(provider_name, error=e.detail[:500])
+            errors.append(_serialize_provider_attempt_error(provider_name, e))
+            logger.warning("Provider %s failed: %s, trying next...", provider_name, e.detail[:200])
+            if _config.metrics.get("enabled"):
+                _metrics.log_request(
+                    provider=provider_name,
+                    model=provider.model,
+                    layer=decision.layer,
+                    rule_name=decision.rule_name,
+                    success=False,
+                    error=e.detail[:500],
+                    requested_model=model_requested,
+                    modality="chat",
+                    client_profile=client_profile,
+                    client_tag=client_tag,
+                    decision_reason=decision.reason,
+                    confidence=decision.confidence,
+                    **_attempt_metric_fields(
+                        decision,
+                        provider_name,
+                        attempt_order=attempt_order,
+                    ),
+                    attempt_order=attempt_order,
+                )
+            continue
+
+    return _ChatExecutionFailure(
+        status_code=502,
+        body={
+            "error": {
+                "message": "All providers failed",
+                "type": "provider_error",
+                "attempts": errors,
+            }
+        },
+    )
+
+
+def _openai_result_to_canonical_response(result: dict[str, Any]) -> CanonicalChatResponse:
+    """Normalize one OpenAI-style completion response into the canonical model."""
+
+    choices = result.get("choices") or []
+    first_choice = choices[0] if choices else {}
+    message = first_choice.get("message") or {}
+    usage = result.get("usage") or {}
+    provider_meta = result.get("_faigate") or {}
+    return CanonicalChatResponse(
+        response_id=str(result.get("id") or ""),
+        model=str(result.get("model") or ""),
+        provider=str(provider_meta.get("provider") or ""),
+        message=CanonicalResponseMessage(
+            role=str(message.get("role") or "assistant"),
+            content=message.get("content") or "",
+            tool_calls=list(message.get("tool_calls") or []),
+            stop_reason=str(first_choice.get("finish_reason") or "") or None,
+        ),
+        stop_reason=str(first_choice.get("finish_reason") or "") or None,
+        usage={
+            "input_tokens": int(usage.get("prompt_tokens") or 0),
+            "output_tokens": int(usage.get("completion_tokens") or 0),
+            "total_tokens": int(usage.get("total_tokens") or 0),
+        },
+        metadata={"raw_usage": dict(usage)},
+        raw=dict(result),
+    )
+
+
+class _AnthropicBridgeExecutor:
+    """Route canonical Anthropic requests through the existing chat path."""
+
+    async def execute_canonical_chat(self, request: CanonicalChatRequest) -> CanonicalChatResponse:
+        alias_map = _config.anthropic_bridge.get("model_aliases", {})
+        requested_model = str(alias_map.get(request.requested_model, request.requested_model))
+        effective_request = CanonicalChatRequest(
+            client=request.client,
+            surface=request.surface,
+            requested_model=requested_model,
+            system=request.system,
+            messages=list(request.messages),
+            tools=list(request.tools),
+            stream=request.stream,
+            metadata=dict(request.metadata),
+        )
+        body = effective_request.to_openai_body()
+        headers = dict(effective_request.metadata.get("bridge_headers") or {})
+        execution = await _execute_chat_completion_body(body, headers)
+        if isinstance(execution, _ChatExecutionFailure):
+            raise AnthropicBridgeError(
+                execution.body.get("error", {}).get("message", "Anthropic bridge request failed")
+            )
+        if execution.stream or not isinstance(execution.result, dict):
+            raise AnthropicBridgeError("Anthropic bridge v1 does not support streaming responses")
+        return _openai_result_to_canonical_response(execution.result)
+
+
 def _collect_image_request_fields(body: dict[str, Any]) -> dict[str, Any]:
     """Return a narrow, validated subset of image-generation request fields."""
     fields: dict[str, Any] = {}
@@ -2610,163 +2924,172 @@ async def chat_completions(request: Request):
 
     headers = _collect_routing_headers(request)
     try:
-        (
-            decision,
-            client_profile,
-            client_tag,
-            attempt_order,
-            model_requested,
-            resolved_mode,
-            resolved_shortcut,
-            hook_state,
-            effective_body,
-        ) = await _resolve_route_preview(body, headers)
+        execution = await _execute_chat_completion_body(body, headers)
     except HookExecutionError as exc:
         return _request_hook_error_response(exc)
-    messages = effective_body.get("messages", [])
-    stream = effective_body.get("stream", False)
-    temperature = effective_body.get("temperature")
-    max_tokens = effective_body.get("max_tokens")
-    tools = effective_body.get("tools")
 
-    logger.info(
-        "Route: %s [%s/%s] %.1fms",
-        decision.provider_name,
-        decision.layer,
-        decision.rule_name,
-        decision.elapsed_ms,
-    )
+    if isinstance(execution, _ChatExecutionFailure):
+        return JSONResponse(execution.body, status_code=execution.status_code)
 
-    # ── Execute with fallback ──────────────────────────────
+    if execution.stream:
+        return StreamingResponse(
+            execution.result,
+            media_type="text/event-stream",
+            headers={
+                "X-faigate-Provider": execution.provider_name,
+                "X-faigate-Profile": execution.client_profile,
+                "X-faigate-Hooks": ",".join(execution.hook_state.applied_hooks),
+                "X-faigate-Hook-Errors": str(len(execution.hook_state.errors)),
+                "x-faigate-trace-id": execution.trace_id or str(uuid.uuid4()),
+            },
+        )
 
-    errors: list[dict[str, Any]] = []
+    resp = JSONResponse(execution.result)
+    resp.headers["X-faigate-Provider"] = execution.provider_name
+    resp.headers["X-faigate-Profile"] = execution.client_profile
+    if execution.resolved_mode:
+        resp.headers["X-faigate-Mode"] = execution.resolved_mode
+    if execution.resolved_shortcut:
+        resp.headers["X-faigate-Shortcut"] = execution.resolved_shortcut
+    resp.headers["X-faigate-Layer"] = execution.decision.layer
+    resp.headers["X-faigate-Rule"] = execution.decision.rule_name
+    resp.headers["X-faigate-Hooks"] = ",".join(execution.hook_state.applied_hooks)
+    resp.headers["X-faigate-Hook-Errors"] = str(len(execution.hook_state.errors))
+    resp.headers["x-faigate-trace-id"] = execution.trace_id or str(uuid.uuid4())
+    return resp
 
-    for provider_name in attempt_order:
-        provider = _providers.get(provider_name)
-        if not provider:
-            continue
-        if not provider.health.healthy and provider_name != attempt_order[0]:
-            continue  # Skip known-unhealthy fallbacks (but always try the chosen one)
 
-        try:
-            result = await provider.complete(
-                messages,
-                stream=stream,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                tools=tools,
+@app.post("/v1/messages")
+async def anthropic_messages(request: Request):
+    """Anthropic-compatible messages endpoint, kept intentionally small for v1."""
+
+    if not _anthropic_bridge_surface_enabled():
+        return _anthropic_error_response(
+            "Anthropic bridge is disabled",
+            error_type="not_found_error",
+            status_code=404,
+        )
+
+    try:
+        body = await _read_json_body(request, operation="Anthropic messages")
+    except PayloadTooLargeError:
+        return _anthropic_error_response(
+            "Anthropic messages request is too large",
+            error_type="request_too_large",
+            status_code=413,
+        )
+    except ValueError:
+        return _anthropic_error_response(
+            "Invalid Anthropic messages request",
+            error_type="invalid_request_error",
+            status_code=400,
+        )
+
+    headers = _collect_anthropic_bridge_headers(request)
+    try:
+        wire_request = parse_anthropic_messages_request(body)
+        if wire_request.stream:
+            return _anthropic_error_response(
+                "Anthropic bridge v1 does not support streaming yet",
+                error_type="not_supported_error",
+                status_code=501,
             )
-            _adaptive_state.record_success(
-                provider_name,
-                latency_ms=(result.get("_faigate") or {}).get("latency_ms", 0)
-                if isinstance(result, dict)
-                else 0.0,
+        canonical_request = anthropic_request_to_canonical(wire_request, headers=headers)
+        canonical_request = _resolve_anthropic_requested_model(canonical_request)
+        execution = await _execute_chat_completion_body(canonical_request.to_openai_body(), headers)
+    except AnthropicBridgeError as exc:
+        return _anthropic_error_response(
+            str(exc),
+            error_type="invalid_request_error",
+            status_code=400,
+        )
+    except HookExecutionError as exc:
+        logger.warning("Anthropic bridge request hook processing failed: %s", exc)
+        return _anthropic_error_response(
+            "Request hook processing failed",
+            error_type="request_hook_error",
+            status_code=500,
+        )
+
+    if isinstance(execution, _ChatExecutionFailure):
+        message = str(
+            execution.body.get("error", {}).get("message", "Anthropic bridge request failed")
+        )
+        error_type = str(execution.body.get("error", {}).get("type", "api_error"))
+        return _anthropic_error_response(
+            message,
+            error_type=error_type,
+            status_code=execution.status_code,
+        )
+
+    if execution.stream or not isinstance(execution.result, dict):
+        return _anthropic_error_response(
+            "Anthropic bridge v1 does not support streaming responses",
+            error_type="not_supported_error",
+            status_code=501,
+        )
+
+    canonical_response = _openai_result_to_canonical_response(execution.result)
+    response = JSONResponse(
+        asdict(
+            canonical_response_to_anthropic(
+                canonical_response,
+                requested_model=canonical_request.requested_model,
             )
-
-            # Log metrics with cost (cache-aware)
-            trace_id: str | None = None
-            if _config.metrics.get("enabled") and isinstance(result, dict):
-                usage = result.get("usage", {})
-                cg = result.get("_faigate", {})
-                pt = usage.get("prompt_tokens", 0)
-                ct = usage.get("completion_tokens", 0)
-                ch = cg.get("cache_hit_tokens", 0)
-                cm = cg.get("cache_miss_tokens", 0)
-                provider_cfg = _config.provider(provider_name)
-                pricing = provider_cfg.get("pricing", {}) if provider_cfg else {}
-                cost = calc_cost(pt, ct, pricing, cache_hit=ch, cache_miss=cm)
-                row_id = _metrics.log_request(
-                    provider=provider_name,
-                    model=provider.model,
-                    layer=decision.layer,
-                    rule_name=decision.rule_name,
-                    prompt_tokens=pt,
-                    completion_tokens=ct,
-                    cache_hit=ch,
-                    cache_miss=cm,
-                    cost_usd=cost,
-                    latency_ms=cg.get("latency_ms", 0),
-                    requested_model=model_requested,
-                    modality="chat",
-                    client_profile=client_profile,
-                    client_tag=client_tag,
-                    decision_reason=decision.reason,
-                    confidence=decision.confidence,
-                    **_attempt_metric_fields(
-                        decision,
-                        provider_name,
-                        attempt_order=attempt_order,
-                    ),
-                    attempt_order=attempt_order,
-                )
-                trace_id = str(row_id) if row_id is not None else str(uuid.uuid4())
-
-            if stream:
-                return StreamingResponse(
-                    result,
-                    media_type="text/event-stream",
-                    headers={
-                        "X-faigate-Provider": provider_name,
-                        "X-faigate-Profile": client_profile,
-                        "X-faigate-Hooks": ",".join(hook_state.applied_hooks),
-                        "X-faigate-Hook-Errors": str(len(hook_state.errors)),
-                        "x-faigate-trace-id": trace_id or str(uuid.uuid4()),
-                    },
-                )
-
-            # Add routing info to response headers (non-streaming)
-            resp = JSONResponse(result)
-            resp.headers["X-faigate-Provider"] = provider_name
-            resp.headers["X-faigate-Profile"] = client_profile
-            if resolved_mode:
-                resp.headers["X-faigate-Mode"] = resolved_mode
-            if resolved_shortcut:
-                resp.headers["X-faigate-Shortcut"] = resolved_shortcut
-            resp.headers["X-faigate-Layer"] = decision.layer
-            resp.headers["X-faigate-Rule"] = decision.rule_name
-            resp.headers["X-faigate-Hooks"] = ",".join(hook_state.applied_hooks)
-            resp.headers["X-faigate-Hook-Errors"] = str(len(hook_state.errors))
-            resp.headers["x-faigate-trace-id"] = trace_id or str(uuid.uuid4())
-            return resp
-
-        except ProviderError as e:
-            _adaptive_state.record_failure(provider_name, error=e.detail[:500])
-            errors.append(_serialize_provider_attempt_error(provider_name, e))
-            logger.warning("Provider %s failed: %s, trying next...", provider_name, e.detail[:200])
-            if _config.metrics.get("enabled"):
-                _metrics.log_request(
-                    provider=provider_name,
-                    model=provider.model,
-                    layer=decision.layer,
-                    rule_name=decision.rule_name,
-                    success=False,
-                    error=e.detail[:500],
-                    requested_model=model_requested,
-                    modality="chat",
-                    client_profile=client_profile,
-                    client_tag=client_tag,
-                    decision_reason=decision.reason,
-                    confidence=decision.confidence,
-                    **_attempt_metric_fields(
-                        decision,
-                        provider_name,
-                        attempt_order=attempt_order,
-                    ),
-                    attempt_order=attempt_order,
-                )
-            continue
-
-    # All providers failed
-    return JSONResponse(
-        {
-            "error": {
-                "message": "All providers failed",
-                "type": "provider_error",
-                "attempts": errors,
-            }
-        },
-        status_code=502,
+        )
     )
+    response.headers["X-faigate-Provider"] = execution.provider_name
+    response.headers["X-faigate-Profile"] = execution.client_profile
+    response.headers["X-faigate-Layer"] = execution.decision.layer
+    response.headers["X-faigate-Rule"] = execution.decision.rule_name
+    response.headers["X-faigate-Hooks"] = ",".join(execution.hook_state.applied_hooks)
+    response.headers["X-faigate-Hook-Errors"] = str(len(execution.hook_state.errors))
+    response.headers["x-faigate-trace-id"] = execution.trace_id or str(uuid.uuid4())
+    return response
+
+
+@app.post("/v1/messages/count_tokens")
+async def anthropic_count_tokens(request: Request):
+    """Anthropic-compatible token counting endpoint.
+
+    v1 uses a deterministic local estimate. The JSON body stays compatible with
+    Anthropic's minimal response shape, while headers make the approximation
+    explicit.
+    """
+
+    if not _anthropic_bridge_surface_enabled():
+        return _anthropic_error_response(
+            "Anthropic bridge is disabled",
+            error_type="not_found_error",
+            status_code=404,
+        )
+
+    try:
+        body = await _read_json_body(request, operation="Anthropic count_tokens")
+    except PayloadTooLargeError:
+        return _anthropic_error_response(
+            "Anthropic count_tokens request is too large",
+            error_type="request_too_large",
+            status_code=413,
+        )
+    except ValueError:
+        return _anthropic_error_response(
+            "Invalid Anthropic count_tokens request",
+            error_type="invalid_request_error",
+            status_code=400,
+        )
+
+    headers = _collect_anthropic_bridge_headers(request)
+    try:
+        result, extra_headers = dispatch_anthropic_count_tokens(payload=body, headers=headers)
+    except AnthropicBridgeError as exc:
+        return _anthropic_error_response(
+            str(exc),
+            error_type="invalid_request_error",
+            status_code=400,
+        )
+
+    return JSONResponse(asdict(result), headers=extra_headers)
 
 
 # ── CLI entry point ────────────────────────────────────────────

@@ -298,6 +298,69 @@ fusionAIze Gate supports two lightweight extension seams:
   - bounded pre-routing hint injection
   - can fail closed depending on `request_hooks.on_error`
 
+For optional Claude-Code-/Anthropic-bridge routing refinement, you can load the
+community hook shipped in this repo:
+
+```yaml
+request_hooks:
+  enabled: true
+  community_hooks_dir: "./hooks/community"
+  hooks:
+    - claude-code-router
+```
+
+The hook stays optional and only adds routing hints for bridge traffic. It does
+not perform protocol translation. By default it treats Anthropic bridge traffic
+as `coding-default`, and it also understands bridge metadata such as
+`claude_code_profile: premium` or `claude_code_profile: fast`.
+
+## Anthropic Bridge Surface
+
+The Anthropic bridge is an optional additional API surface inside Gate. It does
+not replace the OpenAI-compatible surface and it does not add a second routing
+stack.
+
+Relevant config blocks:
+
+- `api_surfaces`
+- `anthropic_bridge`
+- optional `request_hooks` when you want Claude-Code-specific routing hints
+
+Minimal example:
+
+```yaml
+api_surfaces:
+  anthropic_messages: true
+
+anthropic_bridge:
+  enabled: true
+  allow_claude_code_hints: true
+  model_aliases:
+    claude-code: auto
+    claude-code-fast: eco
+    claude-code-premium: premium
+```
+
+What this means:
+
+- `api_surfaces.anthropic_messages`
+  - exposes `POST /v1/messages` and `POST /v1/messages/count_tokens`
+- `anthropic_bridge.enabled`
+  - enables request parsing, canonical mapping, and response remapping
+- `anthropic_bridge.model_aliases`
+  - lets you keep stable Claude-facing model ids while Gate routes internally
+- `anthropic_bridge.allow_claude_code_hints`
+  - preserves bridge metadata for optional request hooks such as `claude-code-router`
+
+Recommended operational pattern:
+
+- use stable logical aliases like `claude-code`, `claude-code-fast`, and `claude-code-premium`
+- keep direct Anthropic routes, Anthropic-capable aggregators, and local workers all probeable
+- be careful with aggregator routes that may still use a BYOK Anthropic key from the same quota domain
+- prefer health checks and fallback ordering over assuming every Anthropic-shaped route is independent
+
+For the end-to-end flow and local smoke example, see [Anthropic Bridge](./anthropic-bridge.md).
+
 Use the onboarding docs and starter examples when introducing a new client instead of hand-authoring these sections from scratch.
 
 ## Config Wizard

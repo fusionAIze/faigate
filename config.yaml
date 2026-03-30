@@ -920,6 +920,15 @@ request_hooks:
   - profile-override-header
   - mode-override-header
   on_error: continue
+api_surfaces:
+  anthropic_messages: false
+anthropic_bridge:
+  enabled: false
+  allow_claude_code_hints: true
+  model_aliases:
+    claude-code: auto
+    claude-code-fast: eco
+    claude-code-premium: premium
 routing_modes:
   default: auto
   enabled: true
