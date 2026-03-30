@@ -37,29 +37,44 @@ The detailed design lives in [Adaptive model orchestration](./ADAPTIVE-ORCHESTRA
 
 The next block should stay disciplined: build on the workstation baseline, keep packaging practical, and avoid turning fusionAIze Gate into a sprawling platform.
 
-## Current release target: `v1.12.0`
+## Current release target: `v1.13.0`
 
-The next release should land as a clean operational release, not as another loose pile of runtime slices.
+The next release should land as a clean bridge release, not as a grab bag of protocol experiments.
 
-`v1.12.0` should close around three themes that now fit together:
+`v1.13.0` should close around one coherent theme:
 
-- provider source cataloging and alerting as a first-class operator surface
-- clearer aggregator behavior for Kilo and BLACKBOX, especially where "free", "budget", "wallet", and explicit paid lanes are easy to conflate
-- hardened release automation after the `v1.11.x` release failures
+- an optional Anthropic-compatible bridge that stays inside the existing Gate core instead of spawning a second gateway or a protocol-specific routing stack
 
-The release should feel coherent from an operator point of view:
+That release should feel disciplined from an operator point of view:
 
-- Quick Setup, Doctor, Provider Probe, Dashboard, and route preview all explain drift or route pressure using the same language
-- Kilo explicit Sonnet/Opus lanes are visible as deliberate routing choices instead of hidden aggregator magic
-- release prep, tag validation, and publish dry-runs are boring and repeatable again
+- Claude-native clients can enter through `/v1/messages` while Gate still owns routing, policy, fallback, and health decisions
+- basic `tool_use` / `tool_result`, Anthropic header tolerance, and bridge-shaped error mapping are stable enough for everyday opt-in usage
+- quota-group-aware fallback behavior avoids the most obvious "same exhausted Anthropic account via another path" mistakes
+- doctor, provider probe, README, API docs, and release-readiness docs all describe the same v1 bridge limits
 
-What is intentionally not in scope for `v1.12.0`:
+What is intentionally not in scope for `v1.13.0`:
 
-- the virtual key layer
-- gateway-level response caching
-- fully automated external provider-source crawling on a long-running schedule
+- full Anthropic parity
+- full Claude Code parity
+- full Claude Desktop parity
+- SSE streaming parity
+- exact provider-side token counting
 
-Those stay as follow-on tracks once the operator surfaces, release path, and aggregator semantics are stable enough to trust.
+Those remain follow-on work once the opt-in bridge line has shipped and seen real operator usage.
+
+## Next target after `v1.13.0`: make the provider catalog truly live
+
+Once the bridge line is out, the next meaningful track should return to provider intelligence:
+
+- move the provider-source catalog from "visible" to "continuously trustworthy"
+- mirror local model visibility per key and per route more directly against the global catalog
+- escalate drift, quota coupling, and stale assumptions earlier in the operator surfaces
+
+That next line should stay operational:
+
+- no second platform
+- no sprawling memory layer
+- no heavy UI dependency just to understand route health
 
 ## Shipped: `v1.8.0` – `v1.9.1`
 

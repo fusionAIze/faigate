@@ -1,5 +1,21 @@
 # fusionAIze Gate Changelog
 
+## v1.13.0 - 2026-03-30
+
+### Added
+
+- Added an optional Anthropic-compatible bridge inside Gate with `POST /v1/messages` and `POST /v1/messages/count_tokens`, so Claude-native clients can enter through a dedicated surface without splitting routing, policy, health, or fallback behavior into a second gateway
+- Added an internal canonical request and response layer for bridge traffic, which keeps Anthropic-shaped ingress mapping separate from the existing routing and completion core instead of adding one-off protocol logic directly in the router
+- Added a community `claude-code-router` hook that can prefer coding-strong, tool-capable, and larger-context routes for Claude Code traffic without making the bridge itself depend on any one routing policy
+- Added bridge-specific validation and release-readiness helpers, including a client-near validation script and an explicit bridge release checklist for opt-in production rollouts
+
+### Changed
+
+- Hardened Anthropic bridge compatibility for real operator workflows: basic `tool_use` / `tool_result` flows now stay on the same execution path, Anthropic version and beta headers survive the bridge, and bridge responses expose the key route-resolution headers needed for debugging
+- Improved quota-aware fallback behavior for Anthropic-shaped traffic by introducing shared quota metadata on routes, which lets Gate avoid blindly retrying another path that is still backed by the same exhausted Anthropic or BYOK quota domain
+- Clarified the Bridge release position across docs: `v1.13.0` ships the Anthropic surface as opt-in and production-usable for early adopters, but does not claim full Anthropic, Claude Code, or Claude Desktop parity yet
+- Aligned the doctor and bridge validation tooling with non-default live configs so release validation runs against the same configured DB, env file, and runtime instance instead of silently falling back to repo-local defaults
+
 ## v1.12.0 - 2026-03-29
 
 ### Added

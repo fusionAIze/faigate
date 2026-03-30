@@ -18,7 +18,7 @@ This repo does not require a heavy release process. Use lightweight tags plus Gi
 10. For hardening-heavy releases, keep the API functional tests green alongside unit and config coverage.
 11. Publish the GitHub Release so [`notify-tap`](./.github/workflows/notify-tap.yml) can dispatch the Homebrew tap update automatically.
 12. If the tap dispatch fails or the formula needs manual follow-up, bump `Formula/faigate.rb` in the separate [`fusionAIze/homebrew-tap`](https://github.com/fusionAIze/homebrew-tap) repo to the new release tag and update its `sha256`.
-13. For Anthropic bridge releases, also run the client-near validation flow in [docs/anthropic-bridge-release-readiness.md](./docs/anthropic-bridge-release-readiness.md) before tagging.
+13. For Anthropic bridge releases, run the client-near validation flow in [docs/anthropic-bridge-release-readiness.md](./docs/anthropic-bridge-release-readiness.md) before tagging, and keep the feature positioned as opt-in unless a later release closes the documented parity gaps.
 
 ## Example
 
@@ -99,6 +99,8 @@ The repo also includes [publish-dry-run](./.github/workflows/publish-dry-run.yml
 - `v1.10.1` is the first `v1.10` follow-up: the Grok adapter path and virtual-provider registration line are stable enough to ship as a public release.
 - `v1.11.0` establishes the modern model-registry baseline: Gemini 3 / 3.1 lanes, dynamic model labels, and the first release-helper automation now move together instead of being hardcoded across the router, wizard, and catalog.
 - `v1.11.2` is the release-reliability follow-up: Python 3.10 compatibility for the update helpers is restored and version surfaces are realigned so package metadata, CLI version output, and API version reporting stay in sync.
+- `v1.12.0` establishes the operator-catalog baseline: provider-source drift is surfaced earlier, Kilo and BLACKBOX semantics are clearer, and release automation is boring and repeatable again.
+- `v1.13.0` establishes the optional Anthropic bridge baseline: Claude-native clients can use an internal Anthropic-compatible surface, bridge traffic stays on the normal Gate routing core, and production rollout is supported as an explicitly opt-in feature line.
 
 ## Planned Publishing Path
 
