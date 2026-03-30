@@ -386,6 +386,37 @@ def test_anthropic_messages_forward_tool_use_and_tool_result_blocks(
     }
 
 
+def test_anthropic_messages_tolerate_tool_result_without_id(anthropic_api_client):
+    client, provider = anthropic_api_client
+
+    response = client.post(
+        "/v1/messages",
+        json={
+            "model": "claude-sonnet",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "content": "Detached tool result text",
+                        }
+                    ],
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    forwarded_messages = provider.calls[0]["messages"]
+    assert forwarded_messages == [
+        {
+            "role": "user",
+            "content": "Detached tool result text",
+        }
+    ]
+
+
 def test_anthropic_messages_rejects_non_text_blocks(anthropic_api_client):
     client, _provider = anthropic_api_client
 

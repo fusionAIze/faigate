@@ -269,6 +269,18 @@ def _user_message_to_canonical(message: AnthropicMessage) -> list[CanonicalMessa
             raise AnthropicBridgeError(
                 "Anthropic bridge v1 supports only text and tool_result blocks in user messages"
             )
+        if not block.tool_use_id:
+            # Claude-native clients can emit tool_result-like user blocks without a
+            # stable tool_use_id. Falling back to user text keeps the session
+            # usable instead of hard-failing the whole turn.
+            pending_text.append(
+                AnthropicContentBlock(
+                    type="text",
+                    text=_anthropic_tool_result_to_string(block),
+                    metadata={**dict(block.metadata), "tool_result_without_id": True},
+                )
+            )
+            continue
         if pending_text:
             canonical_messages.append(
                 CanonicalMessage(role="user", content=_text_blocks_to_string(pending_text))

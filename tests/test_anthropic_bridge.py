@@ -145,6 +145,38 @@ def test_anthropic_request_maps_tool_use_and_tool_result_blocks():
     }
 
 
+def test_anthropic_request_degrades_tool_result_without_id_to_user_text():
+    wire_request = parse_anthropic_messages_request(
+        {
+            "model": "claude-sonnet",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "content": "Result text without a stable tool id",
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+
+    canonical = anthropic_request_to_canonical(
+        wire_request,
+        headers={"x-faigate-client": "claude-code"},
+    )
+    openai_body = canonical.to_openai_body()
+
+    assert openai_body["messages"] == [
+        {
+            "role": "user",
+            "content": "Result text without a stable tool id",
+        }
+    ]
+
+
 def test_detached_router_runs_bridge_dispatch():
     executor = _FakeExecutor()
     response = TestClient(_build_test_app(executor)).post(
