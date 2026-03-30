@@ -227,6 +227,55 @@ if store is not None and health_raw:
             return "route"
         return "inspect"
 
+    def describe_quota_domain(
+        *,
+        backend: str,
+        route_type: str,
+        compatibility: str,
+        billing_mode: str,
+        quota_group: str,
+        quota_isolated: bool,
+        api_key_env: str,
+    ) -> tuple[str, str]:
+        summary_bits = []
+        note = ""
+        if billing_mode:
+            summary_bits.append(f"billing={billing_mode}")
+        elif backend == "anthropic-compat":
+            summary_bits.append("billing=direct-api")
+        elif route_type == "aggregator" or compatibility == "aggregator":
+            summary_bits.append("billing=aggregator-unspecified")
+        if quota_group:
+            summary_bits.append(f"group={quota_group}")
+        if quota_isolated:
+            summary_bits.append("isolated=yes")
+        elif quota_group:
+            summary_bits.append("isolated=no")
+
+        if backend == "anthropic-compat" and api_key_env == "ANTHROPIC_API_KEY":
+            note = (
+                "uses ANTHROPIC_API_KEY through the Anthropic API; this path is separate from "
+                "Claude app subscription meters."
+            )
+        elif quota_group and not quota_isolated:
+            note = (
+                f"shares quota domain '{quota_group}' with sibling routes; a 429 here can also "
+                "hold other routes in the same group."
+            )
+        elif route_type == "aggregator" or compatibility == "aggregator":
+            if quota_isolated:
+                note = (
+                    "marked as quota-isolated; this route can stay in rotation when a separate "
+                    "Anthropic API path is rate-limited."
+                )
+            else:
+                note = (
+                    "aggregator route is not marked quota-isolated; do not assume it escapes "
+                    "the same Anthropic account limits unless its billing path is independent."
+                )
+
+        return " | ".join(summary_bits), note
+
     for provider_name, payload in sorted(providers.items()):
         total += 1
         request_readiness = payload.get("request_readiness") or {}
@@ -237,6 +286,9 @@ if store is not None and health_raw:
         profile = str(request_readiness.get("profile") or "")
         compatibility = str(request_readiness.get("compatibility") or "")
         confidence = str(request_readiness.get("probe_confidence") or "")
+        billing_mode = str(request_readiness.get("billing_mode") or "")
+        quota_group = str(request_readiness.get("quota_group") or "")
+        quota_isolated = bool(request_readiness.get("quota_isolated"))
         verified_via = str(request_readiness.get("verified_via") or "")
         probe_payload = str(request_readiness.get("probe_payload") or "")
         operator_hint = str(request_readiness.get("operator_hint") or "")
@@ -275,6 +327,12 @@ if store is not None and health_raw:
             mirror_gap_routes += 1
         lane_cluster = str(lane.get("cluster") or "")
         degrade_to = [str(item) for item in (lane.get("degrade_to") or []) if str(item)]
+        route_type = str(lane.get("route_type") or "")
+        backend = str(payload.get("backend") or "")
+        api_key_env = ""
+        api_key = str(payload.get("api_key") or "").strip()
+        if api_key.startswith("${") and api_key.endswith("}"):
+            api_key_env = api_key[2:-1].split(":-", 1)[0].split(":", 1)[0]
         add_recommendations = get_route_add_recommendations(
             configured_provider_names=configured_provider_names,
             canonical_model=canonical_model,
@@ -300,6 +358,12 @@ if store is not None and health_raw:
                 "profile": profile,
                 "compatibility": compatibility,
                 "confidence": confidence,
+                "billing_mode": billing_mode,
+                "quota_group": quota_group,
+                "quota_isolated": quota_isolated,
+                "route_type": route_type,
+                "backend": backend,
+                "api_key_env": api_key_env,
                 "verified_via": verified_via,
                 "probe_payload": probe_payload,
                 "operator_hint": operator_hint,
@@ -381,6 +445,19 @@ if store is not None and health_raw:
             )
         if row["probe_payload"]:
             print(f"[ok] request-ready payload: {row['provider']} -> {row['probe_payload']}")
+        quota_summary, quota_note = describe_quota_domain(
+            backend=row["backend"],
+            route_type=row["route_type"],
+            compatibility=row["compatibility"],
+            billing_mode=row["billing_mode"],
+            quota_group=row["quota_group"],
+            quota_isolated=row["quota_isolated"],
+            api_key_env=row["api_key_env"],
+        )
+        if quota_summary:
+            print(f"[ok] request-ready quota: {row['provider']} -> {quota_summary}")
+        if quota_note:
+            print(f"[ok] request-ready quota note: {row['provider']} -> {quota_note}")
         if row["operator_hint"]:
             print(f"[ok] request-ready next step: {row['provider']} -> {row['operator_hint']}")
         if row["runtime_penalty"] or row["runtime_issue_type"]:

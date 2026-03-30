@@ -2431,6 +2431,93 @@ provider_source_refresh:
     assert "Action summary: fix-now=1 | review-now=1 | inspect=0" in result.stdout
 
 
+def test_faigate_provider_probe_surfaces_quota_domain_notes(tmp_path: Path):
+    config_file = tmp_path / "config.yaml"
+    env_file = tmp_path / "faigate.env"
+    config_file.write_text(
+        """
+server:
+  host: "127.0.0.1"
+  port: 8090
+providers:
+  anthropic-sonnet:
+    backend: anthropic-compat
+    api_key: ${ANTHROPIC_API_KEY}
+    base_url: https://api.anthropic.com/v1
+    model: claude-sonnet-4-6
+  kilo-sonnet:
+    backend: openai-compat
+    api_key: ${KILOCODE_API_KEY}
+    base_url: https://api.kilo.ai/api/gateway
+    model: anthropic/claude-sonnet-4.6
+fallback_chain: []
+metrics:
+  enabled: false
+  db_path: ":memory:"
+""".strip(),
+        encoding="utf-8",
+    )
+    env_file.write_text(
+        "ANTHROPIC_API_KEY=test-ant\nKILOCODE_API_KEY=test-kilo\n",
+        encoding="utf-8",
+    )
+
+    fake_bin = _write_fake_curl(
+        tmp_path,
+        {
+            "/health": json.dumps(
+                {
+                    "providers": {
+                        "anthropic-sonnet": {
+                            "healthy": False,
+                            "request_readiness": {
+                                "ready": False,
+                                "status": "rate-limited",
+                                "reason": "429 rate limited upstream",
+                                "profile": "anthropic-native",
+                                "compatibility": "native",
+                                "probe_confidence": "high",
+                            },
+                        },
+                        "kilo-sonnet": {
+                            "healthy": True,
+                            "request_readiness": {
+                                "ready": True,
+                                "status": "ready-compat",
+                                "reason": "route looks request-ready",
+                                "profile": "kilo-openai-compat",
+                                "compatibility": "aggregator",
+                                "probe_confidence": "medium",
+                            },
+                        },
+                    }
+                }
+            )
+        },
+    )
+
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+    env["FAIGATE_CONFIG_FILE"] = str(config_file)
+    env["FAIGATE_ENV_FILE"] = str(env_file)
+    env["FAIGATE_PYTHON"] = sys.executable
+    env["PYTHONPATH"] = str(REPO_ROOT)
+
+    result = subprocess.run(
+        ["bash", "scripts/faigate-provider-probe"],
+        cwd=REPO_ROOT,
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "quota domain: billing=direct-api" in result.stdout
+    assert "separate from Claude app subscription meters" in result.stdout
+    assert "quota domain: billing=aggregator-unspecified" in result.stdout
+    assert "not marked quota-isolated" in result.stdout
+
+
 def test_faigate_doctor_prefers_same_lane_route_before_cluster_degrade(tmp_path: Path):
     config_file = tmp_path / "config.yaml"
     env_file = tmp_path / "faigate.env"
@@ -2531,6 +2618,113 @@ def test_faigate_doctor_prefers_same_lane_route_before_cluster_degrade(tmp_path:
         "openrouter-anthropic-opus (same-lane-route)"
     ) in result.stdout
     assert "request-ready fallback guidance: same-lane=1 | cluster=0 | family=0" in result.stdout
+
+
+def test_faigate_doctor_surfaces_quota_domain_notes(tmp_path: Path):
+    config_file = tmp_path / "config.yaml"
+    env_file = tmp_path / "faigate.env"
+    config_file.write_text(
+        """
+server: {}
+providers:
+  anthropic-sonnet:
+    backend: anthropic-compat
+    api_key: ${ANTHROPIC_API_KEY}
+    base_url: https://api.anthropic.com/v1
+    model: claude-sonnet-4-6
+  kilo-sonnet:
+    backend: openai-compat
+    api_key: ${KILOCODE_API_KEY}
+    base_url: https://api.kilo.ai/api/gateway
+    model: anthropic/claude-sonnet-4.6
+""".strip(),
+        encoding="utf-8",
+    )
+    env_file.write_text(
+        "ANTHROPIC_API_KEY=test-ant\nKILOCODE_API_KEY=test-kilo\n",
+        encoding="utf-8",
+    )
+
+    fake_bin = _write_fake_curl(
+        tmp_path,
+        {
+            "/health": json.dumps(
+                {
+                    "status": "ok",
+                    "summary": {
+                        "providers_total": 2,
+                        "providers_healthy": 1,
+                        "providers_unhealthy": 1,
+                    },
+                    "request_readiness": {
+                        "providers_total": 2,
+                        "providers_ready": 1,
+                        "providers_not_ready": 1,
+                    },
+                    "providers": {
+                        "anthropic-sonnet": {
+                            "backend": "anthropic-compat",
+                            "api_key": "${ANTHROPIC_API_KEY}",
+                            "healthy": False,
+                            "lane": {
+                                "family": "anthropic",
+                                "canonical_model": "anthropic/sonnet-4.6",
+                                "route_type": "direct",
+                            },
+                            "request_readiness": {
+                                "ready": False,
+                                "status": "rate-limited",
+                                "reason": "429 rate limited upstream",
+                                "profile": "anthropic-native",
+                                "compatibility": "native",
+                                "probe_confidence": "high",
+                            },
+                        },
+                        "kilo-sonnet": {
+                            "backend": "openai-compat",
+                            "api_key": "${KILOCODE_API_KEY}",
+                            "healthy": True,
+                            "lane": {
+                                "family": "kilo",
+                                "canonical_model": "anthropic/claude-sonnet-4.6",
+                                "route_type": "aggregator",
+                            },
+                            "request_readiness": {
+                                "ready": True,
+                                "status": "ready-compat",
+                                "reason": "route looks request-ready",
+                                "profile": "kilo-openai-compat",
+                                "compatibility": "aggregator",
+                                "probe_confidence": "medium",
+                            },
+                        },
+                    },
+                }
+            ),
+            "/v1/models": json.dumps({"data": []}),
+        },
+    )
+
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+    env["FAIGATE_CONFIG_FILE"] = str(config_file)
+    env["FAIGATE_ENV_FILE"] = str(env_file)
+    env["FAIGATE_PYTHON"] = sys.executable
+    env["PYTHONPATH"] = str(REPO_ROOT)
+
+    result = subprocess.run(
+        ["bash", "scripts/faigate-doctor"],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert "request-ready quota: anthropic-sonnet -> billing=direct-api" in result.stdout
+    assert "separate from Claude app subscription meters" in result.stdout
+    assert "request-ready quota: kilo-sonnet -> billing=aggregator-unspecified" in result.stdout
+    assert "not marked quota-isolated" in result.stdout
 
 
 def test_faigate_doctor_surfaces_provider_source_priority_actions(tmp_path: Path):

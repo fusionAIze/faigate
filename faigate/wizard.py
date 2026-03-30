@@ -585,6 +585,58 @@ def _extract_env_reference(value: str) -> str:
     return ""
 
 
+def _describe_quota_domain(
+    *,
+    backend: str,
+    route_type: str,
+    compatibility: str,
+    billing_mode: str,
+    quota_group: str,
+    quota_isolated: bool,
+    api_key_env: str,
+) -> tuple[str, str]:
+    summary_bits: list[str] = []
+    note = ""
+
+    if billing_mode:
+        summary_bits.append(f"billing={billing_mode}")
+    elif backend == "anthropic-compat":
+        summary_bits.append("billing=direct-api")
+    elif route_type == "aggregator" or compatibility == "aggregator":
+        summary_bits.append("billing=aggregator-unspecified")
+
+    if quota_group:
+        summary_bits.append(f"group={quota_group}")
+    if quota_isolated:
+        summary_bits.append("isolated=yes")
+    elif quota_group:
+        summary_bits.append("isolated=no")
+
+    if backend == "anthropic-compat" and api_key_env == "ANTHROPIC_API_KEY":
+        note = (
+            "uses ANTHROPIC_API_KEY through the Anthropic API; this path is separate from "
+            "Claude app subscription meters."
+        )
+    elif quota_group and not quota_isolated:
+        note = (
+            f"shares quota domain '{quota_group}' with sibling routes; a 429 here can also "
+            "hold other routes in the same group."
+        )
+    elif route_type == "aggregator" or compatibility == "aggregator":
+        if quota_isolated:
+            note = (
+                "marked as quota-isolated; this route can stay in rotation when a separate "
+                "Anthropic API path is rate-limited."
+            )
+        else:
+            note = (
+                "aggregator route is not marked quota-isolated; do not assume it escapes the "
+                "same Anthropic account limits unless its billing path is independent."
+            )
+
+    return " | ".join(summary_bits), note
+
+
 _ENV_REF_RE = re.compile(r"\$\{([^}]+)}")
 
 
@@ -1232,6 +1284,7 @@ def build_provider_probe_report(
             backend=str(provider.get("backend", "openai-compat") or "openai-compat"),
             contract=str(provider.get("contract", "generic") or "generic"),
         )
+        backend = str(provider.get("backend", "openai-compat") or "openai-compat")
         lane_binding = get_provider_lane_binding(name)
         api_key = str(provider.get("api_key", "") or "").strip()
         env_name = _extract_env_reference(api_key)
@@ -1351,6 +1404,24 @@ def build_provider_probe_report(
                     or transport_defaults.get("probe_strategy")
                     or ""
                 ),
+                "billing_mode": str(
+                    request_readiness.get("billing_mode")
+                    or (provider.get("transport") or {}).get("billing_mode")
+                    or ""
+                ),
+                "quota_group": str(
+                    request_readiness.get("quota_group")
+                    or (provider.get("transport") or {}).get("quota_group")
+                    or ""
+                ),
+                "quota_isolated": bool(
+                    request_readiness.get("quota_isolated")
+                    or (provider.get("transport") or {}).get("quota_isolated")
+                    or False
+                ),
+                "route_type": str(lane.get("route_type") or ""),
+                "backend": backend,
+                "api_key_env": env_name,
                 "probe_payload": str(request_readiness.get("probe_payload") or ""),
                 "verified_via": str(request_readiness.get("verified_via") or ""),
                 "operator_hint": operator_hint,
@@ -1613,6 +1684,19 @@ def render_provider_probe_text(report: dict[str, Any]) -> str:
                 )
                 + (f" | strategy: {row.get('probe_strategy')}" if row.get("probe_strategy") else "")
             )
+        quota_summary, quota_note = _describe_quota_domain(
+            backend=str(row.get("backend") or ""),
+            route_type=str(row.get("route_type") or ""),
+            compatibility=str(row.get("transport_compatibility") or ""),
+            billing_mode=str(row.get("billing_mode") or ""),
+            quota_group=str(row.get("quota_group") or ""),
+            quota_isolated=bool(row.get("quota_isolated")),
+            api_key_env=str(row.get("api_key_env") or ""),
+        )
+        if quota_summary:
+            lines.append("  " + f"quota domain: {quota_summary}")
+        if quota_note:
+            lines.append("  " + f"quota note: {quota_note}")
         if row.get("verified_via"):
             lines.append("  " + f"verified via: {row['verified_via']}")
         if row.get("probe_payload"):
