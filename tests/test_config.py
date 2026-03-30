@@ -411,6 +411,14 @@ def test_anthropic_bridge_defaults_are_exposed():
             "claude-code": "auto",
             "claude-code-fast": "eco",
             "claude-code-premium": "premium",
+            "claude-sonnet-4-6": "anthropic-sonnet",
+            "claude-sonnet-4-6-20251001": "anthropic-sonnet",
+            "claude-sonnet-4-6[1m]": "anthropic-sonnet",
+            "claude-opus-4-6": "anthropic-claude",
+            "claude-opus-4-6-20251001": "anthropic-claude",
+            "claude-opus-4-6[1m]": "anthropic-claude",
+            "claude-haiku-4-5": "anthropic-haiku",
+            "claude-haiku-4-5-20251001": "anthropic-haiku",
         },
     }
 

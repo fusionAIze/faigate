@@ -421,7 +421,19 @@ def _resolve_anthropic_requested_model(request: CanonicalChatRequest) -> Canonic
     """Apply configured Anthropic bridge aliases without changing wire parsing."""
 
     alias_map = _config.anthropic_bridge.get("model_aliases", {})
-    requested_model = str(alias_map.get(request.requested_model, request.requested_model))
+    requested_model_raw = str(request.requested_model or "").strip()
+    requested_model = str(
+        alias_map.get(
+            requested_model_raw,
+            alias_map.get(
+                requested_model_raw.lower(),
+                alias_map.get(
+                    _normalize_anthropic_model_alias(requested_model_raw),
+                    request.requested_model,
+                ),
+            ),
+        )
+    )
     if requested_model == request.requested_model:
         return request
     metadata = dict(request.metadata)
@@ -437,6 +449,21 @@ def _resolve_anthropic_requested_model(request: CanonicalChatRequest) -> Canonic
         stream=request.stream,
         metadata=metadata,
     )
+
+
+def _normalize_anthropic_model_alias(model_id: str) -> str:
+    """Return a stable alias key for Claude-native model ids.
+
+    Claude Code sometimes sends model ids with display-oriented suffixes like
+    ``[1m]``. The bridge should treat those as the same model family for alias
+    resolution instead of forcing operators to encode every formatting variant.
+    """
+
+    normalized = str(model_id or "").strip().lower()
+    if not normalized:
+        return ""
+    normalized = re.sub(r"\[[^\]]+]", "", normalized).strip()
+    return normalized
 
 
 def _collect_operator_context(headers: dict[str, str]) -> tuple[str, str]:

@@ -260,6 +260,32 @@ def test_anthropic_messages_applies_model_aliases(anthropic_api_client):
     assert response.headers["x-faigate-bridge-model-resolved"] == "premium"
 
 
+def test_anthropic_messages_applies_builtin_claude_code_model_aliases(
+    anthropic_api_client,
+):
+    client, provider = anthropic_api_client
+
+    response = client.post(
+        "/v1/messages",
+        json={
+            "model": "claude-sonnet-4-6[1m]",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Use the Claude Code model name directly",
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    metadata = provider.calls[0]["extra_body"]["metadata"]
+    assert metadata["requested_model_original"] == "claude-sonnet-4-6[1m]"
+    assert metadata["requested_model_resolved"] == "anthropic-sonnet"
+    assert response.headers["x-faigate-bridge-model-requested"] == "claude-sonnet-4-6-1m"
+    assert response.headers["x-faigate-bridge-model-resolved"] == "anthropic-sonnet"
+
+
 def test_anthropic_messages_preserve_version_headers(anthropic_api_client):
     client, provider = anthropic_api_client
 
