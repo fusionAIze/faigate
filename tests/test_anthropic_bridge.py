@@ -79,6 +79,54 @@ def test_anthropic_request_maps_to_canonical_and_openai_body():
     assert openai_body["messages"][1]["content"] == "Explain the diff"
 
 
+def test_anthropic_request_maps_tool_use_and_tool_result_blocks():
+    wire_request = parse_anthropic_messages_request(
+        {
+            "model": "claude-sonnet",
+            "messages": [
+                {"role": "user", "content": "Find the spec"},
+                {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "tool_use",
+                            "id": "toolu_lookup",
+                            "name": "lookup_doc",
+                            "input": {"id": "spec-1"},
+                        }
+                    ],
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "toolu_lookup",
+                            "content": "Spec text",
+                        }
+                    ],
+                },
+            ],
+        }
+    )
+
+    canonical = anthropic_request_to_canonical(
+        wire_request,
+        headers={"x-faigate-client": "claude-code"},
+    )
+    openai_body = canonical.to_openai_body()
+
+    assert openai_body["messages"][0] == {"role": "user", "content": "Find the spec"}
+    assert openai_body["messages"][1]["role"] == "assistant"
+    assert openai_body["messages"][1]["tool_calls"][0]["id"] == "toolu_lookup"
+    assert openai_body["messages"][1]["tool_calls"][0]["function"]["name"] == "lookup_doc"
+    assert openai_body["messages"][2] == {
+        "role": "tool",
+        "content": "Spec text",
+        "tool_call_id": "toolu_lookup",
+    }
+
+
 def test_detached_router_runs_bridge_dispatch():
     executor = _FakeExecutor()
     response = TestClient(_build_test_app(executor)).post(
@@ -117,6 +165,44 @@ def test_canonical_response_maps_back_to_anthropic_blocks():
     assert payload["id"] == "msg_back"
     assert payload["content"][0]["text"] == "done"
     assert payload["metadata"]["provider"] == "kilo-opus"
+
+
+def test_canonical_response_maps_tool_calls_to_tool_use_stop_reason():
+    response = canonical_response_to_anthropic(
+        CanonicalChatResponse(
+            response_id="msg_tool",
+            model="anthropic/claude-sonnet-4.6",
+            provider="kilo-sonnet",
+            message=CanonicalResponseMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "call_lookup",
+                        "type": "function",
+                        "function": {
+                            "name": "lookup_doc",
+                            "arguments": '{"id":"abc"}',
+                        },
+                    }
+                ],
+            ),
+            stop_reason="tool_calls",
+        ),
+        requested_model="claude-sonnet",
+    )
+
+    payload = asdict(response)
+    assert payload["stop_reason"] == "tool_use"
+    assert payload["content"] == [
+        {
+            "type": "tool_use",
+            "text": None,
+            "tool_use_id": "call_lookup",
+            "name": "lookup_doc",
+            "input": {"id": "abc"},
+            "metadata": {},
+        }
+    ]
 
 
 def _build_test_app(executor: _FakeExecutor) -> FastAPI:

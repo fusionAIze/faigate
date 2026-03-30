@@ -91,6 +91,8 @@ Recommended pattern:
 - keep direct Anthropic routes probeable and clearly named
 - keep Anthropic-capable aggregators as explicit mirrors or secondary routes
 - do not assume a premium Anthropic mirror is independent if it uses the same exhausted account
+- mark routes that can burn the same upstream quota with a shared `transport.quota_group`
+- use `transport.billing_mode: byok` on aggregator routes when the wallet path may still collapse to your own upstream account
 - use `faigate-doctor`, `faigate-provider-probe`, `/health`, and `/api/providers` to validate which routes are actually request-ready
 
 ## Claude Code / Claude Desktop
@@ -131,10 +133,24 @@ This covers:
 - `POST /v1/messages`
 - `POST /v1/messages/count_tokens`
 
+For a client-near validation pass before release, run:
+
+```bash
+./docs/examples/anthropic-bridge-validation.sh
+```
+
+That broader check adds:
+
+- bridge headers and Anthropic version/beta tolerance
+- basic `tool_use` / `tool_result` flow shape
+- doctor and provider-probe output after the same config is live
+
+For the explicit release gate, see [Anthropic Bridge Release Readiness](./anthropic-bridge-release-readiness.md).
+
 ## Known v1 Limits
 
 - non-streaming only
-- text content blocks only
+- text blocks plus basic `tool_use` / `tool_result`
 - `count_tokens` returns a deterministic local estimate
 - image or binary content blocks are not bridged yet
 - the optional `claude-code-router` hook only adds routing hints

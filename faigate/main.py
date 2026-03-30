@@ -61,7 +61,7 @@ from .provider_catalog_refresh import (
 )
 from .provider_catalog_store import ProviderCatalogStore
 from .provider_sources import list_provider_sources
-from .providers import ProviderBackend, ProviderError
+from .providers import ProviderBackend, ProviderError, classify_runtime_issue
 from .router import Router, RoutingDecision
 from .updates import (
     UpdateChecker,
@@ -142,6 +142,79 @@ def _anthropic_error_response(message: str, *, error_type: str, status_code: int
     )
 
 
+def _anthropic_error_type_for_status(status_code: int, error_type: str) -> str:
+    """Map generic gateway/provider failures onto Anthropic-style error types."""
+
+    known_types = {
+        "invalid_request_error",
+        "authentication_error",
+        "permission_error",
+        "not_found_error",
+        "rate_limit_error",
+        "request_too_large",
+        "api_error",
+        "overloaded_error",
+        "not_supported_error",
+    }
+    if error_type in known_types:
+        return error_type
+    if status_code == 400:
+        return "invalid_request_error"
+    if status_code == 401:
+        return "authentication_error"
+    if status_code == 403:
+        return "permission_error"
+    if status_code == 404:
+        return "not_found_error"
+    if status_code == 413:
+        return "request_too_large"
+    if status_code == 429:
+        return "rate_limit_error"
+    if status_code in {502, 503, 504}:
+        return "overloaded_error"
+    return "api_error"
+
+
+def _anthropic_bridge_response_headers(
+    *,
+    source: str,
+    requested_model: str,
+    resolved_model: str | None = None,
+    anthropic_version: str | None = None,
+    anthropic_beta: str | None = None,
+) -> dict[str, str]:
+    """Return bounded response headers that make bridge behavior visible."""
+
+    headers = {
+        "X-faigate-Bridge-Surface": "anthropic-messages",
+        "X-faigate-Bridge-Source": _sanitize_token(source, default="claude-code", max_chars=64),
+        "X-faigate-Bridge-Model-Requested": _sanitize_token(
+            requested_model,
+            default="unknown",
+            max_chars=96,
+        ),
+    }
+    if resolved_model and resolved_model != requested_model:
+        headers["X-faigate-Bridge-Model-Resolved"] = _sanitize_token(
+            resolved_model,
+            default="unknown",
+            max_chars=96,
+        )
+    if anthropic_version:
+        headers["X-faigate-Bridge-Anthropic-Version"] = _sanitize_token(
+            anthropic_version,
+            default="unknown",
+            max_chars=64,
+        )
+    if anthropic_beta:
+        headers["X-faigate-Bridge-Anthropic-Beta"] = _sanitize_token(
+            anthropic_beta,
+            default="unknown",
+            max_chars=96,
+        )
+    return headers
+
+
 def _invalid_request_response(message: str, *, exc: Exception | None = None) -> JSONResponse:
     """Return a sanitized invalid-request response."""
     if exc is not None:
@@ -190,13 +263,28 @@ def _provider_error_category(status: int, detail: str) -> str:
     return "provider_error"
 
 
-def _serialize_provider_attempt_error(provider_name: str, exc: ProviderError) -> dict[str, Any]:
+def _serialize_provider_attempt_error(
+    provider_name: str,
+    exc: ProviderError,
+    *,
+    category_override: str | None = None,
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Return a sanitized provider-attempt failure object for client responses."""
-    return {
+    payload = {
         "provider": provider_name,
         "status": exc.status,
-        "category": _provider_error_category(exc.status, exc.detail),
+        "category": category_override or _provider_error_category(exc.status, exc.detail),
     }
+    if extra:
+        payload.update(extra)
+    return payload
+
+
+def _provider_quota_group(provider: Any) -> str:
+    """Return the configured shared quota group for one route, if any."""
+
+    return str(getattr(provider, "transport", {}).get("quota_group", "") or "").strip()
 
 
 async def _refresh_local_worker_probes(force: bool = False) -> None:
@@ -311,6 +399,10 @@ def _collect_anthropic_bridge_headers(request: Request) -> dict[str, str]:
     )
     headers.setdefault("x-faigate-client", bridge_source)
     headers.setdefault("x-faigate-surface", "anthropic-messages")
+    for header_name in ("anthropic-version", "anthropic-beta", "user-agent"):
+        value = request.headers.get(header_name)
+        if value:
+            headers[header_name] = _sanitize_header_value(value, max_chars=max_chars)
     return headers
 
 
@@ -1587,12 +1679,35 @@ async def _execute_chat_completion_body(
     )
 
     errors: list[dict[str, Any]] = []
+    blocked_quota_groups: dict[str, dict[str, str]] = {}
 
     for provider_name in attempt_order:
         provider = _providers.get(provider_name)
         if not provider:
             continue
         if not provider.health.healthy and provider_name != attempt_order[0]:
+            continue
+        quota_group = _provider_quota_group(provider)
+        quota_isolated = bool(getattr(provider, "transport", {}).get("quota_isolated", False))
+        blocked_group = blocked_quota_groups.get(quota_group) if quota_group else None
+        if blocked_group and not quota_isolated:
+            logger.info(
+                "Skipping provider %s because shared quota group %s was blocked by %s (%s)",
+                provider_name,
+                quota_group,
+                blocked_group["provider"],
+                blocked_group["issue_type"],
+            )
+            errors.append(
+                {
+                    "provider": provider_name,
+                    "status": 0,
+                    "category": "shared-quota-skipped",
+                    "shared_quota_group": quota_group,
+                    "blocked_by": blocked_group["provider"],
+                    "blocked_issue_type": blocked_group["issue_type"],
+                }
+            )
             continue
 
         try:
@@ -1663,7 +1778,28 @@ async def _execute_chat_completion_body(
             )
         except ProviderError as e:
             _adaptive_state.record_failure(provider_name, error=e.detail[:500])
-            errors.append(_serialize_provider_attempt_error(provider_name, e))
+            classify_issue = getattr(provider, "classify_runtime_issue", None)
+            if callable(classify_issue):
+                issue_type = classify_issue(status=e.status, detail=e.detail)
+            else:
+                issue_type = classify_runtime_issue(status=e.status, detail=e.detail)
+            errors.append(
+                _serialize_provider_attempt_error(
+                    provider_name,
+                    e,
+                    category_override=issue_type,
+                    extra={"shared_quota_group": quota_group} if quota_group else None,
+                )
+            )
+            if (
+                quota_group
+                and not quota_isolated
+                and issue_type in {"quota-exhausted", "rate-limited", "auth-invalid"}
+            ):
+                blocked_quota_groups[quota_group] = {
+                    "provider": provider_name,
+                    "issue_type": issue_type,
+                }
             logger.warning("Provider %s failed: %s, trying next...", provider_name, e.detail[:200])
             if _config.metrics.get("enabled"):
                 _metrics.log_request(
@@ -1688,12 +1824,13 @@ async def _execute_chat_completion_body(
                 )
             continue
 
+    last_error = errors[-1] if errors else {}
     return _ChatExecutionFailure(
-        status_code=502,
+        status_code=int(last_error.get("status") or 502),
         body={
             "error": {
                 "message": "All providers failed",
-                "type": "provider_error",
+                "type": str(last_error.get("category") or "provider_error"),
                 "attempts": errors,
             }
         },
@@ -3015,10 +3152,10 @@ async def anthropic_messages(request: Request):
         message = str(
             execution.body.get("error", {}).get("message", "Anthropic bridge request failed")
         )
-        error_type = str(execution.body.get("error", {}).get("type", "api_error"))
+        raw_error_type = str(execution.body.get("error", {}).get("type", "api_error"))
         return _anthropic_error_response(
             message,
-            error_type=error_type,
+            error_type=_anthropic_error_type_for_status(execution.status_code, raw_error_type),
             status_code=execution.status_code,
         )
 
@@ -3045,6 +3182,16 @@ async def anthropic_messages(request: Request):
     response.headers["X-faigate-Hooks"] = ",".join(execution.hook_state.applied_hooks)
     response.headers["X-faigate-Hook-Errors"] = str(len(execution.hook_state.errors))
     response.headers["x-faigate-trace-id"] = execution.trace_id or str(uuid.uuid4())
+    for key, value in _anthropic_bridge_response_headers(
+        source=str(canonical_request.metadata.get("source") or "claude-code"),
+        requested_model=str(
+            canonical_request.metadata.get("requested_model_original") or wire_request.model
+        ),
+        resolved_model=str(canonical_request.requested_model or wire_request.model),
+        anthropic_version=str(headers.get("anthropic-version") or "") or None,
+        anthropic_beta=str(headers.get("anthropic-beta") or "") or None,
+    ).items():
+        response.headers[key] = value
     return response
 
 
@@ -3088,8 +3235,13 @@ async def anthropic_count_tokens(request: Request):
             error_type="invalid_request_error",
             status_code=400,
         )
-
-    return JSONResponse(asdict(result), headers=extra_headers)
+    bridge_headers = _anthropic_bridge_response_headers(
+        source=str(headers.get("x-faigate-client") or "claude-code"),
+        requested_model=str(body.get("model") or "unknown"),
+        anthropic_version=str(headers.get("anthropic-version") or "") or None,
+        anthropic_beta=str(headers.get("anthropic-beta") or "") or None,
+    )
+    return JSONResponse(asdict(result), headers={**extra_headers, **bridge_headers})
 
 
 # ── CLI entry point ────────────────────────────────────────────

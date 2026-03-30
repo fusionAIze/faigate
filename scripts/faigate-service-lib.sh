@@ -235,7 +235,15 @@ faigate_db_path() {
   env_db="$(faigate_env_value FAIGATE_DB_PATH 2>/dev/null || true)"
   if [ -n "$env_db" ]; then
     printf '%s\n' "$env_db"
-  elif [ "$(faigate_platform)" = "Darwin" ] && [ -n "${FAIGATE_MAC_CONFIG_DIR:-}" ]; then
+  else
+    local yaml_db
+    yaml_db="$(faigate_yaml_value metrics.db_path "")"
+    if [ -n "$yaml_db" ]; then
+      printf '%s\n' "$yaml_db"
+      return 0
+    fi
+  fi
+  if [ "$(faigate_platform)" = "Darwin" ] && [ -n "${FAIGATE_MAC_CONFIG_DIR:-}" ]; then
     faigate_mac_db_path
   else
     printf '%s\n' "$(faigate_repo_root)/faigate.db"

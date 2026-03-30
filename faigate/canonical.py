@@ -34,6 +34,7 @@ class CanonicalMessage:
     content: Any
     name: str | None = None
     tool_call_id: str | None = None
+    tool_calls: list[dict[str, Any]] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -76,6 +77,8 @@ class CanonicalChatRequest:
                 payload["name"] = message.name
             if message.tool_call_id:
                 payload["tool_call_id"] = message.tool_call_id
+            if message.tool_calls:
+                payload["tool_calls"] = list(message.tool_calls)
             if message.metadata:
                 payload["metadata"] = dict(message.metadata)
             messages.append(payload)

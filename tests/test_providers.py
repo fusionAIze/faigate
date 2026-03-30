@@ -233,6 +233,44 @@ class TestProviderHealthProbes:
         assert "kilo-chat-minimal" in readiness["probe_payload"]
 
     @pytest.mark.asyncio
+    async def test_request_readiness_surfaces_quota_group_metadata(self):
+        backend = ProviderBackend(
+            "kilo-sonnet",
+            {
+                "backend": "openai-compat",
+                "base_url": "https://api.kilo.example/v1",
+                "api_key": "secret",
+                "model": "claude-sonnet",
+                "transport": {
+                    "profile": "kilo-openai-compat",
+                    "compatibility": "aggregator",
+                    "probe_confidence": "medium",
+                    "auth_mode": "bearer",
+                    "billing_mode": "byok",
+                    "probe_strategy": "chat",
+                    "probe_payload_kind": "kilo-chat-minimal",
+                    "probe_payload_text": "ping",
+                    "probe_payload_max_tokens": 1,
+                    "models_path": "",
+                    "chat_path": "/chat/completions",
+                    "image_generation_path": "/images/generations",
+                    "image_edit_path": "/images/edits",
+                    "requires_api_key": True,
+                    "supports_models_probe": False,
+                    "quota_group": "anthropic-main",
+                    "quota_isolated": False,
+                    "notes": ["aggregator route may share Anthropic quota through BYOK"],
+                },
+            },
+        )
+
+        readiness = backend.request_readiness()
+
+        assert readiness["billing_mode"] == "byok"
+        assert readiness["quota_group"] == "anthropic-main"
+        assert readiness["quota_isolated"] is False
+
+    @pytest.mark.asyncio
     async def test_chat_probe_marks_provider_ready_verified(self):
         backend = ProviderBackend(
             "kilocode",

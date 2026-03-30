@@ -18,6 +18,7 @@ This repo does not require a heavy release process. Use lightweight tags plus Gi
 10. For hardening-heavy releases, keep the API functional tests green alongside unit and config coverage.
 11. Publish the GitHub Release so [`notify-tap`](./.github/workflows/notify-tap.yml) can dispatch the Homebrew tap update automatically.
 12. If the tap dispatch fails or the formula needs manual follow-up, bump `Formula/faigate.rb` in the separate [`fusionAIze/homebrew-tap`](https://github.com/fusionAIze/homebrew-tap) repo to the new release tag and update its `sha256`.
+13. For Anthropic bridge releases, also run the client-near validation flow in [docs/anthropic-bridge-release-readiness.md](./docs/anthropic-bridge-release-readiness.md) before tagging.
 
 ## Example
 

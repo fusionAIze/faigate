@@ -730,6 +730,37 @@ def test_faigate_service_lib_detects_homebrew_runtime_paths(tmp_path: Path):
     assert lines[3] == "brew services (launchd)"
 
 
+def test_faigate_service_lib_prefers_metrics_db_path_from_config(tmp_path: Path):
+    config_file = tmp_path / "config.yaml"
+    db_path = tmp_path / "state" / "faigate.db"
+    config_file.write_text(
+        f"""
+metrics:
+  db_path: "{db_path}"
+""".strip(),
+        encoding="utf-8",
+    )
+
+    env = os.environ.copy()
+    env["FAIGATE_CONFIG_FILE"] = str(config_file)
+    env["FAIGATE_PYTHON"] = sys.executable
+
+    result = subprocess.run(
+        [
+            "bash",
+            "-lc",
+            "source scripts/faigate-service-lib.sh && faigate_db_path",
+        ],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert result.stdout.strip() == str(db_path)
+
+
 def test_faigate_client_integrations_json_filters_one_client(tmp_path: Path):
     config_file = tmp_path / "config.yaml"
     config_file.write_text(

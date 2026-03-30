@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import re
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -15,6 +15,38 @@ from .lane_registry import get_provider_transport_binding
 
 logger = logging.getLogger("faigate.providers")
 _UNRESOLVED_ENV_RE = re.compile(r"\$\{[^}]+}")
+
+
+def classify_runtime_issue(
+    *,
+    status: int,
+    detail: str,
+    fallback: Callable[[str], tuple[str, str]] | None = None,
+) -> str:
+    """Classify runtime failures without requiring a full ProviderBackend instance."""
+
+    lowered = str(detail or "").lower()
+    if status in {401, 403}:
+        return "auth-invalid"
+    if status == 429:
+        if any(token in lowered for token in ("quota", "insufficient_quota", "billing", "credit")):
+            return "quota-exhausted"
+        return "rate-limited"
+    if status == 404 and "model" in lowered:
+        return "model-unavailable"
+    if callable(fallback):
+        return str(fallback(detail)[0])
+    if status == 0:
+        if "timeout" in lowered:
+            return "timeout"
+        if "connection error" in lowered:
+            return "connection_error"
+        return "transport_error"
+    if 400 <= status < 500:
+        return "upstream_client_error"
+    if status >= 500:
+        return "upstream_server_error"
+    return "degraded"
 
 
 @dataclass
@@ -227,7 +259,10 @@ class ProviderBackend:
         probe_strategy = probe_strategy.replace("-", "_")
         compatibility = str(self.transport.get("compatibility", "native") or "native")
         profile = str(self.transport.get("profile", "") or "")
+        billing_mode = str(self.transport.get("billing_mode", "") or "")
         probe_confidence = str(self.transport.get("probe_confidence", "medium") or "medium")
+        quota_group = str(self.transport.get("quota_group", "") or "")
+        quota_isolated = bool(self.transport.get("quota_isolated", False))
         notes = list(self.transport.get("notes", []) or [])
         verified_via = self._last_probe_strategy or ""
         probe_payload = self._last_probe_payload or self._probe_payload_preview()
@@ -241,7 +276,10 @@ class ProviderBackend:
                 "probe_strategy": probe_strategy,
                 "compatibility": compatibility,
                 "profile": profile,
+                "billing_mode": billing_mode,
                 "probe_confidence": probe_confidence,
+                "quota_group": quota_group,
+                "quota_isolated": quota_isolated,
                 "notes": notes,
                 "probe_payload": probe_payload,
                 "verified_via": verified_via,
@@ -256,7 +294,10 @@ class ProviderBackend:
                 "probe_strategy": probe_strategy,
                 "compatibility": compatibility,
                 "profile": profile,
+                "billing_mode": billing_mode,
                 "probe_confidence": probe_confidence,
+                "quota_group": quota_group,
+                "quota_isolated": quota_isolated,
                 "notes": notes,
                 "probe_payload": probe_payload,
                 "verified_via": verified_via,
@@ -273,7 +314,10 @@ class ProviderBackend:
                 "probe_strategy": probe_strategy,
                 "compatibility": compatibility,
                 "profile": profile,
+                "billing_mode": billing_mode,
                 "probe_confidence": probe_confidence,
+                "quota_group": quota_group,
+                "quota_isolated": quota_isolated,
                 "notes": notes,
                 "probe_payload": probe_payload,
                 "verified_via": verified_via,
@@ -288,7 +332,10 @@ class ProviderBackend:
                 "probe_strategy": probe_strategy,
                 "compatibility": compatibility,
                 "profile": profile,
+                "billing_mode": billing_mode,
                 "probe_confidence": "high",
+                "quota_group": quota_group,
+                "quota_isolated": quota_isolated,
                 "notes": notes,
                 "probe_payload": probe_payload,
                 "verified_via": verified_via or probe_strategy,
@@ -306,7 +353,10 @@ class ProviderBackend:
                 "probe_strategy": probe_strategy,
                 "compatibility": compatibility,
                 "profile": profile,
+                "billing_mode": billing_mode,
                 "probe_confidence": probe_confidence,
+                "quota_group": quota_group,
+                "quota_isolated": quota_isolated,
                 "notes": notes,
                 "probe_payload": probe_payload,
                 "verified_via": verified_via,
@@ -320,12 +370,24 @@ class ProviderBackend:
             "probe_strategy": probe_strategy,
             "compatibility": compatibility,
             "profile": profile,
+            "billing_mode": billing_mode,
             "probe_confidence": probe_confidence,
+            "quota_group": quota_group,
+            "quota_isolated": quota_isolated,
             "notes": notes,
             "probe_payload": probe_payload,
             "verified_via": verified_via,
             "operator_hint": self._request_readiness_action(status),
         }
+
+    def classify_runtime_issue(self, *, status: int, detail: str) -> str:
+        """Classify one runtime failure into a readiness-style issue label."""
+
+        return classify_runtime_issue(
+            status=status,
+            detail=detail,
+            fallback=self._classify_request_readiness_issue,
+        )
 
     async def probe_health(self, timeout_seconds: float = 10.0) -> bool:
         """Probe a provider without sending a completion request.

@@ -111,7 +111,7 @@ Response headers make the approximation explicit:
 Known v1 bridge limits:
 
 - non-streaming only
-- text content blocks only
+- text blocks plus basic `tool_use` / `tool_result`
 - image or binary content blocks are rejected
 - `count_tokens` is an estimate, not provider-exact accounting
 

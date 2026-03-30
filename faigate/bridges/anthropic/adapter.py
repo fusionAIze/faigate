@@ -57,7 +57,7 @@ def anthropic_request_to_canonical(
         surface="anthropic-messages",
         requested_model=request.model,
         system=request.system,
-        messages=[_message_to_canonical(message) for message in request.messages],
+        messages=_messages_to_canonical(request.messages),
         tools=[
             CanonicalTool(
                 name=tool.name,
@@ -108,7 +108,10 @@ def canonical_response_to_anthropic(
         id=response.response_id or f"msg_{uuid4().hex}",
         model=response.model or requested_model,
         content=_canonical_content_to_anthropic_blocks(response.message),
-        stop_reason=response.stop_reason or response.message.stop_reason,
+        stop_reason=map_stop_reason_to_anthropic(
+            response.stop_reason or response.message.stop_reason,
+            has_tool_calls=bool(response.message.tool_calls),
+        ),
         usage=dict(response.usage),
         metadata={
             **dict(response.metadata),
@@ -193,16 +196,129 @@ def approximate_anthropic_input_tokens(request: CanonicalChatRequest) -> tuple[i
     return max(total, 1), "estimated-char-v1"
 
 
-def _message_to_canonical(message: AnthropicMessage) -> CanonicalMessage:
+def _messages_to_canonical(messages: list[AnthropicMessage]) -> list[CanonicalMessage]:
+    """Flatten Anthropic turns into the OpenAI-style sequence the core expects."""
+
+    canonical_messages: list[CanonicalMessage] = []
+    for message in messages:
+        canonical_messages.extend(_message_to_canonical(message))
+    return canonical_messages
+
+
+def _message_to_canonical(message: AnthropicMessage) -> list[CanonicalMessage]:
+    if message.role == "assistant":
+        return [_assistant_message_to_canonical(message)]
+    if message.role == "user":
+        return _user_message_to_canonical(message)
     if any(block.type != "text" for block in message.content):
         raise AnthropicBridgeError(
-            "Anthropic bridge v1 currently supports only text content blocks in messages"
+            f"Anthropic bridge v1 does not support '{message.role}' messages with non-text blocks"
         )
-    if len(message.content) == 1 and message.content[0].type == "text":
-        content: Any = message.content[0].text or ""
-    else:
-        content = [_anthropic_block_to_payload(block) for block in message.content]
-    return CanonicalMessage(role=message.role, content=content)
+    return [
+        CanonicalMessage(
+            role=message.role,
+            content=_text_blocks_to_string(message.content),
+        )
+    ]
+
+
+def _assistant_message_to_canonical(message: AnthropicMessage) -> CanonicalMessage:
+    text_blocks: list[AnthropicContentBlock] = []
+    tool_calls: list[dict[str, Any]] = []
+    for block in message.content:
+        if block.type == "text":
+            text_blocks.append(block)
+            continue
+        if block.type != "tool_use":
+            raise AnthropicBridgeError(
+                "Anthropic bridge v1 supports only text and tool_use blocks in assistant messages"
+            )
+        tool_calls.append(_anthropic_tool_use_to_openai_call(block))
+    return CanonicalMessage(
+        role="assistant",
+        content=_text_blocks_to_string(text_blocks),
+        tool_calls=tool_calls,
+    )
+
+
+def _user_message_to_canonical(message: AnthropicMessage) -> list[CanonicalMessage]:
+    canonical_messages: list[CanonicalMessage] = []
+    pending_text: list[AnthropicContentBlock] = []
+    for block in message.content:
+        if block.type == "text":
+            pending_text.append(block)
+            continue
+        if block.type != "tool_result":
+            raise AnthropicBridgeError(
+                "Anthropic bridge v1 supports only text and tool_result blocks in user messages"
+            )
+        if pending_text:
+            canonical_messages.append(
+                CanonicalMessage(role="user", content=_text_blocks_to_string(pending_text))
+            )
+            pending_text = []
+        canonical_messages.append(_anthropic_tool_result_to_canonical_message(block))
+    if pending_text or not canonical_messages:
+        canonical_messages.append(
+            CanonicalMessage(role="user", content=_text_blocks_to_string(pending_text))
+        )
+    return canonical_messages
+
+
+def _text_blocks_to_string(blocks: list[AnthropicContentBlock]) -> str:
+    parts = [str(block.text or "") for block in blocks if block.type == "text"]
+    return "\n\n".join(part for part in parts if part)
+
+
+def _anthropic_tool_use_to_openai_call(block: AnthropicContentBlock) -> dict[str, Any]:
+    if not block.name:
+        raise AnthropicBridgeError("Anthropic tool_use blocks require a name")
+    call_id = block.tool_use_id or f"toolu_{uuid4().hex[:24]}"
+    return {
+        "id": call_id,
+        "type": "function",
+        "function": {
+            "name": block.name,
+            "arguments": json.dumps(block.input or {}, separators=(",", ":"), sort_keys=True),
+        },
+    }
+
+
+def _anthropic_tool_result_to_canonical_message(block: AnthropicContentBlock) -> CanonicalMessage:
+    tool_use_id = block.tool_use_id
+    if not tool_use_id:
+        raise AnthropicBridgeError("Anthropic tool_result blocks require a tool_use_id")
+    metadata = {}
+    if "is_error" in block.metadata:
+        metadata["tool_result_is_error"] = bool(block.metadata.get("is_error"))
+    return CanonicalMessage(
+        role="tool",
+        content=_anthropic_tool_result_to_string(block),
+        tool_call_id=tool_use_id,
+        metadata=metadata,
+    )
+
+
+def _anthropic_tool_result_to_string(block: AnthropicContentBlock) -> str:
+    raw_content = block.metadata.get("content")
+    if raw_content is None and block.text is not None:
+        return block.text
+    if isinstance(raw_content, str):
+        return raw_content
+    if isinstance(raw_content, list):
+        text_parts: list[str] = []
+        for item in raw_content:
+            if isinstance(item, str):
+                text_parts.append(item)
+                continue
+            if isinstance(item, dict) and str(item.get("type") or "") == "text":
+                text_parts.append(str(item.get("text") or ""))
+                continue
+            return json.dumps(raw_content, sort_keys=True)
+        return "\n\n".join(part for part in text_parts if part)
+    if raw_content is None:
+        return ""
+    return json.dumps(raw_content, sort_keys=True)
 
 
 def _anthropic_block_to_payload(block: AnthropicContentBlock) -> dict[str, Any]:
@@ -250,12 +366,17 @@ def _canonical_content_to_anthropic_blocks(
     content = message.content
     blocks: list[AnthropicContentBlock]
     if isinstance(content, str):
-        blocks = [AnthropicContentBlock(type="text", text=content)]
+        blocks = (
+            []
+            if (not content and message.tool_calls)
+            else [AnthropicContentBlock(type="text", text=content)]
+        )
     elif isinstance(content, list):
         blocks = []
         for item in content:
             if isinstance(item, str):
-                blocks.append(AnthropicContentBlock(type="text", text=item))
+                if item:
+                    blocks.append(AnthropicContentBlock(type="text", text=item))
                 continue
             if not isinstance(item, dict):
                 blocks.append(AnthropicContentBlock(type="text", text=str(item)))
@@ -270,8 +391,10 @@ def _canonical_content_to_anthropic_blocks(
                     metadata=dict(item.get("metadata", {}) or {}),
                 )
             )
+    elif content:
+        blocks = [AnthropicContentBlock(type="text", text=str(content))]
     else:
-        blocks = [AnthropicContentBlock(type="text", text=str(content or ""))]
+        blocks = []
 
     for tool_call in message.tool_calls:
         if not isinstance(tool_call, dict):
@@ -296,3 +419,20 @@ def _canonical_content_to_anthropic_blocks(
             )
         )
     return blocks
+
+
+def map_stop_reason_to_anthropic(
+    stop_reason: str | None, *, has_tool_calls: bool = False
+) -> str | None:
+    """Translate OpenAI-style finish reasons into Anthropic stop reasons."""
+
+    normalized = str(stop_reason or "").strip().lower()
+    if not normalized:
+        return "tool_use" if has_tool_calls else None
+    if normalized in {"stop", "end_turn"}:
+        return "end_turn"
+    if normalized in {"tool_calls", "tool_use"}:
+        return "tool_use"
+    if normalized in {"length", "max_tokens"}:
+        return "max_tokens"
+    return normalized
