@@ -142,6 +142,65 @@ def _anthropic_error_response(message: str, *, error_type: str, status_code: int
     )
 
 
+def _anthropic_error_type_for_status(status_code: int, error_type: str) -> str:
+    """Map generic gateway/provider failures onto Anthropic-style error types."""
+
+    known_types = {
+        "invalid_request_error",
+        "authentication_error",
+        "permission_error",
+        "not_found_error",
+        "rate_limit_error",
+        "request_too_large",
+        "api_error",
+        "overloaded_error",
+        "not_supported_error",
+    }
+    if error_type in known_types:
+        return error_type
+    if status_code == 400:
+        return "invalid_request_error"
+    if status_code == 401:
+        return "authentication_error"
+    if status_code == 403:
+        return "permission_error"
+    if status_code == 404:
+        return "not_found_error"
+    if status_code == 413:
+        return "request_too_large"
+    if status_code == 429:
+        return "rate_limit_error"
+    if status_code in {502, 503, 504}:
+        return "overloaded_error"
+    return "api_error"
+
+
+def _anthropic_bridge_response_headers(
+    *,
+    source: str,
+    requested_model: str,
+    resolved_model: str | None = None,
+) -> dict[str, str]:
+    """Return bounded response headers that make bridge behavior visible."""
+
+    headers = {
+        "X-faigate-Bridge-Surface": "anthropic-messages",
+        "X-faigate-Bridge-Source": _sanitize_token(source, default="claude-code", max_chars=64),
+        "X-faigate-Bridge-Model-Requested": _sanitize_token(
+            requested_model,
+            default="unknown",
+            max_chars=96,
+        ),
+    }
+    if resolved_model and resolved_model != requested_model:
+        headers["X-faigate-Bridge-Model-Resolved"] = _sanitize_token(
+            resolved_model,
+            default="unknown",
+            max_chars=96,
+        )
+    return headers
+
+
 def _invalid_request_response(message: str, *, exc: Exception | None = None) -> JSONResponse:
     """Return a sanitized invalid-request response."""
     if exc is not None:
@@ -1688,12 +1747,13 @@ async def _execute_chat_completion_body(
                 )
             continue
 
+    last_error = errors[-1] if errors else {}
     return _ChatExecutionFailure(
-        status_code=502,
+        status_code=int(last_error.get("status") or 502),
         body={
             "error": {
                 "message": "All providers failed",
-                "type": "provider_error",
+                "type": str(last_error.get("category") or "provider_error"),
                 "attempts": errors,
             }
         },
@@ -3015,10 +3075,10 @@ async def anthropic_messages(request: Request):
         message = str(
             execution.body.get("error", {}).get("message", "Anthropic bridge request failed")
         )
-        error_type = str(execution.body.get("error", {}).get("type", "api_error"))
+        raw_error_type = str(execution.body.get("error", {}).get("type", "api_error"))
         return _anthropic_error_response(
             message,
-            error_type=error_type,
+            error_type=_anthropic_error_type_for_status(execution.status_code, raw_error_type),
             status_code=execution.status_code,
         )
 
@@ -3045,6 +3105,14 @@ async def anthropic_messages(request: Request):
     response.headers["X-faigate-Hooks"] = ",".join(execution.hook_state.applied_hooks)
     response.headers["X-faigate-Hook-Errors"] = str(len(execution.hook_state.errors))
     response.headers["x-faigate-trace-id"] = execution.trace_id or str(uuid.uuid4())
+    for key, value in _anthropic_bridge_response_headers(
+        source=str(canonical_request.metadata.get("source") or "claude-code"),
+        requested_model=str(
+            canonical_request.metadata.get("requested_model_original") or wire_request.model
+        ),
+        resolved_model=str(canonical_request.requested_model or wire_request.model),
+    ).items():
+        response.headers[key] = value
     return response
 
 
@@ -3088,8 +3156,11 @@ async def anthropic_count_tokens(request: Request):
             error_type="invalid_request_error",
             status_code=400,
         )
-
-    return JSONResponse(asdict(result), headers=extra_headers)
+    bridge_headers = _anthropic_bridge_response_headers(
+        source=str(headers.get("x-faigate-client") or "claude-code"),
+        requested_model=str(body.get("model") or "unknown"),
+    )
+    return JSONResponse(asdict(result), headers={**extra_headers, **bridge_headers})
 
 
 # ── CLI entry point ────────────────────────────────────────────

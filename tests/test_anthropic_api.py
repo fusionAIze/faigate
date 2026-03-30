@@ -22,6 +22,7 @@ sys.modules.pop("faigate.main", None)
 
 import faigate.main as main_module  # noqa: E402
 from faigate.config import load_config  # noqa: E402
+from faigate.providers import ProviderError  # noqa: E402
 from faigate.router import Router  # noqa: E402
 
 importlib.reload(main_module)
@@ -84,6 +85,12 @@ class _CapturingProviderStub:
 class _MetricsStub:
     def log_request(self, **_kwargs):
         return None
+
+
+class _FailingProviderStub(_CapturingProviderStub):
+    async def complete(self, messages, **kwargs):
+        self.calls.append({"messages": messages, **kwargs})
+        raise ProviderError("cloud-default", 429, "rate limited upstream")
 
 
 @pytest.fixture
@@ -152,6 +159,9 @@ def test_anthropic_messages_returns_bridge_response(anthropic_api_client):
     assert body["content"][0]["text"] == "anthropic ok"
     assert provider.calls[0]["extra_body"]["metadata"]["source"] == "claude-code"
     assert provider.calls[0]["messages"][0] == {"role": "system", "content": "Use markdown"}
+    assert response.headers["x-faigate-bridge-surface"] == "anthropic-messages"
+    assert response.headers["x-faigate-bridge-source"] == "claude-code"
+    assert response.headers["x-faigate-bridge-model-requested"] == "claude-sonnet"
 
 
 def test_anthropic_messages_applies_model_aliases(anthropic_api_client):
@@ -174,6 +184,8 @@ def test_anthropic_messages_applies_model_aliases(anthropic_api_client):
     metadata = provider.calls[0]["extra_body"]["metadata"]
     assert metadata["requested_model_original"] == "claude-code-premium"
     assert metadata["requested_model_resolved"] == "premium"
+    assert response.headers["x-faigate-bridge-model-requested"] == "claude-code-premium"
+    assert response.headers["x-faigate-bridge-model-resolved"] == "premium"
 
 
 def test_anthropic_messages_rejects_non_text_blocks(anthropic_api_client):
@@ -224,6 +236,8 @@ def test_anthropic_count_tokens_returns_estimate_with_headers(anthropic_api_clie
     assert body["input_tokens"] > 0
     assert response.headers["x-faigate-token-count-exact"] == "false"
     assert response.headers["x-faigate-token-count-method"] == "estimated-char-v1"
+    assert response.headers["x-faigate-bridge-surface"] == "anthropic-messages"
+    assert response.headers["x-faigate-bridge-model-requested"] == "claude-sonnet"
 
 
 def test_anthropic_count_tokens_rejects_invalid_payload(anthropic_api_client):
@@ -298,3 +312,57 @@ metrics:
     body = response.json()
     assert body["type"] == "error"
     assert body["error"]["type"] == "not_found_error"
+
+
+def test_anthropic_messages_maps_rate_limit_provider_errors(tmp_path, monkeypatch):
+    cfg = load_config(
+        _write_config(
+            tmp_path,
+            """
+server:
+  host: "127.0.0.1"
+  port: 8090
+providers:
+  cloud-default:
+    backend: openai-compat
+    base_url: "https://api.example.com/v1"
+    api_key: "secret"
+    model: "chat-model"
+anthropic_bridge:
+  enabled: true
+fallback_chain:
+  - cloud-default
+metrics:
+  enabled: false
+""",
+        )
+    )
+
+    @asynccontextmanager
+    async def _noop_lifespan(_app):
+        yield
+
+    monkeypatch.setattr(main_module, "_config", cfg, raising=False)
+    monkeypatch.setattr(main_module, "_router", Router(cfg), raising=False)
+    monkeypatch.setattr(
+        main_module,
+        "_providers",
+        {"cloud-default": _FailingProviderStub()},
+        raising=False,
+    )
+    monkeypatch.setattr(main_module, "_metrics", _MetricsStub(), raising=False)
+    monkeypatch.setattr(main_module.app.router, "lifespan_context", _noop_lifespan, raising=False)
+
+    with TestClient(main_module.app) as client:
+        response = client.post(
+            "/v1/messages",
+            json={
+                "model": "claude-sonnet",
+                "messages": [{"role": "user", "content": "hello"}],
+            },
+        )
+
+    assert response.status_code == 429
+    body = response.json()
+    assert body["type"] == "error"
+    assert body["error"]["type"] == "rate_limit_error"
