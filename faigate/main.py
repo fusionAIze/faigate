@@ -38,6 +38,7 @@ from .bridges.anthropic import (
 )
 from .canonical import CanonicalChatRequest, CanonicalChatResponse, CanonicalResponseMessage
 from .config import Config, load_config
+from .dashboard_web import DASHBOARD_HTML
 from .hooks import (
     AppliedHooks,
     HookExecutionError,
@@ -116,6 +117,57 @@ class _ChatExecutionFailure:
 def _client_error_response(message: str, *, error_type: str, status_code: int) -> JSONResponse:
     """Return a client-facing JSON error without exposing internal exception details."""
     return JSONResponse({"error": message, "type": error_type}, status_code=status_code)
+
+
+def _openai_sse_data(payload: dict[str, Any]) -> bytes:
+    """Return one OpenAI-style SSE data frame."""
+    return f"data: {json.dumps(payload, separators=(',', ':'))}\n\n".encode()
+
+
+async def _safe_openai_sse_stream(
+    stream: AsyncIterator[bytes],
+    *,
+    provider_name: str,
+    trace_id: str | None,
+) -> AsyncIterator[bytes]:
+    """Keep streaming responses well-formed when the upstream fails mid-turn."""
+
+    try:
+        async for chunk in stream:
+            yield chunk
+    except ProviderError as exc:
+        logger.warning(
+            "Streaming response from %s failed after stream start: %s",
+            provider_name,
+            exc.detail[:200],
+        )
+        yield _openai_sse_data(
+            {
+                "error": {
+                    "message": str(exc.detail or "Streaming request failed"),
+                    "type": classify_runtime_issue(status=exc.status, detail=exc.detail),
+                    "provider": provider_name,
+                    "trace_id": trace_id or "",
+                }
+            }
+        )
+        yield b"data: [DONE]\n\n"
+    except Exception:
+        logger.exception(
+            "Streaming response from %s failed unexpectedly after stream start",
+            provider_name,
+        )
+        yield _openai_sse_data(
+            {
+                "error": {
+                    "message": "Streaming request failed unexpectedly",
+                    "type": "provider_error",
+                    "provider": provider_name,
+                    "trace_id": trace_id or "",
+                }
+            }
+        )
+        yield b"data: [DONE]\n\n"
 
 
 def _request_hook_error_response(exc: Exception) -> JSONResponse:
@@ -3098,7 +3150,11 @@ async def chat_completions(request: Request):
 
     if execution.stream:
         return StreamingResponse(
-            execution.result,
+            _safe_openai_sse_stream(
+                execution.result,
+                provider_name=execution.provider_name,
+                trace_id=execution.trace_id,
+            ),
             media_type="text/event-stream",
             headers={
                 "X-faigate-Provider": execution.provider_name,
@@ -3194,7 +3250,11 @@ async def anthropic_messages(request: Request):
     if execution.stream:
         return StreamingResponse(
             openai_sse_to_anthropic(
-                execution.result,
+                _safe_openai_sse_stream(
+                    execution.result,
+                    provider_name=execution.provider_name,
+                    trace_id=execution.trace_id,
+                ),
                 requested_model=str(
                     canonical_request.metadata.get("requested_model_original") or wire_request.model
                 ),
@@ -3780,3 +3840,6 @@ load();
 setInterval(load, 30000);
 </script>
 </body></html>"""
+
+# Keep the runtime wired to the extracted operator cockpit UI.
+_DASHBOARD_HTML = DASHBOARD_HTML

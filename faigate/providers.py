@@ -684,11 +684,18 @@ class ProviderBackend:
                 raise ProviderError(self.name, resp.status_code, error_text.decode()[:500])
 
             first_chunk = True
-            async for line in resp.aiter_lines():
-                if first_chunk:
-                    self.health.record_success((time.time() - t0) * 1000)
-                    first_chunk = False
-                yield (line + "\n").encode()
+            try:
+                async for line in resp.aiter_lines():
+                    if first_chunk:
+                        self.health.record_success((time.time() - t0) * 1000)
+                        first_chunk = False
+                    yield (line + "\n").encode()
+            except httpx.HTTPError as e:
+                self.health.record_failure(f"Stream error: {e}")
+                raise ProviderError(self.name, 0, f"Stream error: {e}") from e
+            except Exception as e:
+                self.health.record_failure(f"Stream error: {e}")
+                raise ProviderError(self.name, 0, f"Stream error: {e}") from e
 
     # ── Google GenAI path ──────────────────────────────────────
 

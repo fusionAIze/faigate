@@ -307,9 +307,9 @@ def test_anthropic_messages_applies_builtin_claude_code_model_aliases(
     assert response.status_code == 200
     metadata = provider.calls[0]["extra_body"]["metadata"]
     assert metadata["requested_model_original"] == "claude-sonnet-4-6[1m]"
-    assert metadata["requested_model_resolved"] == "anthropic-sonnet"
+    assert metadata["requested_model_resolved"] == "auto"
     assert response.headers["x-faigate-bridge-model-requested"] == "claude-sonnet-4-6-1m"
-    assert response.headers["x-faigate-bridge-model-resolved"] == "anthropic-sonnet"
+    assert response.headers["x-faigate-bridge-model-resolved"] == "auto"
 
 
 def test_anthropic_messages_can_redirect_claude_code_model_ids_to_gateway_routes(
@@ -912,3 +912,57 @@ async def test_openai_sse_to_anthropic_maps_tool_call_deltas():
     assert '"type":"input_json_delta","partial_json":"{\\"id\\":' in body
     assert '"type":"input_json_delta","partial_json":"\\"design-note\\"}"' in body
     assert '"stop_reason":"tool_use"' in body
+
+
+@pytest.mark.asyncio
+async def test_openai_sse_to_anthropic_closes_open_text_block_before_error():
+    async def _iter() -> AsyncIterator[bytes]:
+        yield (
+            b'data: {"id":"chatcmpl-stream","object":"chat.completion.chunk",'
+            b'"model":"chat-model","choices":[{"index":0,"delta":{"role":"assistant",'
+            b'"content":"Hello"},"finish_reason":null}]}\n'
+        )
+        yield b"\n"
+        yield (
+            b'data: {"error":{"type":"api_error","message":"upstream broke"}}\n'
+        )
+        yield b"\n"
+
+    chunks: list[str] = []
+    async for chunk in openai_sse_to_anthropic(
+        _iter(),
+        requested_model="claude-code",
+        resolved_model="premium",
+    ):
+        chunks.append(chunk.decode("utf-8"))
+
+    body = "".join(chunks)
+    assert "event: content_block_start" in body
+    assert '"type":"text_delta","text":"Hello"' in body
+    assert 'event: content_block_stop' in body
+    assert 'event: error' in body
+    assert body.index('event: content_block_stop') < body.index('event: error')
+    assert '"message":"upstream broke"' in body
+
+
+@pytest.mark.asyncio
+async def test_safe_openai_sse_stream_emits_error_frame_and_done():
+    async def _iter() -> AsyncIterator[bytes]:
+        yield b'data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n'
+        raise ProviderError("kilo-sonnet", 429, "rate limited mid-stream")
+
+    chunks: list[bytes] = []
+    async for chunk in main_module._safe_openai_sse_stream(
+        _iter(),
+        provider_name="kilo-sonnet",
+        trace_id="trace-stream-1",
+    ):
+        chunks.append(chunk)
+
+    body = b"".join(chunks).decode("utf-8")
+    assert 'data: {"choices":[{"delta":{"content":"Hello"}}]}' in body
+    assert '"message":"rate limited mid-stream"' in body
+    assert '"type":"rate-limited"' in body
+    assert '"provider":"kilo-sonnet"' in body
+    assert '"trace_id":"trace-stream-1"' in body
+    assert body.rstrip().endswith("data: [DONE]")

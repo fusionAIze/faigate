@@ -1,10 +1,16 @@
 # Implementation Plan
 
+## Goal
+
+Turn Gate's existing routing intelligence into the default daily-use behavior
+for Claude Code, opencode, openclaw, and similar clients, then expose that
+intelligence through a stronger standalone product surface.
+
 ## Scope
 
-This document turns the current roadmap into the next concrete release lines.
+This document turns the roadmap into the next concrete release lines.
 
-It is intentionally biased toward the biggest product levers:
+It stays biased toward the biggest product levers:
 
 - Claude-native daily usability
 - routing trust and operator explainability
@@ -19,8 +25,6 @@ It is not a parking lot for every possible feature.
 - do protocol hardening before bigger marketing claims
 - do routing explainability before stronger live adaptation
 - keep `v2.x` work behind clean product boundaries
-
-## Release Sequence
 
 ## Parity Definitions
 
@@ -51,7 +55,8 @@ Working definition:
 
 ### Full Claude Desktop parity
 
-Daily-use parity for Claude Desktop against local Gate where endpoint override is supported.
+Daily-use parity for Claude Desktop against local Gate where endpoint override
+is supported.
 
 Working definition:
 
@@ -61,192 +66,143 @@ Working definition:
 
 ## Release Sequence
 
-### `v1.14.x` - Anthropic protocol hardening plus Claude Code daily-use parity
+### `v1.14.x` - coding auto modes and Claude daily-use trust
 
-Goal:
+Primary outcome:
 
-- move the Anthropic bridge from early-adopter-safe to comfortable for everyday Claude Code use
-- close the highest-value Anthropic protocol gaps at the same time
+- the cheapest capable route becomes the default for coding traffic instead of
+  hardwiring Sonnet or Opus too early
 
-Why this matters first:
+Implementation slices:
 
-- it is the biggest remaining daily workflow gap
-- it unlocks real Claude Code testing without client reshaping
-- it sharpens the product story around one local endpoint for both OpenAI-native and Claude-native clients
-
-Target slices:
-
-1. SSE streaming parity for `/v1/messages`
-2. stronger Anthropic block compatibility
-   - richer `tool_use`
-   - richer `tool_result`
-   - clearer unsupported block handling
-3. stronger client-facing parity behaviors
-   - stop reasons
-   - version/beta handling
-   - error mapping consistency
-4. expanded client-near validation
-   - Claude Code workflow validation
-   - Claude Desktop workflow notes and smoke steps
+1. map Claude-native model ids to routing intent instead of direct frontier providers
+   - `claude-sonnet-* -> auto`
+   - `claude-opus-* -> premium`
+   - `claude-haiku-* -> eco`
+2. add clear coding routing modes
+   - `coding-auto`
+   - `coding-fast`
+   - `coding-premium`
+3. align default client profiles
+   - `claude`
+   - `opencode`
+   - `openclaw`
+   - `codex`
+4. harden Anthropic streaming parity
+   - SSE streaming parity for `/v1/messages`
+   - mid-stream failure handling
+   - stop-reason correctness
+   - stronger `tool_use` / `tool_result` continuity across longer sessions
+5. validate against real workflows
+   - Claude Code
+   - opencode
+   - openclaw
 
 Success bar:
 
-- Claude Code can be pointed at local Gate and used for normal iterative coding flows with acceptable behavior
+- Claude Code can be pointed at local Gate and used for normal iterative coding
+  flows with acceptable behavior
 - streaming and tool-oriented workflows do not immediately fall off the happy path
+- coding clients enter through clear auto modes instead of muddled provider-first
+  defaults
 
-Deliberately not required:
+Guardrails:
 
-- exact provider-side token counting
-- full parity claims across every Anthropic client feature
+- do not hide premium escalations
+- do not bypass the scoring engine with provider aliases unless the operator
+  asked for an explicit concrete provider
+- keep bridge routing inside the same core, not as a parallel router
 
-### `v1.15.x` - Claude Desktop parity or adaptive orchestration trust
+### `v1.15.x` - product surface and operator trust
 
-This release should be chosen by evidence, not by taste.
+Primary outcome:
 
-Decision rule:
+- Gate becomes legible as a standalone product, not just a strong core hidden
+  behind config files
+- the dashboard answers operator jobs in a sane order instead of dumping one
+  long admin page
 
-- if Claude Desktop local usage validates as the next real operator lever, do the desktop parity line first
-- otherwise take the routing-value line first
+Implementation slices:
 
-#### Option A: Claude Desktop parity
+1. overview dashboard
+   - request-readiness first
+   - provider health
+   - spend and token trend
+   - top alerts
+   - priority-next actions
+2. providers surface
+   - route type
+   - lane family
+   - quota group
+   - billing mode
+   - readiness
+3. clients surface
+   - cost by client
+   - latency by client
+   - profile recommendations
+   - premium-escalation hotspots
+4. routes surface
+   - chosen lane
+   - chosen execution route
+   - same-lane fallback vs downgrade
+   - why selected / why not selected
+5. analytics surface
+   - cost by client
+   - cost by stack
+   - cost by lane family
+   - routing posture distribution
+   - downgrade and fallback visibility
+6. request-log and route drilldowns
+   - recent request stream
+   - trace-first debugging
+   - provider, client, and lane pivots
+7. integrations and troubleshooting surface
+   - Claude Code
+   - opencode
+   - openclaw
+   - Codex / Cursor / Continue / automation setups
+   - common symptom-to-fix views
 
-Goal:
+Design constraints:
 
-- make Claude Desktop a genuinely usable local client against Gate
+- keep the web surface read-heavy and operationally safe first
+- do not hide YAML, traces, or helper CLIs behind opaque UI abstractions
+- borrow the clarity of LLM AIRouter's docs and page structure, not its
+  hosted-router assumptions
+- make Gate feel more intentional and polished than a default admin panel
 
-Target slices:
+Reference:
 
-1. endpoint-override and config-path validation for supported desktop flows
-2. desktop-specific session and response compatibility hardening
-3. clearer local testing and troubleshooting instructions
-4. release-readiness validation for desktop workflows
+- [Dashboard IA](./DASHBOARD-IA.md)
 
-Success bar:
+### `v1.16.x` - adaptive orchestration trust
 
-- Claude Desktop can be used locally against Gate without feeling like a fragile workaround
+Primary outcome:
 
-Current gating note:
+- richer route decisions without turning Gate into a black box
 
-- only take this line next if [Claude Desktop feasibility](./CLAUDE-DESKTOP-FEASIBILITY.md) clears the endpoint-override and repeatable-local-workflow bar
+Implementation slices:
 
-#### Option B: Adaptive orchestration trust
-
-Goal:
-
-- make route selection understandable and trustworthy enough that operators rely on it instead of overriding it by hand
-
-Why it is second:
-
-- the routing engine already does more than the docs and surfaces make obvious
-- the biggest leverage now is visibility, structured lane semantics, and safer aggregator handling
-
-Target slices:
-
-1. canonical lane visibility
-   - route preview speaks in lanes first, transports second
-   - dashboard and provider views summarize lane families clearly
-2. route-aware aggregator handling
-   - clearer mirror/same-lane semantics
-   - quota-isolated vs quota-coupled route handling
-   - stronger aggregator readiness language
-3. benchmark and cost clusters
-   - structured cluster metadata
-   - freshness/review age
-   - operator-visible inputs
-4. operator explainability
-   - why lane won
-   - why route won
-   - why same-lane mirror was skipped
-   - why downgrade happened
-
-Success bar:
-
-- operators can look at a route decision and understand it without reading source code
-- aggregator handling feels intentional instead of “maybe a fallback”
-
-### `v1.16.x` - Remaining parity or live adaptation under pressure
-
-Goal:
-
-- adapt routing under quota, latency, and failure pressure without becoming opaque
-
-Why it is third:
-
-- dynamic adaptation is only worth shipping once lane and route semantics are already trusted
-- any still-open Claude Desktop parity work should be resolved before promising a broader "full parity" story
-
-Target slices:
-
-1. live pressure scoring
-   - quota pressure
-   - latency inflation
-   - failure pressure
-   - fallback pressure
-2. same-lane-first reactions
-   - mirror route before weaker cluster
-3. operator controls
-   - conservative defaults
-   - visible adaptation state
-   - clear cooldown and recovery behavior
-4. richer traces
-   - actual attempted route order
-   - same-lane fallback vs cluster degrade
+1. benchmark and cost cluster refinement
+2. live pressure adaptation under quota, latency, and failure
+3. stronger operator explainability per routing decision
+4. same-lane-first reactions before weaker-cluster degrade
+5. richer traces that show attempted route order and downgrade reasons
 
 Success bar:
 
-- route switching under pressure is visible, understandable, and mostly unsurprising to operators
-
-## Deferred Lines
-
-### Exact provider-side token counting
-
-Recommendation:
-
-- defer until after `v1.14.x`
-- implement first for the providers that expose reliable count endpoints or deterministic usage feedback
-- keep the current bridge estimate until a route-specific exact path exists
-
-### Virtual keys and per-key budgets
-
-Recommendation:
-
-- likely next after the `v1.16.x` trust line if operator-scale controls become the top demand
-- this is the prerequisite for later team/org budget hierarchy
-
-### OTEL trace-context forwarding
-
-Recommendation:
-
-- can move earlier than other `v2.x` items
-- good candidate for a narrower cross-cutting observability release if demand is high
-
-### Team and org budget hierarchy
-
-Recommendation:
-
-- defer until virtual keys and spend ledger are genuinely stable
-
-### Grid shared-state coordination
-
-Recommendation:
-
-- design the contract early
-- implement later
-- keep Gate itself free of hard Redis/Postgres coupling
-
-### Semantic caching
-
-Recommendation:
-
-- do not start before exact caching plus usage evidence
+- operators can look at a route decision and understand it without reading
+  source code
+- route switching under pressure is visible, understandable, and mostly
+  unsurprising to operators
 
 ## Concrete Next Actions
 
 ### Immediate
 
-1. merge docs cleanup and roadmap reset
-2. open a focused `v1.14.x` feature branch for bridge streaming and Claude-native parity hardening
-3. define the `v1.14.x` validation matrix before the implementation expands
+1. finish the `v1.14.x` validation matrix
+2. close remaining Claude-native daily-use gaps under real workflows
+3. keep product-surface work operator-first and trace-friendly
 
 ### `v1.14.x` validation matrix
 
@@ -278,6 +234,32 @@ Use this matrix when deciding whether a release truly moved parity forward:
 | Session continuity under fallback | Helpful | Required | Required |
 | Exact token counting | Strongly preferred | Helpful | Helpful |
 | Real client workflow validation | Not sufficient alone | Required | Required |
+
+## Deferred Lines
+
+### Exact provider-side token counting
+
+Recommendation:
+
+- defer until after `v1.14.x`
+- implement first for providers that expose reliable count endpoints or
+  deterministic usage feedback
+- keep the current bridge estimate until a route-specific exact path exists
+
+### Virtual keys and per-key budgets
+
+Recommendation:
+
+- likely next after the `v1.16.x` trust line if operator-scale controls become
+  the top demand
+
+### OTEL trace-context forwarding
+
+Recommendation:
+
+- can move earlier than other `v2.x` items
+- good candidate for a narrower cross-cutting observability release if demand
+  is high
 
 ## Open Questions
 

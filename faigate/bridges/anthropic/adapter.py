@@ -42,6 +42,7 @@ class _AnthropicStreamToolState:
     tool_use_id: str | None = None
     name: str | None = None
     started: bool = False
+    closed: bool = False
 
 
 def anthropic_request_to_canonical(
@@ -527,144 +528,201 @@ async def openai_sse_to_anthropic(
         },
     )
 
-    async for raw_line in stream:
-        line = raw_line.decode("utf-8", errors="replace").strip()
-        if not line or not line.startswith("data:"):
-            continue
-        payload_text = line[5:].strip()
-        if not payload_text:
-            continue
-        if payload_text == "[DONE]":
-            break
+    try:
+        async for raw_line in stream:
+            line = raw_line.decode("utf-8", errors="replace").strip()
+            if not line or not line.startswith("data:"):
+                continue
+            payload_text = line[5:].strip()
+            if not payload_text:
+                continue
+            if payload_text == "[DONE]":
+                break
 
-        try:
-            payload = json.loads(payload_text)
-        except json.JSONDecodeError:
-            continue
+            try:
+                payload = json.loads(payload_text)
+            except json.JSONDecodeError:
+                continue
 
-        if isinstance(payload, dict) and "error" in payload:
-            yield anthropic_sse_event(
-                "error",
-                {
-                    "type": "error",
-                    "error": payload.get("error")
-                    or {"type": "api_error", "message": "Upstream error"},
-                },
-            )
-            return
-
-        usage_payload = payload.get("usage") or {}
-        prompt_tokens = int(usage_payload.get("prompt_tokens") or 0)
-        completion_tokens = int(usage_payload.get("completion_tokens") or 0)
-        if prompt_tokens:
-            usage["input_tokens"] = prompt_tokens
-        if completion_tokens:
-            usage["output_tokens"] = completion_tokens
-
-        choices = payload.get("choices") or []
-        if not choices:
-            continue
-        choice = choices[0] or {}
-        delta = choice.get("delta") or {}
-        finish_reason = str(choice.get("finish_reason") or "").strip() or None
-
-        text_delta = delta.get("content")
-        if isinstance(text_delta, str) and text_delta:
-            if tool_states and not tool_blocks_closed:
+            if isinstance(payload, dict) and "error" in payload:
+                if text_block_started and not text_block_closed:
+                    yield anthropic_sse_event(
+                        "content_block_stop",
+                        {"type": "content_block_stop", "index": 0},
+                    )
+                    text_block_closed = True
                 for tool_index in sorted(tool_states):
-                    if tool_states[tool_index].started:
+                    state = tool_states[tool_index]
+                    if state.started and not state.closed:
                         yield anthropic_sse_event(
                             "content_block_stop",
                             {
                                 "type": "content_block_stop",
                                 "index": _anthropic_tool_index(
                                     tool_index,
-                                    text_block_started=True,
+                                    text_block_started,
                                 ),
                             },
                         )
+                        state.closed = True
                 tool_blocks_closed = True
-            if not text_block_started:
                 yield anthropic_sse_event(
-                    "content_block_start",
+                    "error",
                     {
-                        "type": "content_block_start",
-                        "index": 0,
-                        "content_block": {"type": "text", "text": ""},
+                        "type": "error",
+                        "error": payload.get("error")
+                        or {"type": "api_error", "message": "Upstream error"},
                     },
                 )
-                text_block_started = True
-            output_tokens += _estimate_text_tokens(text_delta)
-            usage["output_tokens"] = max(usage["output_tokens"], output_tokens)
-            yield anthropic_sse_event(
-                "content_block_delta",
-                {
-                    "type": "content_block_delta",
-                    "index": 0,
-                    "delta": {"type": "text_delta", "text": text_delta},
-                },
-            )
+                return
 
-        delta_tool_calls = delta.get("tool_calls") or []
-        if isinstance(delta_tool_calls, list) and delta_tool_calls:
-            if text_block_started and not text_block_closed:
-                yield anthropic_sse_event(
-                    "content_block_stop",
-                    {"type": "content_block_stop", "index": 0},
-                )
-                text_block_closed = True
-            for tool_delta in delta_tool_calls:
-                if not isinstance(tool_delta, dict):
-                    continue
-                raw_index = int(tool_delta.get("index") or 0)
-                state = tool_states.setdefault(
-                    raw_index, _AnthropicStreamToolState(index=raw_index)
-                )
-                function = tool_delta.get("function") or {}
-                if tool_delta.get("id"):
-                    state.tool_use_id = str(tool_delta["id"])
-                if function.get("name"):
-                    state.name = str(function["name"])
-                if not state.started and state.name:
-                    state.started = True
+            usage_payload = payload.get("usage") or {}
+            prompt_tokens = int(usage_payload.get("prompt_tokens") or 0)
+            completion_tokens = int(usage_payload.get("completion_tokens") or 0)
+            if prompt_tokens:
+                usage["input_tokens"] = prompt_tokens
+            if completion_tokens:
+                usage["output_tokens"] = completion_tokens
+
+            choices = payload.get("choices") or []
+            if not choices:
+                continue
+            choice = choices[0] or {}
+            delta = choice.get("delta") or {}
+            finish_reason = str(choice.get("finish_reason") or "").strip() or None
+
+            text_delta = delta.get("content")
+            if isinstance(text_delta, str) and text_delta:
+                if tool_states and not tool_blocks_closed:
+                    for tool_index in sorted(tool_states):
+                        state = tool_states[tool_index]
+                        if state.started and not state.closed:
+                            yield anthropic_sse_event(
+                                "content_block_stop",
+                                {
+                                    "type": "content_block_stop",
+                                    "index": _anthropic_tool_index(
+                                        tool_index,
+                                        text_block_started=True,
+                                    ),
+                                },
+                            )
+                            state.closed = True
+                    tool_blocks_closed = True
+                if not text_block_started:
                     yield anthropic_sse_event(
                         "content_block_start",
                         {
                             "type": "content_block_start",
-                            "index": _anthropic_tool_index(
-                                raw_index,
-                                text_block_started,
-                            ),
-                            "content_block": {
-                                "type": "tool_use",
-                                "id": state.tool_use_id or f"toolu_{uuid4().hex[:24]}",
-                                "name": state.name,
-                                "input": {},
-                            },
+                            "index": 0,
+                            "content_block": {"type": "text", "text": ""},
                         },
                     )
-                raw_arguments = function.get("arguments")
-                if state.started and isinstance(raw_arguments, str) and raw_arguments:
-                    yield anthropic_sse_event(
-                        "content_block_delta",
-                        {
-                            "type": "content_block_delta",
-                            "index": _anthropic_tool_index(
-                                raw_index,
-                                text_block_started,
-                            ),
-                            "delta": {
-                                "type": "input_json_delta",
-                                "partial_json": raw_arguments,
-                            },
-                        },
-                    )
+                    text_block_started = True
+                output_tokens += _estimate_text_tokens(text_delta)
+                usage["output_tokens"] = max(usage["output_tokens"], output_tokens)
+                yield anthropic_sse_event(
+                    "content_block_delta",
+                    {
+                        "type": "content_block_delta",
+                        "index": 0,
+                        "delta": {"type": "text_delta", "text": text_delta},
+                    },
+                )
 
-        if finish_reason:
-            stop_reason = map_stop_reason_to_anthropic(
-                finish_reason,
-                has_tool_calls=bool(tool_states),
+            delta_tool_calls = delta.get("tool_calls") or []
+            if isinstance(delta_tool_calls, list) and delta_tool_calls:
+                if text_block_started and not text_block_closed:
+                    yield anthropic_sse_event(
+                        "content_block_stop",
+                        {"type": "content_block_stop", "index": 0},
+                    )
+                    text_block_closed = True
+                for tool_delta in delta_tool_calls:
+                    if not isinstance(tool_delta, dict):
+                        continue
+                    raw_index = int(tool_delta.get("index") or 0)
+                    state = tool_states.setdefault(
+                        raw_index, _AnthropicStreamToolState(index=raw_index)
+                    )
+                    function = tool_delta.get("function") or {}
+                    if tool_delta.get("id"):
+                        state.tool_use_id = str(tool_delta["id"])
+                    if function.get("name"):
+                        state.name = str(function["name"])
+                    if not state.started and state.name:
+                        state.started = True
+                        state.tool_use_id = state.tool_use_id or f"toolu_{uuid4().hex[:24]}"
+                        yield anthropic_sse_event(
+                            "content_block_start",
+                            {
+                                "type": "content_block_start",
+                                "index": _anthropic_tool_index(
+                                    raw_index,
+                                    text_block_started,
+                                ),
+                                "content_block": {
+                                    "type": "tool_use",
+                                    "id": state.tool_use_id,
+                                    "name": state.name,
+                                    "input": {},
+                                },
+                            },
+                        )
+                    raw_arguments = function.get("arguments")
+                    if state.started and isinstance(raw_arguments, str) and raw_arguments:
+                        yield anthropic_sse_event(
+                            "content_block_delta",
+                            {
+                                "type": "content_block_delta",
+                                "index": _anthropic_tool_index(
+                                    raw_index,
+                                    text_block_started,
+                                ),
+                                "delta": {
+                                    "type": "input_json_delta",
+                                    "partial_json": raw_arguments,
+                                },
+                            },
+                        )
+
+            if finish_reason:
+                stop_reason = map_stop_reason_to_anthropic(
+                    finish_reason,
+                    has_tool_calls=bool(tool_states),
+                )
+    except Exception as exc:
+        if text_block_started and not text_block_closed:
+            yield anthropic_sse_event(
+                "content_block_stop",
+                {"type": "content_block_stop", "index": 0},
             )
+            text_block_closed = True
+        for tool_index in sorted(tool_states):
+            state = tool_states[tool_index]
+            if state.started and not state.closed:
+                yield anthropic_sse_event(
+                    "content_block_stop",
+                    {
+                        "type": "content_block_stop",
+                        "index": _anthropic_tool_index(
+                            tool_index,
+                            text_block_started,
+                        ),
+                    },
+                )
+                state.closed = True
+        yield anthropic_sse_event(
+            "error",
+            {
+                "type": "error",
+                "error": {
+                    "type": "api_error",
+                    "message": f"Streaming request failed unexpectedly: {exc}",
+                },
+            },
+        )
+        return
 
     if text_block_started and not text_block_closed:
         yield anthropic_sse_event(
@@ -673,7 +731,7 @@ async def openai_sse_to_anthropic(
         )
     for tool_index in sorted(tool_states):
         state = tool_states[tool_index]
-        if state.started:
+        if state.started and not state.closed:
             yield anthropic_sse_event(
                 "content_block_stop",
                 {
