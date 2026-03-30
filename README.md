@@ -212,33 +212,33 @@ which -a faigate
 ## How It Works
 
 ```text
-                               fusionAIze Gate
+                                 fusionAIze Gate
 
-     +--------------------+   +--------------------+   +--------------------+
-     | Claude-native      |   | OpenAI-native      |   | Automation / CLI   |
-     | clients            |   | clients            |   | clients            |
-     |                    |   |                    |   |                    |
-     | Claude Code        |   | OpenClaw           |   | n8n                |
-     | Claude Desktop     |   | opencode           |   | curl / scripts     |
-     | Anthropic SDK tools|   | OpenAI SDK apps    |   | custom apps        |
-     +--------------------+   +--------------------+   +--------------------+
+    +---------------------+   +--------------------+   +--------------------+
+    | Claude-native       |   | OpenAI-native      |   | Automation / CLI   |
+    | clients             |   | clients            |   | clients            |
+    |                     |   |                    |   |                    |
+    | Claude Code         |   | OpenClaw           |   | n8n                |
+    | Claude Desktop      |   | opencode           |   | curl / scripts     |
+    | Anthropic SDK tools |   | OpenAI SDK apps    |   | custom apps        |
+    +---------------------+   +--------------------+   +--------------------+
                \                        |                       /
                 v                       v                      v
-        +------------------------------------------------------------+
-        | One local endpoint                                         |
-        |                                                            |
-        | http://127.0.0.1:8090                                      |
-        | OpenAI-compatible + Anthropic-compatible bridge            |
-        +------------------------------------------------------------+
+         +-------------------------------------------------------------+
+         | One local endpoint                                          |
+         |                                                             |
+         | http://127.0.0.1:8090                                       |
+         | OpenAI-compatible + Anthropic-compatible bridge             |
+         +-------------------------------------------------------------+
                                         |
                                         v
-       +-------------------------------------------------------------+
-       | Routing core - Chooses the best route for the job           |
-       |                                                             |
-       | - quality / cost / speed / heuristics / policies            |
-       | - client profiles / routing modes / hooks                   |
-       | - health / readiness / fallback                             |
-       +-------------------------------------------------------------+
+         +-------------------------------------------------------------+
+         | Routing core - Chooses the best route for the job           |
+         |                                                             |
+         | - quality / cost / speed / heuristics / policies            |
+         | - client profiles / routing modes / hooks                   |
+         | - health / readiness / fallback                             |
+         +-------------------------------------------------------------+
                                         |
                +------------------------+------------------------+
                |                        |                        |
