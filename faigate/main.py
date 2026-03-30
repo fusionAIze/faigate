@@ -3012,7 +3012,9 @@ async def anthropic_messages(request: Request):
         )
 
     if isinstance(execution, _ChatExecutionFailure):
-        message = str(execution.body.get("error", {}).get("message", "Anthropic bridge request failed"))
+        message = str(
+            execution.body.get("error", {}).get("message", "Anthropic bridge request failed")
+        )
         error_type = str(execution.body.get("error", {}).get("type", "api_error"))
         return _anthropic_error_response(
             message,
