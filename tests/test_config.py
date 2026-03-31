@@ -3,8 +3,27 @@
 from pathlib import Path
 
 import pytest
+import yaml
 
 from faigate.config import ConfigError, _safe_db_path, load_config
+
+ROOT = Path(__file__).parent.parent
+SHIPPED_CONFIG = ROOT / "config.yaml"
+
+
+def _load_shipped_config_raw() -> dict:
+    with SHIPPED_CONFIG.open(encoding="utf-8") as handle:
+        return yaml.safe_load(handle)
+
+
+def _unknown_provider_refs(select: dict, providers: set[str]) -> set[str]:
+    unknown = set()
+    for field_name in ("allow_providers", "deny_providers", "prefer_providers"):
+        for value in select.get(field_name, []) or []:
+            if value not in providers:
+                unknown.add(value)
+    return unknown
+
 
 # ── _safe_db_path unit tests ──────────────────────────────────────────────────
 
@@ -71,7 +90,7 @@ def test_safe_db_path_home_fallback(monkeypatch):
 def test_metrics_db_path_uses_env_override(monkeypatch):
     """FAIGATE_DB_PATH env var is reflected in cfg.metrics['db_path']."""
     monkeypatch.setenv("FAIGATE_DB_PATH", "/var/lib/faigate/test.db")
-    cfg = load_config(Path(__file__).parent.parent / "config.yaml")
+    cfg = load_config(SHIPPED_CONFIG)
     assert cfg.metrics["db_path"] == "/var/lib/faigate/test.db"
 
 
@@ -103,14 +122,14 @@ def test_metrics_db_path_never_dot_slash(monkeypatch):
     """cfg.metrics['db_path'] must never start with './' regardless of config.yaml content."""
     monkeypatch.delenv("FAIGATE_DB_PATH", raising=False)
     monkeypatch.delenv("XDG_DATA_HOME", raising=False)
-    cfg = load_config(Path(__file__).parent.parent / "config.yaml")
+    cfg = load_config(SHIPPED_CONFIG)
     db_path = cfg.metrics["db_path"]
     assert not db_path.startswith("./"), f"unsafe db_path in metrics: {db_path}"
     assert db_path.startswith("/"), f"expected absolute path, got: {db_path}"
 
 
 def test_auto_update_defaults_are_exposed():
-    cfg = load_config(Path(__file__).parent.parent / "config.yaml")
+    cfg = load_config(SHIPPED_CONFIG)
     assert cfg.auto_update["enabled"] is False
     assert cfg.auto_update["allow_major"] is False
     assert cfg.auto_update["rollout_ring"] == "early"
@@ -136,7 +155,7 @@ def test_auto_update_defaults_are_exposed():
 
 
 def test_update_check_defaults_include_stable_release_channel():
-    cfg = load_config(Path(__file__).parent.parent / "config.yaml")
+    cfg = load_config(SHIPPED_CONFIG)
     assert cfg.update_check["release_channel"] == "stable"
 
 
@@ -339,7 +358,7 @@ metrics:
 
 
 def test_security_defaults_are_exposed():
-    cfg = load_config(Path(__file__).parent.parent / "config.yaml")
+    cfg = load_config(SHIPPED_CONFIG)
     assert cfg.security == {
         "response_headers": True,
         "cache_control": "no-store",
@@ -350,7 +369,7 @@ def test_security_defaults_are_exposed():
 
 
 def test_provider_catalog_check_defaults_are_exposed():
-    cfg = load_config(Path(__file__).parent.parent / "config.yaml")
+    cfg = load_config(SHIPPED_CONFIG)
     assert cfg.provider_catalog_check == {
         "enabled": True,
         "warn_on_untracked": True,
@@ -362,7 +381,7 @@ def test_provider_catalog_check_defaults_are_exposed():
 
 
 def test_provider_source_refresh_defaults_are_exposed():
-    cfg = load_config(Path(__file__).parent.parent / "config.yaml")
+    cfg = load_config(SHIPPED_CONFIG)
     assert cfg.provider_source_refresh == {
         "enabled": True,
         "on_startup": True,
@@ -398,7 +417,7 @@ metrics:
 
 
 def test_anthropic_bridge_defaults_are_exposed():
-    cfg = load_config(Path(__file__).parent.parent / "config.yaml")
+    cfg = load_config(SHIPPED_CONFIG)
     assert cfg.api_surfaces == {
         "openai_compatible": True,
         "anthropic_messages": False,
@@ -571,3 +590,99 @@ metrics:
 
     cfg = load_config(path)
     assert cfg.providers["local-worker"]["base_url"] == "http://127.0.0.1:11434/v1"
+
+
+def test_shipped_config_loads_as_release_candidate():
+    cfg = load_config(SHIPPED_CONFIG)
+    assert "premium" in cfg.routing_modes["modes"]
+    assert "coding-auto" in cfg.routing_modes["modes"]
+    assert "claude-code" in cfg.anthropic_bridge["model_aliases"]
+
+
+def test_shipped_config_mapping_references_are_consistent():
+    raw = _load_shipped_config_raw()
+    providers = set((raw.get("providers") or {}).keys())
+    routing_modes = raw.get("routing_modes") or {}
+    mode_names = set((routing_modes.get("modes") or {}).keys())
+    shortcuts = (raw.get("model_shortcuts") or {}).get("shortcuts") or {}
+    shortcut_names = set(shortcuts.keys())
+
+    assert not set(raw.get("fallback_chain") or []) - providers
+
+    for name, mode in (routing_modes.get("modes") or {}).items():
+        assert not _unknown_provider_refs((mode or {}).get("select") or {}, providers), name
+
+    client_profiles = raw.get("client_profiles") or {}
+    profiles = client_profiles.get("profiles") or {}
+    for name, profile in profiles.items():
+        assert not _unknown_provider_refs(profile or {}, providers), name
+        routing_mode = str((profile or {}).get("routing_mode", "") or "").strip()
+        assert not routing_mode or routing_mode in mode_names, name
+
+    rules = client_profiles.get("rules") or []
+    profile_names = set(profiles.keys()) | {str(client_profiles.get("default") or "").strip()}
+    for idx, rule in enumerate(rules, start=1):
+        assert str((rule or {}).get("profile", "") or "").strip() in profile_names, idx
+
+    for idx, rule in enumerate(((raw.get("routing_policies") or {}).get("rules") or []), start=1):
+        assert not _unknown_provider_refs((rule or {}).get("select") or {}, providers), idx
+
+    provider_scope = (raw.get("auto_update") or {}).get("provider_scope") or {}
+    assert not _unknown_provider_refs(provider_scope, providers)
+
+    for name, shortcut in shortcuts.items():
+        assert str((shortcut or {}).get("target", "") or "").strip() in providers, name
+
+    valid_alias_targets = providers | mode_names | shortcut_names
+    for alias, target in ((raw.get("anthropic_bridge") or {}).get("model_aliases") or {}).items():
+        assert str(target or "").strip() in valid_alias_targets, alias
+
+
+def test_legacy_provider_reference_aliases_load_for_upgrade_configs(tmp_path):
+    path = tmp_path / "legacy-upgrade.yaml"
+    path.write_text(
+        """
+server:
+  host: "127.0.0.1"
+  port: 8090
+providers:
+  gemini-pro-high:
+    backend: openai-compat
+    base_url: "https://api.example.com/v1"
+    api_key: "secret"
+    model: "chat-model"
+fallback_chain:
+  - gemini-pro
+routing_modes:
+  enabled: true
+  default: premium
+  modes:
+    premium:
+      select:
+        prefer_providers: ["gemini-pro"]
+model_shortcuts:
+  enabled: true
+  shortcuts:
+    default-pro:
+      target: gemini-pro
+anthropic_bridge:
+  enabled: true
+  model_aliases:
+    claude-opus-4-6: gemini-pro
+auto_update:
+  provider_scope:
+    allow_providers: ["gemini-pro"]
+metrics:
+  enabled: false
+""",
+        encoding="utf-8",
+    )
+
+    cfg = load_config(path)
+    assert cfg.fallback_chain == ["gemini-pro-high"]
+    assert cfg.routing_modes["modes"]["premium"]["select"]["prefer_providers"] == [
+        "gemini-pro-high"
+    ]
+    assert cfg.model_shortcuts["shortcuts"]["default-pro"]["target"] == "gemini-pro-high"
+    assert cfg.anthropic_bridge["model_aliases"]["claude-opus-4-6"] == "gemini-pro-high"
+    assert cfg.auto_update["provider_scope"]["allow_providers"] == ["gemini-pro-high"]

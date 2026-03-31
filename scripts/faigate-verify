@@ -3,10 +3,12 @@
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent.resolve()
@@ -14,7 +16,10 @@ ROOT = Path(__file__).parent.parent.resolve()
 
 def run(cmd: list[str], *, cwd: Path = ROOT) -> bool:
     print(f"Running: {' '.join(cmd)}")
-    result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
+    env = dict(os.environ)
+    env.setdefault("RUFF_CACHE_DIR", str(Path(tempfile.gettempdir()) / "faigate-ruff-cache"))
+    env.setdefault("PYTEST_ADDOPTS", "")
+    result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, env=env)
     if result.returncode == 0:
         return True
     print(f"FAILED: {' '.join(cmd)}")
@@ -51,6 +56,15 @@ def main() -> int:
     shutil.rmtree(dist_dir, ignore_errors=True)
 
     commands = [
+        [
+            python,
+            "-m",
+            "pytest",
+            "tests/test_config.py",
+            "-k",
+            "shipped_config or legacy_provider_reference_aliases",
+            "-q",
+        ],
         [python, "-m", "ruff", "check", "."],
         [python, "-m", "ruff", "format", "--check", "."],
         [python, "-m", "pytest", "tests/"],

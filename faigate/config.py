@@ -128,6 +128,20 @@ _DEFAULT_ANTHROPIC_BRIDGE_MODEL_ALIASES = {
     "claude-haiku-4-5-20251001": "eco",
 }
 
+_PROVIDER_REFERENCE_ALIASES = {
+    "gemini-pro": "gemini-pro-high",
+}
+
+_KNOWN_GATE_MODEL_TARGETS = {
+    "auto",
+    "eco",
+    "premium",
+    "free",
+    "coding-auto",
+    "coding-fast",
+    "coding-premium",
+}
+
 _CLIENT_PROFILE_PRESET_SPECS: dict[str, dict[str, Any]] = {
     "openclaw": {
         "profile": {"prefer_tiers": ["default", "reasoning"]},
@@ -895,6 +909,44 @@ def _normalize_policy_match(name: str, match: Any) -> dict[str, Any]:
     return match
 
 
+def _resolve_provider_reference(name: str, provider_names: set[str]) -> str:
+    """Resolve one provider reference, including compatibility aliases."""
+
+    if name in provider_names:
+        return name
+    alias = _PROVIDER_REFERENCE_ALIASES.get(name)
+    if alias and alias in provider_names:
+        return alias
+    return name
+
+
+def _normalize_provider_reference_list(
+    value: Any,
+    *,
+    field_name: str,
+    rule_name: str,
+    provider_names: set[str],
+    allow_empty: bool = False,
+) -> list[str]:
+    """Normalize one provider reference list and apply compatibility aliases."""
+
+    values = _normalize_string_list(
+        value,
+        field_name=field_name,
+        rule_name=rule_name,
+        allow_empty=allow_empty,
+    )
+    normalized = [_resolve_provider_reference(item, provider_names) for item in values]
+    unknown = sorted({item for item in normalized if item not in provider_names})
+    if unknown:
+        unknown_list = ", ".join(unknown)
+        raise ConfigError(
+            "Policy "
+            f"'{rule_name}' field '{field_name}' references unknown providers: {unknown_list}"
+        )
+    return normalized
+
+
 def _normalize_policy_select(
     name: str,
     select: Any,
@@ -919,18 +971,13 @@ def _normalize_policy_select(
     provider_names = set(providers)
 
     for field_name in ("allow_providers", "deny_providers", "prefer_providers"):
-        values = _normalize_string_list(
+        values = _normalize_provider_reference_list(
             normalized.get(field_name, []),
             field_name=field_name,
             rule_name=name,
+            provider_names=provider_names,
             allow_empty=True,
         )
-        unknown_providers = sorted(value for value in values if value not in provider_names)
-        if unknown_providers:
-            unknown_list = ", ".join(unknown_providers)
-            raise ConfigError(
-                f"Policy '{name}' field '{field_name}' references unknown providers: {unknown_list}"
-            )
         normalized[field_name] = values
 
     normalized["prefer_tiers"] = _normalize_string_list(
@@ -1329,7 +1376,7 @@ def _normalize_model_shortcuts(data: dict[str, Any]) -> dict[str, Any]:
         target = spec.get("target", "")
         if not isinstance(target, str) or not target.strip():
             raise ConfigError(f"Model shortcut '{normalized_name}' must define a non-empty target")
-        target = target.strip()
+        target = _resolve_provider_reference(target.strip(), provider_names)
         if target not in provider_names:
             raise ConfigError(
                 f"Model shortcut '{normalized_name}' references unknown provider '{target}'"
@@ -1382,6 +1429,23 @@ def _validate_routing_mode_references(data: dict[str, Any]) -> dict[str, Any]:
                 f"Client profile '{profile_name}' references unknown routing_mode '{routing_mode}'"
             )
     return data
+
+
+def _normalize_fallback_chain(data: dict[str, Any]) -> dict[str, Any]:
+    """Validate fallback_chain against configured providers."""
+
+    provider_names = set((data.get("providers") or {}).keys())
+    fallback_chain = _normalize_provider_reference_list(
+        data.get("fallback_chain", []),
+        field_name="fallback_chain",
+        rule_name="fallback_chain",
+        provider_names=provider_names,
+        allow_empty=True,
+    )
+
+    normalized = dict(data)
+    normalized["fallback_chain"] = fallback_chain
+    return normalized
 
 
 def _normalize_request_hooks(data: dict[str, Any]) -> dict[str, Any]:
@@ -1526,30 +1590,20 @@ def _normalize_auto_update(data: dict[str, Any]) -> dict[str, Any]:
         raise ConfigError("'auto_update.provider_scope' must be a mapping")
 
     provider_names = set((data.get("providers") or {}).keys())
-    allow_providers = _normalize_string_list(
+    allow_providers = _normalize_provider_reference_list(
         provider_scope.get("allow_providers", []),
         field_name="allow_providers",
         rule_name="auto_update.provider_scope",
+        provider_names=provider_names,
         allow_empty=True,
     )
-    deny_providers = _normalize_string_list(
+    deny_providers = _normalize_provider_reference_list(
         provider_scope.get("deny_providers", []),
         field_name="deny_providers",
         rule_name="auto_update.provider_scope",
+        provider_names=provider_names,
         allow_empty=True,
     )
-    unknown_allowed = sorted(name for name in allow_providers if name not in provider_names)
-    if unknown_allowed:
-        raise ConfigError(
-            "'auto_update.provider_scope.allow_providers' references unknown providers: "
-            + ", ".join(unknown_allowed)
-        )
-    unknown_denied = sorted(name for name in deny_providers if name not in provider_names)
-    if unknown_denied:
-        raise ConfigError(
-            "'auto_update.provider_scope.deny_providers' references unknown providers: "
-            + ", ".join(unknown_denied)
-        )
     overlap = sorted(set(allow_providers) & set(deny_providers))
     if overlap:
         raise ConfigError(
@@ -1811,11 +1865,21 @@ def _normalize_anthropic_bridge(data: dict[str, Any]) -> dict[str, Any]:
         raise ConfigError("'anthropic_bridge.model_aliases' must be a mapping")
 
     normalized_aliases: dict[str, str] = dict(_DEFAULT_ANTHROPIC_BRIDGE_MODEL_ALIASES)
+    provider_names = set((data.get("providers") or {}).keys())
+    mode_names = set((data.get("routing_modes") or {}).get("modes", {}).keys())
+    shortcut_names = set((data.get("model_shortcuts") or {}).get("shortcuts", {}).keys())
+    valid_targets = provider_names | mode_names | shortcut_names | _KNOWN_GATE_MODEL_TARGETS
     for key, value in model_aliases.items():
         alias = str(key or "").strip()
         target = str(value or "").strip()
         if not alias or not target:
             raise ConfigError("'anthropic_bridge.model_aliases' keys and values must be non-empty")
+        target = _resolve_provider_reference(target, provider_names)
+        if target not in valid_targets:
+            raise ConfigError(
+                "'anthropic_bridge.model_aliases' references unknown target "
+                f"'{target}' for alias '{alias}'"
+            )
         normalized_aliases[alias] = target
 
     normalized = dict(data)
@@ -2071,7 +2135,9 @@ def load_config(path: str | Path | None = None) -> Config:
                                             _normalize_routing_modes(
                                                 _normalize_client_profiles(
                                                     _normalize_routing_policies(
-                                                        _normalize_providers(_walk_expand(raw))
+                                                        _normalize_fallback_chain(
+                                                            _normalize_providers(_walk_expand(raw))
+                                                        )
                                                     )
                                                 )
                                             )
