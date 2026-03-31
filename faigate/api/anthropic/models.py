@@ -164,14 +164,10 @@ def _parse_system_prompt(raw: Any) -> str | list[str] | None:
             normalized.append(item)
             continue
         if not isinstance(item, Mapping):
-            raise AnthropicBridgeError(
-                "'system' blocks must be strings or text block mappings"
-            )
+            raise AnthropicBridgeError("'system' blocks must be strings or text block mappings")
         block_type = str(item.get("type", "") or "").strip()
         if block_type != "text":
-            raise AnthropicBridgeError(
-                "Anthropic bridge v1 supports only text blocks in 'system'"
-            )
+            raise AnthropicBridgeError("Anthropic bridge v1 supports only text blocks in 'system'")
         normalized.append(str(item.get("text", "") or ""))
     return normalized
 
