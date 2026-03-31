@@ -144,6 +144,64 @@ faigate_env_value() {
   ' "$env_file" | tail -n 1
 }
 
+faigate_provider_metadata_dir() {
+  if [ -n "${FAIGATE_PROVIDER_METADATA_DIR:-}" ]; then
+    printf '%s\n' "$FAIGATE_PROVIDER_METADATA_DIR"
+    return 0
+  fi
+  local env_dir
+  env_dir="$(faigate_env_value FAIGATE_PROVIDER_METADATA_DIR 2>/dev/null || true)"
+  if [ -n "$env_dir" ]; then
+    printf '%s\n' "$env_dir"
+  fi
+}
+
+faigate_provider_metadata_product() {
+  if [ -n "${FAIGATE_PROVIDER_METADATA_PRODUCT:-}" ]; then
+    printf '%s\n' "$FAIGATE_PROVIDER_METADATA_PRODUCT"
+    return 0
+  fi
+  local env_product
+  env_product="$(faigate_env_value FAIGATE_PROVIDER_METADATA_PRODUCT 2>/dev/null || true)"
+  if [ -n "$env_product" ]; then
+    printf '%s\n' "$env_product"
+  else
+    printf '%s\n' "gate"
+  fi
+}
+
+faigate_provider_metadata_snapshot_path() {
+  if [ -n "${FAIGATE_PROVIDER_METADATA_FILE:-}" ]; then
+    printf '%s\n' "$FAIGATE_PROVIDER_METADATA_FILE"
+    return 0
+  fi
+  local env_file
+  env_file="$(faigate_env_value FAIGATE_PROVIDER_METADATA_FILE 2>/dev/null || true)"
+  if [ -n "$env_file" ]; then
+    printf '%s\n' "$env_file"
+    return 0
+  fi
+  local db_path
+  db_path="$(faigate_db_path)"
+  printf '%s/provider-catalog.snapshot.v1.json\n' "$(dirname "$db_path")"
+}
+
+faigate_sync_provider_metadata_if_configured() {
+  local metadata_dir metadata_product snapshot_path repo_root
+  metadata_dir="$(faigate_provider_metadata_dir)"
+  if [ -z "$metadata_dir" ]; then
+    return 0
+  fi
+  metadata_product="$(faigate_provider_metadata_product)"
+  snapshot_path="$(faigate_provider_metadata_snapshot_path)"
+  repo_root="$(faigate_repo_root)"
+  FAIGATE_PROVIDER_METADATA_DIR="$metadata_dir" \
+    "$repo_root/scripts/faigate-provider-metadata-sync" \
+    --repo "$metadata_dir" \
+    --product "$metadata_product" \
+    --out "$snapshot_path"
+}
+
 faigate_yaml_value() {
   local dotted_key="$1"
   local default="${2:-}"

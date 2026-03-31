@@ -1,0 +1,28 @@
+{
+  "schema_version": "fusionaize-provider-catalog/v1",
+  "generated_at": "2026-03-31T18:00:00Z",
+  "source_repo": "fusionaize-metadata",
+  "providers": {
+    "deepseek-chat": {
+      "recommended_model": "deepseek-chat",
+      "aliases": ["deepseek-chat", "ds-v3"],
+      "track": "stable",
+      "offer_track": "direct",
+      "provider_type": "direct",
+      "auth_modes": ["api_key"],
+      "volatility": "low",
+      "evidence_level": "official",
+      "official_source_url": "https://api-docs.deepseek.com/",
+      "signup_url": "https://platform.deepseek.com/",
+      "watch_sources": [],
+      "notes": "Balanced DeepSeek direct route.",
+      "last_reviewed": "2026-03-31",
+      "pricing": {
+        "source_type": "provider-docs",
+        "source_url": "https://api-docs.deepseek.com/pricing",
+        "refreshed_at": "2026-03-31T17:45:00Z",
+        "freshness_status": "fresh"
+      }
+    }
+  }
+}

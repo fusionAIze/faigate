@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fusionaize.local/schemas/provider-catalog.v1.schema.json",
+  "title": "fusionAIze Provider Catalog v1",
+  "type": "object",
+  "required": ["schema_version", "providers"],
+  "properties": {
+    "schema_version": {
+      "type": "string"
+    },
+    "generated_at": {
+      "type": "string"
+    },
+    "source_repo": {
+      "type": "string"
+    },
+    "providers": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object"
+      }
+    }
+  },
+  "additionalProperties": true
+}

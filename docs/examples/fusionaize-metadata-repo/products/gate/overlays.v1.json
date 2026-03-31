@@ -1,0 +1,80 @@
+{
+  "schema_version": "fusionaize-provider-overlays/v1",
+  "product": "gate",
+  "providers": {
+    "anthropic-haiku": {
+      "recommended_model": "claude-3-5-haiku-latest",
+      "aliases": ["claude-3-5-haiku-latest", "anthropic:haiku"],
+      "track": "stable",
+      "offer_track": "direct",
+      "provider_type": "direct",
+      "auth_modes": ["api_key"],
+      "volatility": "low",
+      "evidence_level": "official",
+      "official_source_url": "https://docs.anthropic.com/en/docs/about-claude/models",
+      "signup_url": "https://console.anthropic.com/",
+      "watch_sources": [],
+      "notes": "Gate keeps a direct Anthropic Haiku route tracked here.",
+      "last_reviewed": "2026-03-31",
+      "pricing": {
+        "source_type": "provider-docs",
+        "source_url": "https://www.anthropic.com/pricing#api",
+        "refreshed_at": "2026-03-31T18:15:00Z",
+        "freshness_status": "fresh",
+        "input_cost_per_1m": 0.8,
+        "output_cost_per_1m": 4.0
+      }
+    },
+    "anthropic-sonnet": {
+      "recommended_model": "claude-sonnet-4-6",
+      "aliases": ["claude-sonnet-4-6", "anthropic:sonnet"],
+      "track": "stable",
+      "offer_track": "direct",
+      "provider_type": "direct",
+      "auth_modes": ["api_key"],
+      "volatility": "low",
+      "evidence_level": "official",
+      "official_source_url": "https://docs.anthropic.com/en/docs/about-claude/models",
+      "signup_url": "https://console.anthropic.com/",
+      "watch_sources": [],
+      "notes": "Gate keeps a direct Anthropic Sonnet route tracked here.",
+      "last_reviewed": "2026-03-31",
+      "pricing": {
+        "source_type": "provider-docs",
+        "source_url": "https://www.anthropic.com/pricing#api",
+        "refreshed_at": "2026-03-31T18:15:00Z",
+        "freshness_status": "fresh",
+        "input_cost_per_1m": 3.0,
+        "output_cost_per_1m": 15.0
+      }
+    },
+    "gemini-pro": {
+      "recommended_model": "gemini-2.5-pro",
+      "aliases": ["gemini-2.5-pro", "gemini-pro-high", "google:gemini-pro"],
+      "track": "stable",
+      "offer_track": "direct",
+      "provider_type": "direct",
+      "auth_modes": ["api_key"],
+      "volatility": "low",
+      "evidence_level": "official",
+      "official_source_url": "https://ai.google.dev/gemini-api/docs/models",
+      "signup_url": "https://aistudio.google.com/",
+      "watch_sources": [],
+      "notes": "Gate keeps the Gemini Pro lane tracked here, including the higher-tier provider alias.",
+      "last_reviewed": "2026-03-31",
+      "pricing": {
+        "source_type": "provider-docs",
+        "source_url": "https://ai.google.dev/gemini-api/docs/pricing",
+        "refreshed_at": "2026-03-31T18:15:00Z",
+        "freshness_status": "fresh",
+        "pricing_notes": "Model pricing can vary by modality and token band; verify context-specific rates during refresh."
+      }
+    },
+    "deepseek-chat": {
+      "notes": "Gate overlay can tighten route notes or freshness without rewriting the base catalog.",
+      "pricing": {
+        "freshness_status": "fresh"
+      }
+    }
+  }
+}

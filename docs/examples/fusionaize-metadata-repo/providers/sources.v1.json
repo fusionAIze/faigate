@@ -1,0 +1,11 @@
+{
+  "schema_version": "fusionaize-provider-sources/v1",
+  "sources": {
+    "deepseek-chat": {
+      "owner_product": "gate",
+      "refresh_interval_seconds": 10800,
+      "official_models_url": "https://api-docs.deepseek.com/",
+      "official_pricing_url": "https://api-docs.deepseek.com/pricing"
+    }
+  }
+}

@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${script_dir}/faigate-service-lib.sh"
+
 # update code from repo + restart service
 #
 # Git operations run as the faigate service user (owner of /opt/faigate).
@@ -57,6 +60,15 @@ if [ -f "$FAIGATE_DIR/venv/bin/pip" ]; then
   if [ -f "$FAIGATE_DIR/requirements.txt" ]; then
     $GIT_CMD "$FAIGATE_DIR/venv/bin/pip" install -r "$FAIGATE_DIR/requirements.txt"
   fi
+fi
+
+metadata_dir="$(faigate_provider_metadata_dir)"
+if [ -n "$metadata_dir" ]; then
+  echo "syncing provider metadata from ${metadata_dir}"
+  "$FAIGATE_DIR/scripts/faigate-provider-metadata-sync" \
+    --repo "$metadata_dir" \
+    --product "$(faigate_provider_metadata_product)" \
+    --out "$(faigate_provider_metadata_snapshot_path)"
 fi
 
 # ── systemd ───────────────────────────────────────────────────────────────────

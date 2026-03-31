@@ -44,6 +44,12 @@ faigate_ui_header "fusionAIze Gate Restart" "Restarting through $(faigate_servic
 faigate_ui_info "Target: $(faigate_service_target)"
 faigate_ui_info "Bind: $(faigate_host):$(faigate_port)"
 
+if metadata_dir="$(faigate_provider_metadata_dir)" && [ -n "$metadata_dir" ]; then
+  faigate_ui_info "Syncing provider metadata from: ${metadata_dir}"
+  faigate_sync_provider_metadata_if_configured
+  faigate_ui_success "Provider metadata snapshot refreshed."
+fi
+
 case "$(faigate_platform)" in
   Darwin)
     faigate_launchctl_start

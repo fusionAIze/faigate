@@ -1,0 +1,28 @@
+{
+  "schema_version": "fusionaize-provider-catalog/v1",
+  "generated_at": "2026-03-31T18:00:00Z",
+  "source_repo": "fusionaize-metadata",
+  "providers": {
+    "anthropic-haiku": {
+      "recommended_model": "claude-3-5-haiku-latest",
+      "aliases": ["claude-3-5-haiku-latest", "anthropic:haiku"],
+      "track": "stable",
+      "offer_track": "direct",
+      "provider_type": "direct",
+      "auth_modes": ["api_key"],
+      "volatility": "low",
+      "evidence_level": "official",
+      "official_source_url": "https://docs.anthropic.com/en/docs/about-claude/models",
+      "signup_url": "https://console.anthropic.com/",
+      "watch_sources": [],
+      "notes": "Example snapshot entry for external provider metadata import.",
+      "last_reviewed": "2026-03-31",
+      "pricing": {
+        "source_type": "provider-docs",
+        "source_url": "https://docs.anthropic.com/en/docs/about-claude/models",
+        "refreshed_at": "2026-03-31T17:55:00Z",
+        "freshness_status": "fresh"
+      }
+    }
+  }
+}

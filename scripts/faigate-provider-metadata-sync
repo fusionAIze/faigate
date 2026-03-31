@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/faigate-service-lib.sh"
+
+python_bin="$(faigate_python_bin)"
+repo_dir="${FAIGATE_PROVIDER_METADATA_DIR:-}"
+product="gate"
+output_path=""
+
+usage() {
+  cat <<'EOF'
+Usage:
+  ./scripts/faigate-provider-metadata-sync --repo DIR [--product gate] [--out FILE]
+
+Materialize an effective provider catalog snapshot from a fusionAIze metadata
+repo checkout plus product overlays. The output file can be consumed by Gate
+through FAIGATE_PROVIDER_METADATA_FILE.
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --repo)
+      repo_dir="${2:-}"
+      shift 2
+      ;;
+    --product)
+      product="${2:-}"
+      shift 2
+      ;;
+    --out)
+      output_path="${2:-}"
+      shift 2
+      ;;
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    *)
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [[ -z "$repo_dir" ]]; then
+  printf 'error: metadata repo path required (--repo or FAIGATE_PROVIDER_METADATA_DIR)\n' >&2
+  exit 2
+fi
+
+if [[ -z "$output_path" ]]; then
+  db_path="$(faigate_db_path)"
+  output_path="$(dirname "$db_path")/provider-catalog.snapshot.v1.json"
+fi
+
+FAIGATE_PROVIDER_METADATA_SYNC_REPO="$repo_dir" \
+FAIGATE_PROVIDER_METADATA_SYNC_PRODUCT="$product" \
+FAIGATE_PROVIDER_METADATA_SYNC_OUTPUT="$output_path" \
+"$python_bin" - <<'PY'
+import json
+import os
+
+from faigate.provider_catalog import materialize_provider_metadata_snapshot
+
+repo = os.environ["FAIGATE_PROVIDER_METADATA_SYNC_REPO"]
+product = os.environ["FAIGATE_PROVIDER_METADATA_SYNC_PRODUCT"]
+output = os.environ["FAIGATE_PROVIDER_METADATA_SYNC_OUTPUT"]
+
+snapshot = materialize_provider_metadata_snapshot(repo, output, product=product)
+providers = snapshot.get("providers") or {}
+
+print("fusionAIze Gate Provider Metadata Sync")
+print()
+print(f"Repo: {repo}")
+print(f"Product: {product}")
+print(f"Output: {output}")
+print(f"Providers: {len(providers)}")
+print()
+print(
+    json.dumps(
+        {
+            "schema_version": snapshot.get("schema_version"),
+            "generated_at": snapshot.get("generated_at"),
+            "source_repo": snapshot.get("source_repo"),
+            "product": snapshot.get("product"),
+            "providers": sorted(providers.keys()),
+        },
+        indent=2,
+        sort_keys=True,
+    )
+)
+PY

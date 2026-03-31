@@ -175,6 +175,143 @@ Reference:
 
 - [Dashboard IA](./DASHBOARD-IA.md)
 
+### Immediate operator-trust slices after dashboard v1
+
+These are the next high-signal follow-ups now that the first dashboard surface
+exists and exposes the real gaps.
+
+They should be treated as short operator-trust slices, not as a second broad UI
+redesign.
+
+#### Cluster A - cost truth and catalog freshness
+
+Observed gap:
+
+- cost data is not yet trustworthy enough to explain spend posture per provider
+- several providers still show as untracked in the catalog layer
+
+Challenge:
+
+- provider "price" is not one thing
+- direct-provider list pricing, aggregator marketplace pricing, free-tier offers,
+  and effective billed usage can diverge
+- the product should not claim false precision where only a stale public price
+  table exists
+
+Recommendation:
+
+- introduce a versioned provider-metadata source of truth that can live as JSON
+  in a repo rather than as a hosted database
+- design that metadata source as a shared fusionAIze boundary from day one so
+  Gate is only the first consumer, not the only one
+- keep that scope explicitly limited to fusionAIze products rather than turning
+  it into a generic cross-repo metadata service
+- keep cost provenance explicit per field:
+  - source price
+  - source timestamp
+  - freshness status
+  - source type (`provider-docs`, `aggregator-offer`, `manual-review`,
+    `observed-usage`)
+- add a small refresh job outside Gate that updates that metadata on a fixed
+  rhythm
+- pull that metadata into Gate through a conservative update path tied to normal
+  catalog refresh and restart flows
+
+Working shape:
+
+- versioned JSON documents
+- statically hostable if desired, but not dependent on a dedicated hosted
+  database
+- reusable later for `fusionAIze Grid`, `Lens`, `Fabric`, and similar products
+- not intended for unrelated repositories outside the fusionAIze product line
+- reviewable in Git with clear operator override paths
+
+Immediate slices:
+
+1. catalog schema for price provenance and freshness
+2. tracked assumptions for `anthropic-haiku`, `anthropic-sonnet`, and
+   `gemini-pro`
+3. dashboard surfacing for `tracked`, `stale`, `untracked`, and `source age`
+4. post-update metadata refresh hook tied to Gate's normal update cadence
+
+#### Cluster B - route and lane explainability
+
+Observed gap:
+
+- operators can see routes and lanes, but not yet in a way that feels obvious
+  at a glance
+
+Challenge:
+
+- a graphic by itself will not fix this if the underlying route explanation is
+  still too implicit
+- visual route maps should follow clearer route-decision semantics, not replace
+  them
+
+Recommendation:
+
+- make route choice legible in layers:
+  - requested intent
+  - chosen lane
+  - chosen execution route
+  - same-lane fallback candidates
+  - downgrade path if fallback crossed clusters
+- then add a light visual route map once the textual explanation is already
+  operator-trustworthy
+
+Immediate slices:
+
+1. "why this lane / why this route" drilldown in Routes and Request Log
+2. explicit same-lane fallback vs downgrade markers
+3. lane-family summary cards in Overview and Routes
+4. lightweight visual route map once route trace semantics are stable
+
+#### Cluster C - intelligent command bar and shell parity
+
+Observed gap:
+
+- the command bar filters well enough, but it is not yet intelligent
+- the dashboard does not yet move in lockstep with shell capabilities and
+  config workflows
+
+Challenge:
+
+- "intelligent" should not become another black box
+- if the dashboard can suggest scopes or edits, the same logic must stay
+  inspectable and reproducible from CLI and YAML
+
+Recommendation:
+
+- keep the command bar operator-first:
+  - saved scopes
+  - recommended pivots
+  - next useful drilldowns
+- build shell and dashboard against the same capability layer rather than
+  inventing separate UX-only semantics
+- add config actions only through safe preview/diff/apply flows, not direct
+  opaque mutation
+
+Immediate slices:
+
+1. shell-backed scope suggestions (`high spend`, `fallback active`,
+   `premium drift`, `untracked catalog`)
+2. deep links from dashboard panels to equivalent shell or API views
+3. dashboard config actions with preview, diff, backup, and explicit apply
+4. parity review so dashboard filters, shell helpers, and YAML names stay
+   aligned
+
+#### Recommended near-term order
+
+1. cost truth and tracked-catalog freshness
+2. route and lane explainability
+3. command bar intelligence and shell/config parity
+
+This order keeps the next product gains grounded in trust:
+
+- first make the cost and catalog story believable
+- then make route choice more legible
+- then add smarter operator controls on top of that clearer model
+
 ### `v1.16.x` - adaptive orchestration trust
 
 Primary outcome:

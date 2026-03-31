@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 from datetime import date
+from pathlib import Path
 from typing import Any
 
 from .config import Config
@@ -24,6 +26,12 @@ _DISCOVERY_DISCLOSURE = (
     "Provider recommendations stay performance-led. Shown signup or discovery links are "
     "informational only and do not affect ranking."
 )
+
+_EXTERNAL_CATALOG_ENV = "FAIGATE_PROVIDER_METADATA_FILE"
+_EXTERNAL_CATALOG_DIR_ENV = "FAIGATE_PROVIDER_METADATA_DIR"
+_EXTERNAL_CATALOG_PRODUCT_ENV = "FAIGATE_PROVIDER_METADATA_PRODUCT"
+_DEFAULT_METADATA_PRODUCT = "gate"
+_METADATA_CATALOG_RELATIVE_PATH = Path("providers") / "catalog.v1.json"
 
 _CATALOG: dict[str, dict[str, Any]] = {
     "deepseek-chat": {
@@ -233,6 +241,120 @@ _CATALOG: dict[str, dict[str, Any]] = {
 }
 
 
+def _normalize_catalog_entry(entry: Any) -> dict[str, Any]:
+    if not isinstance(entry, dict):
+        return {}
+    return {str(key): value for key, value in entry.items()}
+
+
+def _merge_catalog_entry(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(base)
+    for key, value in overlay.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _merge_catalog_entry(
+                _normalize_catalog_entry(merged[key]),
+                _normalize_catalog_entry(value),
+            )
+            continue
+        merged[key] = value
+    return merged
+
+
+def _normalize_catalog_payload(payload: Any) -> dict[str, dict[str, Any]]:
+    raw_catalog = payload.get("providers") if isinstance(payload, dict) else payload
+    if not isinstance(raw_catalog, dict):
+        return {}
+
+    catalog: dict[str, dict[str, Any]] = {}
+    for provider_name, entry in raw_catalog.items():
+        normalized_name = str(provider_name or "").strip()
+        normalized_entry = _normalize_catalog_entry(entry)
+        if not normalized_name or not normalized_entry:
+            continue
+        catalog[normalized_name] = normalized_entry
+    return catalog
+
+
+def _load_catalog_payload(path: str | Path) -> dict[str, Any]:
+    try:
+        with open(path, encoding="utf-8") as handle:
+            payload = json.load(handle)
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def build_provider_metadata_snapshot(
+    metadata_dir: str | Path,
+    *,
+    product: str = _DEFAULT_METADATA_PRODUCT,
+) -> dict[str, Any]:
+    root = Path(metadata_dir).expanduser()
+    catalog_payload = _load_catalog_payload(root / _METADATA_CATALOG_RELATIVE_PATH)
+    catalog = _normalize_catalog_payload(catalog_payload)
+
+    product_name = str(product or _DEFAULT_METADATA_PRODUCT).strip() or _DEFAULT_METADATA_PRODUCT
+    overlay_payload = _load_catalog_payload(root / "products" / product_name / "overlays.v1.json")
+    overlay = _normalize_catalog_payload(overlay_payload)
+
+    merged_catalog = dict(catalog)
+    for provider_name, entry in overlay.items():
+        merged_catalog[provider_name] = _merge_catalog_entry(
+            merged_catalog.get(provider_name, {}),
+            entry,
+        )
+
+    return {
+        "schema_version": str(
+            catalog_payload.get("schema_version") or "fusionaize-provider-catalog/v1"
+        ),
+        "generated_at": str(catalog_payload.get("generated_at") or ""),
+        "source_repo": str(catalog_payload.get("source_repo") or ""),
+        "product": product_name,
+        "providers": merged_catalog,
+    }
+
+
+def materialize_provider_metadata_snapshot(
+    metadata_dir: str | Path,
+    output_path: str | Path,
+    *,
+    product: str = _DEFAULT_METADATA_PRODUCT,
+) -> dict[str, Any]:
+    snapshot = build_provider_metadata_snapshot(metadata_dir, product=product)
+    destination = Path(output_path).expanduser()
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(
+        json.dumps(snapshot, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return snapshot
+
+
+def _load_external_provider_catalog() -> dict[str, dict[str, Any]]:
+    metadata_path = str(os.environ.get(_EXTERNAL_CATALOG_ENV, "") or "").strip()
+    if metadata_path:
+        payload = _load_catalog_payload(metadata_path)
+        return _normalize_catalog_payload(payload)
+
+    metadata_dir = str(os.environ.get(_EXTERNAL_CATALOG_DIR_ENV, "") or "").strip()
+    if not metadata_dir:
+        return {}
+    product = str(os.environ.get(_EXTERNAL_CATALOG_PRODUCT_ENV, _DEFAULT_METADATA_PRODUCT) or "")
+    return _normalize_catalog_payload(
+        build_provider_metadata_snapshot(metadata_dir, product=product)
+    )
+
+
+def _get_catalog_source() -> dict[str, dict[str, Any]]:
+    catalog = {name: dict(entry) for name, entry in _CATALOG.items()}
+    for name, entry in _load_external_provider_catalog().items():
+        merged = dict(catalog.get(name, {}))
+        merged.update(entry)
+        catalog[name] = merged
+    return catalog
+
+
 def _slugify_provider_name(provider_name: str) -> str:
     return re.sub(r"[^A-Z0-9]+", "_", provider_name.upper()).strip("_")
 
@@ -263,7 +385,7 @@ def _build_discovery_metadata(provider_name: str, catalog_entry: dict[str, Any])
 def get_provider_catalog() -> dict[str, dict[str, Any]]:
     """Return a shallow copy of the curated provider catalog."""
     payload: dict[str, dict[str, Any]] = {}
-    for name, entry in _CATALOG.items():
+    for name, entry in _get_catalog_source().items():
         item = dict(entry)
         item["discovery"] = _build_discovery_metadata(name, entry)
         payload[name] = item
@@ -272,7 +394,7 @@ def get_provider_catalog() -> dict[str, dict[str, Any]]:
 
 def get_provider_catalog_entry(provider_name: str) -> dict[str, Any]:
     """Return one curated provider catalog entry with discovery metadata."""
-    entry = _CATALOG.get(provider_name)
+    entry = _get_catalog_source().get(provider_name)
     if not entry:
         return {}
     item = dict(entry)
@@ -450,11 +572,11 @@ def build_provider_catalog_report(config: Config) -> dict[str, Any]:
 
     for provider_name, provider in sorted(config.providers.items()):
         model = str(provider.get("model", "") or "").strip()
-        catalog_entry = _CATALOG.get(provider_name)
+        catalog_entry = get_provider_catalog_entry(provider_name)
         item: dict[str, Any] = {
             "provider": provider_name,
             "configured_model": model,
-            "tracked": catalog_entry is not None,
+            "tracked": bool(catalog_entry),
         }
 
         if not catalog_entry:
