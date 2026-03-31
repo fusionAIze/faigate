@@ -1,5 +1,16 @@
 # fusionAIze Gate Changelog
 
+## v1.14.2 - 2026-03-31
+
+### Added
+
+- Added an optional shared provider metadata overlay path so Gate can load repo-backed provider catalog snapshots and merge them into the runtime catalog.
+- Added `faigate-provider-metadata-sync` plus restart/update integration so provider metadata snapshots can be materialized automatically before Gate restarts.
+
+### Changed
+
+- Documented the fusionAIze-only shared metadata repo shape and shipped example catalog/overlay JSON for Gate, including initial tracked metadata coverage for `anthropic-haiku`, `anthropic-sonnet`, and `gemini-pro`.
+
 ## v1.14.1 - 2026-03-31
 
 ### Added
