@@ -8,6 +8,8 @@ from faigate.provider_catalog import (
     build_provider_discovery_view,
     build_provider_metadata_snapshot,
     build_provider_refresh_guidance,
+    get_offerings_catalog,
+    get_packages_catalog,
     get_provider_catalog_entry,
     materialize_provider_metadata_snapshot,
 )
@@ -532,3 +534,35 @@ metrics:
             assert "priority" in rec
             assert "action" in rec
             assert "cluster_id" in rec
+
+
+def test_offerings_and_packages_catalog_loading(tmp_path, monkeypatch):
+    """Test that offerings and packages catalogs can be loaded from external metadata."""
+    # Create a temporary metadata directory with empty catalogs
+    metadata_dir = tmp_path / "metadata"
+    metadata_dir.mkdir()
+    (metadata_dir / "offerings").mkdir()
+    (metadata_dir / "packages").mkdir()
+
+    # Write empty catalogs
+    offerings_catalog = metadata_dir / "offerings" / "catalog.v1.json"
+    offerings_catalog.write_text('{"schema_version":"fusionaize-offering-catalog/v1","offerings":{}}')
+    packages_catalog = metadata_dir / "packages" / "catalog.v1.json"
+    packages_catalog.write_text('{"schema_version":"fusionaize-package-catalog/v1","packages":{}}')
+
+    # Set environment variable
+    monkeypatch.setenv("FAIGATE_PROVIDER_METADATA_DIR", str(metadata_dir))
+
+    # Load catalogs
+    offerings = get_offerings_catalog()
+    packages = get_packages_catalog()
+
+    # Should be empty dicts
+    assert offerings == {}
+    assert packages == {}
+
+    # Test that caching works by loading again
+    offerings2 = get_offerings_catalog()
+    packages2 = get_packages_catalog()
+    assert offerings2 is offerings  # same cached object
+    assert packages2 is packages

@@ -1,0 +1,12 @@
+[Unit]
+Description=Run the fusionAIze Gate metadata sync on a schedule
+Documentation=https://github.com/fusionAIze/faigate
+
+[Timer]
+OnCalendar=*-*-* 00/3:00:00
+RandomizedDelaySec=30m
+Persistent=true
+Unit=faigate-metadata-sync.service
+
+[Install]
+WantedBy=timers.target

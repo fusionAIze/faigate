@@ -36,6 +36,14 @@ if git pull origin main 2>&1 | tee -a "$LOG_FILE"; then
         touch "products/gate/overlays.v1.json"
         echo "Touched overlay file to update mtime" >> "$LOG_FILE"
     fi
+    if [ -f "offerings/catalog.v1.json" ]; then
+        touch "offerings/catalog.v1.json"
+        echo "Touched offerings catalog file to update mtime" >> "$LOG_FILE"
+    fi
+    if [ -f "packages/catalog.v1.json" ]; then
+        touch "packages/catalog.v1.json"
+        echo "Touched packages catalog file to update mtime" >> "$LOG_FILE"
+    fi
 else
     echo "$(date): Failed to update metadata repository" >> "$LOG_FILE"
     echo "ERROR: git pull failed" >> "$LOG_FILE"

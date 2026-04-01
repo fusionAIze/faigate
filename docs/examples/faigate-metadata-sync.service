@@ -1,0 +1,21 @@
+[Unit]
+Description=Synchronize fusionAIze Gate metadata repository
+Documentation=https://github.com/fusionAIze/faigate
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=faigate
+Group=faigate
+WorkingDirectory=/opt/faigate
+EnvironmentFile=/opt/faigate/.env
+ExecStart=/opt/faigate/scripts/sync-metadata.sh
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/faigate /opt/faigate /home/faigate/.faigate
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,3 @@
+# Example cron entry for fusionAIze Gate metadata synchronization.
+# Runs every 3 hours to pull latest provider, offering, and package metadata.
+0 */3 * * * faigate /opt/faigate/scripts/sync-metadata.sh >>/var/log/faigate-metadata-sync.log 2>&1

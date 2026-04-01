@@ -1,5 +1,19 @@
 # fusionAIze Gate Changelog
 
+## v1.16.0 - 2026-04-01
+
+### Added
+
+- Added external metadata schemas and catalogs for models, offerings, and packages (Phase 2a)
+- Added environment variables `FAIGATE_OFFERINGS_METADATA_FILE` and `FAIGATE_PACKAGES_METADATA_FILE`
+- Added `get_offerings_catalog()` and `get_packages_catalog()` public API functions
+- Updated `sync-metadata.sh` to touch offerings and packages catalog files
+
+### Changed
+
+- Extended provider catalog loading to support offerings and packages catalogs alongside providers
+- No breaking changes; all existing functionality remains unchanged
+
 ## v1.14.2 - 2026-03-31
 
 ### Added

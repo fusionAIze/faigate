@@ -1,8 +1,21 @@
-"""Curated provider catalog and drift/freshness reporting."""
+"""Curated provider catalog and drift/freshness reporting.
+
+This module manages external metadata catalogs for providers, offerings, and packages.
+Catalogs are loaded from the external fusionaize-metadata repository (or local overrides)
+and cached for performance.
+
+Environment variables:
+- FAIGATE_PROVIDER_METADATA_FILE: override path to provider catalog JSON
+- FAIGATE_PROVIDER_METADATA_DIR: root directory of metadata repository
+- FAIGATE_PROVIDER_METADATA_PRODUCT: product name for overlays (default "gate")
+- FAIGATE_OFFERINGS_METADATA_FILE: override path to offerings catalog JSON
+- FAIGATE_PACKAGES_METADATA_FILE: override path to packages catalog JSON
+"""
 
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 from datetime import date
@@ -17,6 +30,8 @@ from .lane_registry import (
     get_canonical_model_catalog,
     get_provider_lane_binding,
 )
+
+logger = logging.getLogger("faigate.provider_catalog")
 
 # Path to external fusionaize-metadata repository (set via FAIGATE_PROVIDER_METADATA_DIR)
 _EXTERNAL_METADATA_ROOT = Path("/nonexistent/faigate-metadata-fallback")
@@ -35,8 +50,12 @@ _DISCOVERY_DISCLOSURE = (
 _EXTERNAL_CATALOG_ENV = "FAIGATE_PROVIDER_METADATA_FILE"
 _EXTERNAL_CATALOG_DIR_ENV = "FAIGATE_PROVIDER_METADATA_DIR"
 _EXTERNAL_CATALOG_PRODUCT_ENV = "FAIGATE_PROVIDER_METADATA_PRODUCT"
+_OFFERINGS_CATALOG_ENV = "FAIGATE_OFFERINGS_METADATA_FILE"
+_PACKAGES_CATALOG_ENV = "FAIGATE_PACKAGES_METADATA_FILE"
 _DEFAULT_METADATA_PRODUCT = "gate"
 _METADATA_CATALOG_RELATIVE_PATH = Path("providers") / "catalog.v1.json"
+_OFFERINGS_CATALOG_RELATIVE_PATH = Path("offerings") / "catalog.v1.json"
+_PACKAGES_CATALOG_RELATIVE_PATH = Path("packages") / "catalog.v1.json"
 
 # Hardcoded fallback path for external metadata repository (legacy - non-existent by default)
 # Override with FAIGATE_PROVIDER_METADATA_DIR environment variable
@@ -46,6 +65,10 @@ _EXTERNAL_CATALOG_CACHE: dict[str, Any] | None = None
 _EXTERNAL_CATALOG_MTIME: float = 0.0
 _EXTERNAL_OVERLAY_CACHE: dict[str, Any] | None = None
 _EXTERNAL_OVERLAY_MTIME: float = 0.0
+_EXTERNAL_OFFERINGS_CACHE: dict[str, Any] | None = None
+_EXTERNAL_OFFERINGS_MTIME: float = 0.0
+_EXTERNAL_PACKAGES_CACHE: dict[str, Any] | None = None
+_EXTERNAL_PACKAGES_MTIME: float = 0.0
 
 
 def _get_external_metadata_root() -> Path:
@@ -74,6 +97,24 @@ def _get_external_overlay_path() -> Path:
         product = _DEFAULT_METADATA_PRODUCT
     root = _get_external_metadata_root()
     return root / "products" / product / "overlays.v1.json"
+
+
+def _get_external_offerings_path() -> Path:
+    """Get path to external offerings catalog.v1.json."""
+    metadata_file = os.environ.get(_OFFERINGS_CATALOG_ENV, "").strip()
+    if metadata_file:
+        return Path(metadata_file).expanduser()
+    root = _get_external_metadata_root()
+    return root / "offerings" / "catalog.v1.json"
+
+
+def _get_external_packages_path() -> Path:
+    """Get path to external packages catalog.v1.json."""
+    metadata_file = os.environ.get(_PACKAGES_CATALOG_ENV, "").strip()
+    if metadata_file:
+        return Path(metadata_file).expanduser()
+    root = _get_external_metadata_root()
+    return root / "packages" / "catalog.v1.json"
 
 
 def _load_external_catalog() -> dict[str, Any]:
@@ -136,6 +177,76 @@ def _load_external_overlay() -> dict[str, Any]:
         _EXTERNAL_OVERLAY_MTIME = 0.0
 
     return _EXTERNAL_OVERLAY_CACHE
+
+
+def _load_external_offerings() -> dict[str, Any]:
+    """Load external offerings catalog.v1.json if available."""
+    global _EXTERNAL_OFFERINGS_CACHE, _EXTERNAL_OFFERINGS_MTIME
+
+    offerings_path = _get_external_offerings_path()
+
+    # Check if cache is still valid
+    if _EXTERNAL_OFFERINGS_CACHE is not None and offerings_path.exists():
+        current_mtime = offerings_path.stat().st_mtime
+        if current_mtime <= _EXTERNAL_OFFERINGS_MTIME:
+            logger.debug("Offerings catalog cache hit for %s", offerings_path)
+            return _EXTERNAL_OFFERINGS_CACHE
+        # File has changed, invalidate cache
+        _EXTERNAL_OFFERINGS_CACHE = None
+
+    if not offerings_path.exists():
+        logger.debug("Offerings catalog file not found: %s", offerings_path)
+        _EXTERNAL_OFFERINGS_CACHE = {}
+        _EXTERNAL_OFFERINGS_MTIME = 0.0
+        return {}
+
+    try:
+        with open(offerings_path, encoding="utf-8") as f:
+            data = json.load(f)
+        _EXTERNAL_OFFERINGS_CACHE = data.get("offerings", {})
+        _EXTERNAL_OFFERINGS_MTIME = offerings_path.stat().st_mtime
+        logger.debug("Loaded offerings catalog from %s (%d entries)", offerings_path, len(_EXTERNAL_OFFERINGS_CACHE))
+    except Exception as e:
+        logger.warning("Failed to load offerings catalog from %s: %s", offerings_path, e)
+        _EXTERNAL_OFFERINGS_CACHE = {}
+        _EXTERNAL_OFFERINGS_MTIME = 0.0
+
+    return _EXTERNAL_OFFERINGS_CACHE
+
+
+def _load_external_packages() -> dict[str, Any]:
+    """Load external packages catalog.v1.json if available."""
+    global _EXTERNAL_PACKAGES_CACHE, _EXTERNAL_PACKAGES_MTIME
+
+    packages_path = _get_external_packages_path()
+
+    # Check if cache is still valid
+    if _EXTERNAL_PACKAGES_CACHE is not None and packages_path.exists():
+        current_mtime = packages_path.stat().st_mtime
+        if current_mtime <= _EXTERNAL_PACKAGES_MTIME:
+            logger.debug("Packages catalog cache hit for %s", packages_path)
+            return _EXTERNAL_PACKAGES_CACHE
+        # File has changed, invalidate cache
+        _EXTERNAL_PACKAGES_CACHE = None
+
+    if not packages_path.exists():
+        logger.debug("Packages catalog file not found: %s", packages_path)
+        _EXTERNAL_PACKAGES_CACHE = {}
+        _EXTERNAL_PACKAGES_MTIME = 0.0
+        return {}
+
+    try:
+        with open(packages_path, encoding="utf-8") as f:
+            data = json.load(f)
+        _EXTERNAL_PACKAGES_CACHE = data.get("packages", {})
+        _EXTERNAL_PACKAGES_MTIME = packages_path.stat().st_mtime
+        logger.debug("Loaded packages catalog from %s (%d entries)", packages_path, len(_EXTERNAL_PACKAGES_CACHE))
+    except Exception as e:
+        logger.warning("Failed to load packages catalog from %s: %s", packages_path, e)
+        _EXTERNAL_PACKAGES_CACHE = {}
+        _EXTERNAL_PACKAGES_MTIME = 0.0
+
+    return _EXTERNAL_PACKAGES_CACHE
 
 
 def _get_provider_pricing(provider_name: str) -> dict[str, Any]:
@@ -642,6 +753,29 @@ def get_provider_catalog_entry(provider_name: str) -> dict[str, Any]:
     return item
 
 
+def get_offerings_catalog() -> dict[str, Any]:
+    """Return the loaded external offerings catalog (experimental)."""
+    return _load_external_offerings()
+
+
+def get_packages_catalog() -> dict[str, Any]:
+    """Return the loaded external packages catalog (experimental)."""
+    return _load_external_packages()
+
+
+def get_offering_pricing(model_id: str, provider_id: str) -> dict[str, Any]:
+    """Return pricing metadata for a specific model-provider offering.
+
+    Looks up the offerings catalog for an offering matching the given model and provider.
+    Returns the pricing dict if found, otherwise empty dict.
+    """
+    offerings = _load_external_offerings()
+    for offering in offerings.values():
+        if offering.get("model_id") == model_id and offering.get("provider_id") == provider_id:
+            return offering.get("pricing", {})
+    return {}
+
+
 def _refresh_state_from_review(last_reviewed: str) -> tuple[str, int]:
     reviewed = str(last_reviewed or "").strip()
     if not reviewed:
@@ -1120,6 +1254,8 @@ def build_provider_catalog_report(config: Config) -> dict[str, Any]:
         "total_providers": len(config.providers),
         "alert_count": len(alerts),
         "cost_truth": cost_truth_stats,
+        "offerings_count": len(_load_external_offerings()),
+        "packages_count": len(_load_external_packages()),
         "priority_clusters": priority_clusters,
         "priority_next": priority_next,
         "recommendations": recommendations,

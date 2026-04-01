@@ -86,6 +86,12 @@ local key and route readiness. The same summary now shows up in Dashboard and
 Quick Setup, and Gate can re-check due sources on a conservative background
 interval.
 
+Gate v1.16+ extends the metadata system with additional catalogs for **offerings**
+(model-provider-price mappings) and **packages** (provider credit packages, quotas,
+and subscriptions). These enable cost-aware routing decisions and operator alerts
+for expiring credits. Catalogs are loaded from the external `fusionaize-metadata`
+repository and cached locally.
+
 ```bash
 ./scripts/faigate-menu
 ./scripts/faigate-config-wizard --help
