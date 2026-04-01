@@ -40,6 +40,7 @@ from .bridges.anthropic import (
 )
 from .canonical import CanonicalChatRequest, CanonicalChatResponse, CanonicalResponseMessage
 from .config import Config, load_config
+from .dashboard import _metadata_catalogs_summary, _metadata_packages_detail
 from .dashboard_web import DASHBOARD_HTML
 from .hooks import (
     AppliedHooks,
