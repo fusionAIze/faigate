@@ -331,6 +331,47 @@ def _get_provider_pricing(provider_name: str) -> dict[str, Any]:
     return pricing
 
 
+def _get_pricing_for_provider_and_model(provider_name: str, model_id: str | None = None) -> dict[str, Any]:
+    """Get pricing metadata for a provider and optional specific model.
+
+    First tries the offerings catalog for the exact model-provider pair.
+    If not found, falls back to provider-level pricing.
+    """
+    # If model_id is provided, try offerings catalog
+    if model_id:
+        offering_pricing = get_offering_pricing(model_id, provider_name)
+        if offering_pricing:
+            # Normalize field names (same mapping as in _get_provider_pricing)
+            field_mapping = {
+                "input_cost_per_1m": "input",
+                "output_cost_per_1m": "output",
+                "cache_read_cost_per_1m": "cache_read",
+            }
+            normalized = {}
+            for src, dst in field_mapping.items():
+                if src in offering_pricing and dst not in offering_pricing:
+                    normalized[dst] = offering_pricing[src]
+                elif dst in offering_pricing:
+                    normalized[dst] = offering_pricing[dst]
+            # Preserve other fields (source_type, freshness_status, etc.)
+            for key, value in offering_pricing.items():
+                if key not in normalized:
+                    normalized[key] = value
+            return normalized
+    # Fall back to provider-level pricing
+    return _get_provider_pricing(provider_name)
+
+
+def _get_packages_for_provider(provider_name: str) -> list[dict[str, Any]]:
+    """Return active packages for a provider from the packages catalog."""
+    packages_catalog = get_packages_catalog()
+    provider_packages = []
+    for package_id, package in packages_catalog.items():
+        if package.get("provider_id") == provider_name:
+            provider_packages.append(package)
+    return provider_packages
+
+
 _CATALOG: dict[str, dict[str, Any]] = {
     "deepseek-chat": {
         "recommended_model": get_active_model_id("deepseek/chat"),

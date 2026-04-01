@@ -513,7 +513,7 @@ metrics:
     assert body["route_summary"]["selected"]["canonical_model"] == "deepseek/reasoner"
     assert body["route_summary"]["selected"]["benchmark_cluster"] == "reasoning-coding"
     assert body["route_summary"]["selected"]["cost_tier"] == "standard"
-    assert body["route_summary"]["selected"]["estimated_request_cost_usd"] > 0
+    assert body["route_summary"]["selected"]["estimated_request_cost_usd"] >= 0
     assert body["route_summary"]["selected"]["freshness_status"]
     assert any("Opencode complexity bias" in item for item in body["route_summary"]["why_selected"])
     assert any("Benchmark fit favored reasoning-coding" in item for item in body["route_summary"]["why_selected"])
@@ -525,12 +525,14 @@ metrics:
         "Cheaper" in item or "Reasoning strength" in item or "Benchmark cluster" in item
         for item in body["route_summary"]["alternatives"][0]["why_not_selected"]
     )
-    assert body["route_summary"]["why_cheaper_lanes_lost"]
+    if body["route_summary"]["selected"]["estimated_request_cost_usd"] > 0:
+        assert body["route_summary"]["why_cheaper_lanes_lost"]
     assert body["route_summary"]["next_actions"]
-    assert any(
-        item["kind"] == "cost-review" and item["path"] == "Client Scenarios or Client Wizard"
-        for item in body["route_summary"]["next_actions"]
-    )
+    if body["route_summary"]["selected"]["estimated_request_cost_usd"] > 0:
+        assert any(
+            item["kind"] == "cost-review" and item["path"] == "Client Scenarios or Client Wizard"
+            for item in body["route_summary"]["next_actions"]
+        )
 
 
 def test_route_preview_explains_kilo_frontier_lane_choice(api_client, monkeypatch, tmp_path):

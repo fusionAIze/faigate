@@ -6,12 +6,17 @@ from __future__ import annotations
 
 import json
 import time
+from datetime import date
 from pathlib import Path
 from typing import Any
 
 from .lane_registry import get_route_add_recommendations
 from .metrics import MetricsStore
-from .provider_catalog import build_provider_refresh_guidance
+from .provider_catalog import (
+    build_provider_refresh_guidance,
+    get_offerings_catalog,
+    get_packages_catalog,
+)
 from .provider_catalog_refresh import (
     build_catalog_alert_summary,
     build_catalog_alerts,
@@ -207,6 +212,100 @@ def _provider_catalog_summary(db_path: str) -> dict[str, Any]:
         return summary
     finally:
         store.close()
+
+
+def _metadata_catalogs_summary() -> dict[str, Any]:
+    """Return summary statistics for offerings and packages catalogs."""
+    offerings = get_offerings_catalog()
+    packages = get_packages_catalog()
+
+    # Count offerings by freshness
+    freshness_counts = {"fresh": 0, "aging": 0, "stale": 0, "unknown": 0}
+    for offering in offerings.values():
+        pricing = offering.get("pricing", {})
+        freshness = pricing.get("freshness_status", "unknown")
+        if freshness in freshness_counts:
+            freshness_counts[freshness] += 1
+        else:
+            freshness_counts["unknown"] += 1
+
+    # Count packages by type and expiry
+    package_types = {}
+    expiring_soon = 0
+    today = date.today()
+    for package in packages.values():
+        pkg_type = package.get("type", "unknown")
+        package_types[pkg_type] = package_types.get(pkg_type, 0) + 1
+
+        # Check expiry
+        expiry_str = package.get("expiry_date")
+        if expiry_str:
+            try:
+                expiry_date = date.fromisoformat(expiry_str)
+                days_left = (expiry_date - today).days
+                if 0 <= days_left <= 7:
+                    expiring_soon += 1
+            except ValueError:
+                pass
+
+    return {
+        "offerings": {
+            "total": len(offerings),
+            "freshness": freshness_counts,
+        },
+        "packages": {
+            "total": len(packages),
+            "types": package_types,
+            "expiring_soon": expiring_soon,
+        },
+    }
+
+
+def _metadata_packages_detail() -> list[dict[str, Any]]:
+    """Return detailed package information for dashboard."""
+    packages = get_packages_catalog()
+    today = date.today()
+    result = []
+    for package in packages.values():
+        expiry_str = package.get("expiry_date")
+        days_left = None
+        if expiry_str:
+            try:
+                expiry_date = date.fromisoformat(expiry_str)
+                days_left = (expiry_date - today).days
+            except ValueError:
+                pass
+        total = package.get("total_credits")
+        used = package.get("used_credits", 0)
+        remaining = total - used if total is not None else None
+        remaining_pct = (remaining / total * 100) if total and total > 0 else 0
+        result.append(
+            {
+                "package_id": package.get("package_id"),
+                "provider_id": package.get("provider_id"),
+                "name": package.get("name"),
+                "type": package.get("type"),
+                "total_credits": total,
+                "used_credits": used,
+                "remaining_credits": remaining,
+                "remaining_pct": remaining_pct,
+                "expiry_date": expiry_str,
+                "days_left": days_left,
+                "currency": package.get("currency"),
+                "price": package.get("price"),
+                "renewal_policy": package.get("renewal_policy"),
+                "notes": package.get("notes"),
+            }
+        )
+    # Sort by expiry (soonest first, then no expiry), then by remaining percentage (lowest first)
+    result.sort(
+        key=lambda p: (
+            0 if p["days_left"] is not None and p["days_left"] >= 0 else 1,
+            p["days_left"] if p["days_left"] is not None else float("inf"),
+            p["remaining_pct"] if p["remaining_pct"] is not None else float("inf"),
+        )
+    )
+    return result
 
 
 def _lane_family_summary(
@@ -1029,6 +1128,15 @@ def build_dashboard_report(
                 "review_now": _safe_int(provider_catalog_alert_summary.get("review_now")),
                 "inspect": _safe_int(provider_catalog_alert_summary.get("inspect")),
             },
+            "metadata_catalogs": {
+                "offerings_total": _safe_int(_metadata_catalogs_summary()["offerings"]["total"]),
+                "offerings_fresh": _safe_int(_metadata_catalogs_summary()["offerings"]["freshness"]["fresh"]),
+                "offerings_aging": _safe_int(_metadata_catalogs_summary()["offerings"]["freshness"]["aging"]),
+                "offerings_stale": _safe_int(_metadata_catalogs_summary()["offerings"]["freshness"]["stale"]),
+                "packages_total": _safe_int(_metadata_catalogs_summary()["packages"]["total"]),
+                "packages_expiring_soon": _safe_int(_metadata_catalogs_summary()["packages"]["expiring_soon"]),
+                "packages_detail": _metadata_packages_detail(),
+            },
             "drivers": {
                 "top_provider": top_provider,
                 "top_cost_provider": top_provider_cost,
@@ -1125,6 +1233,42 @@ def _render_overview(report: dict[str, Any]) -> str:
             f"  Recent changes     {_safe_int(report['cards']['provider_catalog']['recent_changes'])}",
         ]
     )
+
+    # Add metadata catalogs section
+    lines.extend(
+        [
+            "",
+            "Metadata catalogs",
+            f"  Offerings          {_safe_int(report['cards']['metadata_catalogs']['offerings_total'])} total ({_safe_int(report['cards']['metadata_catalogs']['offerings_fresh'])} fresh)",
+            f"  Packages           {_safe_int(report['cards']['metadata_catalogs']['packages_total'])} total ({_safe_int(report['cards']['metadata_catalogs']['packages_expiring_soon'])} expiring soon)",
+        ]
+    )
+    # Add package details if any packages exist
+    packages_detail = report["cards"]["metadata_catalogs"].get("packages_detail", [])
+    if packages_detail:
+        # Show top 3 packages (sorted by expiry and remaining)
+        lines.append("")
+        lines.append("  Package details")
+        for pkg in packages_detail[:3]:
+            provider = pkg.get("provider_id", "unknown")
+            name = pkg.get("name", "unnamed")
+            total = pkg.get("total_credits")
+            remaining = pkg.get("remaining_credits")
+            expiry = pkg.get("expiry_date")
+            days_left = pkg.get("days_left")
+            if total is not None and remaining is not None:
+                creds = f"{remaining}/{total}"
+                pct = pkg.get("remaining_pct", 0)
+                creds_line = f"{creds} ({pct:.0f}%)"
+            else:
+                creds_line = "n/a"
+            expiry_line = ""
+            if expiry:
+                if days_left is not None and days_left >= 0:
+                    expiry_line = f", expires in {days_left} day{'s' if days_left != 1 else ''}"
+                else:
+                    expiry_line = ", expired"
+            lines.append(f"    - {provider}: {name} ({creds_line}{expiry_line})")
     if report["alerts"]:
         alert = report["alerts"][0]
         lines.extend(

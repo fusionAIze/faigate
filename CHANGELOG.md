@@ -1,5 +1,22 @@
 # fusionAIze Gate Changelog
 
+## v1.17.0 - 2026-04-01
+
+### Added
+
+- Added router integration with offerings catalog for price-aware routing decisions (Phase 2b)
+- Added package scoring based on remaining credits and expiry dates for intelligent routing
+- Added detailed package overview to dashboard with credits, expiry, and provider mapping
+- Added `_metadata_packages_detail()` function for detailed package insights
+- Enhanced dashboard with package details section and cost projection improvements
+
+### Changed
+
+- Updated router cost estimation to prefer offering-specific pricing over provider defaults
+- Improved provider dimension scoring with package score integration
+- Extended dashboard metadata catalogs summary with package details
+- No breaking changes; existing routing behavior remains compatible
+
 ## v1.16.0 - 2026-04-01
 
 ### Added

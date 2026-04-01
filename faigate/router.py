@@ -6,10 +6,12 @@ import logging
 import re
 import time
 from dataclasses import dataclass, field
+from datetime import date
 from typing import Any
 
 from .config import Config
 from .lane_registry import get_canonical_model_catalog, get_canonical_model_routes
+from .provider_catalog import _get_packages_for_provider, _get_pricing_for_provider_and_model
 
 logger = logging.getLogger("faigate.router")
 _BOUNDARY_TEXT_RE = re.compile(r"[a-z0-9]")
@@ -590,6 +592,45 @@ def _estimated_request_cost_usd(provider: dict[str, Any], ctx: _RoutingContext |
     pricing = dict(provider.get("pricing") or {})
     if not pricing:
         return 0.0
+    prompt_rate = float(pricing.get("input", 0) or 0)
+    output_rate = float(pricing.get("output", 0) or 0)
+    cache_rate = float(pricing.get("cache_read", prompt_rate) or 0)
+    prompt_tokens = max(1, int(ctx.total_tokens or 0))
+    output_tokens = int(ctx.requested_output_tokens or 0)
+    if output_tokens <= 0:
+        output_tokens = min(1024, max(128, prompt_tokens // 2))
+
+    cache_cfg = provider.get("cache") or {}
+    cache_mode = str(cache_cfg.get("mode") or "none")
+    cache_min_prefix = int(cache_cfg.get("min_prefix_tokens") or 64)
+    cache_threshold = max(64, cache_min_prefix)
+    if ctx.stable_prefix_tokens >= cache_threshold and cache_mode != "none":
+        cached_tokens = min(prompt_tokens, int(ctx.stable_prefix_tokens))
+        prompt_cost = ((cached_tokens * cache_rate) + ((prompt_tokens - cached_tokens) * prompt_rate)) / 1_000_000
+    else:
+        prompt_cost = (prompt_tokens * prompt_rate) / 1_000_000
+
+    output_cost = (output_tokens * output_rate) / 1_000_000
+    return round(prompt_cost + output_cost, 6)
+
+
+def _estimated_request_cost_usd_with_lane(
+    provider_name: str,
+    model_id: str | None,
+    provider: dict[str, Any],
+    ctx: _RoutingContext | None,
+) -> float:
+    """Estimate request cost using offerings catalog pricing if available."""
+    if ctx is None:
+        return 0.0
+    # First check provider config pricing
+    config_pricing = provider.get("pricing")
+    if config_pricing and isinstance(config_pricing, dict):
+        pricing = config_pricing
+    else:
+        pricing = _get_pricing_for_provider_and_model(provider_name, model_id)
+        if not pricing:
+            return 0.0
     prompt_rate = float(pricing.get("input", 0) or 0)
     output_rate = float(pricing.get("output", 0) or 0)
     cache_rate = float(pricing.get("cache_read", prompt_rate) or 0)
@@ -1572,7 +1613,8 @@ class Router:
         benchmark_score = self._benchmark_posture_score(lane, routing_posture)
         benchmark_request_score = _benchmark_request_score(lane, ctx)
         cost_tier = str(capabilities.get("cost_tier") or lane.get("quality_tier") or "")
-        estimated_request_cost_usd = _estimated_request_cost_usd(provider, ctx)
+        model_id = lane.get("canonical_model")
+        estimated_request_cost_usd = _estimated_request_cost_usd_with_lane(name, model_id, provider, ctx)
         cost_score = _cost_posture_score(
             estimated_cost_usd=estimated_request_cost_usd,
             routing_posture=routing_posture,
@@ -1583,6 +1625,42 @@ class Router:
         kilo_score = int(kilo_fit.get("score") or 0)
         adaptation_penalty = int(runtime_state.get("penalty", 0) or 0)
         recovery_score = self._recovery_posture_score(lane, runtime_state, routing_posture)
+        # Package score based on remaining credits and expiry
+        package_score = 0
+        package_details = []
+        packages = _get_packages_for_provider(name)
+        for pkg in packages:
+            total = pkg.get("total_credits")
+            used = pkg.get("used_credits", 0)
+            expiry = pkg.get("expiry_date")
+            if total is not None and total > 0:
+                remaining = total - used
+                remaining_ratio = remaining / total
+                # Score based on remaining ratio (0-5 points)
+                remaining_score = min(5, int(remaining_ratio * 5))
+                expiry_score = 0
+                if expiry:
+                    try:
+                        expiry_date = date.fromisoformat(expiry)
+                        days_left = (expiry_date - date.today()).days
+                        if days_left > 0:
+                            # Prefer packages that expire soon (use them up)
+                            if days_left <= 7:
+                                expiry_score = 5
+                            elif days_left <= 30:
+                                expiry_score = 2
+                    except ValueError:
+                        pass
+                package_score += remaining_score + expiry_score
+                package_details.append(
+                    {
+                        "package_id": pkg.get("package_id"),
+                        "remaining": remaining,
+                        "total": total,
+                        "expiry_date": expiry,
+                        "remaining_ratio": remaining_ratio,
+                    }
+                )
         image_score = 0
         image_policy_score = 0
         image_outputs_fit = True
@@ -1641,6 +1719,7 @@ class Router:
             + freshness_score
             + kilo_score
             + recovery_score
+            + package_score
             + image_score
             + image_policy_score
             - adaptation_penalty
@@ -1671,6 +1750,8 @@ class Router:
             "kilo_reasons": list(kilo_fit.get("reasons") or []),
             "adaptation_penalty": adaptation_penalty,
             "recovery_score": recovery_score,
+            "package_score": package_score,
+            "package_details": package_details,
             "image_score": image_score,
             "image_policy_score": image_policy_score,
             "headroom": headroom,
