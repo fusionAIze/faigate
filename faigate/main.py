@@ -41,6 +41,7 @@ from .bridges.anthropic import (
 from .canonical import CanonicalChatRequest, CanonicalChatResponse, CanonicalResponseMessage
 from .config import Config, load_config
 from .dashboard_web import DASHBOARD_HTML
+from .dashboard import _metadata_catalogs_summary, _metadata_packages_detail
 from .hooks import (
     AppliedHooks,
     HookExecutionError,
@@ -401,9 +402,7 @@ async def _refresh_provider_source_catalog(*, force: bool = False) -> list[dict[
         record_availability_from_config,
         _provider_catalog_store,
         config_path=_provider_catalog_config_path(),
-        health_payload={
-            "providers": {item["name"]: item for item in _build_provider_inventory()}
-        },
+        health_payload={"providers": {item["name"]: item for item in _build_provider_inventory()}},
     )
     await asyncio.to_thread(
         refresh_local_model_availability,
@@ -2394,9 +2393,7 @@ async def provider_catalog():
             record_availability_from_config,
             _provider_catalog_store,
             config_path=_provider_catalog_config_path(),
-            health_payload={
-                "providers": {item["name"]: item for item in _build_provider_inventory()}
-            },
+            health_payload={"providers": {item["name"]: item for item in _build_provider_inventory()}},
         )
         source_catalog = build_catalog_summary(
             _provider_catalog_store,
@@ -2523,6 +2520,8 @@ async def stats(
         "operator_actions": _metrics.get_operator_breakdown(**operator_filters),
         "hourly": _metrics.get_hourly_series(24),
         "daily": _metrics.get_daily_totals(30),
+        "packages_summary": _metadata_catalogs_summary()["packages"],
+        "packages_detail": _metadata_packages_detail(),
     }
 
 

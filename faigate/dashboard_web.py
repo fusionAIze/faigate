@@ -2531,6 +2531,32 @@ function topAlertBundle(bundle) {
       suggestion: alert.recommended_model ? 'Check recommended model ' + alert.recommended_model + '.' : 'Refresh the catalog or review the source trail.',
     });
   });
+  // Package renewal alerts
+  const packagesSummary = bundle.stats.packages_summary || {};
+  const packagesDetail = bundle.stats.packages_detail || [];
+  if (packagesSummary.expiring_soon > 0) {
+    alerts.push({
+      level: 'warning',
+      headline: packagesSummary.expiring_soon + ' package' + (packagesSummary.expiring_soon === 1 ? '' : 's') + ' expiring soon',
+      detail: 'Package credits will expire within 7 days.',
+      suggestion: 'Review packages and consider renewal before expiry.',
+    });
+  }
+  if (packagesDetail.length > 0) {
+    const lowCreditPackages = packagesDetail.filter(pkg => {
+      const remaining = pkg.remaining_credits;
+      const total = pkg.total_credits;
+      return remaining !== null && total !== null && total > 0 && remaining / total < 0.1;
+    });
+    if (lowCreditPackages.length > 0) {
+      alerts.push({
+        level: 'warning',
+        headline: lowCreditPackages.length + ' package' + (lowCreditPackages.length === 1 ? '' : 's') + ' running low on credits',
+        detail: 'Packages have less than 10% credits remaining.',
+        suggestion: 'Monitor usage or purchase additional credits.',
+      });
+    }
+  }
   const unhealthy = (bundle.inventory.providers || []).filter(row => row.healthy === false);
   if (unhealthy.length) {
     const top = unhealthy[0];
@@ -2664,6 +2690,8 @@ function render(bundle) {
   latestBundle = bundle;
   const totals = bundle.stats.totals || {};
   const providers = bundle.inventory.providers || [];
+  const packagesSummary = bundle.stats.packages_summary || {};
+  const packagesDetail = bundle.stats.packages_detail || [];
   const providerMetrics = Object.fromEntries((bundle.stats.providers || []).map(row => [row.provider, row]));
   const clientTotals = bundle.stats.client_totals || [];
   const routing = bundle.stats.routing || [];
@@ -2737,6 +2765,7 @@ function render(bundle) {
     ['Top lane family', laneFamilies.length ? (laneFamilies[0].lane_family || 'unclassified') : '—'],
     ['Top cost client', topCost ? (topCost.client_tag || topCost.client_profile || 'generic') : '—'],
     ['Catalog due', String(sourceCatalog.due_sources || 0)],
+    ['Packages', String(packagesSummary.total || 0) + (packagesSummary.expiring_soon > 0 ? ' (' + String(packagesSummary.expiring_soon) + ' expiring)' : '')],
   ].map(([label, value]) => `<div class="rack-row"><div class="label">${esc(label)}</div><strong>${esc(value)}</strong></div>`).join('');
 
   $('#overview-cards').innerHTML = [
@@ -2747,6 +2776,7 @@ function render(bundle) {
     {kicker:'Estimated spend', value:fmtUsd(totals.total_cost_usd || 0), detail:fmtTok((totals.total_prompt_tokens || 0) + (totals.total_compl_tokens || 0)) + ' tokens', tone:'orange'},
     {kicker:'Avg latency', value:fmtMs(totals.avg_latency_ms || 0), detail:'Last request ' + ago(totals.last_request), tone:'green'},
     {kicker:'Catalog drift', value:String(bundle.catalog.alert_count || 0), detail:String(sourceCatalog.due_sources || 0) + ' reviews due', tone:'orange'},
+    {kicker:'Packages', value:String(packagesSummary.total || 0), detail:String(packagesSummary.expiring_soon || 0) + ' expiring soon', tone:packagesSummary.expiring_soon > 0 ? 'warning' : 'blue'},
     {kicker:'Top client', value:esc(bundle.stats.client_highlights && bundle.stats.client_highlights.top_requests ? (bundle.stats.client_highlights.top_requests.client_tag || bundle.stats.client_highlights.top_requests.client_profile || 'generic') : '—'), detail:'Highest request volume', tone:'lime'},
   ].map(metricCard).join('');
 
