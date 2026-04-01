@@ -880,9 +880,9 @@ request_hooks:
   - mode-override-header
   on_error: continue
 api_surfaces:
-  anthropic_messages: false
+  anthropic_messages: true
 anthropic_bridge:
-  enabled: false
+  enabled: true
   allow_claude_code_hints: true
   model_aliases:
     claude-code: auto
@@ -896,6 +896,13 @@ anthropic_bridge:
     claude-opus-4-6[1m]: premium
     claude-haiku-4-5: eco
     claude-haiku-4-5-20251001: eco
+    # Claude Desktop model aliases
+    claude-3-5-sonnet-20241022: auto
+    claude-3-5-sonnet: auto
+    claude-3-opus-20240229: premium
+    claude-3-opus: premium
+    claude-3-haiku-20240307: eco
+    claude-3-haiku: eco
 routing_modes:
   default: auto
   enabled: true
