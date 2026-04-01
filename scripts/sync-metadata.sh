@@ -4,7 +4,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-METADATA_DIR="/Users/andrelange/Documents/repositories/github/fusionaize-metadata"
+METADATA_DIR="${FAIGATE_METADATA_DIR:-$HOME/.faigate/metadata}"
 LOG_FILE="/tmp/faigate-metadata-sync.log"
 
 echo "$(date): Starting metadata synchronization" >> "$LOG_FILE"

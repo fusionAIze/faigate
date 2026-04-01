@@ -18,10 +18,8 @@ from .lane_registry import (
     get_provider_lane_binding,
 )
 
-# Path to external fusionaize-metadata repository
-_EXTERNAL_METADATA_ROOT = Path("/Users/andrelange/Documents/repositories/github/fusionaize-metadata")
-_EXTERNAL_CATALOG_PATH = _EXTERNAL_METADATA_ROOT / "providers" / "catalog.v1.json"
-_EXTERNAL_OVERLAY_PATH = _EXTERNAL_METADATA_ROOT / "products" / "gate" / "overlays.v1.json"  # noqa: E501
+# Path to external fusionaize-metadata repository (set via FAIGATE_PROVIDER_METADATA_DIR)
+_EXTERNAL_METADATA_ROOT = Path("/nonexistent/faigate-metadata-fallback")
 
 _COMMUNITY_WATCHLIST = {
     "label": "free-llm-api-resources",
@@ -40,8 +38,8 @@ _EXTERNAL_CATALOG_PRODUCT_ENV = "FAIGATE_PROVIDER_METADATA_PRODUCT"
 _DEFAULT_METADATA_PRODUCT = "gate"
 _METADATA_CATALOG_RELATIVE_PATH = Path("providers") / "catalog.v1.json"
 
-# Hardcoded fallback path for external metadata repository (legacy)
-_EXTERNAL_METADATA_ROOT = Path("/Users/andrelange/Documents/repositories/github/fusionaize-metadata")
+# Hardcoded fallback path for external metadata repository (legacy - non-existent by default)
+# Override with FAIGATE_PROVIDER_METADATA_DIR environment variable
 
 # Cache for external metadata
 _EXTERNAL_CATALOG_CACHE: dict[str, Any] | None = None
