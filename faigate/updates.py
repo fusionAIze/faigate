@@ -151,9 +151,7 @@ def apply_auto_update_guardrails(
 
     if providers_unhealthy > max_unhealthy_providers:
         result["eligible"] = False
-        result["blocked_reason"] = (
-            f"Too many unhealthy providers ({providers_unhealthy} > {max_unhealthy_providers})"
-        )
+        result["blocked_reason"] = f"Too many unhealthy providers ({providers_unhealthy} > {max_unhealthy_providers})"
         return result
 
     return result
@@ -181,9 +179,7 @@ def apply_release_age_guardrail(
         return result
     if age_hours < min_release_age_hours:
         result["eligible"] = False
-        result["blocked_reason"] = (
-            f"Release is too new ({age_hours:.1f}h < {min_release_age_hours}h)"
-        )
+        result["blocked_reason"] = f"Release is too new ({age_hours:.1f}h < {min_release_age_hours}h)"
     return result
 
 
@@ -238,9 +234,7 @@ def apply_maintenance_window_guardrail(
         return result
     if not hour_allowed:
         result["eligible"] = False
-        result["blocked_reason"] = (
-            f"Outside maintenance window ({start_hour:02d}:00-{end_hour:02d}:00 {timezone_name})"
-        )
+        result["blocked_reason"] = f"Outside maintenance window ({start_hour:02d}:00-{end_hour:02d}:00 {timezone_name})"
     return result
 
 
@@ -310,9 +304,7 @@ class UpdateChecker:
             "enabled": bool((auto_update or {}).get("enabled", False)),
             "allow_major": bool((auto_update or {}).get("allow_major", False)),
             "rollout_ring": str((auto_update or {}).get("rollout_ring", "early")),
-            "require_healthy_providers": bool(
-                (auto_update or {}).get("require_healthy_providers", True)
-            ),
+            "require_healthy_providers": bool((auto_update or {}).get("require_healthy_providers", True)),
             "max_unhealthy_providers": int((auto_update or {}).get("max_unhealthy_providers", 0)),
             "min_release_age_hours": int((auto_update or {}).get("min_release_age_hours", 0)),
             "provider_scope": dict((auto_update or {}).get("provider_scope") or {}),
@@ -373,9 +365,7 @@ class UpdateChecker:
             "allowed_update_types": allowed_types,
             "allow_major": allow_major,
             "rollout_ring": rollout_ring,
-            "require_healthy_providers": bool(
-                self.auto_update.get("require_healthy_providers", True)
-            ),
+            "require_healthy_providers": bool(self.auto_update.get("require_healthy_providers", True)),
             "max_unhealthy_providers": int(self.auto_update.get("max_unhealthy_providers", 0)),
             "min_release_age_hours": int(self.auto_update.get("min_release_age_hours", 0)),
             "provider_scope": dict(self.auto_update.get("provider_scope") or {}),
@@ -487,9 +477,7 @@ class UpdateChecker:
                 release_channel=self.release_channel,
                 update_type=update_type,
                 alert_level=alert_level,
-                recommended_action=(
-                    "Upgrade to the latest release" if update_available else "No action needed"
-                ),
+                recommended_action=("Upgrade to the latest release" if update_available else "No action needed"),
                 auto_update=apply_release_age_guardrail(
                     self._auto_update_status(
                         status="ok",

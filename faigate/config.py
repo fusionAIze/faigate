@@ -260,21 +260,13 @@ def _validate_provider_base_url(name: str, base_url: str) -> str:
     parsed = urlparse(base_url)
     scheme = (parsed.scheme or "").strip().lower()
     if scheme not in {"http", "https"}:
-        raise ConfigError(
-            "Provider "
-            f"'{name}' base_url must use http or https "
-            f"(got '{parsed.scheme or 'missing'}')"
-        )
+        raise ConfigError(f"Provider '{name}' base_url must use http or https (got '{parsed.scheme or 'missing'}')")
 
     if not parsed.netloc:
         raise ConfigError(f"Provider '{name}' base_url must include a host")
 
     if scheme == "http" and not _looks_local_base_url(base_url):
-        raise ConfigError(
-            "Provider "
-            f"'{name}' base_url must use https unless it points "
-            "to local/private network space"
-        )
+        raise ConfigError(f"Provider '{name}' base_url must use https unless it points to local/private network space")
 
     return base_url
 
@@ -350,9 +342,7 @@ def _normalize_positive_int(value: Any, *, field_name: str, provider_name: str) 
     if value in (None, ""):
         return None
     if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
-        raise ConfigError(
-            f"Provider '{provider_name}' field '{field_name}' must be a positive integer"
-        )
+        raise ConfigError(f"Provider '{provider_name}' field '{field_name}' must be a positive integer")
     return value
 
 
@@ -361,9 +351,7 @@ def _normalize_nonneg_int(value: Any, *, field_name: str, provider_name: str) ->
     if value in (None, ""):
         return None
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-        raise ConfigError(
-            f"Provider '{provider_name}' field '{field_name}' must be a non-negative integer"
-        )
+        raise ConfigError(f"Provider '{provider_name}' field '{field_name}' must be a non-negative integer")
     return value
 
 
@@ -404,8 +392,7 @@ def _normalize_provider_cache(name: str, cfg: dict[str, Any]) -> dict[str, Any]:
     if mode not in _SUPPORTED_CACHE_MODES:
         supported = ", ".join(sorted(_SUPPORTED_CACHE_MODES))
         raise ConfigError(
-            f"Provider '{name}' field 'cache.mode' uses unsupported value '{mode}'"
-            f" (supported: {supported})"
+            f"Provider '{name}' field 'cache.mode' uses unsupported value '{mode}' (supported: {supported})"
         )
 
     read_discount = raw.get("read_discount")
@@ -443,13 +430,9 @@ def _normalize_provider_cache(name: str, cfg: dict[str, Any]) -> dict[str, Any]:
         try:
             cache_read_discount = float(cache_read_discount_raw)
         except (TypeError, ValueError):
-            raise ConfigError(
-                f"Provider '{name}' field 'cache.cache_read_discount' must be a float"
-            )
+            raise ConfigError(f"Provider '{name}' field 'cache.cache_read_discount' must be a float")
         if not (0.0 <= cache_read_discount <= 1.0):
-            raise ConfigError(
-                f"Provider '{name}' field 'cache.cache_read_discount' must be between 0.0 and 1.0"
-            )
+            raise ConfigError(f"Provider '{name}' field 'cache.cache_read_discount' must be between 0.0 and 1.0")
     else:
         # Derive from pricing if available
         input_price = float(pricing.get("input", 0) or 0)
@@ -464,13 +447,9 @@ def _normalize_provider_cache(name: str, cfg: dict[str, Any]) -> dict[str, Any]:
         try:
             cache_write_surcharge = float(cache_write_surcharge_raw)
         except (TypeError, ValueError):
-            raise ConfigError(
-                f"Provider '{name}' field 'cache.cache_write_surcharge' must be a float"
-            )
+            raise ConfigError(f"Provider '{name}' field 'cache.cache_write_surcharge' must be a float")
         if cache_write_surcharge < 1.0:
-            raise ConfigError(
-                f"Provider '{name}' field 'cache.cache_write_surcharge' must be >= 1.0"
-            )
+            raise ConfigError(f"Provider '{name}' field 'cache.cache_write_surcharge' must be >= 1.0")
     else:
         cache_write_surcharge = 1.0
 
@@ -519,9 +498,7 @@ def _normalize_provider_image(name: str, cfg: dict[str, Any]) -> dict[str, Any]:
     normalized_sizes = []
     for value in supported_sizes:
         if not isinstance(value, str) or not value.strip():
-            raise ConfigError(
-                f"Provider '{name}' field 'image.supported_sizes' must contain non-empty strings"
-            )
+            raise ConfigError(f"Provider '{name}' field 'image.supported_sizes' must contain non-empty strings")
         normalized_sizes.append(value.strip())
     if normalized_sizes:
         image["supported_sizes"] = normalized_sizes
@@ -537,9 +514,7 @@ def _normalize_provider_image(name: str, cfg: dict[str, Any]) -> dict[str, Any]:
     normalized_tags = []
     for value in policy_tags:
         if not isinstance(value, str) or not value.strip():
-            raise ConfigError(
-                f"Provider '{name}' field 'image.policy_tags' must contain non-empty strings"
-            )
+            raise ConfigError(f"Provider '{name}' field 'image.policy_tags' must contain non-empty strings")
         normalized_tags.append(value.strip().lower())
     if normalized_tags:
         image["policy_tags"] = normalized_tags
@@ -678,8 +653,7 @@ def _normalize_provider_transport(name: str, cfg: dict[str, Any]) -> dict[str, A
     if auth_mode not in _SUPPORTED_PROVIDER_TRANSPORT_AUTH_MODES:
         supported = ", ".join(sorted(_SUPPORTED_PROVIDER_TRANSPORT_AUTH_MODES))
         raise ConfigError(
-            f"Provider '{name}' transport.auth_mode uses unsupported value "
-            f"'{auth_mode}' (supported: {supported})"
+            f"Provider '{name}' transport.auth_mode uses unsupported value '{auth_mode}' (supported: {supported})"
         )
     normalized["auth_mode"] = auth_mode
 
@@ -696,9 +670,7 @@ def _normalize_provider_transport(name: str, cfg: dict[str, Any]) -> dict[str, A
         )
     normalized["probe_strategy"] = probe_strategy
 
-    probe_payload_kind = (
-        str(transport.get("probe_payload_kind", "default") or "default").strip().lower()
-    )
+    probe_payload_kind = str(transport.get("probe_payload_kind", "default") or "default").strip().lower()
     if not probe_payload_kind:
         raise ConfigError(f"Provider '{name}' transport.probe_payload_kind must be non-empty")
     normalized["probe_payload_kind"] = probe_payload_kind
@@ -710,9 +682,7 @@ def _normalize_provider_transport(name: str, cfg: dict[str, Any]) -> dict[str, A
 
     probe_payload_max_tokens = transport.get("probe_payload_max_tokens", 1)
     if not isinstance(probe_payload_max_tokens, int) or probe_payload_max_tokens < 1:
-        raise ConfigError(
-            f"Provider '{name}' transport.probe_payload_max_tokens must be an integer >= 1"
-        )
+        raise ConfigError(f"Provider '{name}' transport.probe_payload_max_tokens must be an integer >= 1")
     normalized["probe_payload_max_tokens"] = probe_payload_max_tokens
 
     for field_name in (
@@ -729,9 +699,7 @@ def _normalize_provider_transport(name: str, cfg: dict[str, Any]) -> dict[str, A
             raise ConfigError(f"Provider '{name}' transport.{field_name} must be a string")
         cleaned = value.strip()
         if not cleaned.startswith("/"):
-            raise ConfigError(
-                f"Provider '{name}' transport.{field_name} must start with '/' when set"
-            )
+            raise ConfigError(f"Provider '{name}' transport.{field_name} must start with '/' when set")
         normalized[field_name] = cleaned
 
     for field_name in ("requires_api_key", "supports_models_probe"):
@@ -762,9 +730,7 @@ def _normalize_provider_transport(name: str, cfg: dict[str, Any]) -> dict[str, A
         normalized["notes"].append(item.strip())
 
     if normalized["probe_strategy"] == "models" and not normalized["models_path"]:
-        raise ConfigError(
-            f"Provider '{name}' transport.probe_strategy=models requires transport.models_path"
-        )
+        raise ConfigError(f"Provider '{name}' transport.probe_strategy=models requires transport.models_path")
 
     return normalized
 
@@ -778,9 +744,7 @@ def _normalize_provider(name: str, cfg: Any) -> dict[str, Any]:
     backend = normalized.get("backend", "openai-compat")
     if backend not in _SUPPORTED_BACKENDS:
         supported = ", ".join(sorted(_SUPPORTED_BACKENDS))
-        raise ConfigError(
-            f"Provider '{name}' uses unsupported backend '{backend}' (supported: {supported})"
-        )
+        raise ConfigError(f"Provider '{name}' uses unsupported backend '{backend}' (supported: {supported})")
 
     for field in ("base_url", "model"):
         value = normalized.get(field, "")
@@ -802,20 +766,14 @@ def _normalize_provider(name: str, cfg: Any) -> dict[str, Any]:
     contract = contract.strip()
     if contract not in _SUPPORTED_PROVIDER_CONTRACTS:
         supported = ", ".join(sorted(_SUPPORTED_PROVIDER_CONTRACTS))
-        raise ConfigError(
-            f"Provider '{name}' uses unsupported contract '{contract}' (supported: {supported})"
-        )
+        raise ConfigError(f"Provider '{name}' uses unsupported contract '{contract}' (supported: {supported})")
     normalized["contract"] = contract
 
     if contract == "local-worker":
         if backend != "openai-compat":
-            raise ConfigError(
-                f"Provider '{name}' contract 'local-worker' requires backend 'openai-compat'"
-            )
+            raise ConfigError(f"Provider '{name}' contract 'local-worker' requires backend 'openai-compat'")
         if not _looks_local_base_url(str(normalized.get("base_url", ""))):
-            raise ConfigError(
-                f"Provider '{name}' contract 'local-worker' requires a local/private base_url"
-            )
+            raise ConfigError(f"Provider '{name}' contract 'local-worker' requires a local/private base_url")
         normalized.setdefault("tier", "local")
 
         raw_capabilities = normalized.get("capabilities")
@@ -831,9 +789,7 @@ def _normalize_provider(name: str, cfg: Any) -> dict[str, Any]:
         }
     elif contract == "image-provider":
         if backend != "openai-compat":
-            raise ConfigError(
-                f"Provider '{name}' contract 'image-provider' requires backend 'openai-compat'"
-            )
+            raise ConfigError(f"Provider '{name}' contract 'image-provider' requires backend 'openai-compat'")
         raw_capabilities = normalized.get("capabilities")
         if raw_capabilities is None:
             raw_capabilities = {}
@@ -870,15 +826,11 @@ def _normalize_providers(data: dict[str, Any]) -> dict[str, Any]:
         raise ConfigError("'providers' must be a mapping")
 
     normalized = dict(data)
-    normalized["providers"] = {
-        name: _normalize_provider(name, cfg) for name, cfg in providers.items()
-    }
+    normalized["providers"] = {name: _normalize_provider(name, cfg) for name, cfg in providers.items()}
     return normalized
 
 
-def _normalize_string_list(
-    value: Any, *, field_name: str, rule_name: str, allow_empty: bool = False
-) -> list[str]:
+def _normalize_string_list(value: Any, *, field_name: str, rule_name: str, allow_empty: bool = False) -> list[str]:
     """Normalize a config field to a list of non-empty strings."""
     if value is None:
         return []
@@ -892,9 +844,7 @@ def _normalize_string_list(
     normalized = []
     for item in items:
         if not isinstance(item, str) or not item.strip():
-            raise ConfigError(
-                f"Policy '{rule_name}' field '{field_name}' must contain non-empty strings"
-            )
+            raise ConfigError(f"Policy '{rule_name}' field '{field_name}' must contain non-empty strings")
         normalized.append(item.strip())
 
     if not allow_empty and not normalized:
@@ -940,10 +890,7 @@ def _normalize_provider_reference_list(
     unknown = sorted({item for item in normalized if item not in provider_names})
     if unknown:
         unknown_list = ", ".join(unknown)
-        raise ConfigError(
-            "Policy "
-            f"'{rule_name}' field '{field_name}' references unknown providers: {unknown_list}"
-        )
+        raise ConfigError(f"Policy '{rule_name}' field '{field_name}' references unknown providers: {unknown_list}")
     return normalized
 
 
@@ -996,9 +943,7 @@ def _normalize_policy_select(
     unknown_caps = sorted(cap for cap in required_caps if cap not in _ALL_CAPABILITY_FIELDS)
     if unknown_caps:
         unknown_list = ", ".join(unknown_caps)
-        raise ConfigError(
-            f"Policy '{name}' require_capabilities has unknown capability names: {unknown_list}"
-        )
+        raise ConfigError(f"Policy '{name}' require_capabilities has unknown capability names: {unknown_list}")
     normalized["require_capabilities"] = required_caps
 
     cap_values = normalized.get("capability_values", {})
@@ -1010,25 +955,17 @@ def _normalize_policy_select(
     normalized_cap_values: dict[str, list[Any]] = {}
     for cap_name, raw_values in cap_values.items():
         if cap_name not in _ALL_CAPABILITY_FIELDS:
-            raise ConfigError(
-                f"Policy '{name}' capability_values references unknown capability '{cap_name}'"
-            )
+            raise ConfigError(f"Policy '{name}' capability_values references unknown capability '{cap_name}'")
         values = raw_values if isinstance(raw_values, list) else [raw_values]
         if not values:
-            raise ConfigError(
-                f"Policy '{name}' capability_values '{cap_name}' must not be an empty list"
-            )
+            raise ConfigError(f"Policy '{name}' capability_values '{cap_name}' must not be an empty list")
         normalized_values = []
         for value in values:
             if cap_name in _BOOL_CAPABILITY_FIELDS and not isinstance(value, bool):
-                raise ConfigError(
-                    f"Policy '{name}' capability_values '{cap_name}' must use boolean values"
-                )
+                raise ConfigError(f"Policy '{name}' capability_values '{cap_name}' must use boolean values")
             if cap_name in _STRING_CAPABILITY_FIELDS:
                 if not isinstance(value, str) or not value.strip():
-                    raise ConfigError(
-                        f"Policy '{name}' capability_values '{cap_name}' must use non-empty strings"
-                    )
+                    raise ConfigError(f"Policy '{name}' capability_values '{cap_name}' must use non-empty strings")
                 value = value.strip()
             normalized_values.append(value)
         normalized_cap_values[cap_name] = normalized_values
@@ -1038,9 +975,7 @@ def _normalize_policy_select(
         overlap = sorted(set(normalized["allow_providers"]) & set(normalized["deny_providers"]))
         if overlap:
             overlap_list = ", ".join(overlap)
-            raise ConfigError(
-                f"Policy '{name}' cannot allow and deny the same provider(s): {overlap_list}"
-            )
+            raise ConfigError(f"Policy '{name}' cannot allow and deny the same provider(s): {overlap_list}")
 
     if extra_keys and "routing_mode" in extra_keys:
         routing_mode = normalized.get("routing_mode", "")
@@ -1110,15 +1045,12 @@ def _normalize_client_profile_match(name: str, match: Any) -> dict[str, Any]:
 
     if "header_contains" in match:
         if not isinstance(match["header_contains"], dict):
-            raise ConfigError(
-                f"Client profile rule '{name}' field 'header_contains' must be a mapping"
-            )
+            raise ConfigError(f"Client profile rule '{name}' field 'header_contains' must be a mapping")
         normalized_header_contains = {}
         for header_name, values in match["header_contains"].items():
             if not isinstance(header_name, str) or not header_name.strip():
                 raise ConfigError(
-                    f"Client profile rule '{name}' field 'header_contains' "
-                    "must use non-empty header names"
+                    f"Client profile rule '{name}' field 'header_contains' must use non-empty header names"
                 )
             normalized_header_contains[header_name.strip().lower()] = _normalize_string_list(
                 values,
@@ -1132,9 +1064,7 @@ def _normalize_client_profile_match(name: str, match: Any) -> dict[str, Any]:
         if compound in match:
             values = match[compound]
             if not isinstance(values, list) or not values:
-                raise ConfigError(
-                    f"Client profile rule '{name}' field '{compound}' must be a non-empty list"
-                )
+                raise ConfigError(f"Client profile rule '{name}' field '{compound}' must be a non-empty list")
             match[compound] = [_normalize_client_profile_match(name, item) for item in values]
 
     return match
@@ -1203,9 +1133,7 @@ def _normalize_client_profiles(data: dict[str, Any]) -> dict[str, Any]:
     if default_profile not in normalized_profiles:
         normalized_profiles.setdefault(
             default_profile,
-            _normalize_policy_select(
-                f"client profile '{default_profile}'", {}, data.get("providers", {})
-            ),
+            _normalize_policy_select(f"client profile '{default_profile}'", {}, data.get("providers", {})),
         )
 
     rules = raw.get("rules", [])
@@ -1234,9 +1162,7 @@ def _normalize_client_profiles(data: dict[str, Any]) -> dict[str, Any]:
             raise ConfigError(f"Client profile rule #{idx} must define a non-empty 'profile'")
         profile_name = profile_name.strip()
         if profile_name not in normalized_profiles:
-            raise ConfigError(
-                f"Client profile rule #{idx} references unknown profile '{profile_name}'"
-            )
+            raise ConfigError(f"Client profile rule #{idx} references unknown profile '{profile_name}'")
         if profile_name in seen_rule_profiles:
             normalized_rules = [r for r in normalized_rules if r["profile"] != profile_name]
         normalized_rules.append(
@@ -1306,9 +1232,7 @@ def _normalize_routing_modes(data: dict[str, Any]) -> dict[str, Any]:
         for alias in [normalized_name, *aliases]:
             owner = seen_aliases.get(alias)
             if owner and owner != normalized_name:
-                raise ConfigError(
-                    f"Routing mode alias '{alias}' is already used by routing mode '{owner}'"
-                )
+                raise ConfigError(f"Routing mode alias '{alias}' is already used by routing mode '{owner}'")
             seen_aliases[alias] = normalized_name
 
         normalized_modes[normalized_name] = {
@@ -1369,23 +1293,16 @@ def _normalize_model_shortcuts(data: dict[str, Any]) -> dict[str, Any]:
         unknown = sorted(set(spec) - _SUPPORTED_MODEL_SHORTCUT_KEYS)
         if unknown:
             unknown_list = ", ".join(unknown)
-            raise ConfigError(
-                f"Model shortcut '{normalized_name}' has unknown keys: {unknown_list}"
-            )
+            raise ConfigError(f"Model shortcut '{normalized_name}' has unknown keys: {unknown_list}")
 
         target = spec.get("target", "")
         if not isinstance(target, str) or not target.strip():
             raise ConfigError(f"Model shortcut '{normalized_name}' must define a non-empty target")
         target = _resolve_provider_reference(target.strip(), provider_names)
         if target not in provider_names:
-            raise ConfigError(
-                f"Model shortcut '{normalized_name}' references unknown provider '{target}'"
-            )
+            raise ConfigError(f"Model shortcut '{normalized_name}' references unknown provider '{target}'")
         if normalized_name in mode_names:
-            raise ConfigError(
-                "Model shortcut "
-                f"'{normalized_name}' conflicts with routing mode '{normalized_name}'"
-            )
+            raise ConfigError(f"Model shortcut '{normalized_name}' conflicts with routing mode '{normalized_name}'")
 
         aliases = _normalize_string_list(
             spec.get("aliases", []),
@@ -1396,13 +1313,9 @@ def _normalize_model_shortcuts(data: dict[str, Any]) -> dict[str, Any]:
         for alias in [normalized_name, *aliases]:
             owner = seen_aliases.get(alias)
             if owner and owner != normalized_name:
-                raise ConfigError(
-                    f"Model shortcut alias '{alias}' is already used by model shortcut '{owner}'"
-                )
+                raise ConfigError(f"Model shortcut alias '{alias}' is already used by model shortcut '{owner}'")
             if alias in mode_names:
-                raise ConfigError(
-                    f"Model shortcut alias '{alias}' conflicts with routing mode '{alias}'"
-                )
+                raise ConfigError(f"Model shortcut alias '{alias}' conflicts with routing mode '{alias}'")
             seen_aliases[alias] = normalized_name
 
         normalized_shortcuts[normalized_name] = {
@@ -1425,9 +1338,7 @@ def _validate_routing_mode_references(data: dict[str, Any]) -> dict[str, Any]:
     for profile_name, hints in (data.get("client_profiles") or {}).get("profiles", {}).items():
         routing_mode = str((hints or {}).get("routing_mode", "") or "").strip()
         if routing_mode and routing_mode not in mode_names:
-            raise ConfigError(
-                f"Client profile '{profile_name}' references unknown routing_mode '{routing_mode}'"
-            )
+            raise ConfigError(f"Client profile '{profile_name}' references unknown routing_mode '{routing_mode}'")
     return data
 
 
@@ -1607,8 +1518,7 @@ def _normalize_auto_update(data: dict[str, Any]) -> dict[str, Any]:
     overlap = sorted(set(allow_providers) & set(deny_providers))
     if overlap:
         raise ConfigError(
-            "'auto_update.provider_scope' cannot allow and deny the same providers: "
-            + ", ".join(overlap)
+            "'auto_update.provider_scope' cannot allow and deny the same providers: " + ", ".join(overlap)
         )
 
     verification = raw.get("verification", {})
@@ -1626,9 +1536,7 @@ def _normalize_auto_update(data: dict[str, Any]) -> dict[str, Any]:
         raise ConfigError("'auto_update.verification.command' must be a non-empty string")
 
     verification_timeout_seconds = verification.get("timeout_seconds", 30)
-    if isinstance(verification_timeout_seconds, bool) or not isinstance(
-        verification_timeout_seconds, int
-    ):
+    if isinstance(verification_timeout_seconds, bool) or not isinstance(verification_timeout_seconds, int):
         raise ConfigError("'auto_update.verification.timeout_seconds' must be an integer")
     if verification_timeout_seconds <= 0:
         raise ConfigError("'auto_update.verification.timeout_seconds' must be positive")
@@ -1660,8 +1568,7 @@ def _normalize_auto_update(data: dict[str, Any]) -> dict[str, Any]:
     unknown_days = sorted(set(days) - _SUPPORTED_WINDOW_DAYS)
     if unknown_days:
         raise ConfigError(
-            "'auto_update.maintenance_window.days' has unknown weekday values: "
-            + ", ".join(unknown_days)
+            "'auto_update.maintenance_window.days' has unknown weekday values: " + ", ".join(unknown_days)
         )
 
     start_hour = maintenance_window.get("start_hour", 0)
@@ -1793,9 +1700,7 @@ def _normalize_provider_source_refresh(data: dict[str, Any]) -> dict[str, Any]:
     providers = raw.get("providers", ["blackbox", "kilo", "openai"])
     if providers in (None, ""):
         providers = ["blackbox", "kilo", "openai"]
-    if not isinstance(providers, list) or any(
-        not isinstance(item, str) or not item.strip() for item in providers
-    ):
+    if not isinstance(providers, list) or any(not isinstance(item, str) or not item.strip() for item in providers):
         raise ConfigError("'provider_source_refresh.providers' must be a list of names")
 
     normalized = dict(data)
@@ -1877,8 +1782,7 @@ def _normalize_anthropic_bridge(data: dict[str, Any]) -> dict[str, Any]:
         target = _resolve_provider_reference(target, provider_names)
         if target not in valid_targets:
             raise ConfigError(
-                "'anthropic_bridge.model_aliases' references unknown target "
-                f"'{target}' for alias '{alias}'"
+                f"'anthropic_bridge.model_aliases' references unknown target '{target}' for alias '{alias}'"
             )
         normalized_aliases[alias] = target
 

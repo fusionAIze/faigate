@@ -276,9 +276,7 @@ metrics:
     assert cfg.providers["cloud-default"]["transport"]["auth_mode"] == "bearer"
     assert cfg.providers["cloud-default"]["transport"]["profile"] == "openai-compatible"
     assert cfg.providers["cloud-default"]["transport"]["compatibility"] == "native"
-    assert (
-        cfg.providers["cloud-default"]["transport"]["probe_payload_kind"] == "openai-chat-minimal"
-    )
+    assert cfg.providers["cloud-default"]["transport"]["probe_payload_kind"] == "openai-chat-minimal"
     assert cfg.providers["cloud-default"]["transport"]["probe_payload_text"] == "ping"
     assert cfg.providers["cloud-default"]["transport"]["probe_payload_max_tokens"] == 1
     assert cfg.providers["cloud-default"]["transport"]["billing_mode"] == ""
@@ -680,9 +678,7 @@ metrics:
 
     cfg = load_config(path)
     assert cfg.fallback_chain == ["gemini-pro-high"]
-    assert cfg.routing_modes["modes"]["premium"]["select"]["prefer_providers"] == [
-        "gemini-pro-high"
-    ]
+    assert cfg.routing_modes["modes"]["premium"]["select"]["prefer_providers"] == ["gemini-pro-high"]
     assert cfg.model_shortcuts["shortcuts"]["default-pro"]["target"] == "gemini-pro-high"
     assert cfg.anthropic_bridge["model_aliases"]["claude-opus-4-6"] == "gemini-pro-high"
     assert cfg.auto_update["provider_scope"]["allow_providers"] == ["gemini-pro-high"]

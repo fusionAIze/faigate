@@ -9,6 +9,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+from . import registry
 from .config import Config
 from .lane_registry import (
     get_active_model_id,
@@ -16,15 +17,11 @@ from .lane_registry import (
     get_canonical_model_catalog,
     get_provider_lane_binding,
 )
-from . import registry
-
 
 # Path to external fusionaize-metadata repository
-_EXTERNAL_METADATA_ROOT = Path(
-    "/Users/andrelange/Documents/repositories/github/fusionaize-metadata"
-)
+_EXTERNAL_METADATA_ROOT = Path("/Users/andrelange/Documents/repositories/github/fusionaize-metadata")
 _EXTERNAL_CATALOG_PATH = _EXTERNAL_METADATA_ROOT / "providers" / "catalog.v1.json"
-_EXTERNAL_OVERLAY_PATH = _EXTERNAL_METADATA_ROOT / "products" / "gate" / "overlays.v1.json"
+_EXTERNAL_OVERLAY_PATH = _EXTERNAL_METADATA_ROOT / "products" / "gate" / "overlays.v1.json"  # noqa: E501
 
 _COMMUNITY_WATCHLIST = {
     "label": "free-llm-api-resources",
@@ -32,8 +29,9 @@ _COMMUNITY_WATCHLIST = {
 }
 
 _DISCOVERY_DISCLOSURE = (
-    "Provider recommendations stay performance-led. Shown signup or discovery links are "
-    "informational only and do not affect ranking."
+    "Provider recommendations stay performance-led. "
+    "Shown signup or discovery links are informational only "
+    "and do not affect ranking."
 )
 
 _EXTERNAL_CATALOG_ENV = "FAIGATE_PROVIDER_METADATA_FILE"
@@ -43,9 +41,7 @@ _DEFAULT_METADATA_PRODUCT = "gate"
 _METADATA_CATALOG_RELATIVE_PATH = Path("providers") / "catalog.v1.json"
 
 # Hardcoded fallback path for external metadata repository (legacy)
-_EXTERNAL_METADATA_ROOT = Path(
-    "/Users/andrelange/Documents/repositories/github/fusionaize-metadata"
-)
+_EXTERNAL_METADATA_ROOT = Path("/Users/andrelange/Documents/repositories/github/fusionaize-metadata")
 
 # Cache for external metadata
 _EXTERNAL_CATALOG_CACHE: dict[str, Any] | None = None
@@ -75,7 +71,7 @@ def _get_external_catalog_path() -> Path:
 
 def _get_external_overlay_path() -> Path:
     """Get path to external overlays.v1.json for the current product."""
-    product = os.environ.get(_EXTERNAL_CATALOG_PRODUCT_ENV, _DEFAULT_METADATA_PRODUCT).strip()
+    product = os.environ.get(_EXTERNAL_CATALOG_PRODUCT_ENV, _DEFAULT_METADATA_PRODUCT).strip()  # noqa: E501
     if not product:
         product = _DEFAULT_METADATA_PRODUCT
     root = _get_external_metadata_root()
@@ -102,7 +98,7 @@ def _load_external_catalog() -> dict[str, Any]:
         return {}
 
     try:
-        with open(catalog_path, "r", encoding="utf-8") as f:
+        with open(catalog_path, encoding="utf-8") as f:
             data = json.load(f)
         _EXTERNAL_CATALOG_CACHE = data.get("providers", {})
         _EXTERNAL_CATALOG_MTIME = catalog_path.stat().st_mtime
@@ -133,7 +129,7 @@ def _load_external_overlay() -> dict[str, Any]:
         return {}
 
     try:
-        with open(overlay_path, "r", encoding="utf-8") as f:
+        with open(overlay_path, encoding="utf-8") as f:
             data = json.load(f)
         _EXTERNAL_OVERLAY_CACHE = data.get("providers", {})
         _EXTERNAL_OVERLAY_MTIME = overlay_path.stat().st_mtime
@@ -166,7 +162,8 @@ def _get_provider_pricing(provider_name: str) -> dict[str, Any]:
                     pricing[key] = value
 
     # Normalize pricing field names from external catalog
-    # Map input_cost_per_1m -> input, output_cost_per_1m -> output, cache_read_cost_per_1m -> cache_read
+    # Map input_cost_per_1m -> input, output_cost_per_1m -> output,
+    # cache_read_cost_per_1m -> cache_read
     field_mapping = {
         "input_cost_per_1m": "input",
         "output_cost_per_1m": "output",
@@ -219,7 +216,7 @@ def _get_provider_pricing(provider_name: str) -> dict[str, Any]:
             if field in registry_pricing and registry_pricing[field]:
                 # Convert to float if not already
                 value = registry_pricing[field]
-                if isinstance(value, (int, float)) and value > 0 and field not in pricing:
+                if isinstance(value, (int, float)) and value > 0 and field not in pricing:  # noqa: E501
                     pricing[field] = float(value)
 
     return pricing
@@ -298,7 +295,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "official_source_url": "https://openrouter.ai/docs/features/provider-routing",
         "signup_url": "https://openrouter.ai/",
         "watch_sources": [],
-        "notes": "Marketplace fallback path with official provider routing and BYOK support",
+        "notes": "Marketplace fallback path with official provider routing and BYOK support",  # noqa: E501
         "last_reviewed": "2026-03-19",
     },
     "kilocode": {
@@ -313,12 +310,12 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "official_source_url": "https://kilo.ai/docs/gateway/models-and-providers",
         "signup_url": "https://kilo.ai/",
         "watch_sources": [_COMMUNITY_WATCHLIST],
-        "notes": "Current curated Kilo free-tier model; free and budget tracks can move quickly",
+        "notes": "Current curated Kilo free-tier model; free and budget tracks can move quickly",  # noqa: E501
         "last_reviewed": "2026-03-19",
     },
     "kilo-sonnet": {
         "recommended_model": "anthropic/claude-sonnet-4.6",
-        "aliases": ["anthropic/claude-sonnet-4.6", "kilo-auto/frontier", "kilo-auto/balanced"],
+        "aliases": ["anthropic/claude-sonnet-4.6", "kilo-auto/frontier", "kilo-auto/balanced"],  # noqa: E501
         "track": "stable",
         "offer_track": "gateway-paid",
         "provider_type": "aggregator",
@@ -346,10 +343,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "official_source_url": "https://kilo.ai/docs/gateway/models-and-providers",
         "signup_url": "https://kilo.ai/",
         "watch_sources": [],
-        "notes": (
-            "Kilo paid Opus lane; useful when expiring Kilo credits should absorb "
-            "premium reasoning traffic"
-        ),
+        "notes": ("Kilo paid Opus lane; useful when expiring Kilo credits should absorb premium reasoning traffic"),
         "last_reviewed": "2026-03-29",
     },
     "blackbox-free": {
@@ -365,7 +359,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://cloud.blackbox.ai/",
         "watch_sources": [_COMMUNITY_WATCHLIST],
         "notes": (
-            "Legacy provider id for the current low-cost BLACKBOX Grok Code Fast route; "
+            "Legacy provider id for the current low-cost BLACKBOX Grok Code Fast route; "  # noqa: E501
             "verify often because pricing and model availability can rotate"
         ),
         "last_reviewed": "2026-03-29",
@@ -487,7 +481,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "official_source_url": "https://blockrun.ai/docs/products/routing/clawrouter",
         "signup_url": "https://blockrun.ai/",
         "watch_sources": [],
-        "notes": "BlockRun ClawRouter uses wallet/x402 routing modes rather than a classic API key",
+        "notes": "BlockRun ClawRouter uses wallet/x402 routing modes rather than a classic API key",  # noqa: E501
         "last_reviewed": "2026-03-19",
     },
 }
@@ -499,7 +493,7 @@ def _normalize_catalog_entry(entry: Any) -> dict[str, Any]:
     return {str(key): value for key, value in entry.items()}
 
 
-def _merge_catalog_entry(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
+def _merge_catalog_entry(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:  # noqa: E501
     merged = dict(base)
     for key, value in overlay.items():
         if isinstance(value, dict) and isinstance(merged.get(key), dict):
@@ -545,8 +539,8 @@ def build_provider_metadata_snapshot(
     catalog_payload = _load_catalog_payload(root / _METADATA_CATALOG_RELATIVE_PATH)
     catalog = _normalize_catalog_payload(catalog_payload)
 
-    product_name = str(product or _DEFAULT_METADATA_PRODUCT).strip() or _DEFAULT_METADATA_PRODUCT
-    overlay_payload = _load_catalog_payload(root / "products" / product_name / "overlays.v1.json")
+    product_name = str(product or _DEFAULT_METADATA_PRODUCT).strip() or _DEFAULT_METADATA_PRODUCT  # noqa: E501
+    overlay_payload = _load_catalog_payload(root / "products" / product_name / "overlays.v1.json")  # noqa: E501
     overlay = _normalize_catalog_payload(overlay_payload)
 
     merged_catalog = dict(catalog)
@@ -557,9 +551,7 @@ def build_provider_metadata_snapshot(
         )
 
     return {
-        "schema_version": str(
-            catalog_payload.get("schema_version") or "fusionaize-provider-catalog/v1"
-        ),
+        "schema_version": str(catalog_payload.get("schema_version") or "fusionaize-provider-catalog/v1"),
         "generated_at": str(catalog_payload.get("generated_at") or ""),
         "source_repo": str(catalog_payload.get("source_repo") or ""),
         "product": product_name,
@@ -593,9 +585,7 @@ def _load_external_provider_catalog() -> dict[str, dict[str, Any]]:
     if not metadata_dir:
         return {}
     product = str(os.environ.get(_EXTERNAL_CATALOG_PRODUCT_ENV, _DEFAULT_METADATA_PRODUCT) or "")
-    return _normalize_catalog_payload(
-        build_provider_metadata_snapshot(metadata_dir, product=product)
-    )
+    return _normalize_catalog_payload(build_provider_metadata_snapshot(metadata_dir, product=product))
 
 
 def _get_catalog_source() -> dict[str, dict[str, Any]]:
@@ -616,12 +606,12 @@ def _discovery_env_var(provider_name: str) -> str:
     return f"FAIGATE_PROVIDER_LINK_{token}_URL"
 
 
-def _build_discovery_metadata(provider_name: str, catalog_entry: dict[str, Any]) -> dict[str, Any]:
+def _build_discovery_metadata(provider_name: str, catalog_entry: dict[str, Any]) -> dict[str, Any]:  # noqa: E501
     env_var = _discovery_env_var(provider_name)
     operator_url = str(os.environ.get(env_var, "") or "").strip()
     signup_url = str(catalog_entry.get("signup_url", "") or "").strip()
     discovery_url = (
-        operator_url or signup_url or str(catalog_entry.get("official_source_url", "") or "")
+        operator_url or signup_url or str(catalog_entry.get("official_source_url", "") or "")  # noqa: E501
     )
 
     return {
@@ -691,7 +681,7 @@ def build_provider_refresh_guidance(
         override = dict(overrides.get(normalized_name) or {})
         freshness_status = str(override.get("freshness_status") or "").strip().lower()
         review_age_days_raw = override.get("review_age_days")
-        review_age_days = int(review_age_days_raw) if review_age_days_raw not in (None, "") else -1
+        review_age_days = int(review_age_days_raw) if review_age_days_raw not in (None, "") else -1  # noqa: E501
         freshness_hint = str(override.get("freshness_hint") or "").strip()
 
         if not freshness_status:
@@ -711,13 +701,16 @@ def build_provider_refresh_guidance(
         action = "refresh-now" if freshness_status == "stale" else "review-soon"
         action_label = "refresh now" if action == "refresh-now" else "review soon"
         reason = freshness_hint or (
-            "benchmark and cost assumptions are stale; review before trusting them heavily"
+            "benchmark and cost assumptions are stale; review before trusting them heavily"  # noqa: E501
             if freshness_status == "stale"
             else "benchmark and cost assumptions are aging and worth rechecking soon"
         )
-        if catalog_entry.get("volatility") in {"medium", "high"} and catalog_entry.get(
-            "offer_track"
-        ) in {"free", "credit", "byok", "marketplace"}:
+        if catalog_entry.get("volatility") in {"medium", "high"} and catalog_entry.get("offer_track") in {
+            "free",
+            "credit",
+            "byok",
+            "marketplace",
+        }:
             reason += " This route also sits on a more volatile offer track."
 
         guidance.append(
@@ -784,7 +777,7 @@ def _tracked_item(
     # Get pricing metadata
     pricing = _get_provider_pricing(provider_name)
     has_numeric_rates = (
-        bool(pricing.get("input")) or bool(pricing.get("output")) or bool(pricing.get("cache_read"))
+        bool(pricing.get("input")) or bool(pricing.get("output")) or bool(pricing.get("cache_read"))  # noqa: E501
     )
     pricing_available = bool(pricing)
 
@@ -814,9 +807,7 @@ def _tracked_item(
         "route_type": lane.get("route_type", ""),
         "lane_cluster": lane.get("cluster", ""),
         "benchmark_cluster": lane.get("benchmark_cluster", ""),
-        "preferred_degrades": list(
-            canonical_entry.get("preferred_degrades", lane.get("degrade_to", []))
-        ),
+        "preferred_degrades": list(canonical_entry.get("preferred_degrades", lane.get("degrade_to", []))),
         "lane": lane,
         "pricing": pricing,
         "pricing_available": pricing_available,
@@ -852,7 +843,7 @@ def build_provider_catalog_report(config: Config) -> dict[str, Any]:
                         severity="warning",
                         code="untracked-provider",
                         message=(
-                            f"Provider '{provider_name}' is not in the curated provider "
+                            f"Provider '{provider_name}' is not in the curated provider "  # noqa: E501
                             "catalog yet."
                         ),
                     )
@@ -874,7 +865,7 @@ def build_provider_catalog_report(config: Config) -> dict[str, Any]:
                     severity="warning",
                     code="model-drift",
                     message=(
-                        f"Provider '{provider_name}' uses model '{model}', while the curated "
+                        f"Provider '{provider_name}' uses model '{model}', while the curated "  # noqa: E501
                         f"catalog recommends '{item['recommended_model']}'."
                     ),
                     recommended_model=item["recommended_model"],
@@ -912,7 +903,7 @@ def build_provider_catalog_report(config: Config) -> dict[str, Any]:
                     severity="notice",
                     code="volatile-offer-configured",
                     message=(
-                        f"Provider '{provider_name}' is on the '{item['offer_track']}' track "
+                        f"Provider '{provider_name}' is on the '{item['offer_track']}' track "  # noqa: E501
                         f"with {item['volatility']} volatility; limits, models, or "
                         "pricing may change quickly."
                     ),
@@ -928,8 +919,7 @@ def build_provider_catalog_report(config: Config) -> dict[str, Any]:
                     severity="notice",
                     code="catalog-stale",
                     message=(
-                        f"Catalog guidance for provider '{provider_name}' is "
-                        f"{item['catalog_age_days']} days old."
+                        f"Catalog guidance for provider '{provider_name}' is {item['catalog_age_days']} days old."
                     ),
                     last_reviewed=item["last_reviewed"],
                 )
@@ -989,7 +979,9 @@ def build_provider_catalog_report(config: Config) -> dict[str, Any]:
             "item_count": sum(
                 1
                 for item in items
-                if item.get("status") == "tracked" and not item.get("model_matches_recommendation")
+                if (
+                    item.get("status") == "tracked" and not item.get("model_matches_recommendation")  # noqa: E501
+                )
             ),
             "total_items": tracked,
         },
@@ -1001,14 +993,14 @@ def build_provider_catalog_report(config: Config) -> dict[str, Any]:
             "item_count": sum(
                 1
                 for item in items
-                if item.get("status") == "tracked" and item.get("evidence_level") != "official"
+                if (item.get("status") == "tracked" and item.get("evidence_level") != "official")  # noqa: E501
             ),
             "total_items": tracked,
         },
         {
             "id": "volatile_offer_review",
             "name": "Volatile offer review",
-            "description": "Providers on volatile offer tracks (free/credit/marketplace)",
+            "description": "Providers on volatile offer tracks (free/credit/marketplace)",  # noqa: E501
             "priority": "low",
             "item_count": sum(
                 1
@@ -1028,7 +1020,7 @@ def build_provider_catalog_report(config: Config) -> dict[str, Any]:
                 1
                 for item in items
                 if item.get("status") == "tracked"
-                and item.get("catalog_age_days", 0) > int(check_cfg.get("max_catalog_age_days", 30))
+                and item.get("catalog_age_days", 0) > int(check_cfg.get("max_catalog_age_days", 30))  # noqa: E501
             ),
             "total_items": tracked,
         },
@@ -1051,9 +1043,9 @@ def build_provider_catalog_report(config: Config) -> dict[str, Any]:
                 {
                     "id": "improve_pricing_coverage",
                     "title": "Improve pricing metadata coverage",
-                    "description": f"{cluster['item_count']} tracked providers lack numeric pricing rates.",
+                    "description": f"{cluster['item_count']} tracked providers lack numeric pricing rates.",  # noqa: E501
                     "priority": cluster["priority"],
-                    "action": "Add numeric pricing rates to external catalog for providers missing rates.",
+                    "action": "Add numeric pricing rates to external catalog for providers missing rates.",  # noqa: E501
                     "cluster_id": cluster["id"],
                 }
             )
@@ -1062,7 +1054,7 @@ def build_provider_catalog_report(config: Config) -> dict[str, Any]:
                 {
                     "id": "expand_catalog_coverage",
                     "title": "Expand catalog coverage",
-                    "description": f"{cluster['item_count']} configured providers are not yet tracked in the catalog.",
+                    "description": f"{cluster['item_count']} configured providers are not yet tracked in the catalog.",  # noqa: E501
                     "priority": cluster["priority"],
                     "action": "Add catalog entries for untracked providers.",
                     "cluster_id": cluster["id"],
@@ -1073,9 +1065,9 @@ def build_provider_catalog_report(config: Config) -> dict[str, Any]:
                 {
                     "id": "align_models_with_recommendations",
                     "title": "Align configured models with catalog recommendations",
-                    "description": f"{cluster['item_count']} tracked providers have configured models that don't match catalog recommendations.",
+                    "description": f"{cluster['item_count']} tracked providers have configured models that don't match catalog recommendations.",  # noqa: E501
                     "priority": cluster["priority"],
-                    "action": "Update provider model configurations to match catalog recommendations.",
+                    "action": "Update provider model configurations to match catalog recommendations.",  # noqa: E501
                     "cluster_id": cluster["id"],
                 }
             )
@@ -1084,9 +1076,9 @@ def build_provider_catalog_report(config: Config) -> dict[str, Any]:
                 {
                     "id": "review_evidence_sources",
                     "title": "Review evidence sources",
-                    "description": f"{cluster['item_count']} tracked providers rely on unofficial evidence sources.",
+                    "description": f"{cluster['item_count']} tracked providers rely on unofficial evidence sources.",  # noqa: E501
                     "priority": cluster["priority"],
-                    "action": "Verify and potentially upgrade evidence sources to official documentation.",
+                    "action": "Verify and potentially upgrade evidence sources to official documentation.",  # noqa: E501
                     "cluster_id": cluster["id"],
                 }
             )
@@ -1095,9 +1087,9 @@ def build_provider_catalog_report(config: Config) -> dict[str, Any]:
                 {
                     "id": "review_volatile_offers",
                     "title": "Review volatile offers",
-                    "description": f"{cluster['item_count']} tracked providers are on volatile offer tracks (free/credit/marketplace).",
+                    "description": f"{cluster['item_count']} tracked providers are on volatile offer tracks (free/credit/marketplace).",  # noqa: E501
                     "priority": cluster["priority"],
-                    "action": "Monitor these providers for changes in pricing, availability, or terms.",
+                    "action": "Monitor these providers for changes in pricing, availability, or terms.",  # noqa: E501
                     "cluster_id": cluster["id"],
                 }
             )
@@ -1106,9 +1098,9 @@ def build_provider_catalog_report(config: Config) -> dict[str, Any]:
                 {
                     "id": "refresh_stale_catalog_entries",
                     "title": "Refresh stale catalog entries",
-                    "description": f"{cluster['item_count']} catalog entries are older than the maximum age threshold.",
+                    "description": f"{cluster['item_count']} catalog entries are older than the maximum age threshold.",  # noqa: E501
                     "priority": cluster["priority"],
-                    "action": "Review and update catalog entries to ensure they reflect current provider offerings.",
+                    "action": "Review and update catalog entries to ensure they reflect current provider offerings.",  # noqa: E501
                     "cluster_id": cluster["id"],
                 }
             )
@@ -1119,7 +1111,7 @@ def build_provider_catalog_report(config: Config) -> dict[str, Any]:
                     "title": cluster["name"],
                     "description": cluster["description"],
                     "priority": cluster["priority"],
-                    "action": f"Address {cluster['item_count']} items in this category.",
+                    "action": f"Address {cluster['item_count']} items in this category.",  # noqa: E501
                     "cluster_id": cluster["id"],
                 }
             )
@@ -1167,7 +1159,7 @@ def build_provider_discovery_view(
         resolved_url = str(discovery.get("resolved_url", "") or "").strip()
         if not resolved_url:
             continue
-        if normalized_link_source and discovery.get("link_source") != normalized_link_source:
+        if normalized_link_source and discovery.get("link_source") != normalized_link_source:  # noqa: E501
             continue
         if disclosed_only and not discovery.get("disclosure_required", False):
             continue
@@ -1185,7 +1177,7 @@ def build_provider_discovery_view(
                 "link_source": discovery.get("link_source", "official"),
                 "operator_env_var": discovery.get("operator_env_var", ""),
                 "disclosure": discovery.get("disclosure", ""),
-                "disclosure_required": bool(discovery.get("disclosure_required", False)),
+                "disclosure_required": bool(discovery.get("disclosure_required", False)),  # noqa: E501
             }
         )
 

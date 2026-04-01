@@ -154,9 +154,7 @@ def _parse_system_prompt(raw: Any) -> str | list[str] | None:
     if isinstance(raw, str):
         return raw
     if not isinstance(raw, list):
-        raise AnthropicBridgeError(
-            "'system' must be a string, a list of strings, a list of text blocks, or null"
-        )
+        raise AnthropicBridgeError("'system' must be a string, a list of strings, a list of text blocks, or null")
 
     normalized: list[str] = []
     for item in raw:

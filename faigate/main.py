@@ -354,11 +354,7 @@ async def _refresh_local_worker_probes(force: bool = False) -> None:
             continue
 
         interval = recovery_interval if not provider.health.healthy else check_interval
-        due = (
-            force
-            or provider.health.last_check == 0
-            or (time.time() - provider.health.last_check) >= interval
-        )
+        due = force or provider.health.last_check == 0 or (time.time() - provider.health.last_check) >= interval
 
         if not due:
             continue
@@ -383,11 +379,7 @@ async def _refresh_provider_source_catalog(*, force: bool = False) -> list[dict[
     for source in list_provider_sources(provider_ids):
         _provider_catalog_store.upsert_source(source)
 
-    target_ids = (
-        provider_ids
-        if force
-        else due_provider_ids(_provider_catalog_store, provider_ids=provider_ids)
-    )
+    target_ids = provider_ids if force else due_provider_ids(_provider_catalog_store, provider_ids=provider_ids)
     if not target_ids:
         return []
 
@@ -801,9 +793,7 @@ def _provider_request_readiness(provider: Any) -> dict[str, Any]:
             f"{runtime_cooldown_remaining}s after recent {runtime_issue_type.replace('-', ' ')} failures"
         )
         state["runtime_cooldown_active"] = True
-        state["operator_hint"] = (
-            "keep this route out of primary traffic until the cooldown pressure drops"
-        )
+        state["operator_hint"] = "keep this route out of primary traffic until the cooldown pressure drops"
     elif runtime_window_state == "degraded" and runtime_issue_type and bool(state.get("ready")):
         state["status"] = "ready-degraded"
         state["reason"] = (
@@ -818,9 +808,7 @@ def _provider_request_readiness(provider: Any) -> dict[str, Any]:
             f"{runtime_last_recovered_issue.replace('-', ' ') or 'runtime'} issues "
             f"({runtime_recovery_remaining}s recovery watch left)"
         )
-        state["operator_hint"] = (
-            "route can carry traffic again; keep it under observation during the recovery window"
-        )
+        state["operator_hint"] = "route can carry traffic again; keep it under observation during the recovery window"
     elif runtime_penalty >= 20 and runtime_issue_type in {
         "quota-exhausted",
         "rate-limited",
@@ -828,19 +816,13 @@ def _provider_request_readiness(provider: Any) -> dict[str, Any]:
     }:
         state["ready"] = False
         state["status"] = runtime_issue_type
-        state["reason"] = (
-            "route is in runtime cooldown after recent "
-            f"{runtime_issue_type.replace('-', ' ')} failures"
-        )
+        state["reason"] = f"route is in runtime cooldown after recent {runtime_issue_type.replace('-', ' ')} failures"
         state["runtime_cooldown_active"] = True
-        state["operator_hint"] = (
-            "keep this route out of primary traffic until the cooldown pressure drops"
-        )
+        state["operator_hint"] = "keep this route out of primary traffic until the cooldown pressure drops"
     elif runtime_penalty >= 12 and runtime_issue_type and bool(state.get("ready")):
         state["status"] = "ready-degraded"
         state["reason"] = (
-            "route is still request-ready but operating under recent "
-            f"{runtime_issue_type.replace('-', ' ')} pressure"
+            f"route is still request-ready but operating under recent {runtime_issue_type.replace('-', ' ')} pressure"
         )
         state["operator_hint"] = "prefer lower-pressure siblings while this route recovers"
     return state
@@ -895,10 +877,7 @@ def _attempt_relation_details(selected_provider: str, attempted_provider: str) -
         selected_lane.get("canonical_model")
         and selected_lane.get("canonical_model") == attempted_lane.get("canonical_model")
     )
-    same_cluster = bool(
-        selected_lane.get("cluster")
-        and selected_lane.get("cluster") == attempted_lane.get("cluster")
-    )
+    same_cluster = bool(selected_lane.get("cluster") and selected_lane.get("cluster") == attempted_lane.get("cluster"))
     same_benchmark_cluster = bool(
         selected_lane.get("benchmark_cluster")
         and selected_lane.get("benchmark_cluster") == attempted_lane.get("benchmark_cluster")
@@ -983,21 +962,13 @@ def _attempt_metric_fields(
     )
 
     return {
-        "canonical_model": str(
-            actual_lane.get("canonical_model") or details.get("canonical_model") or ""
-        ),
+        "canonical_model": str(actual_lane.get("canonical_model") or details.get("canonical_model") or ""),
         "lane_family": str(actual_lane.get("family") or details.get("lane_family") or ""),
         "route_type": str(actual_lane.get("route_type") or details.get("route_type") or ""),
         "lane_cluster": str(actual_lane.get("cluster") or details.get("lane_cluster") or ""),
-        "selection_path": str(
-            relation.get("selection_path") or details.get("selection_path") or ""
-        ),
-        "runtime_window_state": str(
-            (details.get("attempt_runtime_state") or {}).get("window_state") or ""
-        ),
-        "recovered_recently": bool(
-            (details.get("attempt_runtime_state") or {}).get("recovered_recently")
-        ),
+        "selection_path": str(relation.get("selection_path") or details.get("selection_path") or ""),
+        "runtime_window_state": str((details.get("attempt_runtime_state") or {}).get("window_state") or ""),
+        "recovered_recently": bool((details.get("attempt_runtime_state") or {}).get("recovered_recently")),
         "last_recovered_issue_type": str(
             (details.get("attempt_runtime_state") or {}).get("last_recovered_issue_type") or ""
         ),
@@ -1123,25 +1094,17 @@ def _build_route_summary(decision: RoutingDecision) -> dict[str, Any]:
         "lane_name": str(details.get("lane_name") or ""),
         "route_type": str(details.get("route_type") or ""),
         "lane_cluster": str(details.get("lane_cluster") or ""),
-        "benchmark_cluster": str(
-            details.get("benchmark_cluster") or selected_row.get("benchmark_cluster") or ""
-        ),
+        "benchmark_cluster": str(details.get("benchmark_cluster") or selected_row.get("benchmark_cluster") or ""),
         "quality_tier": str(details.get("quality_tier") or selected_row.get("quality_tier") or ""),
-        "reasoning_strength": str(
-            details.get("reasoning_strength") or selected_row.get("reasoning_strength") or ""
-        ),
+        "reasoning_strength": str(details.get("reasoning_strength") or selected_row.get("reasoning_strength") or ""),
         "benchmark_request_score": int(selected_row.get("benchmark_request_score") or 0),
         "cost_tier": str(details.get("cost_tier") or selected_row.get("cost_tier") or ""),
         "estimated_request_cost_usd": float(selected_row.get("estimated_request_cost_usd") or 0.0),
         "kilo_score": int(selected_row.get("kilo_score") or 0),
         "kilo_mode": str(selected_row.get("kilo_mode") or ""),
         "kilo_reasons": list(selected_row.get("kilo_reasons") or []),
-        "freshness_status": str(
-            details.get("freshness_status") or selected_row.get("freshness_status") or ""
-        ),
-        "review_age_days": int(
-            details.get("review_age_days") or selected_row.get("review_age_days") or -1
-        ),
+        "freshness_status": str(details.get("freshness_status") or selected_row.get("freshness_status") or ""),
+        "review_age_days": int(details.get("review_age_days") or selected_row.get("review_age_days") or -1),
         "selection_path": str(details.get("selection_path") or "primary-selected"),
     }
 
@@ -1151,9 +1114,7 @@ def _build_route_summary(decision: RoutingDecision) -> dict[str, Any]:
     elif decision.layer == "heuristic":
         why_selected.append(f"Matched heuristic '{decision.rule_name}'.")
     elif decision.layer == "profile":
-        why_selected.append(
-            f"Client profile '{details.get('profile_name') or ''}' influenced routing.".strip()
-        )
+        why_selected.append(f"Client profile '{details.get('profile_name') or ''}' influenced routing.".strip())
     elif decision.layer == "fallback":
         why_selected.append("No stronger rule matched, so the fallback chain was used.")
     else:
@@ -1167,9 +1128,7 @@ def _build_route_summary(decision: RoutingDecision) -> dict[str, Any]:
     if heuristic_match.get("opencode_bias_applied"):
         why_selected.append("Opencode complexity bias promoted a stronger coding lane.")
     if heuristic_match.get("suppressed_for_complexity"):
-        why_selected.append(
-            "Simple-query routing was suppressed because the request looked riskier."
-        )
+        why_selected.append("Simple-query routing was suppressed because the request looked riskier.")
     for note in request_insights.get("complexity_reasons") or []:
         why_selected.append(str(note))
     if selected.get("benchmark_cluster") and request_insights.get("signal_groups"):
@@ -1217,15 +1176,11 @@ def _build_route_summary(decision: RoutingDecision) -> dict[str, Any]:
             reason_bits.append(f"runtime penalty {row.get('runtime_penalty')}")
         if row.get("route_type") and row.get("route_type") != selected["route_type"]:
             reason_bits.append(f"{row.get('route_type')} route")
-        if row.get("benchmark_cluster") and row.get("benchmark_cluster") != selected.get(
-            "benchmark_cluster"
-        ):
+        if row.get("benchmark_cluster") and row.get("benchmark_cluster") != selected.get("benchmark_cluster"):
             reason_bits.append(f"weaker benchmark fit ({row.get('benchmark_cluster')})")
         if row.get("estimated_request_cost_usd"):
             reason_bits.append(f"est. ${float(row.get('estimated_request_cost_usd') or 0.0):.6f}")
-        if row.get("freshness_status") and row.get("freshness_status") != selected.get(
-            "freshness_status"
-        ):
+        if row.get("freshness_status") and row.get("freshness_status") != selected.get("freshness_status"):
             reason_bits.append(f"{row.get('freshness_status')} assumptions")
         alternatives.append(
             {
@@ -1245,9 +1200,7 @@ def _build_route_summary(decision: RoutingDecision) -> dict[str, Any]:
                 "freshness_status": str(row.get("freshness_status") or ""),
                 "review_age_days": int(row.get("review_age_days") or -1),
                 "runtime_penalty": int(row.get("runtime_penalty") or 0),
-                "reason": ", ".join(reason_bits)
-                if reason_bits
-                else "ranked below the selected route",
+                "reason": ", ".join(reason_bits) if reason_bits else "ranked below the selected route",
             }
         )
         alternatives[-1]["why_not_selected"] = _alternative_loss_reasons(
@@ -1300,8 +1253,7 @@ def _build_route_summary(decision: RoutingDecision) -> dict[str, Any]:
             {
                 "kind": "route-add",
                 "title": (
-                    f"Add {top_add.get('setup_provider_name') or top_add.get('provider_name')} "
-                    "for fuller lane coverage"
+                    f"Add {top_add.get('setup_provider_name') or top_add.get('provider_name')} for fuller lane coverage"
                 ),
                 "detail": str(top_add.get("reason") or ""),
                 "path": "Provider Setup -> Guided Route Additions",
@@ -1316,10 +1268,7 @@ def _build_route_summary(decision: RoutingDecision) -> dict[str, Any]:
             item
             for item in alternatives
             if float(item.get("estimated_request_cost_usd") or 0.0) > 0
-            and (
-                float(item.get("estimated_request_cost_usd") or 0.0)
-                <= max(0.0, selected_cost * 0.6)
-            )
+            and (float(item.get("estimated_request_cost_usd") or 0.0) <= max(0.0, selected_cost * 0.6))
         ),
         None,
     )
@@ -1371,9 +1320,7 @@ def _decorate_direct_decision(decision: RoutingDecision) -> RoutingDecision:
         details.setdefault("lane_name", str(lane.get("name") or ""))
         details.setdefault("route_type", str(lane.get("route_type") or ""))
         details.setdefault("lane_cluster", str(lane.get("cluster") or ""))
-    details.setdefault(
-        "route_runtime_state", _provider_runtime_state_snapshot().get(provider.name, {})
-    )
+    details.setdefault("route_runtime_state", _provider_runtime_state_snapshot().get(provider.name, {}))
     decision.details = details
     return decision
 
@@ -1494,9 +1441,7 @@ def _client_highlights(client_totals: list[dict[str, Any]]) -> dict[str, dict[st
     failure_rows = [row for row in rows if (row.get("failures") or 0) > 0]
 
     return {
-        "top_requests": max(
-            rows, key=lambda row: (row.get("requests") or 0, row.get("total_tokens") or 0)
-        ),
+        "top_requests": max(rows, key=lambda row: (row.get("requests") or 0, row.get("total_tokens") or 0)),
         "top_tokens": max(
             rows,
             key=lambda row: (row.get("total_tokens") or 0, row.get("requests") or 0),
@@ -1561,9 +1506,7 @@ def _estimate_request_dimensions(body: dict[str, Any]) -> dict[str, int | str]:
     system_text = "\n".join(system_parts)
     estimated_input_tokens = max(1, len(full_text) // 4) if full_text else 0
     stable_prefix_tokens = max(1, len(system_text) // 4) if system_text else 0
-    requested_output_tokens = (
-        body.get("max_tokens") if isinstance(body.get("max_tokens"), int) else 0
-    )
+    requested_output_tokens = body.get("max_tokens") if isinstance(body.get("max_tokens"), int) else 0
     return {
         "estimated_input_tokens": estimated_input_tokens,
         "stable_prefix_tokens": stable_prefix_tokens,
@@ -1614,9 +1557,7 @@ def _merge_routing_context_headers(headers: dict[str, str], body: dict[str, Any]
     return merged
 
 
-async def _apply_request_hooks(
-    body: dict[str, Any], headers: dict[str, str]
-) -> tuple[dict[str, Any], AppliedHooks]:
+async def _apply_request_hooks(body: dict[str, Any], headers: dict[str, str]) -> tuple[dict[str, Any], AppliedHooks]:
     """Apply configured request hooks before route resolution."""
     model_requested = str(body.get("model", "auto"))
     applied = await apply_request_hooks(
@@ -1804,9 +1745,7 @@ async def _execute_chat_completion_body(
             )
             _adaptive_state.record_success(
                 provider_name,
-                latency_ms=(result.get("_faigate") or {}).get("latency_ms", 0)
-                if isinstance(result, dict)
-                else 0.0,
+                latency_ms=(result.get("_faigate") or {}).get("latency_ms", 0) if isinstance(result, dict) else 0.0,
             )
 
             trace_id: str | None = None
@@ -1874,11 +1813,7 @@ async def _execute_chat_completion_body(
                     extra={"shared_quota_group": quota_group} if quota_group else None,
                 )
             )
-            if (
-                quota_group
-                and not quota_isolated
-                and issue_type in {"quota-exhausted", "rate-limited", "auth-invalid"}
-            ):
+            if quota_group and not quota_isolated and issue_type in {"quota-exhausted", "rate-limited", "auth-invalid"}:
                 blocked_quota_groups[quota_group] = {
                     "provider": provider_name,
                     "issue_type": issue_type,
@@ -1994,9 +1929,7 @@ async def _read_json_body(request: Request, *, operation: str) -> dict[str, Any]
     raw = await request.body()
     max_bytes = int((_config.security or {}).get("max_json_body_bytes", 1_048_576))
     if len(raw) > max_bytes:
-        raise PayloadTooLargeError(
-            f"{operation} body exceeded security.max_json_body_bytes ({len(raw)} > {max_bytes})"
-        )
+        raise PayloadTooLargeError(f"{operation} body exceeded security.max_json_body_bytes ({len(raw)} > {max_bytes})")
     try:
         parsed = json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -2114,9 +2047,7 @@ def _extract_image_edit_request_fields(form_data: dict[str, Any]) -> dict[str, A
     return _normalize_image_request_body(form_data, capability="image_editing")
 
 
-async def _read_uploaded_file(
-    value: Any, *, field_name: str, required: bool, max_bytes: int
-) -> dict[str, Any] | None:
+async def _read_uploaded_file(value: Any, *, field_name: str, required: bool, max_bytes: int) -> dict[str, Any] | None:
     """Read one uploaded file into a normalized payload."""
     if value is None:
         if required:
@@ -2130,9 +2061,7 @@ async def _read_uploaded_file(
     if not content:
         raise ValueError(f"Uploaded file '{field_name}' must not be empty")
     if len(content) > max_bytes:
-        raise PayloadTooLargeError(
-            f"Uploaded file '{field_name}' exceeded security.max_upload_bytes"
-        )
+        raise PayloadTooLargeError(f"Uploaded file '{field_name}' exceeded security.max_upload_bytes")
 
     return {
         "filename": value.filename or field_name,
@@ -2198,8 +2127,7 @@ async def _resolve_image_route_preview(
                 rule_name=f"explicit-{capability}-model",
                 confidence=1.0,
                 reason=(
-                    f"Model shortcut '{resolved_shortcut}' resolved to image provider:"
-                    f" {direct_provider_name}"
+                    f"Model shortcut '{resolved_shortcut}' resolved to image provider: {direct_provider_name}"
                     if resolved_shortcut
                     else f"Directly requested image provider: {direct_provider_name}"
                 ),
@@ -2303,10 +2231,7 @@ async def lifespan(app: FastAPI):
         source_refresh_cfg = _config.provider_source_refresh
         if source_refresh_cfg.get("enabled") and source_refresh_cfg.get("on_startup"):
             await _refresh_provider_source_catalog(force=True)
-        if (
-            source_refresh_cfg.get("enabled")
-            and int(source_refresh_cfg.get("interval_seconds") or 0) > 0
-        ):
+        if source_refresh_cfg.get("enabled") and int(source_refresh_cfg.get("interval_seconds") or 0) > 0:
             _provider_catalog_refresh_task = asyncio.create_task(
                 _provider_source_refresh_loop(),
                 name="faigate-provider-source-refresh",
@@ -2447,9 +2372,7 @@ async def provider_catalog():
             provider_ids=list(_config.provider_source_refresh.get("providers") or []),
         )
         source_catalog["alerts"] = build_catalog_alerts(source_catalog)
-        source_catalog["alert_summary"] = build_catalog_alert_summary(
-            list(source_catalog.get("alerts") or [])
-        )
+        source_catalog["alert_summary"] = build_catalog_alert_summary(list(source_catalog.get("alerts") or []))
     return {
         **report,
         "source_catalog": source_catalog,
@@ -2886,9 +2809,7 @@ async def image_generations(request: Request):
             )
             _adaptive_state.record_success(
                 provider_name,
-                latency_ms=(result.get("_faigate") or {}).get("latency_ms", 0)
-                if isinstance(result, dict)
-                else 0.0,
+                latency_ms=(result.get("_faigate") or {}).get("latency_ms", 0) if isinstance(result, dict) else 0.0,
             )
             trace_id: str | None = None
             if _config.metrics.get("enabled") and isinstance(result, dict):
@@ -3036,9 +2957,7 @@ async def image_edits(request: Request):
             )
             _adaptive_state.record_success(
                 provider_name,
-                latency_ms=(result.get("_faigate") or {}).get("latency_ms", 0)
-                if isinstance(result, dict)
-                else 0.0,
+                latency_ms=(result.get("_faigate") or {}).get("latency_ms", 0) if isinstance(result, dict) else 0.0,
             )
             trace_id: str | None = None
             if _config.metrics.get("enabled") and isinstance(result, dict):
@@ -3247,9 +3166,7 @@ async def anthropic_messages(request: Request):
         )
 
     if isinstance(execution, _ChatExecutionFailure):
-        message = str(
-            execution.body.get("error", {}).get("message", "Anthropic bridge request failed")
-        )
+        message = str(execution.body.get("error", {}).get("message", "Anthropic bridge request failed"))
         raw_error_type = str(execution.body.get("error", {}).get("type", "api_error"))
         return _anthropic_error_response(
             message,
@@ -3259,9 +3176,7 @@ async def anthropic_messages(request: Request):
 
     bridge_headers = _anthropic_bridge_response_headers(
         source=str(canonical_request.metadata.get("source") or "claude-code"),
-        requested_model=str(
-            canonical_request.metadata.get("requested_model_original") or wire_request.model
-        ),
+        requested_model=str(canonical_request.metadata.get("requested_model_original") or wire_request.model),
         resolved_model=str(canonical_request.requested_model or wire_request.model),
         anthropic_version=str(headers.get("anthropic-version") or "") or None,
         anthropic_beta=str(headers.get("anthropic-beta") or "") or None,
@@ -3275,9 +3190,7 @@ async def anthropic_messages(request: Request):
                     provider_name=execution.provider_name,
                     trace_id=execution.trace_id,
                 ),
-                requested_model=str(
-                    canonical_request.metadata.get("requested_model_original") or wire_request.model
-                ),
+                requested_model=str(canonical_request.metadata.get("requested_model_original") or wire_request.model),
                 resolved_model=str(canonical_request.requested_model or wire_request.model),
             ),
             media_type="text/event-stream",

@@ -533,14 +533,10 @@ def _clone(value: Any) -> Any:
 
 def _load_env_values(env_file: str | Path | None = None) -> dict[str, str]:
     """Return environment values from one env file, ignoring empty entries."""
-    values = {
-        key: value for key, value in os.environ.items() if isinstance(value, str) and value.strip()
-    }
+    values = {key: value for key, value in os.environ.items() if isinstance(value, str) and value.strip()}
     path = Path(env_file) if env_file is not None else Path.cwd() / ".env"
     if path.exists():
-        values.update(
-            {k: v for k, v in dotenv_values(path).items() if isinstance(v, str) and v.strip()}
-        )
+        values.update({k: v for k, v in dotenv_values(path).items() if isinstance(v, str) and v.strip()})
     return values
 
 
@@ -775,13 +771,9 @@ def _candidate_row(
         "official_source_url": catalog_entry.get("official_source_url", ""),
         "signup_url": (catalog_entry.get("discovery") or {}).get("signup_url", ""),
         "discovery_url": (catalog_entry.get("discovery") or {}).get("resolved_url", ""),
-        "discovery_link_source": (
-            (catalog_entry.get("discovery") or {}).get("link_source", "official")
-        ),
+        "discovery_link_source": ((catalog_entry.get("discovery") or {}).get("link_source", "official")),
         "discovery_disclosure": ((catalog_entry.get("discovery") or {}).get("disclosure", "")),
-        "discovery_disclosure_required": bool(
-            (catalog_entry.get("discovery") or {}).get("disclosure_required", False)
-        ),
+        "discovery_disclosure_required": bool((catalog_entry.get("discovery") or {}).get("disclosure_required", False)),
         "discovery_env_var": ((catalog_entry.get("discovery") or {}).get("operator_env_var", "")),
         "notes": catalog_entry.get("notes", ""),
         "canonical_model": lane.get("canonical_model", ""),
@@ -847,8 +839,7 @@ def build_interactive_candidate_sections(
             catalog=catalog,
         )
         for name in detected
-        if name not in seen
-        and _PROVIDER_FACTORIES[name]["provider"].get("contract", "generic") == "generic"
+        if name not in seen and _PROVIDER_FACTORIES[name]["provider"].get("contract", "generic") == "generic"
     ]
     extra_ready.sort(key=lambda row: row["provider"])
     ready_now.extend(extra_ready)
@@ -890,10 +881,7 @@ def render_candidate_cards_text(
             if row["already_configured"]:
                 badges.append("already in config")
             lines.append(f"- {row['provider']}  ({' · '.join(badges)})")
-            lines.append(
-                "  "
-                + f"model: {row['model']} | tier: {row['tier']} | source: {row['provider_type']}"
-            )
+            lines.append("  " + f"model: {row['model']} | tier: {row['tier']} | source: {row['provider_type']}")
             if row["canonical_model"]:
                 lines.append(
                     "  "
@@ -919,10 +907,7 @@ def render_candidate_cards_text(
         lines.append("More options if you add keys")
         for row in available_with_key:
             lines.append(f"- {row['provider']}  (needs {row['env']})")
-            lines.append(
-                "  "
-                + f"model: {row['model']} | tier: {row['tier']} | source: {row['provider_type']}"
-            )
+            lines.append("  " + f"model: {row['model']} | tier: {row['tier']} | source: {row['provider_type']}")
             if row["canonical_model"]:
                 lines.append(
                     "  "
@@ -953,9 +938,7 @@ def render_candidate_cards_text(
         lines.append("")
 
     lines.append("Tip: Press Enter in the wizard to use the recommended ready providers.")
-    lines.append(
-        "Tip: Use --json or --yaml with --list-candidates when you want the full metadata dump."
-    )
+    lines.append("Tip: Use --json or --yaml with --list-candidates when you want the full metadata dump.")
     return "\n".join(lines) + "\n"
 
 
@@ -1009,9 +992,7 @@ def render_known_provider_sources_text(
         if row["configured"]:
             status_bits.append("already in config")
         lines.append(f"- {row['provider']}  ({' · '.join(status_bits)})")
-        lines.append(
-            "  " + f"model: {row['model']} | tier: {row['tier']} | source: {row['provider_type']}"
-        )
+        lines.append("  " + f"model: {row['model']} | tier: {row['tier']} | source: {row['provider_type']}")
         if row["notes"]:
             lines.append("  " + f"why: {row['notes']}")
     lines.append("")
@@ -1027,11 +1008,7 @@ def render_current_provider_sources_text(
     env_values = _load_env_values(env_file)
     configured = _load_existing_provider_configs(config_path)
     if not configured:
-        return (
-            "Current provider sources\n\n"
-            "- none yet\n"
-            "  why: config.yaml does not contain any provider blocks yet.\n"
-        )
+        return "Current provider sources\n\n- none yet\n  why: config.yaml does not contain any provider blocks yet.\n"
 
     lines = ["Current provider sources", ""]
     for name in sorted(configured):
@@ -1043,11 +1020,7 @@ def render_current_provider_sources_text(
             match = api_key[2:-1].split(":-", 1)[0].split(":", 1)[0]
         if match:
             env_name = match
-        status = (
-            "ready"
-            if (env_name and env_values.get(env_name)) or (api_key and not env_name)
-            else "missing key"
-        )
+        status = "ready" if (env_name and env_values.get(env_name)) or (api_key and not env_name) else "missing key"
         contract = str(provider.get("contract", "generic") or "generic")
         tier = str(provider.get("tier", "default") or "default")
         lines.append(f"- {name}  ({status} · {contract})")
@@ -1072,9 +1045,7 @@ def apply_provider_setup(
     if config_path is None:
         raise ValueError("config_path is required")
 
-    existing_config = (
-        _load_existing_config(config_path) if Path(config_path).exists() else {"providers": {}}
-    )
+    existing_config = _load_existing_config(config_path) if Path(config_path).exists() else {"providers": {}}
     providers = dict(existing_config.get("providers") or {})
     env_updates: dict[str, str] = {}
     added_providers: list[str] = []
@@ -1120,16 +1091,10 @@ def apply_provider_setup(
                 "canonical_model": str(custom_provider.get("canonical_model", name) or name),
                 "route_type": "direct",
                 "cluster": str(custom_provider.get("cluster", "custom") or "custom"),
-                "benchmark_cluster": str(
-                    custom_provider.get("benchmark_cluster", "custom") or "custom"
-                ),
+                "benchmark_cluster": str(custom_provider.get("benchmark_cluster", "custom") or "custom"),
                 "quality_tier": str(custom_provider.get("quality_tier", "custom") or "custom"),
-                "reasoning_strength": str(
-                    custom_provider.get("reasoning_strength", "custom") or "custom"
-                ),
-                "context_strength": str(
-                    custom_provider.get("context_strength", "custom") or "custom"
-                ),
+                "reasoning_strength": str(custom_provider.get("reasoning_strength", "custom") or "custom"),
+                "context_strength": str(custom_provider.get("context_strength", "custom") or "custom"),
                 "tool_strength": str(custom_provider.get("tool_strength", "custom") or "custom"),
                 "same_model_group": str(custom_provider.get("same_model_group", name) or name),
                 "degrade_to": list(custom_provider.get("degrade_to", []) or []),
@@ -1167,9 +1132,7 @@ def apply_provider_setup(
                 "cluster": "local-worker",
                 "benchmark_cluster": "local-worker",
                 "quality_tier": "local",
-                "reasoning_strength": str(
-                    local_worker.get("reasoning_strength", "custom") or "custom"
-                ),
+                "reasoning_strength": str(local_worker.get("reasoning_strength", "custom") or "custom"),
                 "context_strength": str(local_worker.get("context_strength", "custom") or "custom"),
                 "tool_strength": str(local_worker.get("tool_strength", "custom") or "custom"),
                 "same_model_group": str(local_worker.get("same_model_group", name) or name),
@@ -1302,9 +1265,7 @@ def build_provider_probe_report(
             status_reason = str(request_readiness.get("reason") or "route is not request-ready")
         elif request_readiness and bool(request_readiness.get("ready")):
             status = str(request_readiness.get("status") or "ready")
-            status_reason = str(
-                request_readiness.get("reason") or "route looks request-ready from runtime state"
-            )
+            status_reason = str(request_readiness.get("reason") or "route looks request-ready from runtime state")
             ready_count += 1
         elif health_payload is None:
             status = "configured"
@@ -1345,9 +1306,7 @@ def build_provider_probe_report(
         next_action = operator_hint or _default_probe_action_hint(
             action_group=action_group,
             provider_name=name,
-            family=str(
-                (provider.get("lane") or {}).get("family") or lane_binding.get("family") or ""
-            ),
+            family=str((provider.get("lane") or {}).get("family") or lane_binding.get("family") or ""),
         )
         lane = dict(lane_binding or {})
         lane.update(dict(provider.get("lane") or {}))
@@ -1405,14 +1364,10 @@ def build_provider_probe_report(
                     or ""
                 ),
                 "billing_mode": str(
-                    request_readiness.get("billing_mode")
-                    or (provider.get("transport") or {}).get("billing_mode")
-                    or ""
+                    request_readiness.get("billing_mode") or (provider.get("transport") or {}).get("billing_mode") or ""
                 ),
                 "quota_group": str(
-                    request_readiness.get("quota_group")
-                    or (provider.get("transport") or {}).get("quota_group")
-                    or ""
+                    request_readiness.get("quota_group") or (provider.get("transport") or {}).get("quota_group") or ""
                 ),
                 "quota_isolated": bool(
                     request_readiness.get("quota_isolated")
@@ -1447,12 +1402,8 @@ def build_provider_probe_report(
         recommendation = _pick_probe_recommendation(row=row, rows=rows)
         row["recommended_route"] = recommendation["provider"]
         row["recommended_strategy"] = recommendation["strategy"]
-        recommendation_counts[recommendation["strategy"]] = (
-            recommendation_counts.get(recommendation["strategy"], 0) + 1
-        )
-        row["family_summary"] = dict(
-            family_summaries.get(str(row.get("lane_family") or "unclassified")) or {}
-        )
+        recommendation_counts[recommendation["strategy"]] = recommendation_counts.get(recommendation["strategy"], 0) + 1
+        row["family_summary"] = dict(family_summaries.get(str(row.get("lane_family") or "unclassified")) or {})
         add_recommendations = get_route_add_recommendations(
             configured_provider_names=configured_names,
             canonical_model=str(row.get("canonical_model") or ""),
@@ -1466,9 +1417,7 @@ def build_provider_probe_report(
         row["recommended_add_strategy"] = (
             str(add_recommendations[0].get("strategy") or "") if add_recommendations else "none"
         )
-        add_counts[row["recommended_add_strategy"]] = (
-            add_counts.get(row["recommended_add_strategy"], 0) + 1
-        )
+        add_counts[row["recommended_add_strategy"]] = add_counts.get(row["recommended_add_strategy"], 0) + 1
         row["next_action"] = _combine_probe_next_action(
             current_hint=str(row.get("next_action") or ""),
             action_group=str(row.get("action_group") or "inspect"),
@@ -1481,12 +1430,8 @@ def build_provider_probe_report(
 
     refresh_guidance = _refresh_guidance_from_rows(rows)
     refresh_counts = {
-        "refresh-now": sum(
-            1 for item in refresh_guidance if str(item.get("action") or "") == "refresh-now"
-        ),
-        "review-soon": sum(
-            1 for item in refresh_guidance if str(item.get("action") or "") == "review-soon"
-        ),
+        "refresh-now": sum(1 for item in refresh_guidance if str(item.get("action") or "") == "refresh-now"),
+        "review-soon": sum(1 for item in refresh_guidance if str(item.get("action") or "") == "review-soon"),
     }
 
     return {
@@ -1525,62 +1470,43 @@ def _provider_probe_priority_next(report: dict[str, Any]) -> dict[str, str]:
     if int(actions.get("fix-now") or 0) > 0:
         return {
             "path": "API Keys or Provider Setup",
-            "why": (
-                "at least one configured route still needs credentials, "
-                "endpoint fixes, or model cleanup."
-            ),
+            "why": ("at least one configured route still needs credentials, endpoint fixes, or model cleanup."),
         }
     if int(summary.get("mirror_gaps") or 0) > 0:
         return {
             "path": "Provider Setup -> Guided Route Additions",
-            "why": (
-                "known same-lane or cluster mirrors are still missing from "
-                "the configured route inventory."
-            ),
+            "why": ("known same-lane or cluster mirrors are still missing from the configured route inventory."),
         }
     if int(refresh_actions.get("refresh-now") or 0) > 0:
         return {
             "path": "Dashboard -> Provider detail",
             "why": (
-                "one or more active routes rely on stale benchmark and cost "
-                "assumptions that should be refreshed now."
+                "one or more active routes rely on stale benchmark and cost assumptions that should be refreshed now."
             ),
         }
     if int(actions.get("hold") or 0) > 0 or int(actions.get("watch") or 0) > 0:
         return {
             "path": "Doctor or Dashboard -> Provider detail",
             "why": (
-                "runtime cooldown or recovery pressure is active and should be "
-                "checked before routing heavier traffic."
+                "runtime cooldown or recovery pressure is active and should be checked before routing heavier traffic."
             ),
         }
     if int(summary.get("ready") or 0) > 0:
         return {
             "path": "Client Scenarios or Client Quickstarts",
-            "why": (
-                "the provider layer looks ready enough to move on to client "
-                "defaults and real client wiring."
-            ),
+            "why": ("the provider layer looks ready enough to move on to client defaults and real client wiring."),
         }
     return {
         "path": "Validate",
-        "why": (
-            "the probe ran, but the next operator action is still to tighten "
-            "the current config and env state."
-        ),
+        "why": ("the probe ran, but the next operator action is still to tighten the current config and env state."),
     }
 
 
 def render_provider_probe_text(report: dict[str, Any]) -> str:
     lines = ["Provider probe", ""]
     summary = report.get("summary") or {}
-    lines.append(
-        f"Configured: {summary.get('configured', 0)} | Ready now: {summary.get('ready', 0)}"
-    )
-    lines.append(
-        "Live health: "
-        + ("available" if summary.get("health_live") else "not available; config/env only")
-    )
+    lines.append(f"Configured: {summary.get('configured', 0)} | Ready now: {summary.get('ready', 0)}")
+    lines.append("Live health: " + ("available" if summary.get("health_live") else "not available; config/env only"))
     if summary.get("live_probe"):
         lines.append("Live probe: enabled (using transport-specific shallow request probes)")
     actions = summary.get("actions") or {}
@@ -1654,9 +1580,7 @@ def render_provider_probe_text(report: dict[str, Any]) -> str:
     lines.append("")
     for row in report.get("providers", []):
         lines.append(f"- {row['provider']}  ({row['status']})")
-        lines.append(
-            "  " + f"model: {row['model']} | tier: {row['tier']} | contract: {row['contract']}"
-        )
+        lines.append("  " + f"model: {row['model']} | tier: {row['tier']} | contract: {row['contract']}")
         if row.get("lane_family") or row.get("action_group"):
             family = row.get("lane_family") or "unclassified"
             action = row.get("action_group") or "inspect"
@@ -1677,11 +1601,7 @@ def render_provider_probe_text(report: dict[str, Any]) -> str:
                 "  "
                 + "transport: "
                 + f"{row['transport_profile']} | {row.get('transport_compatibility') or 'n/a'}"
-                + (
-                    f" | confidence: {row.get('transport_confidence')}"
-                    if row.get("transport_confidence")
-                    else ""
-                )
+                + (f" | confidence: {row.get('transport_confidence')}" if row.get("transport_confidence") else "")
                 + (f" | strategy: {row.get('probe_strategy')}" if row.get("probe_strategy") else "")
             )
         quota_summary, quota_note = _describe_quota_domain(
@@ -1712,9 +1632,7 @@ def render_provider_probe_text(report: dict[str, Any]) -> str:
                 + f"({row.get('recommended_strategy') or 'fallback'})"
             )
         if row.get("known_mirror_gaps"):
-            lines.append(
-                "  " + "known mirrors not configured: " + ", ".join(row["known_mirror_gaps"][:3])
-            )
+            lines.append("  " + "known mirrors not configured: " + ", ".join(row["known_mirror_gaps"][:3]))
         if row.get("recommended_add_provider"):
             lines.append(
                 "  "
@@ -1749,13 +1667,8 @@ def render_provider_probe_text(report: dict[str, Any]) -> str:
             if item.get("reason"):
                 lines.append("  " + f"why: {item['reason']}")
     lines.append("")
-    lines.append(
-        "Tip: Ready means config, env, and the current /health "
-        "request-readiness payload all line up."
-    )
-    lines.append(
-        "Tip: Missing-key or model-unavailable states should be fixed before client rollout."
-    )
+    lines.append("Tip: Ready means config, env, and the current /health request-readiness payload all line up.")
+    lines.append("Tip: Missing-key or model-unavailable states should be fixed before client rollout.")
     return "\n".join(lines) + "\n"
 
 
@@ -1776,17 +1689,9 @@ def _classify_probe_action(
         "model-unavailable",
     }:
         return "fix-now"
-    if (
-        runtime_cooldown_active
-        or runtime_window_state == "cooldown"
-        or status in {"quota-exhausted", "rate-limited"}
-    ):
+    if runtime_cooldown_active or runtime_window_state == "cooldown" or status in {"quota-exhausted", "rate-limited"}:
         return "hold"
-    if (
-        runtime_recovered_recently
-        or runtime_window_state == "degraded"
-        or status == "ready-recovered"
-    ):
+    if runtime_recovered_recently or runtime_window_state == "degraded" or status == "ready-recovered":
         return "watch"
     if ready or status in {"ready", "ready-verified", "ready-compat"}:
         return "route"
@@ -1796,16 +1701,11 @@ def _classify_probe_action(
 def _default_probe_action_hint(*, action_group: str, provider_name: str, family: str) -> str:
     family_label = family or "this route"
     if action_group == "fix-now":
-        return (
-            f"fix credentials, model mapping, or endpoint settings before routing {provider_name}"
-        )
+        return f"fix credentials, model mapping, or endpoint settings before routing {provider_name}"
     if action_group == "hold":
         return f"hold {provider_name} out of primary traffic until the cooldown pressure clears"
     if action_group == "watch":
-        return (
-            f"keep {provider_name} in light traffic while the {family_label} "
-            "recovery window stays open"
-        )
+        return f"keep {provider_name} in light traffic while the {family_label} recovery window stays open"
     if action_group == "route":
         return f"route can carry live traffic for the {family_label} lane"
     return f"inspect runtime hints for {provider_name} before making it a primary lane"
@@ -1844,9 +1744,7 @@ def _build_probe_family_summaries(rows: list[dict[str, Any]]) -> dict[str, dict[
     )
 
 
-def _pick_probe_recommendation(
-    *, row: dict[str, Any], rows: list[dict[str, Any]]
-) -> dict[str, str]:
+def _pick_probe_recommendation(*, row: dict[str, Any], rows: list[dict[str, Any]]) -> dict[str, str]:
     action_group = str(row.get("action_group") or "inspect")
     if action_group == "route":
         return {"provider": "", "strategy": "none"}
@@ -1881,9 +1779,7 @@ def _pick_probe_recommendation(
 
     degrade_to = [str(item) for item in (row.get("degrade_to") or []) if str(item)]
     if degrade_to:
-        candidates = candidate_pool(
-            matcher=lambda candidate: str(candidate.get("canonical_model") or "") in degrade_to
-        )
+        candidates = candidate_pool(matcher=lambda candidate: str(candidate.get("canonical_model") or "") in degrade_to)
         if candidates:
             return {
                 "provider": str(candidates[0].get("provider") or ""),
@@ -1892,9 +1788,7 @@ def _pick_probe_recommendation(
 
     family = str(row.get("lane_family") or "")
     if family:
-        candidates = candidate_pool(
-            matcher=lambda candidate: str(candidate.get("lane_family") or "") == family
-        )
+        candidates = candidate_pool(matcher=lambda candidate: str(candidate.get("lane_family") or "") == family)
         if candidates:
             return {
                 "provider": str(candidates[0].get("provider") or ""),
@@ -1932,30 +1826,20 @@ def _combine_probe_next_action(
                 f"for {traffic_label} traffic meanwhile"
             )
         if action_group == "watch":
-            return (
-                f"{current_hint}; favor {preferred_route} as the {strategy_label} "
-                f"for steady {traffic_label} traffic"
-            )
+            return f"{current_hint}; favor {preferred_route} as the {strategy_label} for steady {traffic_label} traffic"
         if action_group in {"fix-now", "inspect"}:
             return (
                 f"{current_hint}; route {traffic_label} traffic through {preferred_route} "
                 f"as the {strategy_label} until fixed"
             )
     if add_provider and action_group in {"hold", "watch", "fix-now", "inspect"}:
-        return (
-            f"{current_hint}; add {add_provider} as a {add_strategy_label} "
-            f"for {traffic_label} traffic"
-        )
+        return f"{current_hint}; add {add_provider} as a {add_strategy_label} for {traffic_label} traffic"
     return current_hint
 
 
 def _scenario_provider_selection(*, purpose: str, client: str) -> list[str]:
     preferred = _preferred_provider_set(list(_PROVIDER_FACTORIES), purpose=purpose, client=client)
-    return [
-        name
-        for name in preferred
-        if _PROVIDER_FACTORIES[name]["provider"].get("contract", "generic") == "generic"
-    ]
+    return [name for name in preferred if _PROVIDER_FACTORIES[name]["provider"].get("contract", "generic") == "generic"]
 
 
 def _scenario_provider_selection_for_spec(spec: dict[str, Any]) -> list[str]:
@@ -2039,8 +1923,7 @@ def _provider_route_registry_summary(provider_name: str) -> dict[str, Any]:
     mirror_providers = [
         str(route.get("provider_name") or "")
         for route in routes
-        if str(route.get("provider_name") or "")
-        and str(route.get("provider_name") or "") != provider_name
+        if str(route.get("provider_name") or "") and str(route.get("provider_name") or "") != provider_name
     ]
     return {
         "canonical_model": canonical_model,
@@ -2099,9 +1982,7 @@ def _scenario_family_coverage(provider_names: list[str]) -> list[str]:
     if "anthropic-claude" in provider_set:
         coverage.append("Anthropic: quality lane active; workhorse/fast lane not configured yet")
     if "openai-gpt4o" in provider_set:
-        coverage.append(
-            "OpenAI: balanced lane active; faster or cheaper family split not configured yet"
-        )
+        coverage.append("OpenAI: balanced lane active; faster or cheaper family split not configured yet")
     if "deepseek-reasoner" in provider_set and "deepseek-chat" in provider_set:
         coverage.append("DeepSeek: reasoning + workhorse lanes active")
     if {"kilo-opus", "kilo-sonnet", "kilocode"} <= provider_set:
@@ -2352,10 +2233,7 @@ def render_route_add_setup_plan_text(plan: dict[str, Any]) -> str:
             [
                 "Priority next",
                 f"- path: Review remaining env inputs ({len(manual)} route addition(s) blocked)",
-                (
-                    "- why : the recommended mirrors are known, but at least "
-                    "one required env value is still missing."
-                ),
+                ("- why : the recommended mirrors are known, but at least one required env value is still missing."),
                 "",
             ]
         )
@@ -2369,8 +2247,7 @@ def render_route_add_setup_plan_text(plan: dict[str, Any]) -> str:
         if item.get("base_url_env") and not item.get("base_url_present"):
             status_bits.append(f"optional {item['base_url_env']}")
         lines.append(
-            f"- {item['setup_provider_name']}  "
-            + f"({' · '.join(status_bits) if status_bits else 'ready to add'})"
+            f"- {item['setup_provider_name']}  " + f"({' · '.join(status_bits) if status_bits else 'ready to add'})"
         )
         lines.append(
             "  "
@@ -2396,9 +2273,7 @@ def render_route_add_setup_plan_text(plan: dict[str, Any]) -> str:
         lines.append(f"Tip: {len(auto_apply)} route addition(s) can be applied")
         lines.append("     in one pass with the current env.")
     if manual:
-        lines.append(
-            f"Tip: {len(manual)} route addition(s) still need input before they can be written."
-        )
+        lines.append(f"Tip: {len(manual)} route addition(s) still need input before they can be written.")
     refresh_guidance = list(plan.get("refresh_guidance") or [])
     if refresh_guidance:
         lines.extend(["", "Refresh guidance"])
@@ -2515,10 +2390,7 @@ def render_client_scenarios_text(
             for coverage_line in item["family_coverage"]:
                 lines.append("  " + f"family coverage: {coverage_line}")
     lines.append("")
-    lines.append(
-        "Tip: Apply one scenario when you want a client-specific default "
-        "without hand-editing profile modes."
-    )
+    lines.append("Tip: Apply one scenario when you want a client-specific default without hand-editing profile modes.")
     lines.append(
         "Tip: Scenario lanes describe the current configured provider inventory. "
         "If you want separate Opus / Sonnet / Haiku or similar family lanes, "
@@ -2537,9 +2409,7 @@ def apply_client_scenario(
         raise ValueError(f"Unsupported client scenario '{scenario_id}'")
     spec = _CLIENT_SCENARIOS[scenario_id]
     available = detect_wizard_providers(env_file=env_file)
-    selected = [
-        name for name in _scenario_provider_selection_for_spec(spec) if name in set(available)
-    ]
+    selected = [name for name in _scenario_provider_selection_for_spec(spec) if name in set(available)]
     suggestion = build_initial_config(
         env_file=env_file,
         purpose=spec["purpose"],
@@ -2553,9 +2423,7 @@ def apply_client_scenario(
     profiles[spec["client"]] = profile
     merged_provider_names = set((merged.get("providers") or {}).keys())
     active_provider_names = [
-        name
-        for name in _scenario_provider_selection_for_spec(spec)
-        if name in merged_provider_names
+        name for name in _scenario_provider_selection_for_spec(spec) if name in merged_provider_names
     ]
     route_add_setup_plan = build_route_add_setup_plan(
         config_path=config_path,
@@ -2616,17 +2484,12 @@ def render_client_scenario_summary(payload: dict[str, Any]) -> str:
         lines.append("- add providers: " + ", ".join(summary["added_providers"]))
     if summary.get("replaced_models"):
         for item in summary["replaced_models"]:
-            lines.append(
-                "- replace model: "
-                + f"{item['provider']} {item['from_model']} -> {item['to_model']}"
-            )
+            lines.append("- replace model: " + f"{item['provider']} {item['from_model']} -> {item['to_model']}")
     if summary.get("fallback_additions"):
         lines.append("- fallback additions: " + ", ".join(summary["fallback_additions"]))
     if summary.get("changed_profile_modes"):
         for item in summary["changed_profile_modes"]:
-            lines.append(
-                "- profile mode: " + f"{item['profile']} {item['from_mode']} -> {item['to_mode']}"
-            )
+            lines.append("- profile mode: " + f"{item['profile']} {item['from_mode']} -> {item['to_mode']}")
     if lines[-1] == "Change preview":
         lines.append("- no config changes beyond confirming the current scenario")
     if routing_rationale:
@@ -2639,14 +2502,12 @@ def render_client_scenario_summary(payload: dict[str, Any]) -> str:
     if actionable_additions:
         priority_path = "Provider Setup -> Guided Route Additions"
         priority_reason = (
-            "recommended same-lane or cluster mirrors are still missing for "
-            "the scenario you just selected."
+            "recommended same-lane or cluster mirrors are still missing for the scenario you just selected."
         )
     elif refresh_guidance_lines:
         priority_path = "Provider Probe or Dashboard -> Provider detail"
         priority_reason = (
-            "the scenario is usable, but route freshness should be reviewed "
-            "before heavier traffic leans on it."
+            "the scenario is usable, but route freshness should be reviewed before heavier traffic leans on it."
         )
     lines.extend(["", "Priority next", f"- path: {priority_path}", f"- why : {priority_reason}"])
     if refresh_guidance_lines:
@@ -2658,9 +2519,7 @@ def render_client_scenario_summary(payload: dict[str, Any]) -> str:
         for item in actionable_additions[:3]:
             setup_provider = str(item.get("setup_provider_name") or item.get("provider_name") or "")
             lines.append(
-                "- add route: "
-                + f"{setup_provider} for {item.get('provider_name')} "
-                + f"({item.get('strategy')})"
+                "- add route: " + f"{setup_provider} for {item.get('provider_name')} " + f"({item.get('strategy')})"
             )
         lines.append("- next path : Provider Setup -> Guided Route Additions")
     if route_additions:
@@ -2933,9 +2792,7 @@ def apply_update_suggestions(
     merged = merge_initial_config(config_path=config_path, suggestion=suggestion)
 
     if "recommended_mode_changes" in groups:
-        profile_names = selected_profiles or [
-            item["profile"] for item in suggestions["recommended_mode_changes"]
-        ]
+        profile_names = selected_profiles or [item["profile"] for item in suggestions["recommended_mode_changes"]]
         profiles = merged.setdefault("client_profiles", {}).setdefault("profiles", {})
         for item in suggestions["recommended_mode_changes"]:
             if item["profile"] not in profile_names:
@@ -2968,9 +2825,7 @@ def build_config_change_summary(
         from_model = str(current.get("model", "") or "").strip()
         to_model = str(provider.get("model", "") or "").strip()
         if from_model and to_model and from_model != to_model:
-            replaced_models.append(
-                {"provider": name, "from_model": from_model, "to_model": to_model}
-            )
+            replaced_models.append({"provider": name, "from_model": from_model, "to_model": to_model})
 
     existing_profiles = ((existing.get("client_profiles") or {}).get("profiles")) or {}
     updated_profiles = ((updated_config.get("client_profiles") or {}).get("profiles")) or {}
@@ -2982,9 +2837,7 @@ def build_config_change_summary(
         from_mode = str(current.get("routing_mode", "") or "").strip()
         to_mode = str(profile.get("routing_mode", "") or "").strip()
         if from_mode and to_mode and from_mode != to_mode:
-            changed_profile_modes.append(
-                {"profile": name, "from_mode": from_mode, "to_mode": to_mode}
-            )
+            changed_profile_modes.append({"profile": name, "from_mode": from_mode, "to_mode": to_mode})
 
     existing_fallback = list(existing.get("fallback_chain", []) or [])
     updated_fallback = list(updated_config.get("fallback_chain", []) or [])
@@ -3034,10 +2887,7 @@ def _resolve_selected_providers(
     if selected_providers:
         unknown = [name for name in selected_providers if name not in available]
         if unknown:
-            raise ValueError(
-                "Unsupported or unavailable wizard provider selection: "
-                + ", ".join(sorted(unknown))
-            )
+            raise ValueError("Unsupported or unavailable wizard provider selection: " + ", ".join(sorted(unknown)))
         return list(dict.fromkeys(selected_providers))
     return _preferred_provider_set(available, purpose=purpose, client=client)
 
@@ -3067,9 +2917,7 @@ def _provider_payload_with_lane(name: str) -> dict[str, Any]:
 
 def _premium_targets(available: list[str]) -> list[str]:
     return [
-        name
-        for name in ("anthropic-claude", "openai-gpt4o", "deepseek-reasoner", "gemini-flash")
-        if name in available
+        name for name in ("anthropic-claude", "openai-gpt4o", "deepseek-reasoner", "gemini-flash") if name in available
     ]
 
 
@@ -3187,15 +3035,12 @@ def merge_initial_config(
     merged["providers"].update(_clone(_mapping_or_empty(suggestion.get("providers"))))
 
     merged["fallback_chain"] = _unique_preserve_order(
-        list(_list_or_empty(merged.get("fallback_chain")))
-        + list(_list_or_empty(suggestion.get("fallback_chain")))
+        list(_list_or_empty(merged.get("fallback_chain"))) + list(_list_or_empty(suggestion.get("fallback_chain")))
     )
 
     existing_modes = _mapping_or_empty(merged.get("routing_modes"))
     suggested_modes = _mapping_or_empty(suggestion.get("routing_modes"))
-    existing_modes["enabled"] = bool(
-        existing_modes.get("enabled", suggested_modes.get("enabled", True))
-    )
+    existing_modes["enabled"] = bool(existing_modes.get("enabled", suggested_modes.get("enabled", True)))
     existing_modes["default"] = existing_modes.get(
         "default",
         suggested_modes.get("default", "auto"),
@@ -3208,9 +3053,7 @@ def merge_initial_config(
 
     existing_shortcuts = _mapping_or_empty(merged.get("model_shortcuts"))
     suggested_shortcuts = _mapping_or_empty(suggestion.get("model_shortcuts"))
-    existing_shortcuts["enabled"] = bool(
-        existing_shortcuts.get("enabled", suggested_shortcuts.get("enabled", True))
-    )
+    existing_shortcuts["enabled"] = bool(existing_shortcuts.get("enabled", suggested_shortcuts.get("enabled", True)))
     existing_shortcuts["shortcuts"] = _merge_mapping(
         _mapping_or_empty(existing_shortcuts.get("shortcuts")),
         _mapping_or_empty(suggested_shortcuts.get("shortcuts")),
@@ -3219,15 +3062,10 @@ def merge_initial_config(
 
     existing_profiles = _mapping_or_empty(merged.get("client_profiles"))
     suggested_profiles = _mapping_or_empty(suggestion.get("client_profiles"))
-    existing_profiles["enabled"] = bool(
-        existing_profiles.get("enabled", suggested_profiles.get("enabled", True))
-    )
-    existing_profiles["default"] = existing_profiles.get(
-        "default", suggested_profiles.get("default", "generic")
-    )
+    existing_profiles["enabled"] = bool(existing_profiles.get("enabled", suggested_profiles.get("enabled", True)))
+    existing_profiles["default"] = existing_profiles.get("default", suggested_profiles.get("default", "generic"))
     existing_profiles["presets"] = _unique_preserve_order(
-        list(_list_or_empty(existing_profiles.get("presets")))
-        + list(_list_or_empty(suggested_profiles.get("presets")))
+        list(_list_or_empty(existing_profiles.get("presets"))) + list(_list_or_empty(suggested_profiles.get("presets")))
     )
     profiles = dict(_mapping_or_empty(existing_profiles.get("profiles")))
     for name, profile in _mapping_or_empty(suggested_profiles.get("profiles")).items():
@@ -3237,9 +3075,7 @@ def merge_initial_config(
         )
     existing_profiles["profiles"] = profiles
     rules_by_profile = {
-        rule.get("profile"): rule
-        for rule in _list_or_empty(existing_profiles.get("rules"))
-        if isinstance(rule, dict)
+        rule.get("profile"): rule for rule in _list_or_empty(existing_profiles.get("rules")) if isinstance(rule, dict)
     }
     for rule in _list_or_empty(suggested_profiles.get("rules")):
         if not isinstance(rule, dict):
@@ -3250,13 +3086,9 @@ def merge_initial_config(
 
     existing_policies = _mapping_or_empty(merged.get("routing_policies"))
     suggested_policies = _mapping_or_empty(suggestion.get("routing_policies"))
-    existing_policies["enabled"] = bool(
-        existing_policies.get("enabled", suggested_policies.get("enabled", True))
-    )
+    existing_policies["enabled"] = bool(existing_policies.get("enabled", suggested_policies.get("enabled", True)))
     rules_by_name = {
-        rule.get("name"): rule
-        for rule in _list_or_empty(existing_policies.get("rules"))
-        if isinstance(rule, dict)
+        rule.get("name"): rule for rule in _list_or_empty(existing_policies.get("rules")) if isinstance(rule, dict)
     }
     for rule in _list_or_empty(suggested_policies.get("rules")):
         if not isinstance(rule, dict):
@@ -3267,15 +3099,10 @@ def merge_initial_config(
 
     existing_hooks = _mapping_or_empty(merged.get("request_hooks"))
     suggested_hooks = _mapping_or_empty(suggestion.get("request_hooks"))
-    existing_hooks["enabled"] = bool(
-        existing_hooks.get("enabled", suggested_hooks.get("enabled", True))
-    )
-    existing_hooks["on_error"] = existing_hooks.get(
-        "on_error", suggested_hooks.get("on_error", "continue")
-    )
+    existing_hooks["enabled"] = bool(existing_hooks.get("enabled", suggested_hooks.get("enabled", True)))
+    existing_hooks["on_error"] = existing_hooks.get("on_error", suggested_hooks.get("on_error", "continue"))
     existing_hooks["hooks"] = _unique_preserve_order(
-        list(_list_or_empty(existing_hooks.get("hooks")))
-        + list(_list_or_empty(suggested_hooks.get("hooks")))
+        list(_list_or_empty(existing_hooks.get("hooks"))) + list(_list_or_empty(suggested_hooks.get("hooks")))
     )
     merged["request_hooks"] = existing_hooks
     return merged

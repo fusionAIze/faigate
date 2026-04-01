@@ -1267,15 +1267,9 @@ def test_list_client_scenarios_exposes_opencode_quality_path(tmp_path: Path):
     assert by_id["opencode-quality"]["routing_mode"] == "premium"
     assert "anthropic-claude" in by_id["opencode-quality"]["ready_providers"]
     assert any("anthropic/opus-4.6:" in line for line in by_id["opencode-quality"]["route_mirrors"])
-    assert any(
-        line.startswith("anthropic/opus-4.6 ->")
-        for line in by_id["opencode-quality"]["degrade_chains"]
-    )
+    assert any(line.startswith("anthropic/opus-4.6 ->") for line in by_id["opencode-quality"]["degrade_chains"])
     assert by_id["opencode-quality"]["route_additions"]
-    assert (
-        by_id["opencode-quality"]["route_additions"][0]["provider_name"]
-        == "openrouter-anthropic-opus"
-    )
+    assert by_id["opencode-quality"]["route_additions"][0]["provider_name"] == "openrouter-anthropic-opus"
 
 
 def test_apply_client_scenario_sets_client_profile_mode_and_adds_providers(tmp_path: Path):
@@ -1330,9 +1324,7 @@ client_profiles:
     assert "add route:" in summary
 
 
-def test_render_client_scenario_summary_includes_refresh_guidance(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-):
+def test_render_client_scenario_summary_includes_refresh_guidance(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     config_path = tmp_path / "config.yaml"
     config_path.write_text(
         """
@@ -1508,9 +1500,7 @@ providers:
     assert "deepseek-chat" in rendered
 
 
-def test_render_route_add_setup_plan_text_includes_refresh_guidance(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-):
+def test_render_route_add_setup_plan_text_includes_refresh_guidance(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     config_path = tmp_path / "config.yaml"
     config_path.write_text(
         """

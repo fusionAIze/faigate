@@ -604,9 +604,7 @@ def _estimated_request_cost_usd(provider: dict[str, Any], ctx: _RoutingContext |
     cache_threshold = max(64, cache_min_prefix)
     if ctx.stable_prefix_tokens >= cache_threshold and cache_mode != "none":
         cached_tokens = min(prompt_tokens, int(ctx.stable_prefix_tokens))
-        prompt_cost = (
-            (cached_tokens * cache_rate) + ((prompt_tokens - cached_tokens) * prompt_rate)
-        ) / 1_000_000
+        prompt_cost = ((cached_tokens * cache_rate) + ((prompt_tokens - cached_tokens) * prompt_rate)) / 1_000_000
     else:
         prompt_cost = (prompt_tokens * prompt_rate) / 1_000_000
 
@@ -626,8 +624,7 @@ def _build_request_insights(
     search_text = (last_user_message or "").lower()
     opencode_hits = _collect_keyword_hits(search_text, _OPENCODE_COMPLEXITY_HINTS)
     signal_hits = {
-        group: _collect_keyword_hits(search_text, keywords)
-        for group, keywords in _OPENCODE_SIGNAL_GROUPS.items()
+        group: _collect_keyword_hits(search_text, keywords) for group, keywords in _OPENCODE_SIGNAL_GROUPS.items()
     }
     signal_hits = {group: hits for group, hits in signal_hits.items() if hits}
     signal_groups = list(signal_hits.keys())
@@ -675,17 +672,11 @@ def _build_request_insights(
 
     complexity_reasons: list[str] = []
     if short_complex:
-        complexity_reasons.append(
-            "Brief prompt, but multiple risk-heavy coding signal groups are present."
-        )
+        complexity_reasons.append("Brief prompt, but multiple risk-heavy coding signal groups are present.")
     if architecture_risk:
-        complexity_reasons.append(
-            "Architecture and change-risk signals suggest a higher-cost mistake surface."
-        )
+        complexity_reasons.append("Architecture and change-risk signals suggest a higher-cost mistake surface.")
     if planning_terms and signal_groups:
-        complexity_reasons.append(
-            "Planning or design language appears together with implementation-risk signals."
-        )
+        complexity_reasons.append("Planning or design language appears together with implementation-risk signals.")
     if has_tools:
         complexity_reasons.append("Tool usage raises the likelihood of multi-step coding work.")
 
@@ -1162,9 +1153,7 @@ class Router:
             requested_image_outputs=requested_outputs or 1,
             requested_image_side_px=_parse_image_size_max_side(requested_size),
             requested_image_size=requested_size.strip().lower() if requested_size else "",
-            requested_image_policy=(
-                (headers or {}).get("x-faigate-image-policy", "").strip().lower()
-            ),
+            requested_image_policy=((headers or {}).get("x-faigate-image-policy", "").strip().lower()),
             required_capability=capability,
             cache_preference=(headers or {}).get("x-faigate-cache", "").strip().lower(),
             model_requested=model_requested.lower().strip(),
@@ -1295,9 +1284,7 @@ class Router:
                 layer="policy",
                 rule_name=rule["name"],
                 confidence=0.95,
-                reason=(
-                    f"Policy rule '{rule['name']}' matched for required capability '{capability}'"
-                ),
+                reason=(f"Policy rule '{rule['name']}' matched for required capability '{capability}'"),
                 details={
                     "required_capability": capability,
                     "candidate_ranking": ranking,
@@ -1343,9 +1330,7 @@ class Router:
 
         return matched_any
 
-    def _select_policy_provider(
-        self, select: dict, ctx: _RoutingContext
-    ) -> tuple[str | None, list[dict[str, Any]]]:
+    def _select_policy_provider(self, select: dict, ctx: _RoutingContext) -> tuple[str | None, list[dict[str, Any]]]:
         """Choose a provider from the current config based on a policy rule."""
         candidates = [
             name
@@ -1361,9 +1346,7 @@ class Router:
                 return provider_name, ranking
         return (ranked[0] if ranked else None), ranking
 
-    def _provider_matches_policy(
-        self, provider: dict, name: str, select: dict, ctx: _RoutingContext
-    ) -> bool:
+    def _provider_matches_policy(self, provider: dict, name: str, select: dict, ctx: _RoutingContext) -> bool:
         """Return whether a provider is eligible for a policy rule."""
         capabilities = provider.get("capabilities", {})
         allow = select.get("allow_providers", [])
@@ -1436,9 +1419,7 @@ class Router:
 
         return preferred, ranking
 
-    def _provider_fits_request_dimensions(
-        self, name: str, provider: dict, ctx: _RoutingContext | None
-    ) -> bool:
+    def _provider_fits_request_dimensions(self, name: str, provider: dict, ctx: _RoutingContext | None) -> bool:
         """Return whether a provider can satisfy the current token and context shape."""
         if ctx is None:
             return True
@@ -1461,17 +1442,9 @@ class Router:
             supported_sizes = image_cfg.get("supported_sizes", [])
             if max_outputs and ctx.requested_image_outputs > max_outputs:
                 return False
-            if (
-                max_side_px
-                and ctx.requested_image_side_px
-                and ctx.requested_image_side_px > max_side_px
-            ):
+            if max_side_px and ctx.requested_image_side_px and ctx.requested_image_side_px > max_side_px:
                 return False
-            if (
-                supported_sizes
-                and ctx.requested_image_size
-                and ctx.requested_image_size not in supported_sizes
-            ):
+            if supported_sizes and ctx.requested_image_size and ctx.requested_image_size not in supported_sizes:
                 return False
         return True
 
@@ -1592,9 +1565,7 @@ class Router:
         elif locality_preference == "cloud":
             locality_score = 10 if capabilities.get("cloud") else 0
         else:
-            locality_score = (
-                2 if capabilities.get("local") else 1 if capabilities.get("cloud") else 0
-            )
+            locality_score = 2 if capabilities.get("local") else 1 if capabilities.get("cloud") else 0
 
         lane_score = self._lane_posture_score(lane, routing_posture)
         route_score = self._route_posture_score(lane, routing_posture)
@@ -1641,9 +1612,7 @@ class Router:
                 image_score += 2
 
             if supported_sizes:
-                image_supported_size = (
-                    not ctx.requested_image_size or ctx.requested_image_size in supported_sizes
-                )
+                image_supported_size = not ctx.requested_image_size or ctx.requested_image_size in supported_sizes
                 image_score += 6 if image_supported_size else 0
             elif ctx.requested_image_size:
                 image_score += 1
@@ -1726,9 +1695,7 @@ class Router:
             "runtime_penalty": adaptation_penalty,
             "runtime_recovered_recently": bool(runtime_state.get("recovered_recently")),
             "runtime_recovery_remaining_s": int(runtime_state.get("recovery_remaining_s") or 0),
-            "runtime_last_recovered_issue_type": str(
-                runtime_state.get("last_recovered_issue_type") or ""
-            ),
+            "runtime_last_recovered_issue_type": str(runtime_state.get("last_recovered_issue_type") or ""),
             "cache_mode": cache.get("mode", "none"),
             "locality_preference": locality_preference or "balanced",
             "routing_posture": routing_posture,
@@ -1792,10 +1759,7 @@ class Router:
 
         prefer_tiers = {str(item).strip().lower() for item in select.get("prefer_tiers", [])}
         if not prefer_tiers and ctx is not None:
-            prefer_tiers = {
-                str(item).strip().lower()
-                for item in (ctx.profile_hints or {}).get("prefer_tiers", [])
-            }
+            prefer_tiers = {str(item).strip().lower() for item in (ctx.profile_hints or {}).get("prefer_tiers", [])}
 
         if "premium" in prefer_tiers:
             return "quality"
@@ -1877,8 +1841,7 @@ class Router:
             and primary_lane.get("canonical_model") == candidate_lane.get("canonical_model")
         )
         same_cluster = bool(
-            primary_lane.get("cluster")
-            and primary_lane.get("cluster") == candidate_lane.get("cluster")
+            primary_lane.get("cluster") and primary_lane.get("cluster") == candidate_lane.get("cluster")
         )
         same_benchmark_cluster = bool(
             primary_lane.get("benchmark_cluster")
@@ -1919,13 +1882,9 @@ class Router:
         ctx: _RoutingContext,
     ) -> tuple[list[str], list[dict[str, Any]]]:
         routing_posture = self._routing_posture({}, ctx)
-        diagnostics = {
-            name: self._provider_dimension_details(name, ctx, None, routing_posture)
-            for name in candidates
-        }
+        diagnostics = {name: self._provider_dimension_details(name, ctx, None, routing_posture) for name in candidates}
         relations = {
-            name: self._fallback_relation_details(primary_provider, name, routing_posture)
-            for name in candidates
+            name: self._fallback_relation_details(primary_provider, name, routing_posture) for name in candidates
         }
         ranked = sorted(
             candidates,
@@ -1993,13 +1952,10 @@ class Router:
         decision.details = details
         return decision
 
-    def _score_provider_candidates(
-        self, ctx: _RoutingContext, *, limit: int = 3
-    ) -> list[dict[str, Any]]:
+    def _score_provider_candidates(self, ctx: _RoutingContext, *, limit: int = 3) -> list[dict[str, Any]]:
         routing_posture = self._routing_posture({}, ctx)
         diagnostics = {
-            name: self._provider_dimension_details(name, ctx, None, routing_posture)
-            for name in ctx.providers
+            name: self._provider_dimension_details(name, ctx, None, routing_posture) for name in ctx.providers
         }
         ranked = [
             name
@@ -2189,9 +2145,7 @@ class Router:
         matched, _ = self._evaluate_heuristic_match({"name": "", "match": match}, ctx)
         return matched
 
-    def _evaluate_heuristic_match(
-        self, rule: dict[str, Any], ctx: _RoutingContext
-    ) -> tuple[bool, dict[str, Any]]:
+    def _evaluate_heuristic_match(self, rule: dict[str, Any], ctx: _RoutingContext) -> tuple[bool, dict[str, Any]]:
         """Evaluate a heuristic match block."""
         match = rule.get("match", {})
         rule_name = str(rule.get("name") or "")
@@ -2204,11 +2158,7 @@ class Router:
             hook_hints = dict(getattr(ctx, "hook_hints", {}) or {})
             routing_mode = str(hook_hints.get("routing_mode") or "").strip()
             _EXPLICIT_MODES = {"eco", "premium", "free", "quality", "save", "cheap"}
-            if (
-                ri.get("short_complex")
-                or hook_hints.get("prefer_providers")
-                or routing_mode in _EXPLICIT_MODES
-            ):
+            if ri.get("short_complex") or hook_hints.get("prefer_providers") or routing_mode in _EXPLICIT_MODES:
                 return False, {
                     "rule_name": rule_name,
                     "fallthrough": True,
@@ -2274,9 +2224,7 @@ class Router:
             # and would inflate every request to the reasoning tier.
             search_text = ctx.last_user_message.lower()
             matched_keywords = [
-                str(kw).strip().lower()
-                for kw in keywords
-                if _keyword_matches_text(str(kw), search_text)
+                str(kw).strip().lower() for kw in keywords if _keyword_matches_text(str(kw), search_text)
             ]
             hit_count = len(matched_keywords)
             request_insights = dict(getattr(ctx, "request_insights", {}) or {})
@@ -2287,9 +2235,7 @@ class Router:
 
             if (
                 ctx.client_profile == "opencode"
-                and any(
-                    _keyword_matches_text(term, search_text) for term in _OPENCODE_COMPLEXITY_HINTS
-                )
+                and any(_keyword_matches_text(term, search_text) for term in _OPENCODE_COMPLEXITY_HINTS)
                 and any(term in _OPENCODE_COMPLEXITY_RULE_KEYWORDS for term in matched_keywords)
             ):
                 min_matches = max(1, int(min_matches) - 1)
@@ -2299,8 +2245,7 @@ class Router:
                 ctx.client_profile == "opencode"
                 and complexity_profile == "high"
                 and any(
-                    token in rule_name.lower()
-                    for token in ("complex", "reason", "debug", "review", "plan", "design")
+                    token in rule_name.lower() for token in ("complex", "reason", "debug", "review", "plan", "design")
                 )
                 and matched_keywords
             ):
@@ -2311,8 +2256,7 @@ class Router:
                 ctx.client_profile == "opencode"
                 and bool(request_insights.get("short_complex"))
                 and any(
-                    token in rule_name.lower()
-                    for token in ("complex", "reason", "debug", "review", "plan", "design")
+                    token in rule_name.lower() for token in ("complex", "reason", "debug", "review", "plan", "design")
                 )
                 and matched_keywords
             ):
@@ -2414,8 +2358,7 @@ class Router:
                 if not fb_health.get("healthy", True):
                     continue
                 if required_capabilities and any(
-                    not provider.get("capabilities", {}).get(capability)
-                    for capability in required_capabilities
+                    not provider.get("capabilities", {}).get(capability) for capability in required_capabilities
                 ):
                     continue
                 if not self._provider_fits_request_dimensions(fallback, provider, ctx):

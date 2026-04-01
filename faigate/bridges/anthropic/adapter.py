@@ -53,11 +53,7 @@ def anthropic_request_to_canonical(
     """Map an Anthropic messages request to the internal gateway model."""
 
     normalized_headers = {str(key): str(value) for key, value in (headers or {}).items()}
-    source = (
-        normalized_headers.get("x-faigate-client")
-        or normalized_headers.get("anthropic-client")
-        or "claude-code"
-    )
+    source = normalized_headers.get("x-faigate-client") or normalized_headers.get("anthropic-client") or "claude-code"
     client = source
     metadata = dict(request.metadata)
     metadata.setdefault("source", source)
@@ -204,9 +200,7 @@ def approximate_anthropic_input_tokens(
         total += 12
         total += _estimate_text_tokens(tool.name)
         total += _estimate_text_tokens(tool.description)
-        total += _estimate_text_tokens(
-            json.dumps(tool.input_schema, sort_keys=True, separators=(",", ":"))
-        )
+        total += _estimate_text_tokens(json.dumps(tool.input_schema, sort_keys=True, separators=(",", ":")))
 
     return max(total, 1), "estimated-char-v1"
 
@@ -264,9 +258,7 @@ def _user_message_to_canonical(message: AnthropicMessage) -> list[CanonicalMessa
             pending_text.append(block)
             continue
         if block.type != "tool_result":
-            raise AnthropicBridgeError(
-                "Anthropic bridge v1 supports only text and tool_result blocks in user messages"
-            )
+            raise AnthropicBridgeError("Anthropic bridge v1 supports only text and tool_result blocks in user messages")
         if not block.tool_use_id:
             # Claude-native clients can emit tool_result-like user blocks without a
             # stable tool_use_id. Falling back to user text keeps the session
@@ -289,9 +281,7 @@ def _user_message_to_canonical(message: AnthropicMessage) -> list[CanonicalMessa
         # OpenAI-style tool continuity requires tool messages to follow the
         # assistant tool_calls immediately. Preserve any surrounding user text
         # as a trailing user turn once all tool_result blocks are emitted.
-        canonical_messages.append(
-            CanonicalMessage(role="user", content=_text_blocks_to_string(pending_text))
-        )
+        canonical_messages.append(CanonicalMessage(role="user", content=_text_blocks_to_string(pending_text)))
     return canonical_messages
 
 
@@ -402,11 +392,7 @@ def _canonical_content_to_anthropic_blocks(
     content = message.content
     blocks: list[AnthropicContentBlock]
     if isinstance(content, str):
-        blocks = (
-            []
-            if (not content and message.tool_calls)
-            else [AnthropicContentBlock(type="text", text=content)]
-        )
+        blocks = [] if (not content and message.tool_calls) else [AnthropicContentBlock(type="text", text=content)]
     elif isinstance(content, list):
         blocks = []
         for item in content:
@@ -457,9 +443,7 @@ def _canonical_content_to_anthropic_blocks(
     return blocks
 
 
-def map_stop_reason_to_anthropic(
-    stop_reason: str | None, *, has_tool_calls: bool = False
-) -> str | None:
+def map_stop_reason_to_anthropic(stop_reason: str | None, *, has_tool_calls: bool = False) -> str | None:
     """Translate OpenAI-style finish reasons into Anthropic stop reasons."""
 
     normalized = str(stop_reason or "").strip().lower()
@@ -567,8 +551,7 @@ async def openai_sse_to_anthropic(
                     "error",
                     {
                         "type": "error",
-                        "error": payload.get("error")
-                        or {"type": "api_error", "message": "Upstream error"},
+                        "error": payload.get("error") or {"type": "api_error", "message": "Upstream error"},
                     },
                 )
                 return
@@ -639,9 +622,7 @@ async def openai_sse_to_anthropic(
                     if not isinstance(tool_delta, dict):
                         continue
                     raw_index = int(tool_delta.get("index") or 0)
-                    state = tool_states.setdefault(
-                        raw_index, _AnthropicStreamToolState(index=raw_index)
-                    )
+                    state = tool_states.setdefault(raw_index, _AnthropicStreamToolState(index=raw_index))
                     function = tool_delta.get("function") or {}
                     if tool_delta.get("id"):
                         state.tool_use_id = str(tool_delta["id"])

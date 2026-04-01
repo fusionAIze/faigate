@@ -206,16 +206,12 @@ class RoutePressure:
             "cooldown_window_s": cooldown_window_s,
             "cooldown_remaining_s": cooldown_remaining_s,
             "cooldown_until": (
-                round(self.last_issue_at + cooldown_window_s, 3)
-                if cooldown_window_s and self.last_issue_at
-                else 0.0
+                round(self.last_issue_at + cooldown_window_s, 3) if cooldown_window_s and self.last_issue_at else 0.0
             ),
             "degraded_window_s": degraded_window_s,
             "degraded_remaining_s": degraded_remaining_s,
             "degraded_until": (
-                round(self.last_issue_at + degraded_window_s, 3)
-                if degraded_window_s and self.last_issue_at
-                else 0.0
+                round(self.last_issue_at + degraded_window_s, 3) if degraded_window_s and self.last_issue_at else 0.0
             ),
             "window_state": self.window_state(),
             "request_blocked": self.cooldown_active(),

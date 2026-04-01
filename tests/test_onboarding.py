@@ -64,10 +64,7 @@ auto_update:
     assert report["integrations"]["openclaw"]["recommended"] is True
     assert report["integrations"]["n8n"]["recommended"] is False
     assert report["provider_catalog"]["alert_count"] == 0
-    assert (
-        "Keep auto_update disabled until the provider and client set is stable."
-        in report["suggestions"]
-    )
+    assert "Keep auto_update disabled until the provider and client set is stable." in report["suggestions"]
 
 
 def test_onboarding_report_marks_local_worker_ready(tmp_path: Path):
@@ -126,9 +123,7 @@ auto_update:
     assert "`local-worker`" in markdown
 
 
-def test_onboarding_validation_blocks_missing_env_and_unready_providers(
-    tmp_path: Path, monkeypatch
-):
+def test_onboarding_validation_blocks_missing_env_and_unready_providers(tmp_path: Path, monkeypatch):
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
 
@@ -176,10 +171,7 @@ auto_update:
     assert "Environment file is missing." in validation["blockers"]
     assert "No configured provider is ready." in validation["blockers"]
     assert "Fallback chain is empty for a multi-provider setup." in validation["blockers"]
-    assert (
-        "No ready primary provider is available for a staged multi-provider rollout."
-        in validation["blockers"]
-    )
+    assert "No ready primary provider is available for a staged multi-provider rollout." in validation["blockers"]
     assert "Client profiles are disabled." in validation["warnings"]
     assert "Request hooks are enabled but no hooks are configured." in validation["warnings"]
     assert "Status: blocked" in text
@@ -279,9 +271,7 @@ auto_update:
     assert "provider discovery:" in text
     assert "openrouter-fallback: disclosed link -> https://go.example.test/openrouter" in text
     assert "Policy: provider links affect ranking = `False`" in markdown
-    assert (
-        "`openrouter-fallback`: disclosed link -> `https://go.example.test/openrouter`" in markdown
-    )
+    assert "`openrouter-fallback`: disclosed link -> `https://go.example.test/openrouter`" in markdown
 
 
 def test_onboarding_validation_passes_for_ready_multi_provider_setup(tmp_path: Path):
@@ -707,13 +697,7 @@ auto_update:
     assert report["provider_rollout"]["fallback_targets"] == [
         {"name": "image-worker", "configured": True, "ready": False}
     ]
-    assert (
-        "Image-capable providers are configured, but none are ready yet."
-        in report["provider_rollout"]["gaps"]
-    )
-    assert (
-        "Fallback chain is configured, but none of its targets are currently ready."
-        in validation["warnings"]
-    )
+    assert "Image-capable providers are configured, but none are ready yet." in report["provider_rollout"]["gaps"]
+    assert "Fallback chain is configured, but none of its targets are currently ready." in validation["warnings"]
     assert "- stage 1 primary: primary-chat" in text
     assert "- fallback targets:" in text

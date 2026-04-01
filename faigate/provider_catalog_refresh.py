@@ -92,29 +92,18 @@ def _source_refresh_suggestion(item: dict[str, Any]) -> str:
             f"--provider {provider_id} and verify the source URL, parser, or "
             "auth assumptions before trusting catalog data here."
         )
-    return (
-        f"Refresh {provider_id} before relying on older model, pricing, or free-tier assumptions."
-    )
+    return f"Refresh {provider_id} before relying on older model, pricing, or free-tier assumptions."
 
 
 def _catalog_change_suggestion(event: dict[str, Any]) -> str:
     change_type = str(event.get("change_type") or "")
     provider_id = str(event.get("provider_id") or "provider")
     if change_type == "model-removed":
-        return (
-            f"Review configured model ids and fallback mirrors for {provider_id}; "
-            "one catalog entry disappeared."
-        )
+        return f"Review configured model ids and fallback mirrors for {provider_id}; one catalog entry disappeared."
     if change_type == "field-changed":
-        return (
-            f"Recheck pricing, context, and routing weights for {provider_id}; "
-            "a tracked field changed."
-        )
+        return f"Recheck pricing, context, and routing weights for {provider_id}; a tracked field changed."
     if change_type == "model-added":
-        return (
-            f"Review whether the newly listed {provider_id} model belongs in "
-            "route additions or scenarios."
-        )
+        return f"Review whether the newly listed {provider_id} model belongs in route additions or scenarios."
     return f"Review recent provider catalog changes for {provider_id}."
 
 
@@ -187,12 +176,8 @@ def build_catalog_alerts(
                     change_type=change_type,
                 ),
                 "provider_id": str(event.get("provider_id") or ""),
-                "headline": (
-                    f"Catalog change detected for {event.get('provider_id')}: "
-                    f"{event.get('change_type')}"
-                ),
-                "detail": str(event.get("message") or "").strip()
-                or "A provider catalog change was detected.",
+                "headline": (f"Catalog change detected for {event.get('provider_id')}: {event.get('change_type')}"),
+                "detail": str(event.get("message") or "").strip() or "A provider catalog change was detected.",
                 "suggestion": _catalog_change_suggestion(event),
                 "source_kind": str(event.get("source_kind") or ""),
                 "change_type": change_type,
@@ -290,10 +275,7 @@ def build_catalog_summary(
                 "models_count": len(latest_models),
                 "pricing_count": len(latest_pricing),
                 "docs_index_count": len(latest_docs_index),
-                "sample_models": [
-                    str(item.get("model_id") or "")
-                    for item in (latest_pricing or latest_models)[:5]
-                ],
+                "sample_models": [str(item.get("model_id") or "") for item in (latest_pricing or latest_models)[:5]],
                 "billing_notes": str(source.get("billing_notes") or ""),
                 "account_profile": store.get_account_profile(provider_id),
             }
@@ -368,10 +350,7 @@ def render_catalog_summary_text(
         + f"due={int(summary.get('due_sources') or 0)} | "
         + f"recent changes={int(summary.get('recent_changes') or 0)}"
     )
-    alert_summary = dict(
-        summary.get("alert_summary")
-        or build_catalog_alert_summary(list(summary.get("alerts") or []))
-    )
+    alert_summary = dict(summary.get("alert_summary") or build_catalog_alert_summary(list(summary.get("alerts") or [])))
     lines.append(
         "  alert summary: "
         + f"status={alert_summary.get('status') or 'clear'} | "
@@ -394,9 +373,7 @@ def render_catalog_summary_text(
         if item.get("refresh_interval_seconds"):
             lines.append(f"    refresh interval: {int(item['refresh_interval_seconds'])}s")
         if item.get("seconds_since_success") is not None:
-            lines.append(
-                f"    age: {int(float(item['seconds_since_success']))}s since last success"
-            )
+            lines.append(f"    age: {int(float(item['seconds_since_success']))}s since last success")
         profile = dict(item.get("account_profile") or {})
         if profile:
             profile_bits = [str(profile.get("billing_mode") or "")]
@@ -451,9 +428,7 @@ def due_provider_ids(
         stored = dict(source_rows.get(provider_id) or {})
         last_success_at = float(stored.get("last_success_at") or 0)
         refresh_interval_seconds = int(
-            stored.get("refresh_interval_seconds")
-            or source.get("refresh_interval_seconds")
-            or 21600
+            stored.get("refresh_interval_seconds") or source.get("refresh_interval_seconds") or 21600
         )
         if not last_success_at or refresh_interval_seconds <= 0:
             due.append(provider_id)
@@ -551,9 +526,7 @@ def parse_regex_model_refs(
     """Extract model ids from docs text using prefixes and regex patterns."""
     found: set[str] = set()
     rows: list[dict[str, Any]] = []
-    prefix_patterns = [
-        re.escape(prefix) + r"[a-zA-Z0-9.\-:\/]+" for prefix in (model_prefixes or [])
-    ]
+    prefix_patterns = [re.escape(prefix) + r"[a-zA-Z0-9.\-:\/]+" for prefix in (model_prefixes or [])]
     for pattern in prefix_patterns + list(model_patterns or []):
         for match in re.findall(pattern, text):
             token = str(match).strip("`*.,)('\"")

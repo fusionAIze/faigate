@@ -37,9 +37,7 @@ def test_dashboard_surfaces_provider_catalog_alerts(tmp_path):
                 "field_name": "input_cost",
                 "old_value": "5.0",
                 "new_value": "6.0",
-                "message": (
-                    "kilo: input_cost for 'anthropic/claude-opus-4.6' changed from 5.0 to 6.0."
-                ),
+                "message": ("kilo: input_cost for 'anthropic/claude-opus-4.6' changed from 5.0 to 6.0."),
             }
         ]
     )

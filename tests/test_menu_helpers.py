@@ -447,12 +447,9 @@ providers:
     assert "request-ready: deepseek-chat -> ready" in result.stdout
     assert "request readiness summary: 1/1 provider routes look request-ready" in result.stdout
     assert (
-        "request-ready action: deepseek-chat -> route "
-        "[deepseek | deepseek/chat | balanced-workhorse | freshness="
+        "request-ready action: deepseek-chat -> route [deepseek | deepseek/chat | balanced-workhorse | freshness="
     ) in result.stdout
-    assert (
-        "request-ready actions: fix-now=0 | hold=0 | watch=0 | route=1 | inspect=0" in result.stdout
-    )
+    assert "request-ready actions: fix-now=0 | hold=0 | watch=0 | route=1 | inspect=0" in result.stdout
     assert "[openai-compatible | native | confidence=high]" in result.stdout
     assert "request-ready payload: deepseek-chat -> openai-chat-minimal" in result.stdout
     assert "request-ready next step: deepseek-chat -> route can carry live traffic" in result.stdout
@@ -489,16 +486,14 @@ def test_faigate_doctor_reports_runtime_cooldown_windows(tmp_path: Path):
                                 "ready": False,
                                 "status": "rate-limited",
                                 "reason": (
-                                    "route is in runtime cooldown for another 120s "
-                                    "after recent rate limited failures"
+                                    "route is in runtime cooldown for another 120s after recent rate limited failures"
                                 ),
                                 "profile": "openai-compatible",
                                 "compatibility": "native",
                                 "probe_confidence": "high",
                                 "probe_payload": "openai-chat-minimal | user='ping' | max_tokens=1",
                                 "operator_hint": (
-                                    "keep this route out of primary traffic until "
-                                    "the cooldown pressure drops"
+                                    "keep this route out of primary traffic until the cooldown pressure drops"
                                 ),
                                 "runtime_penalty": 24,
                                 "runtime_issue_type": "rate-limited",
@@ -533,16 +528,13 @@ def test_faigate_doctor_reports_runtime_cooldown_windows(tmp_path: Path):
 
     assert "request-ready: deepseek-chat -> rate-limited" in result.stdout
     assert (
-        "request-ready action: deepseek-chat -> hold "
-        "[deepseek | deepseek/chat | balanced-workhorse | freshness="
+        "request-ready action: deepseek-chat -> hold [deepseek | deepseek/chat | balanced-workhorse | freshness="
     ) in result.stdout
     assert (
         "request-ready runtime: deepseek-chat -> penalty=24 | issue=rate-limited "
         "| cooldown active | cooldown 120s left" in result.stdout
     )
-    assert (
-        "request-ready actions: fix-now=0 | hold=1 | watch=0 | route=0 | inspect=0" in result.stdout
-    )
+    assert "request-ready actions: fix-now=0 | hold=1 | watch=0 | route=0 | inspect=0" in result.stdout
 
 
 def test_faigate_doctor_reports_recent_route_recovery(tmp_path: Path):
@@ -621,16 +613,10 @@ def test_faigate_doctor_reports_recent_route_recovery(tmp_path: Path):
 
     assert "request-ready: deepseek-chat -> ready-recovered" in result.stdout
     assert (
-        "request-ready action: deepseek-chat -> watch "
-        "[deepseek | deepseek/chat | balanced-workhorse | freshness="
+        "request-ready action: deepseek-chat -> watch [deepseek | deepseek/chat | balanced-workhorse | freshness="
     ) in result.stdout
-    assert (
-        "request-ready recovery: deepseek-chat -> recovered from rate-limited | watch 240s"
-        in result.stdout
-    )
-    assert (
-        "request-ready actions: fix-now=0 | hold=0 | watch=1 | route=0 | inspect=0" in result.stdout
-    )
+    assert "request-ready recovery: deepseek-chat -> recovered from rate-limited | watch 240s" in result.stdout
+    assert "request-ready actions: fix-now=0 | hold=0 | watch=1 | route=0 | inspect=0" in result.stdout
 
 
 def test_faigate_doctor_reports_refresh_guidance_for_stale_routes(tmp_path: Path):
@@ -664,9 +650,7 @@ def test_faigate_doctor_reports_refresh_guidance_for_stale_routes(tmp_path: Path
                                 "cluster": "balanced-workhorse",
                                 "freshness_status": "stale",
                                 "review_age_days": 29,
-                                "freshness_hint": (
-                                    "review this route before trusting benchmark assumptions"
-                                ),
+                                "freshness_hint": ("review this route before trusting benchmark assumptions"),
                             },
                             "request_readiness": {
                                 "ready": True,
@@ -1239,9 +1223,7 @@ fallback_chain: [deepseek-chat]
                     "summary": {"providers_total": 1, "providers_healthy": 1},
                 }
             ),
-            "/v1/models": json.dumps(
-                {"data": [{"id": "auto"}, {"id": "deepseek-chat"}, {"id": "gemini-flash"}]}
-            ),
+            "/v1/models": json.dumps({"data": [{"id": "auto"}, {"id": "deepseek-chat"}, {"id": "gemini-flash"}]}),
         },
     )
 
@@ -1999,9 +1981,7 @@ def test_faigate_dashboard_provider_detail_shows_canonical_lane(tmp_path: Path):
                                 "benchmark_cluster": "balanced-coding",
                                 "freshness_status": "fresh",
                                 "review_age_days": 1,
-                                "freshness_hint": (
-                                    "benchmark and cost assumptions were reviewed recently"
-                                ),
+                                "freshness_hint": ("benchmark and cost assumptions were reviewed recently"),
                             },
                             "capabilities": {"cost_tier": "standard"},
                             "transport": {
@@ -2051,15 +2031,10 @@ def test_faigate_dashboard_provider_detail_shows_canonical_lane(tmp_path: Path):
     assert "Lane cluster      balanced-workhorse" in result.stdout
     assert "Benchmark focus   balanced-coding" in result.stdout
     assert "Cost tier         standard" in result.stdout
-    assert (
-        "Routing fit       balanced-coding with a standard cost posture over direct routing"
-        in result.stdout
-    )
+    assert "Routing fit       balanced-coding with a standard cost posture over direct routing" in result.stdout
     assert "Freshness         fresh" in result.stdout
     assert "Review age        1d" in result.stdout
-    assert (
-        "Freshness hint    benchmark and cost assumptions were reviewed recently" in result.stdout
-    )
+    assert "Freshness hint    benchmark and cost assumptions were reviewed recently" in result.stdout
     assert "Request-ready     ready-verified" in result.stdout
     assert "Verified via      models" in result.stdout
     assert "Probe payload     openai-chat-minimal | user='ping' | max_tokens=1" in result.stdout
@@ -2144,8 +2119,7 @@ def test_faigate_dashboard_provider_detail_shows_refresh_guidance_for_stale_lane
                                 "freshness_status": "stale",
                                 "review_age_days": 24,
                                 "freshness_hint": (
-                                    "benchmark and cost assumptions are stale; "
-                                    "review before trusting them heavily"
+                                    "benchmark and cost assumptions are stale; review before trusting them heavily"
                                 ),
                             },
                             "capabilities": {"cost_tier": "standard"},
@@ -2238,9 +2212,7 @@ def test_faigate_dashboard_activity_and_alerts_show_family_and_path_summaries(tm
                     "client_totals": [],
                     "client_highlights": {},
                     "operator_actions": [],
-                    "hourly": [
-                        {"hour_offset": 0, "requests": 20, "cost_usd": 0.6, "tokens": 11000}
-                    ],
+                    "hourly": [{"hour_offset": 0, "requests": 20, "cost_usd": 0.6, "tokens": 11000}],
                     "daily": [
                         {
                             "day": "2026-03-20",
@@ -2284,10 +2256,7 @@ def test_faigate_dashboard_activity_and_alerts_show_family_and_path_summaries(tm
     assert "Selection paths" in activity.stdout
     assert "Priority next" in activity.stdout
     assert "Providers or Clients" in activity.stdout
-    assert (
-        "same-lane-route: 6 req / $0.18 / 410ms "
-        "[deepseek | cooldown | recovery-watch]" in activity.stdout
-    )
+    assert "same-lane-route: 6 req / $0.18 / 410ms [deepseek | cooldown | recovery-watch]" in activity.stdout
     assert "Lane families" in alerts.stdout
     assert "Selection paths" in alerts.stdout
     assert "Priority next" in alerts.stdout
@@ -2552,10 +2521,7 @@ def test_faigate_doctor_prefers_same_lane_route_before_cluster_degrade(tmp_path:
                             "request_readiness": {
                                 "ready": False,
                                 "status": "rate-limited",
-                                "reason": (
-                                    "route is in runtime cooldown after recent "
-                                    "rate limited failures"
-                                ),
+                                "reason": ("route is in runtime cooldown after recent rate limited failures"),
                                 "runtime_cooldown_active": True,
                                 "runtime_window_state": "cooldown",
                             },
@@ -2610,12 +2576,10 @@ def test_faigate_doctor_prefers_same_lane_route_before_cluster_degrade(tmp_path:
     )
 
     assert (
-        "request-ready action: anthropic-claude -> hold "
-        "[anthropic | anthropic/opus-4.6 | elite-reasoning | freshness="
+        "request-ready action: anthropic-claude -> hold [anthropic | anthropic/opus-4.6 | elite-reasoning | freshness="
     ) in result.stdout
     assert (
-        "request-ready preferred route: anthropic-claude -> "
-        "openrouter-anthropic-opus (same-lane-route)"
+        "request-ready preferred route: anthropic-claude -> openrouter-anthropic-opus (same-lane-route)"
     ) in result.stdout
     assert "request-ready fallback guidance: same-lane=1 | cluster=0 | family=0" in result.stdout
 
@@ -2808,10 +2772,7 @@ provider_source_refresh:
 
     assert "provider source alert summary: status=intervention-needed" in result.stdout
     assert "fix-now=2 | review-now=0 | inspect=0" in result.stdout
-    assert (
-        "provider source alert: kilo -> Provider source refresh failing for kilo (fix-now)"
-        in result.stdout
-    )
+    assert "provider source alert: kilo -> Provider source refresh failing for kilo (fix-now)" in result.stdout
     assert "provider source priority next: Provider Catalog Refresh" in result.stdout
 
 
@@ -2853,10 +2814,7 @@ def test_faigate_doctor_prefers_family_route_when_route_is_on_hold(tmp_path: Pat
                             "request_readiness": {
                                 "ready": False,
                                 "status": "rate-limited",
-                                "reason": (
-                                    "route is in runtime cooldown after recent "
-                                    "rate limited failures"
-                                ),
+                                "reason": ("route is in runtime cooldown after recent rate limited failures"),
                                 "runtime_cooldown_active": True,
                                 "runtime_window_state": "cooldown",
                             },
@@ -2885,13 +2843,9 @@ def test_faigate_doctor_prefers_family_route_when_route_is_on_hold(tmp_path: Pat
     )
 
     assert (
-        "request-ready action: deepseek-reasoner -> hold "
-        "[deepseek | deepseek/reasoner | elite-reasoning | freshness="
+        "request-ready action: deepseek-reasoner -> hold [deepseek | deepseek/reasoner | elite-reasoning | freshness="
     ) in result.stdout
-    assert (
-        "request-ready preferred route: deepseek-reasoner -> deepseek-chat "
-        "(cluster-degrade)" in result.stdout
-    )
+    assert "request-ready preferred route: deepseek-reasoner -> deepseek-chat (cluster-degrade)" in result.stdout
 
 
 def test_faigate_doctor_reports_known_mirror_gaps(tmp_path: Path):
@@ -2966,13 +2920,8 @@ providers:
         check=True,
     )
 
-    assert (
-        "request-ready mirror gap: anthropic-claude -> openrouter-anthropic-opus" in result.stdout
-    )
-    assert (
-        "request-ready add route: anthropic-claude -> openrouter-anthropic-opus (same-lane-add)"
-        in result.stdout
-    )
+    assert "request-ready mirror gap: anthropic-claude -> openrouter-anthropic-opus" in result.stdout
+    assert "request-ready add route: anthropic-claude -> openrouter-anthropic-opus (same-lane-add)" in result.stdout
     assert "request-ready add guidance: same-lane=1 | cluster=0 | family=0" in result.stdout
     assert "request-ready mirror gaps: 1 routes have known mirrors not configured" in result.stdout
 
@@ -3070,9 +3019,7 @@ client_profiles:
     )
 
     assert "Client scenario applied." in result.stdout
-    assert (
-        "Recommended next: open Provider Setup -> Guided Route Additions before restart work"
-    ) in result.stdout
+    assert ("Recommended next: open Provider Setup -> Guided Route Additions before restart work") in result.stdout
     assert "new opencode profile default" in result.stdout
     assert "drill into opencode Details" in result.stdout
 

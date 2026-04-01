@@ -50,11 +50,7 @@ import uuid
 
 # ── Grok-Api path resolution ────────────────────────────────────────────────
 
-_GROK_API_DIR = (
-    pathlib.Path(os.environ.get("GROK_API_DIR", "~/.config/faigate/grok-api"))
-    .expanduser()
-    .resolve()
-)
+_GROK_API_DIR = pathlib.Path(os.environ.get("GROK_API_DIR", "~/.config/faigate/grok-api")).expanduser().resolve()
 
 if str(_GROK_API_DIR) not in sys.path:
     sys.path.insert(0, str(_GROK_API_DIR))

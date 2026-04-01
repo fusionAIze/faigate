@@ -164,12 +164,8 @@ def _sanitize_body_updates(updates: dict[str, Any]) -> tuple[dict[str, Any], lis
         if key in {"temperature"} and not isinstance(value, (int, float)):
             warnings.append(f"Ignored hook body update for '{key}' because it was not numeric")
             continue
-        if key in {"max_tokens"} and (
-            isinstance(value, bool) or not isinstance(value, int) or value <= 0
-        ):
-            warnings.append(
-                "Ignored hook body update for 'max_tokens' because it was not a positive integer"
-            )
+        if key in {"max_tokens"} and (isinstance(value, bool) or not isinstance(value, int) or value <= 0):
+            warnings.append("Ignored hook body update for 'max_tokens' because it was not a positive integer")
             continue
         if key == "stream" and not isinstance(value, bool):
             warnings.append("Ignored hook body update for 'stream' because it was not a boolean")
@@ -230,8 +226,7 @@ def _sanitize_routing_hints(hints: dict[str, Any]) -> tuple[dict[str, Any], list
                 normalized_values = [
                     value
                     for value in values
-                    if isinstance(value, (str, bool))
-                    and (not isinstance(value, str) or value.strip())
+                    if isinstance(value, (str, bool)) and (not isinstance(value, str) or value.strip())
                 ]
                 if normalized_values:
                     cap_values[capability.strip()] = normalized_values
@@ -245,9 +240,7 @@ def _sanitize_routing_hints(hints: dict[str, Any]) -> tuple[dict[str, Any], list
         if isinstance(raw_mode, str) and raw_mode.strip():
             sanitized["routing_mode"] = raw_mode.strip().lower()
         else:
-            errors.append(
-                "ignored invalid routing_hints.routing_mode (expected a non-empty string)"
-            )
+            errors.append("ignored invalid routing_hints.routing_mode (expected a non-empty string)")
 
     unknown = sorted(set(hints) - (_LIST_HINT_KEYS | {"capability_values", "routing_mode"}))
     for key in unknown:
@@ -429,18 +422,14 @@ def load_community_hooks(plugin_dir: str | None) -> list[str]:
     loaded: list[str] = []
     for py_file in sorted(path.glob("*.py")):
         try:
-            spec = importlib.util.spec_from_file_location(
-                f"faigate_community_hook_{py_file.stem}", py_file
-            )
+            spec = importlib.util.spec_from_file_location(f"faigate_community_hook_{py_file.stem}", py_file)
             if spec is None or spec.loader is None:
                 _logger.warning("Cannot load community hook %s — invalid spec", py_file.name)
                 continue
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)  # type: ignore[union-attr]
             if not hasattr(module, "register"):
-                _logger.warning(
-                    "Community hook %s has no register() function — skipped", py_file.name
-                )
+                _logger.warning("Community hook %s has no register() function — skipped", py_file.name)
                 continue
             # Support optional second arg for virtual provider registration
             try:

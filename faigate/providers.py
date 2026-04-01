@@ -469,9 +469,7 @@ class ProviderBackend:
             body.update(extra_body)
 
         headers = self._authorization_headers(content_type="application/json")
-        url = self._transport_url(
-            self._transport_path("image_generation_path", "/images/generations")
-        )
+        url = self._transport_url(self._transport_path("image_generation_path", "/images/generations"))
         t0 = time.time()
 
         try:
@@ -673,9 +671,7 @@ class ProviderBackend:
             self.health.record_failure(f"Connection error: {e}")
             raise ProviderError(self.name, 0, f"Connection error: {e}") from e
 
-    async def _stream_response(
-        self, url: str, headers: dict, body: dict, t0: float
-    ) -> AsyncIterator[bytes]:
+    async def _stream_response(self, url: str, headers: dict, body: dict, t0: float) -> AsyncIterator[bytes]:
         """Yield SSE chunks for streaming responses."""
         async with self._client.stream("POST", url, json=body, headers=headers) as resp:
             if resp.status_code >= 400:

@@ -278,8 +278,7 @@ CUSTOM: dict[str, ProviderDef] = {
         example_model="volcengine-plan/ark-code-latest",
         pricing={"input": 0.0, "output": 0.0},
         notes=(
-            "Volcano Engine – coding models"
-            " (ark-code-latest, doubao-seed-code, kimi-k2.5, kimi-k2-thinking, glm-4.7)"
+            "Volcano Engine – coding models (ark-code-latest, doubao-seed-code, kimi-k2.5, kimi-k2-thinking, glm-4.7)"
         ),
     ),
     # ── BytePlus (international equivalent of Volcano Engine) ─────────────
@@ -303,8 +302,7 @@ CUSTOM: dict[str, ProviderDef] = {
         example_model="byteplus-plan/ark-code-latest",
         pricing={"input": 0.0, "output": 0.0},
         notes=(
-            "BytePlus ARK – coding models"
-            " (ark-code-latest, doubao-seed-code, kimi-k2.5, kimi-k2-thinking, glm-4.7)"
+            "BytePlus ARK – coding models (ark-code-latest, doubao-seed-code, kimi-k2.5, kimi-k2-thinking, glm-4.7)"
         ),
     ),
     # ── Synthetic ─────────────────────────────────────────────────────────
@@ -416,10 +414,7 @@ OAUTH: dict[str, ProviderDef] = {
         tier="default",
         example_model="qwen-portal/coder-model",
         pricing={"input": 0.0, "output": 0.0},
-        notes=(
-            "Qwen OAuth (free tier) – device-code flow;"
-            " requires: openclaw plugins enable qwen-portal-auth"
-        ),
+        notes=("Qwen OAuth (free tier) – device-code flow; requires: openclaw plugins enable qwen-portal-auth"),
     ),
 }
 

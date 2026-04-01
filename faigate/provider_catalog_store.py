@@ -206,10 +206,7 @@ class ProviderCatalogStore:
             return
         ts = float(snapshot_at or time.time())
         self._conn.execute(
-            (
-                "DELETE FROM provider_model_snapshots "
-                "WHERE provider_id=? AND source_kind=? AND snapshot_at=?"
-            ),
+            ("DELETE FROM provider_model_snapshots WHERE provider_id=? AND source_kind=? AND snapshot_at=?"),
             (provider_id, source_kind, ts),
         )
         for model in models:

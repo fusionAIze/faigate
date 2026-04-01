@@ -496,9 +496,7 @@ async def test_min_release_age_blocks_auto_update_until_release_has_aged():
             {
                 "tag_name": "v0.6.1",
                 "html_url": "https://github.com/fusionAIze/faigate/releases/tag/v0.6.1",
-                "published_at": (datetime.now(UTC) - timedelta(hours=1))
-                .isoformat()
-                .replace("+00:00", "Z"),
+                "published_at": (datetime.now(UTC) - timedelta(hours=1)).isoformat().replace("+00:00", "Z"),
             },
         )
     )

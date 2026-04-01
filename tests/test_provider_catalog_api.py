@@ -84,9 +84,7 @@ provider_source_refresh:
                 "field_name": "model_id",
                 "old_value": "x-ai/grok-code-fast-1:free",
                 "new_value": "",
-                "message": (
-                    "blackbox: model 'x-ai/grok-code-fast-1:free' disappeared from pricing."
-                ),
+                "message": ("blackbox: model 'x-ai/grok-code-fast-1:free' disappeared from pricing."),
             }
         ]
     )
@@ -109,6 +107,5 @@ def test_provider_catalog_endpoint_includes_source_alerts(provider_catalog_api_s
     assert body["source_catalog"]["alerts"][0]["kind"] == "source-refresh-error"
     assert any(alert["kind"] == "catalog-change" for alert in body["source_alerts"])
     assert any(
-        "verify the source URL, parser, or auth assumptions" in alert["suggestion"]
-        for alert in body["source_alerts"]
+        "verify the source URL, parser, or auth assumptions" in alert["suggestion"] for alert in body["source_alerts"]
     )

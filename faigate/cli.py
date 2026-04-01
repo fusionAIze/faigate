@@ -83,10 +83,7 @@ def _bar(ratio: float, width: int = 20, char: str = "█") -> str:
 def _table(headers: list[str], rows: list[list[str]], col_widths: list[int] | None = None):
     """Print a simple aligned table."""
     if not col_widths:
-        col_widths = [
-            max(len(h), max((len(str(r[i])) for r in rows), default=0)) + 2
-            for i, h in enumerate(headers)
-        ]
+        col_widths = [max(len(h), max((len(str(r[i])) for r in rows), default=0)) + 2 for i, h in enumerate(headers)]
 
     # Header
     hdr = ""

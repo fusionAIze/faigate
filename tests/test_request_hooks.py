@@ -341,10 +341,7 @@ metrics:
         assert hook_state.routing_hints["capability_values"]["tools"] == [True]
         assert hook_state.routing_hints["capability_values"]["long_context"] == [True]
         assert hook_state.routing_hints["prefer_tiers"] == ["default", "reasoning"]
-        assert any(
-            "Claude Code router hook applied profile: coding-default" in note
-            for note in hook_state.notes
-        )
+        assert any("Claude Code router hook applied profile: coding-default" in note for note in hook_state.notes)
 
     @pytest.mark.asyncio
     async def test_claude_code_router_supports_premium_profile(self, tmp_path, monkeypatch):
@@ -436,9 +433,7 @@ metrics:
         assert hook_state.applied_hooks == ["claude-code-router"]
         assert hook_state.routing_hints["routing_mode"] == "premium"
         assert hook_state.routing_hints["prefer_tiers"] == ["reasoning", "default"]
-        assert any(
-            "Claude Code router hook applied profile: premium" in note for note in hook_state.notes
-        )
+        assert any("Claude Code router hook applied profile: premium" in note for note in hook_state.notes)
 
     @pytest.mark.asyncio
     async def test_locality_and_profile_hooks_shape_one_request(self, hook_config):
@@ -475,9 +470,7 @@ metrics:
 
 class TestRequestHookHardening:
     def test_hook_error_response_hides_exception_text(self):
-        response = _request_hook_error_response(
-            HookExecutionError("traceback: provider token leaked in hook output")
-        )
+        response = _request_hook_error_response(HookExecutionError("traceback: provider token leaked in hook output"))
 
         assert response.status_code == 500
         assert b"traceback" not in response.body
@@ -529,14 +522,10 @@ class TestRequestHookHardening:
         assert applied.routing_hints["prefer_providers"] == ["local-worker"]
         assert applied.routing_hints["capability_values"]["local"] == [True]
         assert "unsafe-test" in applied.applied_hooks
-        assert any(
-            "unsupported hook body update field 'internal_flag'" in note for note in applied.notes
-        )
+        assert any("unsupported hook body update field 'internal_flag'" in note for note in applied.notes)
         assert any("invalid profile override" in error for error in applied.errors)
         assert any("routing_hints.prefer_providers" in error for error in applied.errors)
-        assert any(
-            "unsupported routing_hints field 'unexpected'" in error for error in applied.errors
-        )
+        assert any("unsupported routing_hints field 'unexpected'" in error for error in applied.errors)
 
     @pytest.mark.asyncio
     async def test_hook_fail_mode_raises(self, monkeypatch):

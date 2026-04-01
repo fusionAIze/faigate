@@ -148,10 +148,7 @@ def _describe_client_match(match: dict[str, Any]) -> str:
     if match.get("header_present"):
         parts.append("headers present: " + ", ".join(match["header_present"]))
     if match.get("header_contains"):
-        header_parts = [
-            f"{header}~{', '.join(values)}"
-            for header, values in sorted(match["header_contains"].items())
-        ]
+        header_parts = [f"{header}~{', '.join(values)}" for header, values in sorted(match["header_contains"].items())]
         parts.append("header contains: " + "; ".join(header_parts))
     if match.get("any"):
         any_parts = []
@@ -211,9 +208,7 @@ def _build_client_matrix(client_profiles: dict[str, Any]) -> list[dict[str, Any]
                 "name": name,
                 "source": "preset" if name in presets else "custom",
                 "default": name == client_profiles.get("default", "generic"),
-                "matched_by": (
-                    _describe_client_match(match) if match else "default or explicit override"
-                ),
+                "matched_by": (_describe_client_match(match) if match else "default or explicit override"),
                 "routing_intent": _summarize_profile_hints(profile),
                 "has_rule": match is not None,
             }
@@ -272,9 +267,7 @@ def build_onboarding_report(
     if not providers:
         suggestions.append("Add one provider before onboarding clients.")
     if providers and ready == 0:
-        suggestions.append(
-            "Configure at least one ready provider with a real key or local worker URL."
-        )
+        suggestions.append("Configure at least one ready provider with a real key or local worker URL.")
     if not client_profiles.get("enabled"):
         suggestions.append("Enable client_profiles when multiple clients share one gateway.")
     if not client_profiles.get("presets"):
@@ -309,8 +302,7 @@ def build_onboarding_report(
         },
         "ai-native-app": {
             "recommended": any(
-                name not in {"generic", "openclaw", "n8n", "cli", "local-only"}
-                for name in profile_names
+                name not in {"generic", "openclaw", "n8n", "cli", "local-only"} for name in profile_names
             ),
             "header": "X-faigate-Client: your-app",
             "profile": "custom app profile",
@@ -333,8 +325,7 @@ def build_onboarding_report(
             ],
             "notes": [
                 "Start workflow traffic with the n8n preset before adding custom policy rules.",
-                "Use route dry-runs to confirm cheaper or local-first defaults before"
-                " production runs.",
+                "Use route dry-runs to confirm cheaper or local-first defaults before production runs.",
             ],
         },
         "opencode": {
@@ -346,10 +337,8 @@ def build_onboarding_report(
                 "Model: auto",
             ],
             "notes": [
-                "Keep opencode on the OpenAI-compatible path first, and let Gate choose"
-                " the provider behind it.",
-                "Use the opencode profile when coding traffic should stay separate from"
-                " generic CLI traffic.",
+                "Keep opencode on the OpenAI-compatible path first, and let Gate choose the provider behind it.",
+                "Use the opencode profile when coding traffic should stay separate from generic CLI traffic.",
             ],
         },
         "cli": {
@@ -361,10 +350,8 @@ def build_onboarding_report(
                 "export OPENAI_API_KEY=local",
             ],
             "notes": [
-                "Use a stable client tag such as codex, claude, or kilocode to keep"
-                " traces readable.",
-                "Only add hook-based locality or provider overrides when one CLI flow"
-                " truly needs them.",
+                "Use a stable client tag such as codex, claude, or kilocode to keep traces readable.",
+                "Only add hook-based locality or provider overrides when one CLI flow truly needs them.",
             ],
         },
         "swe-af": {
@@ -376,10 +363,8 @@ def build_onboarding_report(
                 "export OPENAI_API_KEY=local",
             ],
             "notes": [
-                "Treat SWE-AF like another OpenAI-compatible agent client first, not a"
-                " special runtime.",
-                "Keep a stable client header so coding and delegated subflows remain"
-                " attributable in traces.",
+                "Treat SWE-AF like another OpenAI-compatible agent client first, not a special runtime.",
+                "Keep a stable client header so coding and delegated subflows remain attributable in traces.",
             ],
         },
         "paperclip": {
@@ -392,8 +377,7 @@ def build_onboarding_report(
             ],
             "notes": [
                 "Start with the common OpenAI-compatible path before inventing a deeper adapter.",
-                "Use client profiles only when paperclip traffic should differ from"
-                " other app traffic.",
+                "Use client profiles only when paperclip traffic should differ from other app traffic.",
             ],
         },
         "ship-faster": {
@@ -405,8 +389,7 @@ def build_onboarding_report(
                 "export OPENAI_API_KEY=local",
             ],
             "notes": [
-                "Use one short client tag first; add more profile splits only when the"
-                " workflow actually needs them.",
+                "Use one short client tag first; add more profile splits only when the workflow actually needs them.",
                 "Prefer hook-based overrides only for narrow rollout or locality constraints.",
             ],
         },
@@ -419,8 +402,7 @@ def build_onboarding_report(
                 "export OPENAI_API_KEY=local",
             ],
             "notes": [
-                "LangChain should stay on the OpenAI-compatible path unless a"
-                " framework-specific blocker appears.",
+                "LangChain should stay on the OpenAI-compatible path unless a framework-specific blocker appears.",
                 "Use route previews before splitting chain traffic into multiple custom profiles.",
             ],
         },
@@ -435,8 +417,7 @@ def build_onboarding_report(
             "notes": [
                 "Keep LangGraph on the shared gateway path and use client tags to"
                 " distinguish graph traffic from generic LangChain traffic.",
-                "Only add dedicated policies when graph workloads need stricter"
-                " locality or cost boundaries.",
+                "Only add dedicated policies when graph workloads need stricter locality or cost boundaries.",
             ],
         },
         "agno": {
@@ -449,10 +430,7 @@ def build_onboarding_report(
             ],
             "notes": [
                 "Keep Agno on the shared OpenAI-compatible path first.",
-                (
-                    "Split profiles only when one agent family needs different cost "
-                    "or locality defaults."
-                ),
+                ("Split profiles only when one agent family needs different cost or locality defaults."),
             ],
         },
         "semantic-kernel": {
@@ -464,10 +442,7 @@ def build_onboarding_report(
                 "export OPENAI_API_KEY=local",
             ],
             "notes": [
-                (
-                    "Use one stable client tag for kernel traffic before adding "
-                    "skill-specific routing."
-                ),
+                ("Use one stable client tag for kernel traffic before adding skill-specific routing."),
                 "Validate tool-heavy paths with route previews before adding custom hook hints.",
             ],
         },
@@ -480,14 +455,8 @@ def build_onboarding_report(
                 "export OPENAI_API_KEY=local",
             ],
             "notes": [
-                (
-                    "Treat Haystack as another OpenAI-compatible client unless a "
-                    "pipeline-specific gap appears."
-                ),
-                (
-                    "Keep retrieval and generation traffic together until a real "
-                    "routing split is needed."
-                ),
+                ("Treat Haystack as another OpenAI-compatible client unless a pipeline-specific gap appears."),
+                ("Keep retrieval and generation traffic together until a real routing split is needed."),
             ],
         },
         "mastra": {
@@ -500,10 +469,7 @@ def build_onboarding_report(
             ],
             "notes": [
                 "Keep Mastra on one shared gateway path first.",
-                (
-                    "Only add dedicated policies when workflow classes need stronger "
-                    "provider separation."
-                ),
+                ("Only add dedicated policies when workflow classes need stronger provider separation."),
             ],
         },
         "google-adk": {
@@ -516,10 +482,7 @@ def build_onboarding_report(
             ],
             "notes": [
                 "Keep Google ADK traffic on the common gateway path for provider consistency.",
-                (
-                    "Use a dedicated profile only when ADK workloads need different "
-                    "fallback or locality rules."
-                ),
+                ("Use a dedicated profile only when ADK workloads need different fallback or locality rules."),
             ],
         },
         "autogen": {
@@ -548,10 +511,7 @@ def build_onboarding_report(
             ],
             "notes": [
                 "Keep retrieval and generation on one gateway surface to start with.",
-                (
-                    "Add dedicated routing only when one index or workflow class needs "
-                    "different provider behavior."
-                ),
+                ("Add dedicated routing only when one index or workflow class needs different provider behavior."),
             ],
         },
         "crewai": {
@@ -579,14 +539,8 @@ def build_onboarding_report(
                 "export OPENAI_API_KEY=local",
             ],
             "notes": [
-                (
-                    "Keep PydanticAI on the common OpenAI-compatible path unless a "
-                    "model API gap appears."
-                ),
-                (
-                    "Use client profiles only when tool or validation-heavy traffic "
-                    "deserves a different provider set."
-                ),
+                ("Keep PydanticAI on the common OpenAI-compatible path unless a model API gap appears."),
+                ("Use client profiles only when tool or validation-heavy traffic deserves a different provider set."),
             ],
         },
         "camel": {
@@ -599,10 +553,7 @@ def build_onboarding_report(
             ],
             "notes": [
                 "Start CAMEL traffic on the shared gateway path and keep one stable client tag.",
-                (
-                    "Only add narrower policies when multi-agent workloads need stronger "
-                    "provider isolation."
-                ),
+                ("Only add narrower policies when multi-agent workloads need stronger provider isolation."),
             ],
         },
     }
@@ -673,9 +624,7 @@ def build_onboarding_validation(report: dict[str, Any]) -> dict[str, Any]:
     if providers["total"] > 1 and not routing["fallback_chain"]:
         blockers.append("Fallback chain is empty for a multi-provider setup.")
     if providers["total"] > 1 and not provider_rollout["stage_1_primary"]:
-        blockers.append(
-            "No ready primary provider is available for a staged multi-provider rollout."
-        )
+        blockers.append("No ready primary provider is available for a staged multi-provider rollout.")
 
     if providers["not_ready"] > 0:
         warnings.append(
@@ -694,10 +643,7 @@ def build_onboarding_validation(report: dict[str, Any]) -> dict[str, Any]:
         warnings.append("Multiple client profiles are configured, but no client match rules exist.")
     for row in clients.get("matrix", []):
         if row["name"] != clients["default_profile"] and not row["has_rule"]:
-            warnings.append(
-                f"Client profile '{row['name']}' has no match rule and only applies"
-                " via explicit override."
-            )
+            warnings.append(f"Client profile '{row['name']}' has no match rule and only applies via explicit override.")
     if routing["request_hooks_enabled"] and routing["request_hook_count"] == 0:
         warnings.append("Request hooks are enabled but no hooks are configured.")
 
@@ -718,9 +664,7 @@ def render_onboarding_report(report: dict[str, Any]) -> str:
     ops_block = report["operations"]
     integration_block = report["integrations"]
     preset_text = ", ".join(client_block["presets"]) if client_block["presets"] else "none"
-    fallback_text = (
-        ", ".join(routing_block["fallback_chain"]) if routing_block["fallback_chain"] else "none"
-    )
+    fallback_text = ", ".join(routing_block["fallback_chain"]) if routing_block["fallback_chain"] else "none"
 
     lines = [
         "fusionAIze Gate onboarding report",
@@ -744,8 +688,7 @@ def render_onboarding_report(report: dict[str, Any]) -> str:
         for item in provider_block["items"]:
             readiness = "ready" if item["ready"] else f"not ready ({item['readiness_reason']})"
             lines.append(
-                f"- {item['name']}: {item['contract']} / {item['backend']} / "
-                f"{item['tier'] or 'default'} / {readiness}"
+                f"- {item['name']}: {item['contract']} / {item['backend']} / {item['tier'] or 'default'} / {readiness}"
             )
 
     lines.extend(
@@ -773,10 +716,8 @@ def render_onboarding_report(report: dict[str, Any]) -> str:
             "",
             "Routing",
             f"- fallback chain: {fallback_text}",
-            f"- policy layer: {routing_block['policy_layer_enabled']} "
-            f"({routing_block['policy_rule_count']} rules)",
-            f"- request hooks: {routing_block['request_hooks_enabled']} "
-            f"({routing_block['request_hook_count']} hooks)",
+            f"- policy layer: {routing_block['policy_layer_enabled']} ({routing_block['policy_rule_count']} rules)",
+            f"- request hooks: {routing_block['request_hooks_enabled']} ({routing_block['request_hook_count']} hooks)",
             "",
             "Provider rollout",
             "- stage 1 primary: " + (", ".join(rollout_block["stage_1_primary"]) or "none"),
@@ -784,8 +725,7 @@ def render_onboarding_report(report: dict[str, Any]) -> str:
             "- stage 3 modality: " + (", ".join(rollout_block["stage_3_modality"]) or "none"),
             "",
             "Provider catalog",
-            f"- tracked providers: {catalog_block['tracked_providers']} / "
-            f"{catalog_block['total_providers']}",
+            f"- tracked providers: {catalog_block['tracked_providers']} / {catalog_block['total_providers']}",
             f"- alerts: {catalog_block['alert_count']}",
             "",
             "Operations",
@@ -809,9 +749,7 @@ def render_onboarding_report(report: dict[str, Any]) -> str:
                 + f"{item['provider']}: {item['provider_type']} / {item['offer_track']} / "
                 + f"{item['evidence_level']} / {item['volatility']}"
             )
-    discovery_items = [
-        item for item in tracked_items if (item.get("discovery") or {}).get("resolved_url")
-    ]
+    discovery_items = [item for item in tracked_items if (item.get("discovery") or {}).get("resolved_url")]
     if discovery_items:
         policy = catalog_block.get("recommendation_policy", {})
         lines.append("- provider discovery:")
@@ -872,10 +810,7 @@ def render_onboarding_report_markdown(report: dict[str, Any]) -> str:
 
     env_requirements = env_block.get("provider_requirements", {})
     if env_requirements.get("missing"):
-        lines.append(
-            "- Missing provider env: "
-            + ", ".join(f"`{item}`" for item in env_requirements["missing"])
-        )
+        lines.append("- Missing provider env: " + ", ".join(f"`{item}`" for item in env_requirements["missing"]))
 
     if provider_block["items"]:
         lines.extend(["", "### Provider Inventory"])
@@ -910,24 +845,17 @@ def render_onboarding_report_markdown(report: dict[str, Any]) -> str:
         [
             "",
             "## Routing",
-            "- Fallback chain: "
-            + (", ".join(f"`{item}`" for item in routing_block["fallback_chain"]) or "none"),
-            f"- Policy layer: {routing_block['policy_layer_enabled']} "
-            f"({routing_block['policy_rule_count']} rules)",
-            f"- Request hooks: {routing_block['request_hooks_enabled']} "
-            f"({routing_block['request_hook_count']} hooks)",
+            "- Fallback chain: " + (", ".join(f"`{item}`" for item in routing_block["fallback_chain"]) or "none"),
+            f"- Policy layer: {routing_block['policy_layer_enabled']} ({routing_block['policy_rule_count']} rules)",
+            f"- Request hooks: {routing_block['request_hooks_enabled']} ({routing_block['request_hook_count']} hooks)",
             "",
             "## Provider Rollout",
-            "- Stage 1 primary: "
-            + (", ".join(f"`{item}`" for item in rollout_block["stage_1_primary"]) or "none"),
-            "- Stage 2 secondary: "
-            + (", ".join(f"`{item}`" for item in rollout_block["stage_2_secondary"]) or "none"),
-            "- Stage 3 modality: "
-            + (", ".join(f"`{item}`" for item in rollout_block["stage_3_modality"]) or "none"),
+            "- Stage 1 primary: " + (", ".join(f"`{item}`" for item in rollout_block["stage_1_primary"]) or "none"),
+            "- Stage 2 secondary: " + (", ".join(f"`{item}`" for item in rollout_block["stage_2_secondary"]) or "none"),
+            "- Stage 3 modality: " + (", ".join(f"`{item}`" for item in rollout_block["stage_3_modality"]) or "none"),
             "",
             "## Provider Catalog",
-            f"- Tracked providers: {catalog_block['tracked_providers']} / "
-            f"{catalog_block['total_providers']}",
+            f"- Tracked providers: {catalog_block['tracked_providers']} / {catalog_block['total_providers']}",
             f"- Alerts: {catalog_block['alert_count']}",
         ]
     )
@@ -946,15 +874,12 @@ def render_onboarding_report_markdown(report: dict[str, Any]) -> str:
                 + f"`{item['provider']}`: {item['provider_type']} / {item['offer_track']} / "
                 + f"{item['evidence_level']} / {item['volatility']}"
             )
-    discovery_items = [
-        item for item in tracked_items if (item.get("discovery") or {}).get("resolved_url")
-    ]
+    discovery_items = [item for item in tracked_items if (item.get("discovery") or {}).get("resolved_url")]
     if discovery_items:
         policy = catalog_block.get("recommendation_policy", {})
         lines.append("- Provider discovery:")
         lines.append(
-            "  - Policy: provider links affect ranking = "
-            + f"`{policy.get('provider_links_affect_ranking', False)}`"
+            "  - Policy: provider links affect ranking = " + f"`{policy.get('provider_links_affect_ranking', False)}`"
         )
         for item in discovery_items:
             discovery = item["discovery"]

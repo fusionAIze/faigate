@@ -112,9 +112,7 @@ def _client_highlights(client_totals: list[dict[str, Any]]) -> dict[str, dict[st
             rows,
             key=lambda row: (_safe_int(row.get("total_tokens")), _safe_int(row.get("requests"))),
         ),
-        "top_cost": max(
-            rows, key=lambda row: (_safe_float(row.get("cost_usd")), _safe_int(row.get("requests")))
-        ),
+        "top_cost": max(rows, key=lambda row: (_safe_float(row.get("cost_usd")), _safe_int(row.get("requests")))),
         "highest_failure_rate": (
             max(
                 failure_rows,
@@ -216,9 +214,7 @@ def _lane_family_summary(
     provider_map: dict[str, dict[str, Any]],
 ) -> list[dict[str, Any]]:
     metric_rows_by_provider = {
-        str(row.get("provider") or ""): row
-        for row in provider_rows
-        if str(row.get("provider") or "")
+        str(row.get("provider") or ""): row for row in provider_rows if str(row.get("provider") or "")
     }
     source_rows: list[dict[str, Any]] = []
     if provider_map:
@@ -231,9 +227,7 @@ def _lane_family_summary(
                     "cost_usd": _safe_float(metrics_row.get("cost_usd")),
                     "lane": dict((inventory_row or {}).get("lane") or {}),
                     "request_readiness": dict((inventory_row or {}).get("request_readiness") or {}),
-                    "route_runtime_state": dict(
-                        (inventory_row or {}).get("route_runtime_state") or {}
-                    ),
+                    "route_runtime_state": dict((inventory_row or {}).get("route_runtime_state") or {}),
                 }
             )
     else:
@@ -391,9 +385,7 @@ def _enrich_provider_rows_with_lane(
                 "lane_cluster": str(lane.get("cluster") or ""),
                 "benchmark_cluster": str(lane.get("benchmark_cluster") or ""),
                 "cost_tier": str(
-                    ((provider_inventory.get("capabilities") or {}).get("cost_tier"))
-                    or lane.get("quality_tier")
-                    or ""
+                    ((provider_inventory.get("capabilities") or {}).get("cost_tier")) or lane.get("quality_tier") or ""
                 ),
                 "freshness_status": str(lane.get("freshness_status") or ""),
                 "review_age_days": int(lane.get("review_age_days") or -1),
@@ -403,9 +395,7 @@ def _enrich_provider_rows_with_lane(
                 "route_runtime_state": dict(provider_inventory.get("route_runtime_state") or {}),
                 "route_add_recommendations": add_recommendations,
                 "recommended_add_provider": (
-                    str(add_recommendations[0].get("provider_name") or "")
-                    if add_recommendations
-                    else ""
+                    str(add_recommendations[0].get("provider_name") or "") if add_recommendations else ""
                 ),
                 "recommended_add_strategy": (
                     str(add_recommendations[0].get("strategy") or "") if add_recommendations else ""
@@ -479,10 +469,7 @@ def _render_refresh_guidance_block(report: dict[str, Any], *, limit: int = 3) ->
         freshness_status = str(item.get("freshness_status") or "unknown")
         review_age_days = int(item.get("review_age_days") or -1)
         age_suffix = f", {review_age_days}d" if review_age_days >= 0 else ""
-        line = (
-            f"- {provider}: {item.get('action_label') or item.get('action')}"
-            f" ({freshness_status}{age_suffix})"
-        )
+        line = f"- {provider}: {item.get('action_label') or item.get('action')} ({freshness_status}{age_suffix})"
         if item.get("refresh_url"):
             line += f" -> {item['refresh_url']}"
         lines.append(line)
@@ -509,9 +496,7 @@ def _render_provider_catalog_block(report: dict[str, Any], *, limit: int = 3) ->
             f"pricing={_safe_int(item.get('pricing_count'))}"
         )
     for alert in list(summary.get("alerts") or [])[:limit]:
-        lines.append(
-            f"- [{alert.get('severity')}] {alert.get('provider_id')}: {alert.get('headline')}"
-        )
+        lines.append(f"- [{alert.get('severity')}] {alert.get('provider_id')}: {alert.get('headline')}")
     alert_summary = dict(summary.get("alert_summary") or {})
     if alert_summary:
         lines.append(
@@ -631,9 +616,7 @@ def build_dashboard_report(
 
     totals = stats.get("totals") or {}
     inventory_provider_map = _inventory_provider_map(inventory_payload)
-    providers = _enrich_provider_rows_with_lane(
-        stats.get("providers") or [], inventory_provider_map
-    )
+    providers = _enrich_provider_rows_with_lane(stats.get("providers") or [], inventory_provider_map)
     route_additions = _route_add_summary(providers)
     lane_families = _lane_family_summary_from_stats(stats.get("lane_families") or [])
     if not lane_families:
@@ -669,18 +652,14 @@ def build_dashboard_report(
 
     total_requests = _safe_int(totals.get("total_requests"))
     total_failures = _safe_int(totals.get("total_failures"))
-    success_pct = (
-        ((total_requests - total_failures) * 100.0 / total_requests) if total_requests else 100.0
-    )
+    success_pct = ((total_requests - total_failures) * 100.0 / total_requests) if total_requests else 100.0
     total_prompt_tokens = _safe_int(totals.get("total_prompt_tokens"))
     total_completion_tokens = _safe_int(totals.get("total_compl_tokens"))
     total_cost = _safe_float(totals.get("total_cost_usd"))
     avg_latency_ms = _safe_float(totals.get("avg_latency_ms"))
 
     fallback_requests = sum(
-        _safe_int(item.get("requests"))
-        for item in routing
-        if str(item.get("layer") or "") == "fallback"
+        _safe_int(item.get("requests")) for item in routing if str(item.get("layer") or "") == "fallback"
     )
     fallback_pct = (fallback_requests * 100.0 / total_requests) if total_requests else 0.0
 
@@ -724,8 +703,7 @@ def build_dashboard_report(
                     {
                         "provider": provider_name,
                         "category": _health_issue_category(str(payload.get("last_error") or "")),
-                        "detail": str(payload.get("last_error") or "").strip()
-                        or "No error detail provided",
+                        "detail": str(payload.get("last_error") or "").strip() or "No error detail provided",
                     }
                 )
 
@@ -829,9 +807,7 @@ def build_dashboard_report(
 
     if top_provider_cost and total_cost > 0:
         dominant_cost_share = (
-            (_safe_float(top_provider_cost.get("cost_usd")) * 100.0 / total_cost)
-            if total_cost
-            else 0.0
+            (_safe_float(top_provider_cost.get("cost_usd")) * 100.0 / total_cost) if total_cost else 0.0
         )
         if dominant_cost_share >= 60.0:
             hints.append(
@@ -840,8 +816,7 @@ def build_dashboard_report(
             cheaper_healthy = [
                 name
                 for name, tier in healthy_provider_tiers.items()
-                if tier in {"cheap", "default", "fallback"}
-                and name != str(top_provider_cost.get("provider") or "")
+                if tier in {"cheap", "default", "fallback"} and name != str(top_provider_cost.get("provider") or "")
             ]
             if cheaper_healthy:
                 decision_support.append(
@@ -852,18 +827,10 @@ def build_dashboard_report(
         top_lane = str(top_provider_cost.get("canonical_model") or "")
         top_route = str(top_provider_cost.get("route_type") or "")
         if top_lane:
-            hints.append(
-                f"Top-cost lane right now: {top_lane}"
-                + (f" via {top_route}" if top_route else "")
-                + "."
-            )
+            hints.append(f"Top-cost lane right now: {top_lane}" + (f" via {top_route}" if top_route else "") + ".")
 
-    rate_limited = [
-        item["provider"] for item in unhealthy_providers if item["category"] == "rate-limited"
-    ]
-    quota_exhausted = [
-        item["provider"] for item in unhealthy_providers if item["category"] == "quota-exhausted"
-    ]
+    rate_limited = [item["provider"] for item in unhealthy_providers if item["category"] == "rate-limited"]
+    quota_exhausted = [item["provider"] for item in unhealthy_providers if item["category"] == "quota-exhausted"]
     if rate_limited:
         decision_support.append(
             "Rate-limit pressure: "
@@ -880,11 +847,7 @@ def build_dashboard_report(
     if healthy_provider_names:
         hints.append(
             f"Healthy providers right now: {', '.join(healthy_provider_names[:4])}"
-            + (
-                ""
-                if len(healthy_provider_names) <= 4
-                else f" +{len(healthy_provider_names) - 4} more"
-            )
+            + ("" if len(healthy_provider_names) <= 4 else f" +{len(healthy_provider_names) - 4} more")
         )
     elif health_payload:
         hints.append("No healthy providers are currently reported by /health.")
@@ -932,9 +895,7 @@ def build_dashboard_report(
             f"{freshness['stale']} route assumption(s) are stale. Review benchmark or pricing guidance before leaning too hard on those lanes."
         )
     elif freshness.get("aging"):
-        hints.append(
-            f"{freshness['aging']} route assumption(s) are aging and worth rechecking soon."
-        )
+        hints.append(f"{freshness['aging']} route assumption(s) are aging and worth rechecking soon.")
     if refresh_guidance:
         top_refresh = refresh_guidance[0]
         decision_support.append(
@@ -947,11 +908,8 @@ def build_dashboard_report(
             {
                 "level": str(catalog_alert.get("severity") or "notice"),
                 "headline": str(catalog_alert.get("headline") or "Provider catalog alert"),
-                "detail": str(catalog_alert.get("detail") or "").strip()
-                or "Provider source catalog requires review.",
-                "suggestion": str(
-                    catalog_alert.get("suggestion") or "Review provider catalog state."
-                ),
+                "detail": str(catalog_alert.get("detail") or "").strip() or "Provider source catalog requires review.",
+                "suggestion": str(catalog_alert.get("suggestion") or "Review provider catalog state."),
             }
         )
     if not provider_catalog_alerts and _safe_int(provider_catalog.get("due_sources")) > 0:
@@ -965,8 +923,7 @@ def build_dashboard_report(
     if provider_catalog_alerts:
         top_catalog_alert = provider_catalog_alerts[0]
         decision_support.append(
-            f"Catalog alert: {top_catalog_alert.get('headline')} "
-            f"Follow up via {top_catalog_alert.get('suggestion')}"
+            f"Catalog alert: {top_catalog_alert.get('headline')} Follow up via {top_catalog_alert.get('suggestion')}"
         )
     if provider_catalog_alert_summary.get("status") == "intervention-needed":
         hints.append(
@@ -1030,9 +987,7 @@ def build_dashboard_report(
                 "success_pct": round(success_pct, 1),
                 "avg_latency_ms": round(avg_latency_ms, 1),
                 "last_request_ago": _format_ago(float(last_request)) if last_request else "never",
-                "first_request_ago": _format_ago(float(first_request))
-                if first_request
-                else "never",
+                "first_request_ago": _format_ago(float(first_request)) if first_request else "never",
             },
             "spend": {
                 "total_cost_usd": round(total_cost, 6),
@@ -1041,21 +996,14 @@ def build_dashboard_report(
                 "completion_tokens": total_completion_tokens,
             },
             "health": {
-                "status": (health_payload or {}).get("status")
-                or ("live" if health_payload else "unknown"),
-                "providers_healthy": _safe_int(
-                    ((health_payload or {}).get("summary") or {}).get("providers_healthy")
-                ),
-                "providers_total": _safe_int(
-                    ((health_payload or {}).get("summary") or {}).get("providers_total")
-                ),
+                "status": (health_payload or {}).get("status") or ("live" if health_payload else "unknown"),
+                "providers_healthy": _safe_int(((health_payload or {}).get("summary") or {}).get("providers_healthy")),
+                "providers_total": _safe_int(((health_payload or {}).get("summary") or {}).get("providers_total")),
                 "providers_request_ready": _safe_int(
                     ((health_payload or {}).get("request_readiness") or {}).get("providers_ready")
                 ),
                 "providers_request_not_ready": _safe_int(
-                    ((health_payload or {}).get("request_readiness") or {}).get(
-                        "providers_not_ready"
-                    )
+                    ((health_payload or {}).get("request_readiness") or {}).get("providers_not_ready")
                 ),
                 "providers_request_ready_compat": readiness_breakdown.get("compat", 0),
                 "unhealthy": unhealthy_providers,
@@ -1166,9 +1114,7 @@ def _render_overview(report: dict[str, Any]) -> str:
         route_additions = report.get("route_additions") or []
         if route_additions:
             top_addition = route_additions[0]
-            lines.append(
-                f"  Next add           {top_addition.get('add_provider')} ({top_addition.get('strategy')})"
-            )
+            lines.append(f"  Next add           {top_addition.get('add_provider')} ({top_addition.get('strategy')})")
     lines.extend(
         [
             "",
@@ -1438,10 +1384,7 @@ def _render_provider_detail(report: dict[str, Any], provider_name: str) -> str:
         None,
     )
     if not row:
-        return (
-            "fusionAIze Gate Dashboard\n\n"
-            f"Provider detail\n\nNo provider row found for '{provider_name}'.\n"
-        )
+        return f"fusionAIze Gate Dashboard\n\nProvider detail\n\nNo provider row found for '{provider_name}'.\n"
 
     provider = str(row.get("provider") or provider_name)
     status = "live-healthy"
@@ -1454,11 +1397,7 @@ def _render_provider_detail(report: dict[str, Any], provider_name: str) -> str:
     request_readiness = row.get("request_readiness") or {}
     transport = row.get("transport") or {}
     provider_routing_paths = _routing_path_summary(
-        [
-            item
-            for item in report.get("routing") or []
-            if str(item.get("provider") or "").strip().lower() == target
-        ]
+        [item for item in report.get("routing") or [] if str(item.get("provider") or "").strip().lower() == target]
     )
     lines = [
         "fusionAIze Gate Dashboard",
@@ -1487,15 +1426,10 @@ def _render_provider_detail(report: dict[str, Any], provider_name: str) -> str:
         lines.append(f"Review age        {_safe_int(row.get('review_age_days'))}d")
     if row.get("freshness_hint"):
         lines.append(f"Freshness hint    {row.get('freshness_hint')}")
-    refresh_lookup = {
-        str(item.get("provider") or "").lower(): item
-        for item in report.get("refresh_guidance") or []
-    }
+    refresh_lookup = {str(item.get("provider") or "").lower(): item for item in report.get("refresh_guidance") or []}
     refresh_item = refresh_lookup.get(target)
     if refresh_item:
-        lines.append(
-            f"Refresh action    {refresh_item.get('action_label') or refresh_item.get('action')}"
-        )
+        lines.append(f"Refresh action    {refresh_item.get('action_label') or refresh_item.get('action')}")
         if refresh_item.get("refresh_url"):
             lines.append(f"Refresh source    {refresh_item.get('refresh_url')}")
         if refresh_item.get("reason"):
@@ -1509,9 +1443,7 @@ def _render_provider_detail(report: dict[str, Any], provider_name: str) -> str:
     if request_readiness.get("operator_hint"):
         lines.append(f"Operator hint     {request_readiness.get('operator_hint')}")
     if row.get("recommended_add_provider"):
-        lines.append(
-            f"Add route         {row.get('recommended_add_provider')} ({row.get('recommended_add_strategy')})"
-        )
+        lines.append(f"Add route         {row.get('recommended_add_provider')} ({row.get('recommended_add_strategy')})")
     if transport:
         lines.extend(
             [
@@ -1535,20 +1467,12 @@ def _render_provider_detail(report: dict[str, Any], provider_name: str) -> str:
         if runtime_state.get("window_state") and runtime_state.get("window_state") != "clear":
             lines.append(f"Runtime window    {runtime_state.get('window_state')}")
         if runtime_state.get("cooldown_remaining_s"):
-            lines.append(
-                f"Cooldown left     {_safe_int(runtime_state.get('cooldown_remaining_s'))}s"
-            )
+            lines.append(f"Cooldown left     {_safe_int(runtime_state.get('cooldown_remaining_s'))}s")
         if runtime_state.get("degraded_remaining_s"):
-            lines.append(
-                f"Degraded left     {_safe_int(runtime_state.get('degraded_remaining_s'))}s"
-            )
+            lines.append(f"Degraded left     {_safe_int(runtime_state.get('degraded_remaining_s'))}s")
         if runtime_state.get("recovered_recently"):
-            lines.append(
-                f"Recovered from    {runtime_state.get('last_recovered_issue_type') or 'n/a'}"
-            )
-            lines.append(
-                f"Recovery watch    {_safe_int(runtime_state.get('recovery_remaining_s'))}s"
-            )
+            lines.append(f"Recovered from    {runtime_state.get('last_recovered_issue_type') or 'n/a'}")
+            lines.append(f"Recovery watch    {_safe_int(runtime_state.get('recovery_remaining_s'))}s")
     if provider in unhealthy:
         lines.append(f"Live issue        {unhealthy[provider]['detail']}")
     if provider_routing_paths:
@@ -1580,15 +1504,10 @@ def _render_client_detail(report: dict[str, Any], client_name: str) -> str:
         None,
     )
     if not row:
-        return (
-            "fusionAIze Gate Dashboard\n\n"
-            f"Client detail\n\nNo client row found for '{client_name}'.\n"
-        )
+        return f"fusionAIze Gate Dashboard\n\nClient detail\n\nNo client row found for '{client_name}'.\n"
 
     name = str(row.get("client_tag") or row.get("client_profile") or client_name)
-    expensive = (
-        _safe_float(row.get("cost_usd")) > 0.5 or _safe_float(row.get("avg_latency_ms")) > 4000
-    )
+    expensive = _safe_float(row.get("cost_usd")) > 0.5 or _safe_float(row.get("avg_latency_ms")) > 4000
     suggested_scenario = _recommended_scenario_for_client(
         str(row.get("client_profile") or name),
         expensive=expensive,

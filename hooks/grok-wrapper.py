@@ -149,8 +149,7 @@ def register(register_fn, register_provider_fn=None) -> None:  # noqa: ANN001
                 "freshness_status": "fresh",
                 "review_age_days": 0,
                 "freshness_hint": (
-                    "Virtual provider via grok_api_adapter — no XAI API key required. "
-                    f"Adapter at {adapter_url}"
+                    f"Virtual provider via grok_api_adapter — no XAI API key required. Adapter at {adapter_url}"
                 ),
             },
         },

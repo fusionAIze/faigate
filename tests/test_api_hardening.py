@@ -376,9 +376,7 @@ def test_route_preview_sanitizes_header_values(api_client):
     assert body["client_tag"] == "cli-agent-wi"
 
 
-def test_route_preview_includes_route_summary_for_opencode_complexity(
-    api_client, monkeypatch, tmp_path
-):
+def test_route_preview_includes_route_summary_for_opencode_complexity(api_client, monkeypatch, tmp_path):
     cfg = load_config(
         _write_config(
             tmp_path,
@@ -518,14 +516,8 @@ metrics:
     assert body["route_summary"]["selected"]["estimated_request_cost_usd"] > 0
     assert body["route_summary"]["selected"]["freshness_status"]
     assert any("Opencode complexity bias" in item for item in body["route_summary"]["why_selected"])
-    assert any(
-        "Benchmark fit favored reasoning-coding" in item
-        for item in body["route_summary"]["why_selected"]
-    )
-    assert any(
-        "Benchmark/cost assumptions are currently" in item
-        for item in body["route_summary"]["why_selected"]
-    )
+    assert any("Benchmark fit favored reasoning-coding" in item for item in body["route_summary"]["why_selected"])
+    assert any("Benchmark/cost assumptions are currently" in item for item in body["route_summary"]["why_selected"])
     assert body["route_summary"]["alternatives"][0]["provider"] == "gemini-flash-lite"
     assert body["route_summary"]["alternatives"][0]["estimated_request_cost_usd"] > 0
     assert body["route_summary"]["alternatives"][0]["why_not_selected"]
@@ -675,9 +667,7 @@ metrics:
             "messages": [
                 {
                     "role": "user",
-                    "content": (
-                        "Design a rollback-safe architecture plan for this refactor under load."
-                    ),
+                    "content": ("Design a rollback-safe architecture plan for this refactor under load."),
                 }
             ],
         },
@@ -688,10 +678,7 @@ metrics:
     assert body["decision"]["provider"] == "kilo-opus"
     assert body["route_summary"]["selected"]["canonical_model"] == "anthropic/opus-4.6"
     assert body["route_summary"]["selected"]["kilo_mode"] == "frontier-premium"
-    assert any(
-        "Kilo frontier fit favored frontier-premium" in item
-        for item in body["route_summary"]["why_selected"]
-    )
+    assert any("Kilo frontier fit favored frontier-premium" in item for item in body["route_summary"]["why_selected"])
     assert any("premium Kilo Opus lane" in item for item in body["route_summary"]["why_selected"])
     assert body["route_summary"]["alternatives"]
     assert any(

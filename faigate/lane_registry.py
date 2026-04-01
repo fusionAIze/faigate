@@ -595,10 +595,7 @@ _PROVIDER_TRANSPORT_BINDINGS: dict[str, dict[str, Any]] = {
         "supports_models_probe": False,
         "notes": [
             "aggregator route uses a shallow chat probe instead of assuming /models support",
-            (
-                "low-cost BLACKBOX routes can shift quickly in pricing, auth behavior, "
-                "or model availability"
-            ),
+            ("low-cost BLACKBOX routes can shift quickly in pricing, auth behavior, or model availability"),
         ],
     },
 }
@@ -890,9 +887,7 @@ def get_route_add_recommendations(
                     "provider_family": family,
                     "route_type": str(binding.get("route_type") or ""),
                     "route_group": "family-lane",
-                    "reason": (
-                        f"adds another {family} family lane for recovery and routing flexibility"
-                    ),
+                    "reason": (f"adds another {family} family lane for recovery and routing flexibility"),
                 }
             )
             seen.add(provider_name)

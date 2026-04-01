@@ -599,9 +599,7 @@ class TestRoutePreview:
         assert response["selected_provider"]["contract"] == "image-provider"
 
     @pytest.mark.asyncio
-    async def test_image_route_preview_prefers_provider_that_fits_size_and_count(
-        self, preview_config
-    ):
+    async def test_image_route_preview_prefers_provider_that_fits_size_and_count(self, preview_config):
         response = await preview_image_route(
             _json_request(
                 "/api/route/image",
@@ -765,9 +763,7 @@ class TestProviderCoverage:
         assert response["providers"]["image-cloud"]["image"]["max_outputs"] == 1
 
     @pytest.mark.asyncio
-    async def test_health_request_readiness_enters_cooldown_under_runtime_pressure(
-        self, preview_config
-    ):
+    async def test_health_request_readiness_enters_cooldown_under_runtime_pressure(self, preview_config):
         main_module._adaptive_state.record_failure("cloud-default", error="429 rate limit")
         main_module._adaptive_state.record_failure("cloud-default", error="429 rate limit")
 
@@ -798,14 +794,10 @@ class TestProviderCoverage:
         assert readiness["status"] == "ready-degraded"
         assert readiness["runtime_window_state"] == "degraded"
         assert readiness["runtime_degraded_remaining_s"] > 0
-        assert (
-            readiness["operator_hint"] == "prefer lower-pressure siblings while this route recovers"
-        )
+        assert readiness["operator_hint"] == "prefer lower-pressure siblings while this route recovers"
 
     @pytest.mark.asyncio
-    async def test_health_request_readiness_blocks_auth_invalid_routes_immediately(
-        self, preview_config
-    ):
+    async def test_health_request_readiness_blocks_auth_invalid_routes_immediately(self, preview_config):
         main_module._adaptive_state.record_failure("cloud-default", error="401 invalid api key")
 
         response = await health()

@@ -234,9 +234,7 @@ metrics:
     assert view["providers"][0]["resolved_url"].startswith("https://")
 
 
-def test_provider_discovery_view_supports_link_source_and_offer_track_filters(
-    tmp_path: Path, monkeypatch
-):
+def test_provider_discovery_view_supports_link_source_and_offer_track_filters(tmp_path: Path, monkeypatch):
     monkeypatch.setenv(
         "FAIGATE_PROVIDER_LINK_OPENROUTER_FALLBACK_URL",
         "https://go.example.test/openrouter",
@@ -304,9 +302,7 @@ def test_build_provider_refresh_guidance_prefers_stale_entries():
     assert guidance[1]["action"] == "review-soon"
 
 
-def test_provider_catalog_report_can_track_provider_from_external_snapshot(
-    tmp_path: Path, monkeypatch
-):
+def test_provider_catalog_report_can_track_provider_from_external_snapshot(tmp_path: Path, monkeypatch):
     snapshot = tmp_path / "provider-catalog.json"
     snapshot.write_text(
         """
@@ -364,9 +360,7 @@ metrics:
     assert report["items"][0]["recommended_model"] == "claude-3-5-haiku-latest"
 
 
-def test_provider_catalog_external_snapshot_can_override_embedded_entry(
-    tmp_path: Path, monkeypatch
-):
+def test_provider_catalog_external_snapshot_can_override_embedded_entry(tmp_path: Path, monkeypatch):
     snapshot = tmp_path / "provider-catalog.json"
     snapshot.write_text(
         """
