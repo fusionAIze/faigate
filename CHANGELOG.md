@@ -41,6 +41,15 @@
 - Updated the roadmap and implementation plan to prioritize cost-aware coding auto modes first, then stronger product surfaces and licensing-aware stack boundaries for Gate as a standalone product
 - Added a dedicated dashboard IA document so the next web and shell dashboard work is grouped around operator jobs such as overview, providers, clients, routes, analytics, request log, integrations, and troubleshooting instead of one long admin surface
 
+## v1.15.1 - 2026-04-01
+
+### Fixed
+
+- Removed hardcoded user path (`/Users/andrelange/Documents/repositories/github/fusionaize-metadata`) from external metadata integration
+- Changed default metadata root to non-existent path, preventing unauthorized directory access requests
+- Updated `sync-metadata.sh` to use `~/.faigate/metadata` or `FAIGATE_METADATA_DIR` environment variable
+- External metadata remains opt-in via `FAIGATE_PROVIDER_METADATA_DIR` environment variable
+
 ## Unreleased
 
 ## v1.13.0 - 2026-03-30

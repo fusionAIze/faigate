@@ -1,3 +1,3 @@
 """fusionAIze Gate package."""
 
-__version__ = "1.15.0"
+__version__ = "1.15.1"
