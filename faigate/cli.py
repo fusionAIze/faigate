@@ -20,6 +20,8 @@ from pathlib import Path
 
 from .config import _safe_db_path, load_config
 from .metrics import MetricsStore
+from .provider_catalog import get_offerings_catalog
+from .cost import estimate_provider_cost
 
 
 # ── Formatting helpers ─────────────────────────────────────────
@@ -270,6 +272,82 @@ def cmd_daily(metrics: MetricsStore, days: int):
     print()
 
 
+def cmd_project(
+    tokens_input: int,
+    tokens_output: int,
+    model: str,
+    include_credits: bool = True,
+):
+    """Project costs for a given token usage and model."""
+    print()
+    print(_c("  ── Cost Projection ──", DIM))
+    print()
+
+    # Get all providers that offer this model
+    offerings = get_offerings_catalog()
+    providers_for_model = set()
+    for offering in offerings.values():
+        if offering.get("model_id") == model:
+            providers_for_model.add(offering.get("provider_id"))
+
+    if not providers_for_model:
+        print(_c(f"  No providers found offering model '{model}'.", RED))
+        print(_c("  Check offerings catalog or try a different model.", DIM))
+        return
+
+    results = []
+    for provider_id in providers_for_model:
+        estimate = estimate_provider_cost(provider_id, model, tokens_input, tokens_output)
+        results.append(estimate)
+
+    # Sort by total cost ascending
+    results.sort(key=lambda x: x["total_cost"])
+
+    # Display results
+    for i, estimate in enumerate(results):
+        color = GREEN if i == 0 else WHITE  # highlight cheapest
+        provider = estimate["provider"]
+        total_cost = estimate["total_cost"]
+        credits = estimate["credits_remaining"]
+        cost_after = estimate["cost_after_credits"]
+
+        print(f"  {_c(provider, color)}")
+        print(
+            f"    Input:  {_tok(tokens_input)} tokens × ${estimate['input_cost_per_1m']:.4f}/1M"
+            f" = {_usd(estimate['input_cost'])}"
+        )
+        print(
+            f"    Output: {_tok(tokens_output)} tokens × ${estimate['output_cost_per_1m']:.4f}/1M"
+            f" = {_usd(estimate['output_cost'])}"
+        )
+        print(f"    Total:  {_usd(total_cost)}")
+        if credits > 0 and include_credits:
+            print(f"    Credits: {_usd(credits)} remaining")
+            print(f"    After credits: {_usd(cost_after)}")
+        if estimate.get("packages"):
+            pkg_count = len(estimate["packages"])
+            print(f"    Packages: {pkg_count} available")
+            for pkg in estimate["packages"][:2]:
+                name = pkg.get("name", "unknown")
+                remaining = pkg.get("remaining", 0)
+                total = pkg.get("total_credits", 0)
+                expiry = pkg.get("expiry_date", "none")
+                print(f"      - {name}: {remaining}/{total} credits (expires {expiry})")
+        print()
+
+    # Summary
+    if len(results) > 1:
+        cheapest = results[0]
+        most_expensive = results[-1]
+        print(_c("  ── Summary ──", DIM))
+        print(f"  Cheapest: {_c(cheapest['provider'], GREEN)} at {_usd(cheapest['total_cost'])}")
+        print(f"  Most expensive: {_c(most_expensive['provider'], RED)} at {_usd(most_expensive['total_cost'])}")
+        if cheapest["total_cost"] > 0:
+            ratio = most_expensive["total_cost"] / cheapest["total_cost"]
+            print(f"  Price ratio: {ratio:.1f}x")
+        print()
+
+
 # ── Main ───────────────────────────────────────────────────────
 
 
@@ -283,7 +361,31 @@ def main():
     parser.add_argument("--daily", action="store_true", help="Show daily cost breakdown")
     parser.add_argument("--days", type=int, default=30, help="Days for --daily (default: 30)")
     parser.add_argument("--json", action="store_true", help="Output as JSON")
+    parser.add_argument("--project", action="store_true", help="Project costs for token usage")
+    parser.add_argument(
+        "--tokens-input", type=int, default=0, help="Input tokens for projection (required with --project)"
+    )
+    parser.add_argument(
+        "--tokens-output", type=int, default=0, help="Output tokens for projection (required with --project)"
+    )
+    parser.add_argument(
+        "--model", type=str, default="deepseek/chat", help="Model ID for projection (e.g., 'deepseek/chat')"
+    )
+    parser.add_argument("--no-credits", action="store_true", help="Exclude package credits from projection")
     args = parser.parse_args()
+
+    # Handle projection mode
+    if args.project:
+        if args.tokens_input <= 0 or args.tokens_output <= 0:
+            print("Error: --tokens-input and --tokens-output must be positive with --project", file=sys.stderr)
+            sys.exit(1)
+        cmd_project(
+            tokens_input=args.tokens_input,
+            tokens_output=args.tokens_output,
+            model=args.model,
+            include_credits=not args.no_credits,
+        )
+        return
 
     # Find DB
     db_path = args.db
