@@ -495,3 +495,46 @@ def test_materialize_provider_metadata_snapshot_writes_effective_catalog(tmp_pat
     assert written["providers"]["deepseek-chat"]["notes"] == "Gate note"
     assert output_path.exists() is True
     assert "Gate note" in output_path.read_text(encoding="utf-8")
+
+
+def test_provider_catalog_report_includes_recommendations(tmp_path):
+    from faigate.config import load_config
+    from faigate.provider_catalog import build_provider_catalog_report
+
+    cfg = load_config(
+        _write_config(
+            tmp_path,
+            """
+server:
+  host: "127.0.0.1"
+  port: 8090
+providers:
+  deepseek-chat:
+    backend: openai-compat
+    base_url: "https://api.deepseek.com/v1"
+    api_key: "secret"
+    model: "deepseek-chat"
+fallback_chain: []
+metrics:
+  enabled: false
+""",
+        )
+    )
+
+    report = build_provider_catalog_report(cfg)
+
+    # Recommendations field should be present
+    assert "recommendations" in report
+    assert isinstance(report["recommendations"], list)
+
+    # If there are priority clusters with items, there should be recommendations
+    if any(cluster["item_count"] > 0 for cluster in report["priority_clusters"]):
+        assert len(report["recommendations"]) > 0
+        # Each recommendation should have required fields
+        for rec in report["recommendations"]:
+            assert "id" in rec
+            assert "title" in rec
+            assert "description" in rec
+            assert "priority" in rec
+            assert "action" in rec
+            assert "cluster_id" in rec

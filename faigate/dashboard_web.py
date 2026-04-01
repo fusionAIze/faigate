@@ -2124,6 +2124,24 @@ tr:hover td{background:rgba(84,171,238,.045)}
       <div class="panel">
         <div class="panel-header">
           <div>
+            <h3>Priority clusters</h3>
+            <p>Catalog health areas needing attention.</p>
+          </div>
+        </div>
+        <div class="bar-list" id="catalog-priority-clusters"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-header">
+          <div>
+            <h3>Recommendations</h3>
+            <p>Actionable guidance based on catalog health.</p>
+          </div>
+        </div>
+        <div class="alert-stack" id="catalog-recommendations"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-header">
+          <div>
               <h3>Tracked provider assumptions</h3>
             <p>Configured vs recommended model, freshness, volatility, and notes.</p>
           </div>
@@ -2655,6 +2673,10 @@ function render(bundle) {
   const traces = bundle.traces.traces || [];
   const catalogItems = bundle.catalog.items || [];
   const sourceCatalog = bundle.catalog.source_catalog || {};
+  const costTruth = bundle.catalog.cost_truth || {};
+  const priorityClusters = bundle.catalog.priority_clusters || [];
+  const recommendations = bundle.catalog.recommendations || [];
+  const trackedProviders = bundle.catalog.tracked_providers || 0;
   const catalogAlerts = (bundle.catalog.alerts || []).concat(bundle.catalog.source_alerts || []);
   const operatorRows = bundle.operators.events || [];
   const modalityRows = bundle.stats.modalities || [];
@@ -2945,6 +2967,9 @@ function render(bundle) {
     {kicker:'Volatile offers', value:String(catalogItems.filter(row => String(row.volatility || '').toLowerCase().includes('high')).length), detail:'Offers flagged as highly volatile', tone:'orange'},
     {kicker:'Untracked providers', value:String(Math.max(0, (bundle.catalog.total_providers || providers.length) - (bundle.catalog.tracked_providers || 0))), detail:'Configured providers outside coverage', tone:'blue'},
     {kicker:'Recent changes', value:String(sourceCatalog.recent_changes || 0), detail:'Source updates in the review window', tone:'lime'},
+    {kicker:'Pricing coverage', value:String(costTruth.tracked_with_pricing || 0) + '/' + trackedProviders, detail:'Providers with pricing metadata', tone:'blue'},
+    {kicker:'Numeric rates', value:String(costTruth.tracked_with_numeric_rates || 0) + '/' + trackedProviders, detail:'Providers with numeric rates', tone:'green'},
+    {kicker:'Fresh pricing', value:String((costTruth.pricing_freshness || {}).fresh || 0) + '/' + (costTruth.tracked_with_pricing || 0), detail:'Pricing metadata updated within freshness window', tone:'lime'},
   ].map(metricCard).join('');
   $('#catalog-summary').innerHTML = [
     {title:'Tracked providers', body:String(bundle.catalog.tracked_providers || 0) + ' of ' + String(bundle.catalog.total_providers || providers.length) + ' configured routes are covered.'},
@@ -2966,6 +2991,20 @@ function render(bundle) {
     tone: 'green',
     empty: 'No refresh guidance in this scope',
   });
+  $('#catalog-priority-clusters').innerHTML = barList(priorityClusters.slice(0, 6), {
+    label: cluster => cluster.name,
+    detail: cluster => cluster.description,
+    value: cluster => cluster.item_count,
+    format: (value, cluster) => value + '/' + cluster.total_items,
+    tone: cluster => cluster.priority === 'high' ? 'orange' : cluster.priority === 'medium' ? 'blue' : 'green',
+    empty: 'No priority clusters to display',
+  });
+  $('#catalog-recommendations').innerHTML = recommendations.length ? recommendations.slice(0, 5).map(rec => alertCard({
+    level: rec.priority || 'medium',
+    headline: rec.title || rec.id,
+    detail: rec.description || '',
+    suggestion: rec.action || '',
+  })).join('') : empty('No recommendations in this scope', 'Catalog health is fully aligned.');
   $('#catalog-table tbody').innerHTML = catalogItems.length ? catalogItems.map(row => `
     <tr>
       <td><strong>${esc(row.provider || '—')}</strong></td>
