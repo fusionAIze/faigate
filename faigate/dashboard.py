@@ -611,6 +611,33 @@ def _render_provider_catalog_block(report: dict[str, Any], *, limit: int = 3) ->
     return lines
 
 
+def _render_packages_block(*, limit: int = 3) -> list[str]:
+    """Render a summary of packages from metadata catalogs."""
+    summary = _metadata_catalogs_summary()
+    packages = _metadata_packages_detail()
+    if not packages:
+        return []
+    lines = ["Packages (credits/expiry)"]
+    lines.append(
+        f"- total={summary.get('packages', {}).get('total', 0)} | "
+        f"expiring soon={summary.get('packages', {}).get('expiring_soon', 0)} | "
+        f"types={', '.join(summary.get('packages', {}).get('types', []))}"
+    )
+    for pkg in packages[:limit]:
+        provider = pkg.get("provider_id", "unknown")
+        name = pkg.get("name", "unnamed")
+        remaining = pkg.get("remaining_credits", 0)
+        total = pkg.get("total_credits", 0)
+        expiry = pkg.get("expiry_date", "none")
+        days_left = pkg.get("days_left")
+        if days_left is not None and days_left >= 0:
+            expiry_display = f"{expiry} ({days_left}d)"
+        else:
+            expiry_display = expiry
+        lines.append(f"- {provider}: {name} | credits={remaining}/{total} | expires={expiry_display}")
+    return lines
+
+
 def _build_priority_next(
     *,
     route_additions: list[dict[str, Any]],
@@ -1500,6 +1527,9 @@ def _render_alerts(report: dict[str, Any]) -> str:
     catalog_block = _render_provider_catalog_block(report)
     if catalog_block:
         lines.extend(catalog_block)
+    packages_block = _render_packages_block()
+    if packages_block:
+        lines.extend(packages_block)
     for hint in report["hints"][:5]:
         lines.append(f"- {hint}")
     path_block = _render_selection_path_block(report)
