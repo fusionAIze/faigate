@@ -450,7 +450,10 @@ provider_source_refresh:
   timeout_seconds: 10.0
   interval_seconds: 21600
   providers:
+    - anthropic
     - blackbox
+    - deepseek
+    - google
     - kilo
     - openai
 ```
@@ -459,4 +462,5 @@ Notes:
 - startup refresh is best-effort and should not block the service if docs are unavailable
 - `interval_seconds` controls the conservative background refresh loop after startup
 - source snapshots live in the same local DB as metrics
+- for providers with a usable local `models` endpoint, Gate also mirrors key-specific model visibility per configured route and compares that against the global source snapshot
 - local billing overlays such as subscription or quota windows belong in the local account profile layer, not in the global provider snapshot

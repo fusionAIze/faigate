@@ -1,0 +1,79 @@
+# git-cliff configuration for fusionAIze Gate
+# https://git-cliff.org/docs/configuration
+
+[changelog]
+# changelog header
+header = "# Changelog\n"
+# template for the changelog body
+body = """
+{% if version %}
+    ## v{{ version }} - {{ timestamp | date(format="%Y-%m-%d") }}
+{% else %}
+    ## Unreleased
+{% endif %}
+
+{% for group, commits in commits | group_by(attribute="group") %}
+    ### {{ group | upper_first }}
+    {% for commit in commits %}
+        - {{ commit.message | upper_first }}\
+        {% if commit.scope %} *({{commit.scope}})*{% endif %}
+    {% endfor %}
+{% endfor %}
+"""
+# template for a single commit in the changelog body
+trim = true
+# post-processing hooks
+postprocessors = [
+    # Remove trailing whitespace
+    { pattern = "\n{3,}", replace = "\n\n" },
+    { pattern = r"\r", replace = "" },
+]
+# sort the commits inside sections
+sort_commits = "newest"
+
+[git]
+# parse the commits based on https://www.conventionalcommits.org
+conventional_commits = true
+# filter out the commits that are not conventional
+filter_unconventional = true
+# process each line of a commit as an individual commit
+split_commits = false
+# regex for parsing the commit references
+commit_parsers = [
+    { message = "^feat", group = "Added" },
+    { message = "^fix", group = "Fixed" },
+    { message = "^docs", group = "Documentation" },
+    { message = "^style", group = "Style" },
+    { message = "^refactor", group = "Refactored" },
+    { message = "^perf", group = "Performance" },
+    { message = "^test", group = "Tests" },
+    { message = "^build", group = "Build" },
+    { message = "^ci", group = "CI" },
+    { message = "^chore", group = "Chore" },
+    { message = "^revert", group = "Reverted" },
+]
+# protect breaking changes from being skipped due to matching a commit_parser
+protect_breaking_commits = true
+# filter out the commits that are not matched by commit parsers
+filter_commits = true
+# regex for matching and skipping commits
+ignore_commits = [
+    "^Merge",
+    "^Revert",
+    "^Release",
+]
+
+[bump]
+# bump mappings for version increment based on commit types
+mapping = [
+    { break = "major" },
+    { type = "feat", bump = "minor" },
+    { type = "fix", bump = "patch" },
+    { type = "perf", bump = "patch" },
+    { type = "refactor", bump = "patch" },
+    { type = "docs", bump = "patch" },
+]
+
+[tag]
+# regex for matching and parsing the version from a tag
+pattern = "^v([0-9]+\\.[0-9]+\\.[0-9]+)$"

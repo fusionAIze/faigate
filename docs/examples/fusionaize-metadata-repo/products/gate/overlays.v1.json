@@ -22,7 +22,11 @@
         "refreshed_at": "2026-03-31T18:15:00Z",
         "freshness_status": "fresh",
         "input_cost_per_1m": 0.8,
-        "output_cost_per_1m": 4.0
+        "output_cost_per_1m": 4.0,
+        "promotion": "Spring 2026 Discount",
+        "discount_percentage": 15.0,
+        "expires_at": "2026-04-30T23:59:59Z",
+        "promotion_source": "provider-announcement"
       }
     },
     "anthropic-sonnet": {
@@ -45,7 +49,11 @@
         "refreshed_at": "2026-03-31T18:15:00Z",
         "freshness_status": "fresh",
         "input_cost_per_1m": 3.0,
-        "output_cost_per_1m": 15.0
+        "output_cost_per_1m": 15.0,
+        "promotion": "Q1 2026 Launch Offer",
+        "discount_percentage": 10.0,
+        "expires_at": "2026-03-15T23:59:59Z",  # Expired promotion
+        "promotion_source": "provider-announcement"
       }
     },
     "gemini-pro": {

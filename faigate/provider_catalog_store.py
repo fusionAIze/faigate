@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS provider_availability_snapshots (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     provider_id TEXT NOT NULL,
     route_name TEXT NOT NULL,
+    source_name TEXT DEFAULT 'route-state',
     checked_at REAL NOT NULL,
     model_id TEXT DEFAULT '',
     available_for_key INTEGER DEFAULT 0,
@@ -106,7 +107,23 @@ class ProviderCatalogStore:
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA synchronous=NORMAL")
         self._conn.executescript(_CREATE_SQL)
+        self._migrate_schema()
         self._conn.commit()
+
+    def _migrate_schema(self) -> None:
+        if not self._conn:
+            return
+        columns = {
+            row[1]
+            for row in self._conn.execute("PRAGMA table_info(provider_availability_snapshots)")
+        }
+        if "source_name" not in columns:
+            self._conn.execute(
+                """
+                ALTER TABLE provider_availability_snapshots
+                ADD COLUMN source_name TEXT DEFAULT 'route-state'
+                """
+            )
 
     def close(self) -> None:
         if self._conn:
@@ -267,6 +284,7 @@ class ProviderCatalogStore:
         provider_id: str,
         route_name: str,
         *,
+        source_name: str = "route-state",
         model_id: str = "",
         available_for_key: bool = False,
         request_ready: bool = False,
@@ -280,13 +298,14 @@ class ProviderCatalogStore:
         self._conn.execute(
             """
             INSERT INTO provider_availability_snapshots(
-                provider_id, route_name, checked_at, model_id,
+                provider_id, route_name, source_name, checked_at, model_id,
                 available_for_key, request_ready, verified_via, last_issue_type, metadata_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 provider_id,
                 route_name,
+                source_name,
                 float(checked_at or time.time()),
                 model_id,
                 1 if available_for_key else 0,
@@ -297,6 +316,52 @@ class ProviderCatalogStore:
             ),
         )
         self._conn.commit()
+
+    def get_latest_availability(
+        self,
+        *,
+        provider_id: str | None = None,
+        source_name: str | None = None,
+    ) -> list[dict[str, Any]]:
+        if not self._conn:
+            return []
+
+        where_clauses: list[str] = []
+        params: list[Any] = []
+        if provider_id:
+            where_clauses.append("provider_id=?")
+            params.append(provider_id)
+        if source_name:
+            where_clauses.append("source_name=?")
+            params.append(source_name)
+        where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+        cur = self._conn.execute(
+            f"""
+            SELECT snap.provider_id, snap.route_name, snap.source_name, snap.checked_at,
+                snap.model_id, snap.available_for_key, snap.request_ready,
+                snap.verified_via, snap.last_issue_type, snap.metadata_json
+            FROM provider_availability_snapshots AS snap
+            INNER JOIN (
+                SELECT provider_id, route_name, source_name, MAX(checked_at) AS checked_at
+                FROM provider_availability_snapshots
+                {where_sql}
+                GROUP BY provider_id, route_name, source_name
+            ) AS latest
+            ON snap.provider_id = latest.provider_id
+                AND snap.route_name = latest.route_name
+                AND snap.source_name = latest.source_name
+                AND snap.checked_at = latest.checked_at
+            ORDER BY snap.provider_id, snap.route_name, snap.source_name
+            """,
+            params,
+        )
+        cols = [item[0] for item in cur.description]
+        rows = [dict(zip(cols, row)) for row in cur.fetchall()]
+        for row in rows:
+            row["metadata"] = json.loads(str(row.pop("metadata_json") or "{}"))
+            row["available_for_key"] = bool(row.get("available_for_key"))
+            row["request_ready"] = bool(row.get("request_ready"))
+        return rows
 
     def upsert_account_profile(
         self,

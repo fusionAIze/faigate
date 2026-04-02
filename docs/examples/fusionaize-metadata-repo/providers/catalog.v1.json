@@ -21,7 +21,11 @@
         "source_type": "provider-docs",
         "source_url": "https://api-docs.deepseek.com/pricing",
         "refreshed_at": "2026-03-31T17:45:00Z",
-        "freshness_status": "fresh"
+        "freshness_status": "fresh",
+        "promotion": "introductory-discount",
+        "discount_percentage": 20,
+        "expires_at": "2026-06-30T23:59:59Z",
+        "promotion_source": "provider-announcement"
       }
     }
   }

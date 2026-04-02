@@ -1,0 +1,27 @@
+[run]
+source = faigate
+omit =
+    */tests/*
+    */__pycache__/*
+    */vendor/*
+    */assets/*
+branch = true
+
+[report]
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    if self.debug:
+    if settings.DEBUG
+    raise AssertionError
+    raise NotImplementedError
+    if 0:
+    if __name__ == .__main__.:
+    @property
+    @abstractmethod
+ignore_errors = true
+show_missing = true
+
+[html]
+directory = htmlcov
+title = fusionAIze Gate Coverage Report

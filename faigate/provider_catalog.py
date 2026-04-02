@@ -18,7 +18,7 @@ import json
 import logging
 import os
 import re
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -931,6 +931,47 @@ def _alert(
     return payload
 
 
+def _check_promotion_expiry(pricing: dict[str, Any], provider: str) -> dict[str, Any] | None:
+    """Check if a promotion is about to expire and return an alert if needed."""
+    expires_at = pricing.get("expires_at")
+    if not expires_at:
+        return None
+    try:
+        expiry = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+        now = datetime.now(expiry.tzinfo) if expiry.tzinfo else datetime.now()
+        days_left = (expiry - now).days
+        if days_left < 0:
+            return _alert(
+                provider=provider,
+                severity="notice",
+                code="promotion-expired",
+                message=(
+                    f"Promotion '{pricing.get('promotion', 'unknown')}' for provider '{provider}' "
+                    f"expired {abs(days_left)} days ago."
+                ),
+                promotion=pricing.get("promotion"),
+                expires_at=expires_at,
+                days_overdue=abs(days_left),
+            )
+        elif days_left <= 7:
+            return _alert(
+                provider=provider,
+                severity="notice",
+                code="promotion-expiring-soon",
+                message=(
+                    f"Promotion '{pricing.get('promotion', 'unknown')}' for provider '{provider}' "
+                    f"expires in {days_left} days."
+                ),
+                promotion=pricing.get("promotion"),
+                expires_at=expires_at,
+                days_left=days_left,
+            )
+    except (ValueError, TypeError):
+        # If date parsing fails, ignore
+        pass
+    return None
+
+
 def _tracked_item(
     provider_name: str,
     provider: dict[str, Any],
@@ -1097,6 +1138,13 @@ def build_provider_catalog_report(config: Config) -> dict[str, Any]:
                     last_reviewed=item["last_reviewed"],
                 )
             )
+
+        # Promotion expiry check
+        if check_cfg.get("enabled") and item.get("pricing_available"):
+            pricing = item.get("pricing", {})
+            promotion_alert = _check_promotion_expiry(pricing, provider_name)
+            if promotion_alert:
+                alerts.append(promotion_alert)
 
     # Calculate cost truth statistics
     cost_truth_stats = {

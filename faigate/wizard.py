@@ -23,6 +23,7 @@ from .lane_registry import (
 )
 from .provider_catalog import build_provider_refresh_guidance, get_provider_catalog
 from .providers import ProviderBackend
+from .config import dedupe_model_shortcut_aliases
 
 ProviderFactory = dict[str, Any]
 
@@ -3059,6 +3060,7 @@ def merge_initial_config(
         _mapping_or_empty(suggested_shortcuts.get("shortcuts")),
     )
     merged["model_shortcuts"] = existing_shortcuts
+    merged, _ = dedupe_model_shortcut_aliases(merged)
 
     existing_profiles = _mapping_or_empty(merged.get("client_profiles"))
     suggested_profiles = _mapping_or_empty(suggestion.get("client_profiles"))
@@ -3160,7 +3162,7 @@ def build_initial_config(
             "on_startup": True,
             "timeout_seconds": 10.0,
             "interval_seconds": 21600,
-            "providers": ["blackbox", "kilo", "openai"],
+            "providers": ["anthropic", "blackbox", "deepseek", "google", "kilo", "openai"],
         },
         "providers": providers,
         "fallback_chain": fallback_chain,

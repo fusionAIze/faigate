@@ -105,6 +105,8 @@
 - Added an internal canonical request and response layer for bridge traffic, which keeps Anthropic-shaped ingress mapping separate from the existing routing and completion core instead of adding one-off protocol logic directly in the router
 - Added a community `claude-code-router` hook that can prefer coding-strong, tool-capable, and larger-context routes for Claude Code traffic without making the bridge itself depend on any one routing policy
 - Added bridge-specific validation and release-readiness helpers, including a client-near validation script and an explicit bridge release checklist for opt-in production rollouts
+- Expanded the provider source catalog scope beyond `blackbox`, `kilo`, and `openai` so Gate can also track mirrored official source data for `anthropic`, `deepseek`, and `google`
+- Added local models-endpoint overlays per configured route, which lets Gate compare what a specific key can really see against the mirrored global provider catalog
 
 ### Changed
 
@@ -112,6 +114,8 @@
 - Improved quota-aware fallback behavior for Anthropic-shaped traffic by introducing shared quota metadata on routes, which lets Gate avoid blindly retrying another path that is still backed by the same exhausted Anthropic or BYOK quota domain
 - Clarified the Bridge release position across docs: `v1.13.0` ships the Anthropic surface as opt-in and production-usable for early adopters, but does not claim full Anthropic, Claude Code, or Claude Desktop parity yet
 - Aligned the doctor and bridge validation tooling with non-default live configs so release validation runs against the same configured DB, env file, and runtime instance instead of silently falling back to repo-local defaults
+- Provider source alerts now distinguish more clearly between global catalog drift and key-specific route/model visibility drift
+- Catalog summaries now include local route counts, local visible model counts, and route-vs-catalog mismatch hints instead of only source freshness and change counts
 
 ## v1.12.0 - 2026-03-29
 

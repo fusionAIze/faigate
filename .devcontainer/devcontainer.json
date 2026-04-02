@@ -1,0 +1,54 @@
+{
+  "name": "fusionAIze Gate",
+  "image": "mcr.microsoft.com/devcontainers/python:1-3.12-bullseye",
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+  "postCreateCommand": "pip install -e .[dev] && pre-commit install",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-python.black-formatter",
+        "charliermarsh.ruff",
+        "tamasfe.even-better-toml",
+        "ms-azuretools.vscode-docker",
+        "github.vscode-github-actions",
+        "bierner.markdown-preview-github-styles",
+        "redhat.vscode-yaml",
+        "ms-vscode.hexeditor"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.testing.pytestEnabled": true,
+        "python.testing.unittestEnabled": false,
+        "python.testing.pytestArgs": ["tests"],
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+          "source.organizeImports": "explicit"
+        },
+        "[python]": {
+          "editor.defaultFormatter": "charliermarsh.ruff",
+          "editor.formatOnSave": true
+        },
+        "[json]": {
+          "editor.defaultFormatter": "vscode.json-language-features"
+        },
+        "[yaml]": {
+          "editor.defaultFormatter": "redhat.vscode-yaml"
+        },
+        "ruff.path": ["/usr/local/py-utils/bin/ruff"]
+      }
+    }
+  },
+  "remoteUser": "vscode",
+  "forwardPorts": [8080],
+  "portsAttributes": {
+    "8080": {
+      "label": "faigate dashboard",
+      "onAutoForward": "notify"
+    }
+  }
+}

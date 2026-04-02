@@ -187,7 +187,7 @@ That broader check adds:
 - basic `tool_use` / `tool_result` flow shape
 - doctor and provider-probe output after the same config is live
 
-For the explicit release gate, see [Anthropic Bridge Release Readiness](./anthropic-bridge-release-readiness.md).
+For the explicit release gate, see [Anthropic Bridge Release Readiness](./bridge/anthropic-bridge-release-readiness.md).
 
 ## Known v1 Limits
 

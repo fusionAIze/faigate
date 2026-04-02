@@ -1,0 +1,8 @@
+# Map commit authors for consistent contributor attribution
+# Format: Proper Name <proper-email> Commit Name <commit-email>
+
+# Map André Lange to typelicious for GitHub contributor recognition
+typelicious <andre.lange@typelicious.com> André Lange <andre.lange@typelicious.com>
+
+# Note: AI model contributions (e.g., Claude, GPT) are not considered human contributors
+# and should not appear in contributor lists. Their commits are considered automated tooling.

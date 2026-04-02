@@ -1,0 +1,79 @@
+[
+  {
+    "id": "proc_2026-04-02T0911_f38886",
+    "workspaceId": "mnh8wrrb",
+    "title": "faigate server on port 8092",
+    "command": "cd /Users/andrelange/Documents/repositories/github/faigate && python3 -m faigate",
+    "cwd": "/Users/andrelange/Documents/repositories/github/faigate",
+    "status": "stopped",
+    "pid": 65532,
+    "startedAt": "2026-04-02T09:11:51.759Z",
+    "outputSizeBytes": 1572,
+    "stoppedAt": "2026-04-02T09:23:03.877Z"
+  },
+  {
+    "id": "proc_2026-04-02T0919_daa525",
+    "workspaceId": "mnh8wrrb",
+    "title": "faigate server with metadata",
+    "command": "cd /Users/andrelange/Documents/repositories/github/faigate && FAIGATE_PROVIDER_METADATA_DIR=/Users/andrelange/Documents/repositories/github/faigate/docs/examples/fusionaize-metadata-repo python3 -m faigate",
+    "cwd": "/Users/andrelange/Documents/repositories/github/faigate",
+    "status": "error",
+    "pid": 73920,
+    "startedAt": "2026-04-02T09:19:22.138Z",
+    "outputSizeBytes": 2134,
+    "exitCode": 3,
+    "stoppedAt": "2026-04-02T09:19:23.453Z"
+  },
+  {
+    "id": "proc_2026-04-02T0921_e1a02b",
+    "workspaceId": "mnh8wrrb",
+    "title": "faigate server with metadata on port 8092",
+    "command": "cd /Users/andrelange/Documents/repositories/github/faigate && FAIGATE_PROVIDER_METADATA_DIR=/Users/andrelange/Documents/repositories/github/faigate/docs/examples/fusionaize-metadata-repo python3 -m faigate",
+    "cwd": "/Users/andrelange/Documents/repositories/github/faigate",
+    "status": "error",
+    "pid": 80702,
+    "startedAt": "2026-04-02T09:21:57.695Z",
+    "outputSizeBytes": 1662,
+    "exitCode": 1,
+    "stoppedAt": "2026-04-02T09:21:58.598Z"
+  },
+  {
+    "id": "proc_2026-04-02T0922_6b1c2e",
+    "workspaceId": "mnh8wrrb",
+    "title": "faigate server port 8092",
+    "command": "cd /Users/andrelange/Documents/repositories/github/faigate && FAIGATE_PROVIDER_METADATA_DIR=/Users/andrelange/Documents/repositories/github/faigate/docs/examples/fusionaize-metadata-repo python3 -m faigate",
+    "cwd": "/Users/andrelange/Documents/repositories/github/faigate",
+    "status": "error",
+    "pid": 81311,
+    "startedAt": "2026-04-02T09:22:08.700Z",
+    "outputSizeBytes": 1662,
+    "exitCode": 1,
+    "stoppedAt": "2026-04-02T09:22:09.483Z"
+  },
+  {
+    "id": "proc_2026-04-02T0923_af21c4",
+    "workspaceId": "mnh8wrrb",
+    "title": "faigate server with metadata",
+    "command": "cd /Users/andrelange/Documents/repositories/github/faigate && FAIGATE_PROVIDER_METADATA_DIR=/Users/andrelange/Documents/repositories/github/faigate/docs/examples/fusionaize-metadata-repo python3 -m faigate",
+    "cwd": "/Users/andrelange/Documents/repositories/github/faigate",
+    "status": "error",
+    "pid": 85481,
+    "startedAt": "2026-04-02T09:23:17.951Z",
+    "outputSizeBytes": 1662,
+    "exitCode": 1,
+    "stoppedAt": "2026-04-02T09:23:18.719Z"
+  },
+  {
+    "id": "proc_2026-04-02T0926_ddc210",
+    "workspaceId": "mnh8wrrb",
+    "title": "faigate server with merged external metadata",
+    "command": "cd /Users/andrelange/Documents/repositories/github/faigate && FAIGATE_PROVIDER_METADATA_DIR=/Users/andrelange/Documents/repositories/github/faigate/docs/examples/fusionaize-metadata-repo python3 -m faigate",
+    "cwd": "/Users/andrelange/Documents/repositories/github/faigate",
+    "status": "error",
+    "pid": 95038,
+    "startedAt": "2026-04-02T09:26:11.156Z",
+    "outputSizeBytes": 1662,
+    "exitCode": 1,
+    "stoppedAt": "2026-04-02T09:26:12.658Z"
+  }
+]

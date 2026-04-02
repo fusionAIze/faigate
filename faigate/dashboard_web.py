@@ -2052,6 +2052,15 @@ tr:hover td{background:rgba(84,171,238,.045)}
         </div>
         <div class="table-wrap"><table id="routes-table"><thead><tr><th>Layer</th><th>Rule</th><th>Provider</th><th>Lane family</th><th>Selection path</th><th>Requests</th><th>Cost</th><th>Latency</th></tr></thead><tbody></tbody></table></div>
       </div>
+      <div class="panel">
+        <div class="panel-header">
+          <div>
+              <h3>Route decision history</h3>
+            <p>Recent routing decisions with explanations.</p>
+          </div>
+        </div>
+        <div class="table-wrap"><table id="route-decisions-table"><thead><tr><th>Time</th><th>Provider</th><th>Model</th><th>Why selected</th><th>Alternatives</th><th>Cost</th><th>Latency</th></tr></thead><tbody></tbody></table></div>
+      </div>
     </section>
 
     <section class="view-panel" id="view-analytics">
@@ -2146,7 +2155,7 @@ tr:hover td{background:rgba(84,171,238,.045)}
             <p>Configured vs recommended model, freshness, volatility, and notes.</p>
           </div>
         </div>
-        <div class="table-wrap"><table id="catalog-table"><thead><tr><th>Provider</th><th>Status</th><th>Configured</th><th>Recommended</th><th>Offer track</th><th>Volatility</th><th>Reviewed</th><th>Why it matters</th></tr></thead><tbody></tbody></table></div>
+        <div class="table-wrap"><table id="catalog-table"><thead><tr><th>Provider</th><th>Status</th><th>Configured</th><th>Recommended</th><th>Offer track</th><th>Volatility</th><th>Source</th><th>Reviewed</th><th>Why it matters</th></tr></thead><tbody></tbody></table></div>
       </div>
     </section>
 
@@ -2531,6 +2540,32 @@ function topAlertBundle(bundle) {
       suggestion: alert.recommended_model ? 'Check recommended model ' + alert.recommended_model + '.' : 'Refresh the catalog or review the source trail.',
     });
   });
+  // Package renewal alerts
+  const packagesSummary = bundle.stats.packages_summary || {};
+  const packagesDetail = bundle.stats.packages_detail || [];
+  if (packagesSummary.expiring_soon > 0) {
+    alerts.push({
+      level: 'warning',
+      headline: packagesSummary.expiring_soon + ' package' + (packagesSummary.expiring_soon === 1 ? '' : 's') + ' expiring soon',
+      detail: 'Package credits will expire within 7 days.',
+      suggestion: 'Review packages and consider renewal before expiry.',
+    });
+  }
+  if (packagesDetail.length > 0) {
+    const lowCreditPackages = packagesDetail.filter(pkg => {
+      const remaining = pkg.remaining_credits;
+      const total = pkg.total_credits;
+      return remaining !== null && total !== null && total > 0 && remaining / total < 0.1;
+    });
+    if (lowCreditPackages.length > 0) {
+      alerts.push({
+        level: 'warning',
+        headline: lowCreditPackages.length + ' package' + (lowCreditPackages.length === 1 ? '' : 's') + ' running low on credits',
+        detail: 'Packages have less than 10% credits remaining.',
+        suggestion: 'Monitor usage or purchase additional credits.',
+      });
+    }
+  }
   const unhealthy = (bundle.inventory.providers || []).filter(row => row.healthy === false);
   if (unhealthy.length) {
     const top = unhealthy[0];
@@ -2664,6 +2699,8 @@ function render(bundle) {
   latestBundle = bundle;
   const totals = bundle.stats.totals || {};
   const providers = bundle.inventory.providers || [];
+  const packagesSummary = bundle.stats.packages_summary || {};
+  const packagesDetail = bundle.stats.packages_detail || [];
   const providerMetrics = Object.fromEntries((bundle.stats.providers || []).map(row => [row.provider, row]));
   const clientTotals = bundle.stats.client_totals || [];
   const routing = bundle.stats.routing || [];
@@ -2702,6 +2739,7 @@ function render(bundle) {
   });
   const sortedClients = [...clientTotals].sort((a, b) => (Number(b.cost_usd || 0) - Number(a.cost_usd || 0)) || (Number(b.failures || 0) - Number(a.failures || 0)) || (Number(b.requests || 0) - Number(a.requests || 0)));
   const sortedRouting = [...routing].sort((a, b) => (Number(b.cost_usd || 0) - Number(a.cost_usd || 0)) || (Number(b.requests || 0) - Number(a.requests || 0)));
+  const sortedTraces = [...traces].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
   let primaryAction = {target: 'providers', label: 'Open providers'};
   let secondaryAction = {target: 'routes', label: 'Inspect routes'};
@@ -2737,6 +2775,7 @@ function render(bundle) {
     ['Top lane family', laneFamilies.length ? (laneFamilies[0].lane_family || 'unclassified') : '—'],
     ['Top cost client', topCost ? (topCost.client_tag || topCost.client_profile || 'generic') : '—'],
     ['Catalog due', String(sourceCatalog.due_sources || 0)],
+    ['Packages', String(packagesSummary.total || 0) + (packagesSummary.expiring_soon > 0 ? ' (' + String(packagesSummary.expiring_soon) + ' expiring)' : '')],
   ].map(([label, value]) => `<div class="rack-row"><div class="label">${esc(label)}</div><strong>${esc(value)}</strong></div>`).join('');
 
   $('#overview-cards').innerHTML = [
@@ -2747,6 +2786,7 @@ function render(bundle) {
     {kicker:'Estimated spend', value:fmtUsd(totals.total_cost_usd || 0), detail:fmtTok((totals.total_prompt_tokens || 0) + (totals.total_compl_tokens || 0)) + ' tokens', tone:'orange'},
     {kicker:'Avg latency', value:fmtMs(totals.avg_latency_ms || 0), detail:'Last request ' + ago(totals.last_request), tone:'green'},
     {kicker:'Catalog drift', value:String(bundle.catalog.alert_count || 0), detail:String(sourceCatalog.due_sources || 0) + ' reviews due', tone:'orange'},
+    {kicker:'Packages', value:String(packagesSummary.total || 0), detail:String(packagesSummary.expiring_soon || 0) + ' expiring soon', tone:packagesSummary.expiring_soon > 0 ? 'warning' : 'blue'},
     {kicker:'Top client', value:esc(bundle.stats.client_highlights && bundle.stats.client_highlights.top_requests ? (bundle.stats.client_highlights.top_requests.client_tag || bundle.stats.client_highlights.top_requests.client_profile || 'generic') : '—'), detail:'Highest request volume', tone:'lime'},
   ].map(metricCard).join('');
 
@@ -2885,6 +2925,18 @@ function render(bundle) {
     </tr>
   `).join('') : tableEmpty(8, 'No routing rows in this scope', 'Clear filters or switch to All traffic.');
 
+  $('#route-decisions-table tbody').innerHTML = sortedTraces.length ? sortedTraces.map(row => `
+    <tr>
+      <td class="mono">${esc(ago(row.timestamp || 0))}</td>
+      <td>${esc(row.provider || '—')}</td>
+      <td class="mono">${esc(row.model || '—')}</td>
+      <td><span class="tiny">${esc((row.route_summary?.why_selected || []).slice(0, 2).join(', ') || '—')}</span></td>
+      <td><span class="tiny">${esc((row.route_summary?.alternatives || []).length ? `${row.route_summary.alternatives.length} alternatives` : '—')}</span></td>
+      <td class="mono">${fmtUsd(row.cost_usd || 0)}</td>
+      <td class="mono">${fmtMs(row.latency_ms || 0)}</td>
+    </tr>
+  `).join('') : tableEmpty(7, 'No recent route decisions in this scope', 'Clear filters or wait for requests.');
+
   const analyticsDailyLabels = (bundle.stats.daily || []).map(row => row.day || '');
   const analyticsHourlyLabels = (bundle.stats.hourly || []).map(row => row.hour_offset || '');
   $('#analytics-kpis').innerHTML = [
@@ -3013,10 +3065,11 @@ function render(bundle) {
       <td class="mono">${esc(row.recommended_model || '—')}</td>
       <td>${esc(row.offer_track || '—')}</td>
       <td>${esc(row.volatility || '—')}</td>
+      <td>${esc(row.pricing?.source_type || '—')}</td>
       <td class="mono">${esc(row.last_reviewed || '—')}</td>
       <td class="tiny">${esc(row.notes || ((row.model_matches_recommendation === false) ? 'Configured model differs from the curated recommendation.' : 'Catalog guidance is aligned.')).slice(0, 180)}</td>
     </tr>
-  `).join('') : tableEmpty(8, 'No tracked provider assumptions in this scope', 'Widen the scope or check whether provider catalog coverage is enabled.');
+  `).join('') : tableEmpty(9, 'No tracked provider assumptions in this scope', 'Widen the scope or check whether provider catalog coverage is enabled.');
 
   $('#integrations-kpis').innerHTML = [
     {kicker:'Claude-ready', value:(readiness.providers_ready || 0) ? 'Yes' : 'No', detail:'Anthropic endpoint reachable', tone:(readiness.providers_ready || 0) ? 'green' : 'orange'},

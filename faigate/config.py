@@ -1260,6 +1260,120 @@ def _normalize_routing_modes(data: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
+def _shortcut_alias_tokens(shortcut_name: str, spec: Any) -> list[str]:
+    """Return the normalized alias tokens that participate in uniqueness checks."""
+    if not isinstance(shortcut_name, str):
+        return []
+    normalized_name = shortcut_name.strip()
+    if not normalized_name:
+        return []
+
+    tokens = [normalized_name]
+    if not isinstance(spec, dict):
+        return tokens
+
+    for alias in spec.get("aliases", []):
+        if not isinstance(alias, str):
+            continue
+        normalized_alias = alias.strip()
+        if normalized_alias:
+            tokens.append(normalized_alias)
+    return tokens
+
+
+def find_model_shortcut_alias_conflicts(data: dict[str, Any]) -> list[dict[str, str]]:
+    """Return duplicate shortcut-alias conflicts without raising ConfigError."""
+    raw = data.get("model_shortcuts", {"enabled": False, "shortcuts": {}})
+    if raw in (None, "") or not isinstance(raw, dict):
+        return []
+
+    raw_shortcuts = raw.get("shortcuts", {})
+    if raw_shortcuts is None or not isinstance(raw_shortcuts, dict):
+        return []
+
+    seen_aliases: dict[str, str] = {}
+    conflicts: list[dict[str, str]] = []
+    for shortcut_name, spec in raw_shortcuts.items():
+        normalized_name = str(shortcut_name).strip()
+        if not normalized_name:
+            continue
+        for alias in _shortcut_alias_tokens(normalized_name, spec):
+            owner = seen_aliases.get(alias)
+            if owner and owner != normalized_name:
+                conflicts.append(
+                    {
+                        "alias": alias,
+                        "owner": owner,
+                        "conflict": normalized_name,
+                    }
+                )
+                continue
+            seen_aliases[alias] = normalized_name
+    return conflicts
+
+
+def dedupe_model_shortcut_aliases(
+    data: dict[str, Any],
+) -> tuple[dict[str, Any], list[dict[str, str]]]:
+    """Drop duplicate aliases conservatively, keeping the first owner in shortcut order."""
+    raw = data.get("model_shortcuts", {"enabled": False, "shortcuts": {}})
+    if raw in (None, "") or not isinstance(raw, dict):
+        return dict(data), []
+
+    raw_shortcuts = raw.get("shortcuts", {})
+    if raw_shortcuts is None or not isinstance(raw_shortcuts, dict):
+        return dict(data), []
+
+    normalized = dict(data)
+    normalized_model_shortcuts = dict(raw)
+    normalized_shortcuts: dict[str, Any] = {}
+    seen_aliases: dict[str, str] = {}
+    removed: list[dict[str, str]] = []
+
+    for shortcut_name, spec in raw_shortcuts.items():
+        if not isinstance(shortcut_name, str) or not shortcut_name.strip():
+            normalized_shortcuts[shortcut_name] = spec
+            continue
+        normalized_name = shortcut_name.strip()
+        if not isinstance(spec, dict):
+            normalized_shortcuts[normalized_name] = spec
+            continue
+
+        shortcut_copy = dict(spec)
+        deduped_aliases: list[str] = []
+        local_seen: set[str] = set()
+        for alias in spec.get("aliases", []):
+            if not isinstance(alias, str):
+                continue
+            normalized_alias = alias.strip()
+            if not normalized_alias:
+                continue
+            if normalized_alias == normalized_name or normalized_alias in local_seen:
+                continue
+            owner = seen_aliases.get(normalized_alias)
+            if owner and owner != normalized_name:
+                removed.append(
+                    {
+                        "alias": normalized_alias,
+                        "owner": owner,
+                        "conflict": normalized_name,
+                    }
+                )
+                continue
+            seen_aliases[normalized_alias] = normalized_name
+            deduped_aliases.append(normalized_alias)
+            local_seen.add(normalized_alias)
+
+        normalized_shortcuts[normalized_name] = {
+            **shortcut_copy,
+            "aliases": deduped_aliases,
+        }
+
+    normalized_model_shortcuts["shortcuts"] = normalized_shortcuts
+    normalized["model_shortcuts"] = normalized_model_shortcuts
+    return normalized, removed
+
+
 def _normalize_model_shortcuts(data: dict[str, Any]) -> dict[str, Any]:
     """Validate explicit shortcut names that map to concrete providers."""
     raw = data.get("model_shortcuts", {"enabled": False, "shortcuts": {}})

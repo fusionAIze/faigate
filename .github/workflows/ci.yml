@@ -28,8 +28,14 @@ jobs:
       - name: Lint
         run: ruff check .
 
-      - name: Test
-        run: pytest tests/ -v
+      - name: Test with coverage
+        run: pytest tests/ -v --cov=faigate --cov-report=term --cov-report=xml:coverage.xml
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.xml
+          fail_ci_if_error: false
 
   package:
     runs-on: ubuntu-latest
@@ -51,7 +57,113 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install ruff
+      - run: pip install ruff pre-commit
       - run: ruff check .
       - run: ruff format --check .
       - run: bash -n scripts/*
+      - run: pre-commit run --all-files --show-diff-on-failure
+      - name: Validate version consistency
+        run: python -c "
+import re
+import sys
+from pathlib import Path
+root = Path('.')
+pyproject = root / 'pyproject.toml'
+package = root / 'faigate' / '__init__.py'
+pyproject_content = pyproject.read_text()
+package_content = package.read_text()
+pyproject_match = re.search(r'^version = \"([^\"]+)\"$', pyproject_content, flags=re.MULTILINE)
+package_match = re.search(r'^__version__ = \"([^\"]+)\"$', package_content, flags=re.MULTILINE)
+if not pyproject_match:
+    print('ERROR: Could not find version in pyproject.toml')
+    sys.exit(1)
+if not package_match:
+    print('ERROR: Could not find __version__ in faigate/__init__.py')
+    sys.exit(1)
+if pyproject_match.group(1) != package_match.group(1):
+    print('ERROR: Version mismatch')
+    print(f'pyproject.toml: {pyproject_match.group(1)}')
+    print(f'faigate/__init__.py: {package_match.group(1)}')
+    sys.exit(1)
+print(f'Version OK: {pyproject_match.group(1)}')
+"
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install bandit[toml]
+      - run: bandit -c pyproject.toml -r faigate -f html -o bandit-report.html || true
+      - run: bandit -c pyproject.toml -r faigate -f json -o bandit-report.json || true
+      - name: Upload Bandit report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bandit-security-report
+          path: |
+            bandit-report.html
+            bandit-report.json
+
+  benchmarks:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .[dev]
+      - name: Run performance benchmarks
+        run: pytest tests/benchmarks/ --benchmark-only --benchmark-json=benchmark-results.json
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: benchmark-results.json
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .[dev]
+      - name: Generate API documentation
+        run: python scripts/generate-api-docs.py
+      - name: Check if API.md changed
+        run: |
+          if git diff --name-only docs/API.md | grep -q "API.md"; then
+            echo "API.md is out of date. Please run 'python scripts/generate-api-docs.py' and commit the changes."
+            git diff docs/API.md
+            exit 1
+          else
+            echo "API.md is up to date."
+          fi
+
+  changelog:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install git-cliff
+        run: |
+          curl -LsSf https://github.com/orhun/git-cliff/releases/latest/download/git-cliff-x86_64-unknown-linux-gnu.tar.gz | tar xz -C /tmp
+          sudo mv /tmp/git-cliff-*/git-cliff /usr/local/bin/
+      - name: Generate changelog
+        run: git-cliff --config .cliff.toml --unreleased --strip header -o /tmp/generated-changelog.md
+      - name: Check if CHANGELOG.md is up to date
+        run: |
+          if ! diff -u CHANGELOG.md /tmp/generated-changelog.md; then
+            echo "CHANGELOG.md is out of date. Please run 'git-cliff --unreleased --strip header -o CHANGELOG.md' and commit the changes."
+            exit 1
+          else
+            echo "CHANGELOG.md is up to date."
+          fi

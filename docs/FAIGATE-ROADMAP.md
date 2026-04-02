@@ -2,20 +2,27 @@
 
 ## Status
 
-`v1.14.1` is shipped.
+`v1.18.0` is shipped.
 
 Gate is no longer just a routing core with helper scripts around it. The
 current product baseline is now clear:
 
 - one local gateway runtime
 - one OpenAI-compatible surface
-- one optional Anthropic-compatible bridge
+- one optional Anthropic-compatible bridge (SSE streaming, tool continuity, Claude Code aliases)
 - direct providers, aggregators, and local workers under one routing core
 - an operator shell made up of dashboard, doctor, catalog, probe, and guided setup
+- package renewal alerts and cost projection wizard
 
-The roadmap should now stay disciplined. The next release lines should deepen
-operator trust, routing explainability, and daily-use client confidence instead
-of expanding sideways into a second platform.
+### Recent Achievements (v1.15.0 - v1.18.0)
+- **Anthropic bridge production-ready**: SSE streaming adapter, tool result continuity, Claude Code model ID mapping
+- **Dashboard enhancements**: Package renewal alerts, cost trends CLI, uPlot charts integration
+- **Operator tools**: Branch management guidelines, model shortcut alias conflict detection
+- **Provider catalog live**: Local route visibility overlays, operator alert summaries
+
+The roadmap should now stay disciplined. The next release lines should finalize
+Claude Desktop parity, then deepen operator trust through metadata truth and
+routing explainability.
 
 ## Architecture Readout
 
@@ -48,31 +55,42 @@ It does **not** mean:
 - hiding routing logic behind opaque UI magic
 - introducing hosted-only assumptions into a local-first product
 
-## Parity Targets
+## Parity Status & Targets
 
-The roadmap keeps three parity goals separate.
+### Current Parity Status (v1.18.0)
 
-### Full Anthropic parity
+| Capability | Anthropic Bridge | Claude Code | Claude Desktop |
+|------------|------------------|-------------|----------------|
+| `POST /v1/messages` non-streaming | ✅ Production-ready | ✅ Production-ready | ✅ Supported |
+| SSE streaming parity | ✅ Implemented | ✅ Working | ⚠️ Needs validation |
+| `tool_use` / `tool_result` continuity | ✅ Implemented | ✅ Working | ⚠️ Needs validation |
+| Claude model ID aliasing | ✅ Built-in mappings | ✅ Working | ⚠️ Needs validation |
+| Header/version/beta compatibility | ✅ Basic support | ✅ Working | ⚠️ Needs validation |
+| Exact token counting | ⚠️ Char-based estimates | ⚠️ Estimates okay | ⚠️ Estimates okay |
+| Desktop endpoint override flows | N/A | N/A | ⚠️ Needs implementation |
+| Session continuity under fallback | ✅ Working | ✅ Working | ⚠️ Needs validation |
+
+### Full Anthropic parity (Target)
 
 Working definition:
 
 - `POST /v1/messages` request and response compatibility
-- SSE streaming parity
+- SSE streaming parity (✅ achieved)
 - content-block compatibility
 - header, version, and beta compatibility
 - compatible error envelopes and stop reasons
-- trustworthy token-count semantics
+- **trustworthy token-count semantics** (remaining gap)
 
-### Full Claude Code parity
+### Full Claude Code parity (✅ Mostly achieved)
 
 Working definition:
 
-- daily coding sessions feel normal against local Gate
-- streaming and tool flows work
-- aliases and fallback do not constantly disrupt the session
-- routing remains inside Gate instead of being pushed into client config
+- daily coding sessions feel normal against local Gate (✅)
+- streaming and tool flows work (✅)
+- aliases and fallback do not constantly disrupt the session (✅)
+- routing remains inside Gate instead of being pushed into client config (✅)
 
-### Full Claude Desktop parity
+### Full Claude Desktop parity (Next priority)
 
 Working definition:
 
@@ -80,68 +98,85 @@ Working definition:
 - acceptable session behavior for the desktop feature set that actually matters
 - no recurring compatibility papercuts that keep the setup feeling experimental
 
-## Release Sequence
+## Release Sequence (v1.19.x - v1.21.x)
 
-### `v1.15.x` - operator trust and metadata truth
+### `v1.19.x` - Claude Desktop Parity Finalization
 
-Primary outcome:
+**Primary outcome:**
+- Claude Desktop becomes a first-class client with stable local endpoint configuration
+- Desktop-specific workflows work reliably without recurring compatibility issues
+- Bridge hardening completes the Anthropic parity line
 
-- Gate becomes more trustworthy as an operator product
-- dashboard, shell, and config tell the same story
-- cost and catalog signals become reviewable instead of hand-wavy
+**Implementation slices:**
+1. **Desktop endpoint override flows**
+   - Stable local endpoint configuration support
+   - Clear troubleshooting guides for desktop setup
+   - Validation against real Claude Desktop workflows
+2. **Bridge hardening for desktop use**
+   - Enhanced header/version/beta compatibility
+   - Session continuity validation under desktop usage patterns
+   - Error mapping improvements for desktop-specific error cases
+3. **Desktop workflow validation**
+   - Real workflow testing with Claude Desktop
+   - Common papercut identification and fixes
+   - Performance and stability validation
 
-Implementation slices:
+**Success bar:**
+- Operators can configure Claude Desktop to use local Gate without recurring issues
+- Desktop sessions feel stable and production-ready
+- Bridge parity gaps are documented and addressed
 
-1. cost truth and catalog freshness
-   - explicit tracked / stale / untracked state
-   - stronger provider pricing provenance
-   - refresh visibility in dashboard and shell
-2. route and lane explainability
-   - why this lane
-   - why this route
-   - same-lane fallback vs downgrade
-   - clearer lane-family summaries
-3. command bar intelligence and shell parity
-   - shell-backed scope suggestions
-   - parity between dashboard pivots and CLI/YAML terms
-   - safe preview/diff/apply config actions
-4. shared metadata-source foundation
-   - fusionAIze-internal JSON metadata boundary
-   - reusable across Gate and future fusionAIze products only
+### `v1.20.x` - External Metadata Integration (#186)
 
-Success bar:
+**Primary outcome:**
+- Gate integrates with external metadata repository for provider/model/pricing truth
+- Cost-aware routing uses real pricing data from trusted sources
+- Operators gain visibility into pricing provenance and freshness
 
-- operators can trust the dashboard without treating it as a decorative shell
-- cost and freshness signals are explainable
-- route choice is easier to reason about from UI, CLI, and config
+**Implementation slices:**
+1. **Git-based metadata sync** (Phase 2a from #186)
+   - External metadata repository integration
+   - Background update daemon (2-3 hour intervals)
+   - Offline fallback and cache management
+2. **Model/provider/price mapping**
+   - Canonical model definitions with multi-provider offerings
+   - Pricing provenance tracking (source, timestamp, freshness)
+   - Router integration for price-aware routing decisions
+3. **Dashboard integration**
+   - Cost truth visualization with source indicators
+   - Promotion tracking and expiration alerts
+   - Provider mix analytics and cost savings reporting
 
-### `v1.16.x` - adaptive routing trust
+**Success bar:**
+- Gate uses external metadata for accurate pricing and model mappings
+- Operators can trust cost reporting with clear provenance
+- Routing decisions consider real prices and promotions
 
-Primary outcome:
+### `v1.21.x` - Route Explainability & Operator Trust
 
-- richer live routing behavior without turning Gate into a black box
+**Primary outcome:**
+- Route decisions become transparent and explainable to operators
+- Dashboard provides clear "why this route/why this lane" explanations
+- Operators gain confidence in Gate's routing intelligence
 
-Implementation slices:
+**Implementation slices:**
+1. **Route decision explainability**
+   - "Why this lane / why this route" drilldowns in dashboard
+   - Same-lane fallback vs downgrade visual indicators
+   - Lane-family summary cards with decision factors
+2. **Operator trust tooling**
+   - Route trace narratives with decision context
+   - Pressure and cooldown visibility in real-time
+   - Premium drift and fallback pressure indicators
+3. **Shell parity and intelligence**
+   - Shell-backed scope suggestions matching dashboard
+   - Deep links between dashboard panels and CLI views
+   - Safe config preview/diff/apply workflows
 
-1. route pressure and cooldown visibility
-2. same-lane-first adaptation before weaker downgrade paths
-3. clearer route maps and trace-level route narratives
-4. more explicit premium drift, fallback pressure, and quota coupling signals
-
-Success bar:
-
-- adaptation under pressure is visible and mostly unsurprising
-- operators can explain route changes after the fact without reading source code
-
-### Later `v1.x` line - Claude Desktop parity if demand justifies it
-
-This should be validated by real operator demand, not assumed.
-
-If the client demand is real, the next parity-focused slices should cover:
-
-1. supported endpoint override flows
-2. desktop-specific compatibility hardening
-3. clearer troubleshooting and real local workflow validation
+**Success bar:**
+- Operators can understand and explain route decisions without reading source code
+- Dashboard and shell tell the same story about routing behavior
+- Route adaptation under pressure is visible and understandable
 
 ## Shared Metadata Repository Direction
 
@@ -207,16 +242,28 @@ Recommended first delivery model:
 This keeps the truth source inspectable and shared, while avoiding a premature
 hosted control-plane dependency.
 
-## Immediate Near-Term Order
+## Immediate Near-Term Order (v1.19.x)
 
-1. cost truth and catalog freshness
-2. route and lane explainability
-3. command bar intelligence and shell/config parity
+1. **Claude Desktop Parity Finalization**
+   - Desktop endpoint override flows
+   - Bridge hardening for desktop usage
+   - Real workflow validation
+
+2. **External Metadata Integration** (v1.20.x)
+   - Git-based metadata sync implementation
+   - Model/provider/price mapping foundation
+   - Dashboard cost truth visualization
+
+3. **Route Explainability** (v1.21.x)
+   - Route decision drilldowns and explanations
+   - Operator trust tooling and visibility
+   - Shell parity and intelligent suggestions
 
 This order matters.
 
-First make the truth source believable. Then make route choice legible. Then
-add smarter operator controls on top of a clearer model.
+First complete the client parity line with Claude Desktop. Then build metadata
+truth for trustworthy cost routing. Finally add explainability so operators
+understand and trust the routing decisions.
 
 ## Anti-Goals
 

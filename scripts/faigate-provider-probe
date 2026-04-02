@@ -77,7 +77,10 @@ import json
 import os
 
 from faigate.config import load_config
-from faigate.provider_availability import record_availability_from_health
+from faigate.provider_availability import (
+    record_availability_from_health,
+    refresh_local_model_availability,
+)
 from faigate.provider_catalog_refresh import (
     ProviderCatalogRefresher,
     build_catalog_alert_summary,
@@ -108,7 +111,18 @@ if store is not None and os.environ.get("FAIGATE_PROVIDER_PROBE_REFRESH_CATALOG"
         timeout_seconds=float(os.environ.get("FAIGATE_PROVIDER_PROBE_TIMEOUT") or "2.0"),
     )
 if store is not None:
-    record_availability_from_health(store, health_payload=health_payload)
+    record_availability_from_health(
+        store,
+        config_path=os.environ["FAIGATE_PROVIDER_PROBE_CONFIG"],
+        health_payload=health_payload,
+    )
+    if os.environ.get("FAIGATE_PROVIDER_PROBE_REFRESH_CATALOG") == "1":
+        refresh_local_model_availability(
+            store,
+            config_path=os.environ["FAIGATE_PROVIDER_PROBE_CONFIG"],
+            provider_ids=list(config.provider_source_refresh.get("providers") or []),
+            timeout_seconds=float(os.environ.get("FAIGATE_PROVIDER_PROBE_TIMEOUT") or "2.0"),
+        )
     catalog_summary = build_catalog_summary(
         store,
         provider_ids=list(config.provider_source_refresh.get("providers") or []),

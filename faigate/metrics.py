@@ -102,6 +102,7 @@ _OPTIONAL_COLUMNS: dict[str, str] = {
     "last_recovered_issue_type": "TEXT DEFAULT ''",
     "decision_details": "TEXT DEFAULT '{}'",
     "attempt_order": "TEXT DEFAULT '[]'",
+    "route_summary": "TEXT DEFAULT '{}'",
 }
 
 
@@ -169,6 +170,7 @@ class MetricsStore:
         last_recovered_issue_type: str = "",
         decision_details: dict[str, Any] | None = None,
         attempt_order: list[str] | None = None,
+        route_summary: dict[str, Any] | None = None,
     ) -> int | None:
         if not self._conn:
             return None
@@ -181,8 +183,8 @@ class MetricsStore:
                     requested_model,modality,client_profile,client_tag,
                     decision_reason,confidence,canonical_model,lane_family,route_type,lane_cluster,
                     selection_path,runtime_window_state,recovered_recently,last_recovered_issue_type,
-                    decision_details,attempt_order)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    decision_details,attempt_order,route_summary)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     time.time(),
                     provider,
@@ -213,6 +215,7 @@ class MetricsStore:
                     last_recovered_issue_type,
                     json.dumps(decision_details or {}, sort_keys=True),
                     json.dumps(attempt_order or []),
+                    json.dumps(route_summary or {}, sort_keys=True),
                 ),
             )
             self._conn.commit()
@@ -495,6 +498,12 @@ class MetricsStore:
                     row["decision_details"] = json.loads(decision_details)
                 except json.JSONDecodeError:
                     row["decision_details"] = {}
+            route_summary = row.get("route_summary")
+            if isinstance(route_summary, str) and route_summary:
+                try:
+                    row["route_summary"] = json.loads(route_summary)
+                except json.JSONDecodeError:
+                    row["route_summary"] = {}
         return rows
 
     def get_totals(self, **filters: Any) -> dict:

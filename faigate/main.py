@@ -40,7 +40,9 @@ from .bridges.anthropic import (
 )
 from .canonical import CanonicalChatRequest, CanonicalChatResponse, CanonicalResponseMessage
 from .config import Config, load_config
+from .dashboard import _metadata_catalogs_summary, _metadata_packages_detail
 from .dashboard_web import DASHBOARD_HTML
+from .dashboard import _metadata_catalogs_summary, _metadata_packages_detail
 from .hooks import (
     AppliedHooks,
     HookExecutionError,
@@ -51,6 +53,10 @@ from .hooks import (
 )
 from .lane_registry import get_provider_lane_binding, get_route_add_recommendations
 from .metrics import MetricsStore, calc_cost
+from .provider_availability import (
+    record_availability_from_config,
+    refresh_local_model_availability,
+)
 from .provider_catalog import (
     build_provider_catalog_report,
     build_provider_discovery_view,
@@ -86,6 +92,10 @@ _update_checker: UpdateChecker
 _adaptive_state: AdaptiveRouteState = AdaptiveRouteState()
 _provider_catalog_store: ProviderCatalogStore | None = None
 _provider_catalog_refresh_task: asyncio.Task[None] | None = None
+
+
+def _provider_catalog_config_path() -> str:
+    return str(os.environ.get("FAIGATE_CONFIG_FILE") or "config.yaml")
 
 
 class PayloadTooLargeError(ValueError):
@@ -386,6 +396,19 @@ async def _refresh_provider_source_catalog(*, force: bool = False) -> list[dict[
     refresher = ProviderCatalogRefresher(_provider_catalog_store)
     refresh_results = await asyncio.to_thread(
         refresher.refresh,
+        provider_ids=target_ids,
+        timeout_seconds=float(source_refresh_cfg.get("timeout_seconds") or 10.0),
+    )
+    await asyncio.to_thread(
+        record_availability_from_config,
+        _provider_catalog_store,
+        config_path=_provider_catalog_config_path(),
+        health_payload={"providers": {item["name"]: item for item in _build_provider_inventory()}},
+    )
+    await asyncio.to_thread(
+        refresh_local_model_availability,
+        _provider_catalog_store,
+        config_path=_provider_catalog_config_path(),
         provider_ids=target_ids,
         timeout_seconds=float(source_refresh_cfg.get("timeout_seconds") or 10.0),
     )
@@ -1782,6 +1805,7 @@ async def _execute_chat_completion_body(
                         attempt_order=attempt_order,
                     ),
                     attempt_order=attempt_order,
+                    route_summary=_build_route_summary(decision),
                 )
                 trace_id = str(row_id) if row_id is not None else str(uuid.uuid4())
 
@@ -1839,6 +1863,7 @@ async def _execute_chat_completion_body(
                         attempt_order=attempt_order,
                     ),
                     attempt_order=attempt_order,
+                    route_summary=_build_route_summary(decision),
                 )
             continue
 
@@ -2367,6 +2392,12 @@ async def provider_catalog():
         "priority_next": {},
     }
     if _provider_catalog_store is not None:
+        await asyncio.to_thread(
+            record_availability_from_config,
+            _provider_catalog_store,
+            config_path=_provider_catalog_config_path(),
+            health_payload={"providers": {item["name"]: item for item in _build_provider_inventory()}},
+        )
         source_catalog = build_catalog_summary(
             _provider_catalog_store,
             provider_ids=list(_config.provider_source_refresh.get("providers") or []),
@@ -2394,6 +2425,101 @@ async def provider_discovery(
         disclosed_only=disclosed_only,
         offer_track=offer_track,
     )
+
+
+@app.get("/api/analytics/provider-mix")
+async def provider_mix_analytics():
+    """Analyze provider mix for cost savings opportunities."""
+    from .lane_registry import get_canonical_model_catalog, get_provider_lane_binding
+    from .provider_catalog import _get_pricing_for_provider_and_model
+    # Health check uses global _providers
+
+    canonical_catalog = get_canonical_model_catalog()
+    analytics = []
+
+    for canonical_model, model_info in canonical_catalog.items():
+        providers_for_model = []
+
+        # Find all providers that serve this canonical model
+        for provider_name, provider_config in _config.providers.items():
+            lane = dict(provider_config.get("lane") or get_provider_lane_binding(provider_name))
+            if lane.get("canonical_model") == canonical_model:
+                # Get pricing for this provider
+                pricing = _get_pricing_for_provider_and_model(provider_name, canonical_model)
+                if not pricing:
+                    continue
+
+                # Calculate estimated cost per 1k tokens (input + output)
+                input_rate = float(pricing.get("input", 0) or 0)
+                output_rate = float(pricing.get("output", 0) or 0)
+                cost_per_1k = (input_rate + output_rate) / 1000  # Convert from per 1M to per 1K
+
+                # Check provider health
+                health = {}
+                if provider_name in _providers:
+                    health = _providers[provider_name].health.to_dict()
+
+                providers_for_model.append(
+                    {
+                        "provider": provider_name,
+                        "cost_per_1k_tokens": round(cost_per_1k, 6),
+                        "input_rate": input_rate,
+                        "output_rate": output_rate,
+                        "healthy": health.get("healthy", False),
+                        "pricing_source": pricing.get("source_type", "unknown"),
+                        "freshness_status": pricing.get("freshness_status", "unknown"),
+                        "promotion": pricing.get("promotion"),
+                        "discount_percentage": pricing.get("discount_percentage"),
+                        "expires_at": pricing.get("expires_at"),
+                    }
+                )
+
+        if len(providers_for_model) < 2:
+            continue  # Need at least 2 providers for comparison
+
+        # Sort by cost
+        sorted_providers = sorted(providers_for_model, key=lambda x: x["cost_per_1k_tokens"])
+        cheapest = sorted_providers[0]
+        most_expensive = sorted_providers[-1]
+
+        # Calculate potential savings
+        if most_expensive["cost_per_1k_tokens"] > 0:
+            savings_percent = (
+                (most_expensive["cost_per_1k_tokens"] - cheapest["cost_per_1k_tokens"])
+                / most_expensive["cost_per_1k_tokens"]
+                * 100
+            )
+        else:
+            savings_percent = 0
+
+        analytics.append(
+            {
+                "canonical_model": canonical_model,
+                "model_label": model_info.get("label", canonical_model),
+                "provider_count": len(providers_for_model),
+                "providers": providers_for_model,
+                "cheapest_provider": cheapest["provider"],
+                "cheapest_cost_per_1k": cheapest["cost_per_1k_tokens"],
+                "most_expensive_provider": most_expensive["provider"],
+                "most_expensive_cost_per_1k": most_expensive["cost_per_1k_tokens"],
+                "potential_savings_percent": round(savings_percent, 1),
+                "potential_savings_per_1k": round(
+                    most_expensive["cost_per_1k_tokens"] - cheapest["cost_per_1k_tokens"], 6
+                ),
+                "recommendation": f"Use {cheapest['provider']} instead of {most_expensive['provider']} for {round(savings_percent, 1)}% savings"
+                if savings_percent > 5
+                else "Cost differences are minimal",
+            }
+        )
+
+    # Sort by potential savings (descending)
+    analytics.sort(key=lambda x: x["potential_savings_percent"], reverse=True)
+
+    return {
+        "total_opportunities": len(analytics),
+        "total_savings_percent_avg": sum(a["potential_savings_percent"] for a in analytics) / max(1, len(analytics)),
+        "analytics": analytics,
+    }
 
 
 @app.get("/v1/models")
@@ -2492,6 +2618,8 @@ async def stats(
         "operator_actions": _metrics.get_operator_breakdown(**operator_filters),
         "hourly": _metrics.get_hourly_series(24),
         "daily": _metrics.get_daily_totals(30),
+        "packages_summary": _metadata_catalogs_summary()["packages"],
+        "packages_detail": _metadata_packages_detail(),
     }
 
 
@@ -2831,6 +2959,7 @@ async def image_generations(request: Request):
                         attempt_order=attempt_order,
                     ),
                     attempt_order=attempt_order,
+                    route_summary=_build_route_summary(decision),
                 )
                 trace_id = str(row_id) if row_id is not None else str(uuid.uuid4())
 
@@ -2875,6 +3004,7 @@ async def image_generations(request: Request):
                         attempt_order=attempt_order,
                     ),
                     attempt_order=attempt_order,
+                    route_summary=_build_route_summary(decision),
                 )
 
     return JSONResponse(
@@ -2979,6 +3109,7 @@ async def image_edits(request: Request):
                         attempt_order=attempt_order,
                     ),
                     attempt_order=attempt_order,
+                    route_summary=_build_route_summary(decision),
                 )
                 trace_id = str(row_id) if row_id is not None else str(uuid.uuid4())
 

@@ -6,7 +6,7 @@ import logging
 import re
 import time
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
 from typing import Any
 
 from .config import Config
@@ -595,6 +595,7 @@ def _estimated_request_cost_usd(provider: dict[str, Any], ctx: _RoutingContext |
     prompt_rate = float(pricing.get("input", 0) or 0)
     output_rate = float(pricing.get("output", 0) or 0)
     cache_rate = float(pricing.get("cache_read", prompt_rate) or 0)
+    prompt_rate, output_rate, cache_rate = _apply_promotion_discount(pricing, prompt_rate, output_rate, cache_rate)
     prompt_tokens = max(1, int(ctx.total_tokens or 0))
     output_tokens = int(ctx.requested_output_tokens or 0)
     if output_tokens <= 0:
@@ -612,6 +613,27 @@ def _estimated_request_cost_usd(provider: dict[str, Any], ctx: _RoutingContext |
 
     output_cost = (output_tokens * output_rate) / 1_000_000
     return round(prompt_cost + output_cost, 6)
+
+
+def _apply_promotion_discount(
+    pricing: dict[str, Any], prompt_rate: float, output_rate: float, cache_rate: float
+) -> tuple[float, float, float]:
+    """Apply promotion discount to rates if promotion is active and not expired."""
+    discount_percentage = pricing.get("discount_percentage")
+    expires_at = pricing.get("expires_at")
+    if discount_percentage is None or expires_at is None:
+        return prompt_rate, output_rate, cache_rate
+    try:
+        expiry = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+        now = datetime.now(expiry.tzinfo) if expiry.tzinfo else datetime.now()
+        if now > expiry:
+            # Promotion expired
+            return prompt_rate, output_rate, cache_rate
+        discount_factor = 1.0 - (float(discount_percentage) / 100.0)
+        return prompt_rate * discount_factor, output_rate * discount_factor, cache_rate * discount_factor
+    except (ValueError, TypeError):
+        # If date parsing fails, ignore promotion
+        return prompt_rate, output_rate, cache_rate
 
 
 def _estimated_request_cost_usd_with_lane(
@@ -634,6 +656,7 @@ def _estimated_request_cost_usd_with_lane(
     prompt_rate = float(pricing.get("input", 0) or 0)
     output_rate = float(pricing.get("output", 0) or 0)
     cache_rate = float(pricing.get("cache_read", prompt_rate) or 0)
+    prompt_rate, output_rate, cache_rate = _apply_promotion_discount(pricing, prompt_rate, output_rate, cache_rate)
     prompt_tokens = max(1, int(ctx.total_tokens or 0))
     output_tokens = int(ctx.requested_output_tokens or 0)
     if output_tokens <= 0:

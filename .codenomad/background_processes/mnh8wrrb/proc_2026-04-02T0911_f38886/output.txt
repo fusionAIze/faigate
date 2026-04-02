@@ -1,0 +1,22 @@
+INFO:     Started server process [65532]
+INFO:     Waiting for application startup.
+11:11:52 [faigate] INFO Loaded config with 14 providers
+11:11:52 [faigate] INFO   ✓ anthropic-haiku → claude-haiku-3-5 (default)
+11:11:52 [faigate] INFO   ✓ anthropic-sonnet → claude-sonnet-4-6 (mid)
+11:11:52 [faigate] INFO   ✓ anthropic-claude → claude-opus-4-6 (mid)
+11:11:52 [faigate] INFO   ✓ blackbox-free → blackboxai/x-ai/grok-code-fast-1 (fallback)
+11:11:52 [faigate] INFO   ✓ deepseek-chat → deepseek-chat (default)
+11:11:52 [faigate] INFO   ✓ deepseek-reasoner → deepseek-reasoner (reasoning)
+11:11:52 [faigate] INFO   ✓ gemini-flash → gemini-3-flash (mid)
+11:11:52 [faigate] INFO   ✓ gemini-flash-lite → gemini-3-flash-lite (cheap)
+11:11:52 [faigate] INFO   ✓ gemini-pro-high → gemini-3.1-pro (mid)
+11:11:52 [faigate] INFO   ✓ gemini-pro-low → gemini-3.1-pro (mid)
+11:11:52 [faigate] INFO   ✓ kilocode → z-ai/glm-5:free (fallback)
+11:11:52 [faigate] INFO   ✓ openai-gpt4o → gpt-4o (mid)
+11:11:52 [faigate] INFO   ✓ openai-images → gpt-image-1 (specialty)
+11:11:52 [faigate] INFO   ✓ openrouter-fallback → openrouter/auto (fallback)
+11:11:52 [faigate] WARNING Provider source catalog startup refresh skipped: [Errno 13] Permission denied: '/private/var/lib/faigate'
+11:11:52 [faigate] INFO fusionAIze Gate ready on 127.0.0.1:8092
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8092 (Press CTRL+C to quit)
+INFO:     127.0.0.1:58497 - "GET /api/analytics/provider-mix HTTP/1.1" 200 OK
