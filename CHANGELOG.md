@@ -1,5 +1,25 @@
 # fusionAIze Gate Changelog
 
+## v1.20.0 - 2026-04-02
+
+### Added
+
+- External metadata integration: promotion alerts, source badges, provider-mix analytics endpoint (Issue #186)
+- Route explainability dashboard and metrics: route_summary column, decision history panel, why_selected and alternatives display (Issue #188)
+- Added `/api/analytics/provider-mix` endpoint for comparing providers based on external catalog pricing
+- Enhanced dashboard Routes view with "Route decision history" table showing routing explanations
+- Added `route_summary` field to metrics DB and `/api/traces` endpoint
+
+### Changed
+
+- Updated config.yaml metrics db_path default to `./faigate.db` and enabled metrics by default
+- Extended `_build_route_summary` function to populate why_selected and alternatives
+- Updated all six `log_request` calls to include route_summary
+
+### Fixed
+
+- No breaking changes; existing routing behavior remains compatible
+
 ## v1.17.0 - 2026-04-01
 
 ### Added
