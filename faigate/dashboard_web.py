@@ -2052,6 +2052,15 @@ tr:hover td{background:rgba(84,171,238,.045)}
         </div>
         <div class="table-wrap"><table id="routes-table"><thead><tr><th>Layer</th><th>Rule</th><th>Provider</th><th>Lane family</th><th>Selection path</th><th>Requests</th><th>Cost</th><th>Latency</th></tr></thead><tbody></tbody></table></div>
       </div>
+      <div class="panel">
+        <div class="panel-header">
+          <div>
+              <h3>Route decision history</h3>
+            <p>Recent routing decisions with explanations.</p>
+          </div>
+        </div>
+        <div class="table-wrap"><table id="route-decisions-table"><thead><tr><th>Time</th><th>Provider</th><th>Model</th><th>Why selected</th><th>Alternatives</th><th>Cost</th><th>Latency</th></tr></thead><tbody></tbody></table></div>
+      </div>
     </section>
 
     <section class="view-panel" id="view-analytics">
@@ -2730,6 +2739,7 @@ function render(bundle) {
   });
   const sortedClients = [...clientTotals].sort((a, b) => (Number(b.cost_usd || 0) - Number(a.cost_usd || 0)) || (Number(b.failures || 0) - Number(a.failures || 0)) || (Number(b.requests || 0) - Number(a.requests || 0)));
   const sortedRouting = [...routing].sort((a, b) => (Number(b.cost_usd || 0) - Number(a.cost_usd || 0)) || (Number(b.requests || 0) - Number(a.requests || 0)));
+  const sortedTraces = [...traces].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
   let primaryAction = {target: 'providers', label: 'Open providers'};
   let secondaryAction = {target: 'routes', label: 'Inspect routes'};
@@ -2914,6 +2924,18 @@ function render(bundle) {
       <td class="mono">${fmtMs(row.avg_latency_ms || 0)}</td>
     </tr>
   `).join('') : tableEmpty(8, 'No routing rows in this scope', 'Clear filters or switch to All traffic.');
+
+  $('#route-decisions-table tbody').innerHTML = sortedTraces.length ? sortedTraces.map(row => `
+    <tr>
+      <td class="mono">${esc(ago(row.timestamp || 0))}</td>
+      <td>${esc(row.provider || '—')}</td>
+      <td class="mono">${esc(row.model || '—')}</td>
+      <td><span class="tiny">${esc((row.route_summary?.why_selected || []).slice(0, 2).join(', ') || '—')}</span></td>
+      <td><span class="tiny">${esc((row.route_summary?.alternatives || []).length ? `${row.route_summary.alternatives.length} alternatives` : '—')}</span></td>
+      <td class="mono">${fmtUsd(row.cost_usd || 0)}</td>
+      <td class="mono">${fmtMs(row.latency_ms || 0)}</td>
+    </tr>
+  `).join('') : tableEmpty(7, 'No recent route decisions in this scope', 'Clear filters or wait for requests.');
 
   const analyticsDailyLabels = (bundle.stats.daily || []).map(row => row.day || '');
   const analyticsHourlyLabels = (bundle.stats.hourly || []).map(row => row.hour_offset || '');

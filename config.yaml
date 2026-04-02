@@ -303,8 +303,8 @@ llm_classifier:
     '
   timeout_ms: 3000
 metrics:
-  db_path: ${FAIGATE_DB_PATH:-/var/lib/faigate/faigate.db}
-  enabled: false
+  db_path: faigate.db
+  enabled: true
   log_requests: false
   log_routing_decisions: false
 model_shortcuts:

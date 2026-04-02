@@ -1805,6 +1805,7 @@ async def _execute_chat_completion_body(
                         attempt_order=attempt_order,
                     ),
                     attempt_order=attempt_order,
+                    route_summary=_build_route_summary(decision),
                 )
                 trace_id = str(row_id) if row_id is not None else str(uuid.uuid4())
 
@@ -1862,6 +1863,7 @@ async def _execute_chat_completion_body(
                         attempt_order=attempt_order,
                     ),
                     attempt_order=attempt_order,
+                    route_summary=_build_route_summary(decision),
                 )
             continue
 
@@ -2957,6 +2959,7 @@ async def image_generations(request: Request):
                         attempt_order=attempt_order,
                     ),
                     attempt_order=attempt_order,
+                    route_summary=_build_route_summary(decision),
                 )
                 trace_id = str(row_id) if row_id is not None else str(uuid.uuid4())
 
@@ -3001,6 +3004,7 @@ async def image_generations(request: Request):
                         attempt_order=attempt_order,
                     ),
                     attempt_order=attempt_order,
+                    route_summary=_build_route_summary(decision),
                 )
 
     return JSONResponse(
@@ -3105,6 +3109,7 @@ async def image_edits(request: Request):
                         attempt_order=attempt_order,
                     ),
                     attempt_order=attempt_order,
+                    route_summary=_build_route_summary(decision),
                 )
                 trace_id = str(row_id) if row_id is not None else str(uuid.uuid4())
 
