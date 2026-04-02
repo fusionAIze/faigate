@@ -304,9 +304,9 @@ llm_classifier:
   timeout_ms: 3000
 metrics:
   db_path: ${FAIGATE_DB_PATH:-/var/lib/faigate/faigate.db}
-  enabled: true
-  log_requests: true
-  log_routing_decisions: true
+  enabled: false
+  log_requests: false
+  log_routing_decisions: false
 model_shortcuts:
   enabled: false
   shortcuts:
@@ -1061,7 +1061,7 @@ security:
 server:
   host: 127.0.0.1
   log_level: info
-  port: 8090
+  port: 8092
 static_rules:
   enabled: true
   rules:
