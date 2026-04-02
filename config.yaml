@@ -908,11 +908,11 @@ client_profiles:
       prefer_tiers: ["default", "mid", "high", "reasoning"]
     gemini-cli:
       routing_mode: auto
-      prefer_providers: ["gemini-flash", "gemini-flash-lite", "gemini-pro"]
+      prefer_providers: ["gemini-flash", "gemini-flash-lite", "gemini-pro-high"]
       prefer_tiers: ["cheap", "default", "mid"]
     antigravity:
       routing_mode: eco
-      prefer_providers: ["gemini-flash-lite", "gemini-flash", "gemini-pro"]
+      prefer_providers: ["gemini-flash-lite", "gemini-flash", "gemini-pro-high"]
       prefer_tiers: ["cheap", "default"]
   rules:
     - profile: opencode

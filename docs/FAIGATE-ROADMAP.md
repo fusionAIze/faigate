@@ -2,7 +2,7 @@
 
 ## Status
 
-`v1.18.0` is shipped.
+`v1.21.0` is shipped.
 
 Gate is no longer just a routing core with helper scripts around it. The
 current product baseline is now clear:
@@ -14,11 +14,14 @@ current product baseline is now clear:
 - an operator shell made up of dashboard, doctor, catalog, probe, and guided setup
 - package renewal alerts and cost projection wizard
 
-### Recent Achievements (v1.15.0 - v1.18.0)
+### Recent Achievements (v1.15.0 - v1.21.0)
 - **Anthropic bridge production-ready**: SSE streaming adapter, tool result continuity, Claude Code model ID mapping
 - **Dashboard enhancements**: Package renewal alerts, cost trends CLI, uPlot charts integration
 - **Operator tools**: Branch management guidelines, model shortcut alias conflict detection
 - **Provider catalog live**: Local route visibility overlays, operator alert summaries
+- **Claude Desktop parity finalization**: Desktop endpoint override flows, bridge hardening, workflow validation (v1.19.x)
+- **External metadata integration**: Git-based metadata sync, model/provider/price mapping, cost truth visualization (v1.20.x)
+- **Route explainability & operator trust**: Lane family decision factors, selection path categorization, route decision drilldowns (v1.21.x)
 
 The roadmap should now stay disciplined. The next release lines should finalize
 Claude Desktop parity, then deepen operator trust through metadata truth and
@@ -242,28 +245,59 @@ Recommended first delivery model:
 This keeps the truth source inspectable and shared, while avoiding a premature
 hosted control-plane dependency.
 
-## Immediate Near-Term Order (v1.19.x)
+## Completed Release Lines (v1.19.x - v1.21.x)
 
-1. **Claude Desktop Parity Finalization**
+✅ **v1.19.x - Claude Desktop Parity Finalization** (Completed)
    - Desktop endpoint override flows
    - Bridge hardening for desktop usage
    - Real workflow validation
 
-2. **External Metadata Integration** (v1.20.x)
+✅ **v1.20.x - External Metadata Integration** (Completed)
    - Git-based metadata sync implementation
    - Model/provider/price mapping foundation
    - Dashboard cost truth visualization
 
-3. **Route Explainability** (v1.21.x)
+✅ **v1.21.x - Route Explainability & Operator Trust** (Completed)
    - Route decision drilldowns and explanations
    - Operator trust tooling and visibility
-   - Shell parity and intelligent suggestions
+   - Lane family decision factors and selection path categorization
+   - _(Shell parity and intelligent suggestions deferred to v2.0.0)_
 
-This order matters.
+This order proved effective: first completing client parity with Claude Desktop,
+then building metadata truth for trustworthy cost routing, and finally adding
+explainability so operators understand and trust routing decisions.
 
-First complete the client parity line with Claude Desktop. Then build metadata
-truth for trustworthy cost routing. Finally add explainability so operators
-understand and trust the routing decisions.
+## v2.0.0 Planning
+
+**Target: Major release with shell parity, local worker support, and enhanced client profiles**
+
+### Core Themes
+1. **Shell parity and intelligence**
+   - Shell-backed scope suggestions matching dashboard
+   - Deep links between dashboard panels and CLI views
+   - Safe config preview/diff/apply workflows
+
+2. **Local worker support**
+   - First-class local model worker integration
+   - Worker health monitoring and auto-recovery
+   - Cost-aware routing between local and cloud providers
+
+3. **Enhanced client profiles**
+   - Advanced client policy management
+   - Per-client routing rules and cost controls
+   - Client-specific observability and reporting
+
+4. **Observability improvements**
+   - Advanced metrics and alerting
+   - Performance tracing across request chains
+   - Automated anomaly detection
+
+### Considerations
+- v2.0.0 may include breaking changes for cleaner APIs and configuration
+- Migration paths will be documented for existing deployments
+- Focus remains on gateway-first architecture and operator trust
+
+*Detailed planning and issue creation pending review of current priorities and community feedback.*
 
 ## Anti-Goals
 

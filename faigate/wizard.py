@@ -3162,7 +3162,7 @@ def build_initial_config(
             "on_startup": True,
             "timeout_seconds": 10.0,
             "interval_seconds": 21600,
-            "providers": ["anthropic", "blackbox", "deepseek", "google", "kilo", "openai"],
+            "providers": ["blackbox", "kilo", "openai"],
         },
         "providers": providers,
         "fallback_chain": fallback_chain,

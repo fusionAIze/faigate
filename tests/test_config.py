@@ -385,7 +385,7 @@ def test_provider_source_refresh_defaults_are_exposed():
         "on_startup": True,
         "timeout_seconds": 10.0,
         "interval_seconds": 21600,
-        "providers": ["anthropic", "blackbox", "deepseek", "google", "kilo", "openai"],
+        "providers": ["blackbox", "kilo", "openai"],
     }
 
 
@@ -418,10 +418,10 @@ def test_anthropic_bridge_defaults_are_exposed():
     cfg = load_config(SHIPPED_CONFIG)
     assert cfg.api_surfaces == {
         "openai_compatible": True,
-        "anthropic_messages": False,
+        "anthropic_messages": True,
     }
     assert cfg.anthropic_bridge == {
-        "enabled": False,
+        "enabled": True,
         "route_prefix": "/v1",
         "allow_claude_code_hints": True,
         "model_aliases": {
@@ -436,6 +436,13 @@ def test_anthropic_bridge_defaults_are_exposed():
             "claude-opus-4-6[1m]": "premium",
             "claude-haiku-4-5": "eco",
             "claude-haiku-4-5-20251001": "eco",
+            # Claude Desktop model aliases
+            "claude-3-5-sonnet-20241022": "auto",
+            "claude-3-5-sonnet": "auto",
+            "claude-3-opus-20240229": "premium",
+            "claude-3-opus": "premium",
+            "claude-3-haiku-20240307": "eco",
+            "claude-3-haiku": "eco",
         },
     }
 
