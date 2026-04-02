@@ -1061,7 +1061,7 @@ security:
 server:
   host: 127.0.0.1
   log_level: info
-  port: 8091
+  port: 8090
 static_rules:
   enabled: true
   rules:

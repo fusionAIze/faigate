@@ -2396,6 +2396,101 @@ async def provider_discovery(
     )
 
 
+@app.get("/api/analytics/provider-mix")
+async def provider_mix_analytics():
+    """Analyze provider mix for cost savings opportunities."""
+    from .lane_registry import get_canonical_model_catalog, get_provider_lane_binding
+    from .provider_catalog import _get_pricing_for_provider_and_model
+    # Health check uses global _providers
+
+    canonical_catalog = get_canonical_model_catalog()
+    analytics = []
+
+    for canonical_model, model_info in canonical_catalog.items():
+        providers_for_model = []
+
+        # Find all providers that serve this canonical model
+        for provider_name, provider_config in _config.providers.items():
+            lane = dict(provider_config.get("lane") or get_provider_lane_binding(provider_name))
+            if lane.get("canonical_model") == canonical_model:
+                # Get pricing for this provider
+                pricing = _get_pricing_for_provider_and_model(provider_name, canonical_model)
+                if not pricing:
+                    continue
+
+                # Calculate estimated cost per 1k tokens (input + output)
+                input_rate = float(pricing.get("input", 0) or 0)
+                output_rate = float(pricing.get("output", 0) or 0)
+                cost_per_1k = (input_rate + output_rate) / 1000  # Convert from per 1M to per 1K
+
+                # Check provider health
+                health = {}
+                if provider_name in _providers:
+                    health = _providers[provider_name].health.to_dict()
+
+                providers_for_model.append(
+                    {
+                        "provider": provider_name,
+                        "cost_per_1k_tokens": round(cost_per_1k, 6),
+                        "input_rate": input_rate,
+                        "output_rate": output_rate,
+                        "healthy": health.get("healthy", False),
+                        "pricing_source": pricing.get("source_type", "unknown"),
+                        "freshness_status": pricing.get("freshness_status", "unknown"),
+                        "promotion": pricing.get("promotion"),
+                        "discount_percentage": pricing.get("discount_percentage"),
+                        "expires_at": pricing.get("expires_at"),
+                    }
+                )
+
+        if len(providers_for_model) < 2:
+            continue  # Need at least 2 providers for comparison
+
+        # Sort by cost
+        sorted_providers = sorted(providers_for_model, key=lambda x: x["cost_per_1k_tokens"])
+        cheapest = sorted_providers[0]
+        most_expensive = sorted_providers[-1]
+
+        # Calculate potential savings
+        if most_expensive["cost_per_1k_tokens"] > 0:
+            savings_percent = (
+                (most_expensive["cost_per_1k_tokens"] - cheapest["cost_per_1k_tokens"])
+                / most_expensive["cost_per_1k_tokens"]
+                * 100
+            )
+        else:
+            savings_percent = 0
+
+        analytics.append(
+            {
+                "canonical_model": canonical_model,
+                "model_label": model_info.get("label", canonical_model),
+                "provider_count": len(providers_for_model),
+                "providers": providers_for_model,
+                "cheapest_provider": cheapest["provider"],
+                "cheapest_cost_per_1k": cheapest["cost_per_1k_tokens"],
+                "most_expensive_provider": most_expensive["provider"],
+                "most_expensive_cost_per_1k": most_expensive["cost_per_1k_tokens"],
+                "potential_savings_percent": round(savings_percent, 1),
+                "potential_savings_per_1k": round(
+                    most_expensive["cost_per_1k_tokens"] - cheapest["cost_per_1k_tokens"], 6
+                ),
+                "recommendation": f"Use {cheapest['provider']} instead of {most_expensive['provider']} for {round(savings_percent, 1)}% savings"
+                if savings_percent > 5
+                else "Cost differences are minimal",
+            }
+        )
+
+    # Sort by potential savings (descending)
+    analytics.sort(key=lambda x: x["potential_savings_percent"], reverse=True)
+
+    return {
+        "total_opportunities": len(analytics),
+        "total_savings_percent_avg": sum(a["potential_savings_percent"] for a in analytics) / max(1, len(analytics)),
+        "analytics": analytics,
+    }
+
+
 @app.get("/v1/models")
 async def list_models():
     """OpenAI-compatible model listing."""
