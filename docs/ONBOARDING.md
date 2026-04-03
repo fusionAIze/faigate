@@ -337,6 +337,80 @@ Recommended rollout:
 3. introduce policies only for real constraints
 4. keep route debugging enabled through traces and stats
 
+## CLI Intelligence & Dashboard Integration (v2.0.0+)
+
+fusionAIze Gate v2.0.0 brings deeper shell parity between the CLI and dashboard. Key enhancements:
+
+### Dashboard Deep‑Links
+
+All `faigate-stats` commands now generate matching dashboard URLs:
+
+```bash
+# Generate URL for current view/filters
+faigate-stats --link --view routes --provider deepseek-chat
+# Copy to clipboard
+faigate-stats --link --view routes --provider deepseek-chat --copy
+```
+
+Filters work across all CLI commands:
+- `--provider` – filter by provider id
+- `--modality` – filter by modality (`chat`, `image`, `code`)
+- `--client-profile` – filter by client profile (`opencode`, `n8n`, `openclaw`)
+- `--layer` – filter by routing layer (`policy`, `profile`, `static`, `heuristic`)
+
+### Intelligent Suggestions
+
+The CLI can analyze metrics and suggest relevant commands:
+
+```bash
+# Get command suggestions based on failure rates, provider concentration, costs, recent activity
+faigate-stats --suggest
+```
+
+### Safe Config Management
+
+New `faigate-config` CLI provides safe config workflows:
+
+```bash
+# Preview config changes
+faigate-config preview --provider xai --provider zai
+# Show detailed diff
+faigate-config diff config.yaml config.new.yaml
+# Apply with backup and confirmation
+faigate-config apply config.new.yaml --backup --confirm
+# Validate syntax
+faigate-config validate config.yaml
+```
+
+### Local Worker Auto‑Discovery
+
+Automatically detect local AI workers:
+
+```bash
+# Scan for Ollama, vLLM, LM Studio, LiteLLM
+faigate-config discover
+# JSON output for automation
+faigate-config discover --json
+```
+
+For each detected worker, the command suggests a ready‑to‑copy provider block for `config.yaml`.
+
+### Complete Provider Coverage
+
+The provider catalog now includes **43 curated entries** covering all LLM AI Router custom endpoints:
+
+- **xAI / Grok**, **Z.AI / GLM**, **Mistral**, **Groq**, **HuggingFace Inference**
+- **Moonshot AI / Kimi**, **MiniMax**, **Volcano Engine / Doubao**, **BytePlus**
+- **Qwen**, **OpenAI Codex**, **OpenCode Zen**, **Cerebras**, **GitHub Copilot**
+- **Synthetic**, **Kimi Coding**, **Vercel AI Gateway**
+- **KiloCode model‑level lanes**: `kilo‑auto/frontier`, `/balanced`, `/free`
+
+View the full catalog:
+
+```bash
+faigate-stats --link --view catalog
+```
+
 ## Update operations
 
 Current state:

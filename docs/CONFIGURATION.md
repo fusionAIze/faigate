@@ -366,6 +366,87 @@ For the end-to-end flow and local smoke example, see [Anthropic Bridge](./anthro
 
 Use the onboarding docs and starter examples when introducing a new client instead of hand-authoring these sections from scratch.
 
+## CLI Intelligence & Config Management (v2.0.0+)
+
+fusionAIze Gate v2.0.0 introduces deeper shell parity between the CLI and dashboard, plus safe config workflows and local worker auto‑discovery.
+
+### Dashboard Deep‑Links & Suggestions
+
+The `faigate-stats` CLI now integrates with the dashboard through filter‑preserving deep‑links:
+
+```bash
+# Generate dashboard URL with current filters
+faigate-stats --link --view routes --provider deepseek-chat
+# Copy URL to clipboard (macOS/Linux/Windows)
+faigate-stats --link --view routes --provider deepseek-chat --copy
+# Get CLI command suggestions based on metrics analysis
+faigate-stats --suggest
+```
+
+All CLI commands (`overview`, `recent`, `daily`, `trends`) now show matching dashboard links. Filter arguments work across commands:
+
+- `--provider` – filter by provider id (e.g., `deepseek-chat`, `gemini-flash`)
+- `--modality` – filter by modality (`chat`, `image`, `code`)
+- `--client-profile` – filter by client profile (`opencode`, `n8n`, `openclaw`)
+- `--client-tag` – filter by client tag
+- `--layer` – filter by routing layer (`policy`, `profile`, `static`, `heuristic`)
+- `--success` – filter by success (`true`/`false`)
+
+### Safe Config Workflows
+
+The new `faigate-config` CLI provides safe config management with preview, diff, and backup:
+
+```bash
+# Preview config changes before applying
+faigate-config preview --provider xai --provider zai
+# Show detailed diff between config versions
+faigate-config diff config.yaml config.new.yaml
+# Apply changes with backup and confirmation
+faigate-config apply config.new.yaml --backup --confirm
+# Validate config syntax and structure
+faigate-config validate config.yaml
+```
+
+### Local Worker Auto‑Discovery
+
+Automatically detect local AI workers and generate configuration snippets:
+
+```bash
+# Scan for local workers (Ollama, vLLM, LM Studio, LiteLLM)
+faigate-config discover
+# JSON output for automation
+faigate-config discover --json
+# Skip port scanning, only check Grid integration
+faigate-config discover --no-scan
+```
+
+The discovery command checks:
+- **Ollama** (localhost:11434)
+- **vLLM** (localhost:8000)  
+- **LM Studio** (localhost:1234)
+- **LiteLLM** proxy (localhost:4000)
+- **Grid** integration (if available)
+
+For each detected worker, it suggests a ready‑to‑copy provider block for `config.yaml`.
+
+### Complete Provider Coverage
+
+The provider catalog now includes **43 curated entries** covering all LLM AI Router custom endpoints:
+
+```bash
+# View available providers
+faigate-stats --link --view catalog
+# Check provider metadata and recommended models
+faigate-stats --provider xai --link
+```
+
+New providers include:
+- **xAI / Grok**, **Z.AI / GLM**, **Mistral**, **Groq**, **HuggingFace Inference**
+- **Moonshot AI / Kimi**, **MiniMax**, **Volcano Engine / Doubao**, **BytePlus**
+- **Qwen**, **OpenAI Codex**, **OpenCode Zen**, **Cerebras**, **GitHub Copilot**
+- **Synthetic**, **Kimi Coding**, **Vercel AI Gateway**
+- **KiloCode model‑level lanes**: `kilo‑auto/frontier`, `/balanced`, `/free`
+
 ## Config Wizard
 
 For a first local config, let fusionAIze Gate suggest one from the API keys already present in your env file:
