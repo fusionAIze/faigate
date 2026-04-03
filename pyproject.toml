@@ -44,10 +44,15 @@ dev = [
     "bandit[toml]>=1.8.0",
     "jinja2>=3.1.0",
 ]
+oauth = [
+    "requests>=2.31.0",
+    "google-auth>=2.0.0",
+]
 
 [project.scripts]
 faigate = "faigate.main:main"
 faigate-stats = "faigate.cli:main"
+faigate-auth = "faigate.oauth.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/fusionAIze/faigate"

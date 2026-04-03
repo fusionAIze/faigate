@@ -1,5 +1,11 @@
 # fusionAIze Gate Changelog
 
+## Unreleased (v2.1.0)
+
+### Added
+
+- **OAuth wrapper infrastructure**: token storage, generic OAuth backend, config integration, and CLI helper for managed providers (v2.1.0)
+
 ## v2.0.0 - 2026-04-03
 
 ### Added

@@ -23,7 +23,7 @@ from .lane_registry import (
     get_route_add_recommendations,
 )
 from .provider_catalog import build_provider_refresh_guidance, get_provider_catalog
-from .providers import ProviderBackend
+from .providers import ProviderBackend, create_provider_backend
 
 ProviderFactory = dict[str, Any]
 
@@ -666,7 +666,7 @@ async def _probe_providers_live(
         runtime_cfg = _expand_env_with_values(deepcopy(provider), env_values)
         if not isinstance(runtime_cfg, dict):
             continue
-        backend = ProviderBackend(name, runtime_cfg)
+        backend = create_provider_backend(name, runtime_cfg)
         try:
             ok = await backend.probe_health(timeout_seconds=timeout_seconds)
             results[name] = {

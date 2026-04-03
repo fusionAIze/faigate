@@ -11,6 +11,12 @@ from typing import Any
 
 import httpx
 
+# OAuth backend (optional)
+try:
+    from .oauth.backend import OAuthBackend
+except ImportError:
+    OAuthBackend = None
+
 from .lane_registry import get_provider_transport_binding
 
 logger = logging.getLogger("faigate.providers")
@@ -47,6 +53,19 @@ def classify_runtime_issue(
     if status >= 500:
         return "upstream_server_error"
     return "degraded"
+
+
+def create_provider_backend(name: str, cfg: dict) -> ProviderBackend:
+    """Create a provider backend instance, handling OAuth wrapping if needed."""
+    backend_type = cfg.get("backend", "openai-compat")
+    if backend_type == "oauth":
+        if OAuthBackend is None:
+            raise ImportError(
+                "OAuth backend requested but faigate.oauth.backend could not be imported. "
+                "Make sure optional OAuth dependencies are installed."
+            )
+        return OAuthBackend(name, cfg)
+    return ProviderBackend(name, cfg)
 
 
 @dataclass

@@ -70,7 +70,7 @@ from .provider_catalog_refresh import (
 )
 from .provider_catalog_store import ProviderCatalogStore
 from .provider_sources import list_provider_sources
-from .providers import ProviderBackend, ProviderError, classify_runtime_issue
+from .providers import ProviderBackend, ProviderError, classify_runtime_issue, create_provider_backend
 from .router import Router, RoutingDecision
 from .updates import (
     UpdateChecker,
@@ -2212,7 +2212,7 @@ async def lifespan(app: FastAPI):
         if not pcfg.get("api_key"):
             logger.warning("Provider %s has no API key, skipping", name)
             continue
-        _providers[name] = ProviderBackend(name, pcfg)
+        _providers[name] = create_provider_backend(name, pcfg)
         logger.info("  ✓ %s → %s (%s)", name, pcfg["model"], pcfg.get("tier", "default"))
 
     # Merge virtual providers registered by community hooks
@@ -2221,7 +2221,7 @@ async def lifespan(app: FastAPI):
             logger.info("  skip virtual:%s — overridden by config-defined provider", vp_name)
             continue
         try:
-            _providers[vp_name] = ProviderBackend(vp_name, vp_cfg)
+            _providers[vp_name] = create_provider_backend(vp_name, vp_cfg)
             logger.info(
                 "  ✓ virtual:%s → %s (%s) [community hook]",
                 vp_name,

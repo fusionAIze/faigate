@@ -976,6 +976,55 @@ providers:
   #     connect_s: 10
   #     read_s: 90
 
+  # ── OAuth‑managed providers (v2.1.0+) ─────────────────────────────────────
+  # qwen‑portal:
+  #   backend: oauth
+  #   oauth:
+  #     helper: "faigate‑auth qwen‑portal"
+  #     client_id: "qwen‑portal‑client"
+  #     token_endpoint: "https://qwen.example.com/oauth/token"
+  #     refresh_endpoint: "https://qwen.example.com/oauth/refresh"
+  #     scope: "openid email"
+  #   underlying_backend: openai‑compat
+  #   base_url: "https://qwen‑portal.example.com/v1"
+  #   model: qwen‑portal/coder‑model
+  #   tier: default
+  #   timeout:
+  #     connect_s: 10
+  #     read_s: 60
+
+  # claude‑code:
+  #   backend: oauth
+  #   oauth:
+  #     helper: "faigate‑auth claude‑code"
+  #     client_id: "anthropic‑codex‑client"
+  #     token_endpoint: "https://api.anthropic.com/oauth/token"
+  #     refresh_endpoint: "https://api.anthropic.com/oauth/refresh"
+  #     scope: "openid email"
+  #   underlying_backend: anthropic‑compat
+  #   base_url: ${ANTHROPIC_BASE_URL:-https://api.anthropic.com/v1}
+  #   model: claude‑code
+  #   tier: default
+  #   timeout:
+  #     connect_s: 10
+  #     read_s: 90
+
+  # openai‑codex:
+  #   backend: oauth
+  #   oauth:
+  #     helper: "faigate‑auth openai‑codex"
+  #     client_id: "openai‑codex‑client"
+  #     token_endpoint: "https://api.openai.com/oauth/token"
+  #     refresh_endpoint: "https://api.openai.com/oauth/refresh"
+  #     scope: "openid email"
+  #   underlying_backend: openai‑compat
+  #   base_url: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+  #   model: openai‑codex/gpt‑5.3‑codex
+  #   tier: default
+  #   timeout:
+  #     connect_s: 10
+  #     read_s: 60
+
 client_profiles:
   enabled: true
   default: generic

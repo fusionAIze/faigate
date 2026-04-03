@@ -322,6 +322,7 @@ explainability so operators understand and trust routing decisions.
    - Token refresh and session management
    - Wrapper that presents OAuth‑secured endpoints as regular API‑key providers
    - Support for Gemini (Google OAuth), Antigravity, and other OAuth‑first gateways
+   - *Infrastructure ready*: token store, generic OAuth backend, config integration, CLI helper stub
 
 2. **Local worker completion**
    - Grid integration for automatic worker discovery
