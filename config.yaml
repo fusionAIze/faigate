@@ -871,6 +871,111 @@ providers:
     timeout:
       connect_s: 10
       read_s: 90
+
+  # ── Local runtimes (uncomment and configure) ──────────────────────────────
+  # ollama:
+  #   api_key: ""
+  #   backend: openai-compat
+  #   base_url: http://127.0.0.1:11434/v1
+  #   auth_optional: true
+  #   capabilities:
+  #     cost_tier: local
+  #     latency_tier: local
+  #   max_tokens: 8192
+  #   model: ollama/llama3.3
+  #   tier: local
+  #   timeout:
+  #     connect_s: 10
+  #     read_s: 120
+
+  # vllm:
+  #   api_key: ""
+  #   backend: openai-compat
+  #   base_url: http://127.0.0.1:8000/v1
+  #   auth_optional: true
+  #   capabilities:
+  #     cost_tier: local
+  #     latency_tier: local
+  #   max_tokens: 8192
+  #   model: vllm/your-model-id
+  #   tier: local
+  #   timeout:
+  #     connect_s: 10
+  #     read_s: 120
+
+  # lmstudio:
+  #   api_key: ""
+  #   backend: openai-compat
+  #   base_url: http://localhost:1234/v1
+  #   auth_optional: true
+  #   capabilities:
+  #     cost_tier: local
+  #     latency_tier: local
+  #   max_tokens: 8192
+  #   model: lmstudio/minimax-m2.1-gs32
+  #   tier: local
+  #   timeout:
+  #     connect_s: 10
+  #     read_s: 120
+
+  # litellm:
+  #   api_key: ""
+  #   backend: openai-compat
+  #   base_url: http://localhost:4000/v1
+  #   auth_optional: true
+  #   capabilities:
+  #     cost_tier: local
+  #     latency_tier: local
+  #   max_tokens: 8192
+  #   model: litellm/your-model-id
+  #   tier: local
+  #   timeout:
+  #     connect_s: 10
+  #     read_s: 120
+
+  # ── Generic providers (use any model) ─────────────────────────────────────
+  # openai:
+  #   api_key: ${OPENAI_API_KEY}
+  #   backend: openai-compat
+  #   base_url: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+  #   capabilities:
+  #     cost_tier: standard
+  #     latency_tier: balanced
+  #   max_tokens: 8192
+  #   model: gpt-4o  # any OpenAI model ID
+  #   tier: default
+  #   timeout:
+  #     connect_s: 10
+  #     read_s: 60
+
+  # anthropic:
+  #   api_key: ${ANTHROPIC_API_KEY}
+  #   backend: anthropic-compat
+  #   base_url: ${ANTHROPIC_BASE_URL:-https://api.anthropic.com/v1}
+  #   capabilities:
+  #     cost_tier: standard
+  #     latency_tier: balanced
+  #   max_tokens: 16000
+  #   model: claude-sonnet-4-6  # any Anthropic model ID
+  #   tier: default
+  #   timeout:
+  #     connect_s: 10
+  #     read_s: 90
+
+  # google:
+  #   api_key: ${GEMINI_API_KEY}
+  #   backend: google-genai
+  #   base_url: ${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta}
+  #   capabilities:
+  #     cost_tier: standard
+  #     latency_tier: balanced
+  #   max_tokens: 65536
+  #   model: gemini-3.1-pro  # any Gemini model ID
+  #   tier: default
+  #   timeout:
+  #     connect_s: 10
+  #     read_s: 90
+
 client_profiles:
   enabled: true
   default: generic

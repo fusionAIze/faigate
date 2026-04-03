@@ -13,6 +13,7 @@ from typing import Any
 import yaml
 from dotenv import dotenv_values
 
+from .config import dedupe_model_shortcut_aliases
 from .lane_registry import (
     get_active_model_id,
     get_active_model_label,
@@ -23,7 +24,6 @@ from .lane_registry import (
 )
 from .provider_catalog import build_provider_refresh_guidance, get_provider_catalog
 from .providers import ProviderBackend
-from .config import dedupe_model_shortcut_aliases
 
 ProviderFactory = dict[str, Any]
 

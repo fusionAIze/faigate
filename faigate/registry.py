@@ -327,6 +327,17 @@ CUSTOM: dict[str, ProviderDef] = {
         pricing={"input": 0.0, "output": 0.0},
         notes="MiniMax – Anthropic-compat custom endpoint",
     ),
+    # ── Qwen (Alibaba Cloud) ──────────────────────────────────────────────
+    "qwen": ProviderDef(
+        backend="openai-compat",
+        base_url="https://dashscope.aliyun.com/api/v1",
+        base_url_env="QWEN_BASE_URL",
+        api_key_env="QWEN_API_KEY",
+        tier="default",
+        example_model="qwen/qwen3.6-plus",
+        pricing={"input": 0.0, "output": 0.0},
+        notes="Qwen models via Alibaba Cloud – OpenAI-compatible endpoint",
+    ),
 }
 
 
@@ -415,6 +426,18 @@ OAUTH: dict[str, ProviderDef] = {
         example_model="qwen-portal/coder-model",
         pricing={"input": 0.0, "output": 0.0},
         notes=("Qwen OAuth (free tier) – device-code flow; requires: openclaw plugins enable qwen-portal-auth"),
+    ),
+    # ── Claude Code (OAuth via Anthropic) ──────────────────────────────────
+    "claude-code": ProviderDef(
+        backend="anthropic-compat",
+        base_url="https://api.anthropic.com/v1",
+        base_url_env="ANTHROPIC_BASE_URL",
+        api_key_env="ANTHROPIC_CODEX_TOKEN",
+        auth_optional=True,
+        tier="default",
+        example_model="claude-code",
+        pricing={"input": 0.0, "output": 0.0},
+        notes="Claude Code – special coding model via Anthropic OAuth",
     ),
 }
 
