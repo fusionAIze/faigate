@@ -1,5 +1,6 @@
 # fusionAIze Gate Changelog
 
+<<<<<<< HEAD
 ## v2.0.1 - 2026-04-04
 
 ### Added
@@ -17,6 +18,8 @@
 
 - `google-vertex` renamed to `google-gemini-cli` in registry and catalog (alias preserved for backward compatibility)
 
+=======
+>>>>>>> d7a1bd7 (docs: v2.0.0 CLI intelligence and config management documentation)
 ## v2.0.0 - 2026-04-03
 
 ### Added
