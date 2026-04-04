@@ -23,7 +23,7 @@ from .lane_registry import (
     get_route_add_recommendations,
 )
 from .provider_catalog import build_provider_refresh_guidance, get_provider_catalog
-from .providers import ProviderBackend, create_provider_backend
+from .providers import create_provider_backend
 
 ProviderFactory = dict[str, Any]
 
