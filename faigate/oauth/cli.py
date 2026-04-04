@@ -22,6 +22,23 @@ except ImportError:
 
 logger = logging.getLogger("faigate.oauth.cli")
 
+# ── Antigravity constants (from LLM AI Router OAuth URL) ─────────────────────
+_ANTIGRAVITY_CLIENT_ID = "1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com"
+_ANTIGRAVITY_SCOPE = " ".join([
+    "https://www.googleapis.com/auth/cloud-platform",
+    "https://www.googleapis.com/auth/userinfo.email",
+    "https://www.googleapis.com/auth/userinfo.profile",
+    "https://www.googleapis.com/auth/cclog",
+    "https://www.googleapis.com/auth/experimentsandconfigs",
+])
+_ANTIGRAVITY_AUTH_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth"
+_ANTIGRAVITY_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
+_ANTIGRAVITY_CREDS_PATH = "~/.gemini/oauth_creds.json"
+_ANTIGRAVITY_CALLBACK_PORT = 8080
+# Base URL: set ANTIGRAVITY_BASE_URL env var once discovered from network traffic.
+# Known candidate: https://gateway-a2a-tp-pa.sandbox.googleapis.com/v1
+_ANTIGRAVITY_BASE_URL_ENV = "ANTIGRAVITY_BASE_URL"
+
 # ── Qwen constants (from qwen-code source) ───────────────────────────────────
 _QWEN_CLIENT_ID = "f0304373b74a44d2b584a3fb70ca9e56"
 _QWEN_SCOPE = "openid profile email model.completion"
@@ -234,6 +251,246 @@ def qwen_device_code_flow() -> dict[str, Any]:
     raise RuntimeError("Qwen device code flow timed out. Please try again.")
 
 
+def antigravity_oauth() -> dict[str, Any]:
+    """Read Antigravity OAuth credentials from the local token store.
+
+    Antigravity (Google's AI coding IDE) stores Google OAuth credentials at
+    ~/.gemini/oauth_creds.json after signing in via the app or via
+    `antigravity auth login` (agy auth login).
+
+    Token format:
+      {
+        "access_token": "ya29.a0...",
+        "refresh_token": "1//03...",
+        "token_type": "Bearer",
+        "id_token": "eyJ...",
+        "expiry_date": 1234567890000,  # ms timestamp
+        "scope": "https://www.googleapis.com/auth/cloud-platform ...",
+      }
+
+    Returns token data including the base_url from ANTIGRAVITY_BASE_URL env var
+    if set, otherwise flags that discovery is required.
+    """
+    creds_path = os.path.expanduser(_ANTIGRAVITY_CREDS_PATH)
+    if not os.path.exists(creds_path):
+        raise RuntimeError(
+            f"Antigravity credentials not found at {creds_path}.\n"
+            "Please sign in to Antigravity (the IDE) or run:\n"
+            "  agy auth login"
+        )
+
+    try:
+        with open(creds_path) as f:
+            creds = json.load(f)
+    except (json.JSONDecodeError, IOError) as e:
+        raise RuntimeError(f"Failed to read Antigravity credentials from {creds_path}: {e}")
+
+    access_token = creds.get("access_token")
+    if not access_token:
+        raise RuntimeError(
+            f"Antigravity credentials at {creds_path} have no access_token. "
+            "Please sign in to Antigravity or run: agy auth login"
+        )
+
+    expiry_ms = creds.get("expiry_date")
+    if expiry_ms and expiry_ms < time.time() * 1000:
+        logger.warning(
+            "Antigravity token appears expired. "
+            "Run: faigate-auth google-antigravity --refresh  or sign in to Antigravity."
+        )
+
+    base_url = os.environ.get(_ANTIGRAVITY_BASE_URL_ENV)
+    if not base_url:
+        logger.warning(
+            "ANTIGRAVITY_BASE_URL not set. Inference endpoint unknown.\n"
+            "To discover it: inspect Antigravity network traffic (DevTools → Network)\n"
+            "and look for POST requests to a googleapis.com or antigravity endpoint.\n"
+            "Then: export ANTIGRAVITY_BASE_URL=https://<discovered-host>/v1"
+        )
+
+    return {
+        "access_token": access_token,
+        "refresh_token": creds.get("refresh_token"),
+        "token_type": creds.get("token_type", "Bearer"),
+        "id_token": creds.get("id_token"),
+        "expiry_date": expiry_ms,
+        "scope": creds.get("scope", _ANTIGRAVITY_SCOPE),
+        "base_url": base_url or "",
+        "base_url_discovered": bool(base_url),
+    }
+
+
+def antigravity_refresh(refresh_token: str) -> dict[str, Any]:
+    """Refresh an expired Antigravity Google OAuth token.
+
+    Writes the updated credentials back to ~/.gemini/oauth_creds.json.
+    """
+    if requests is None:
+        raise RuntimeError("requests package required. Install with: pip install faigate[oauth]")
+
+    resp = requests.post(
+        _ANTIGRAVITY_TOKEN_ENDPOINT,
+        data={
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token,
+            "client_id": _ANTIGRAVITY_CLIENT_ID,
+        },
+        timeout=30,
+    )
+    resp.raise_for_status()
+    token = resp.json()
+
+    # Read existing creds to preserve fields (refresh_token may not be re-issued)
+    creds_path = os.path.expanduser(_ANTIGRAVITY_CREDS_PATH)
+    existing: dict[str, Any] = {}
+    try:
+        with open(creds_path) as f:
+            existing = json.load(f)
+    except Exception:
+        pass
+
+    new_creds = {
+        **existing,
+        "access_token": token["access_token"],
+        "token_type": token.get("token_type", "Bearer"),
+        "scope": token.get("scope", existing.get("scope", _ANTIGRAVITY_SCOPE)),
+        "expiry_date": int((time.time() + token.get("expires_in", 3600)) * 1000),
+    }
+    if "id_token" in token:
+        new_creds["id_token"] = token["id_token"]
+    if "refresh_token" in token:
+        new_creds["refresh_token"] = token["refresh_token"]
+
+    os.makedirs(os.path.dirname(os.path.expanduser(creds_path)), exist_ok=True)
+    tmp = creds_path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(new_creds, f, indent=2)
+    os.replace(tmp, creds_path)
+    os.chmod(creds_path, 0o600)
+    logger.info("Antigravity token refreshed and written to %s", creds_path)
+
+    return {
+        **new_creds,
+        "base_url": os.environ.get(_ANTIGRAVITY_BASE_URL_ENV, ""),
+    }
+
+
+def antigravity_login() -> dict[str, Any]:
+    """Full Antigravity Google OAuth login via Authorization Code + PKCE.
+
+    Opens a browser to Google's OAuth consent screen, starts a local HTTP
+    server on port 8080 to receive the callback, exchanges the code for
+    tokens, and writes credentials to ~/.gemini/oauth_creds.json.
+
+    This uses the same client_id and scopes as the Antigravity IDE so the
+    resulting token is valid for Antigravity's inference API.
+    """
+    import base64
+    import hashlib
+    import secrets
+    import urllib.parse
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    if requests is None:
+        raise RuntimeError("requests package required. Install with: pip install faigate[oauth]")
+
+    # Generate PKCE code_verifier + code_challenge (S256)
+    code_verifier = base64.urlsafe_b64encode(secrets.token_bytes(32)).rstrip(b"=").decode()
+    code_challenge = base64.urlsafe_b64encode(
+        hashlib.sha256(code_verifier.encode()).digest()
+    ).rstrip(b"=").decode()
+
+    state = secrets.token_urlsafe(24)
+    redirect_uri = f"http://localhost:{_ANTIGRAVITY_CALLBACK_PORT}/callback"
+
+    params = {
+        "client_id": _ANTIGRAVITY_CLIENT_ID,
+        "response_type": "code",
+        "redirect_uri": redirect_uri,
+        "scope": _ANTIGRAVITY_SCOPE,
+        "state": state,
+        "access_type": "offline",
+        "prompt": "consent",
+        "code_challenge": code_challenge,
+        "code_challenge_method": "S256",
+    }
+    auth_url = f"{_ANTIGRAVITY_AUTH_ENDPOINT}?{urllib.parse.urlencode(params)}"
+
+    # Capture auth code via local callback server
+    received: dict[str, str] = {}
+
+    class _CallbackHandler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            parsed = urllib.parse.urlparse(self.path)
+            qs = urllib.parse.parse_qs(parsed.query)
+            received["code"] = qs.get("code", [""])[0]
+            received["state"] = qs.get("state", [""])[0]
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"<h2>Antigravity login complete. You can close this tab.</h2>")
+
+        def log_message(self, *args: Any) -> None:
+            pass  # suppress server logs
+
+    server = HTTPServer(("localhost", _ANTIGRAVITY_CALLBACK_PORT), _CallbackHandler)
+    server.timeout = 120
+
+    print(f"\nOpening browser for Antigravity login...\n{auth_url}\n")
+    if webbrowser:
+        webbrowser.open(auth_url)
+    else:
+        print(f"Open this URL manually:\n{auth_url}")
+
+    print(f"Waiting for callback on http://localhost:{_ANTIGRAVITY_CALLBACK_PORT}/callback ...")
+    server.handle_request()
+    server.server_close()
+
+    code = received.get("code")
+    if not code:
+        raise RuntimeError("No authorization code received from callback.")
+    if received.get("state") != state:
+        raise RuntimeError("OAuth state mismatch — possible CSRF. Aborting.")
+
+    # Exchange code for tokens
+    resp = requests.post(
+        _ANTIGRAVITY_TOKEN_ENDPOINT,
+        data={
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": redirect_uri,
+            "client_id": _ANTIGRAVITY_CLIENT_ID,
+            "code_verifier": code_verifier,
+        },
+        timeout=30,
+    )
+    resp.raise_for_status()
+    token = resp.json()
+
+    new_creds = {
+        "access_token": token["access_token"],
+        "refresh_token": token.get("refresh_token"),
+        "token_type": token.get("token_type", "Bearer"),
+        "id_token": token.get("id_token"),
+        "scope": token.get("scope", _ANTIGRAVITY_SCOPE),
+        "expiry_date": int((time.time() + token.get("expires_in", 3600)) * 1000),
+    }
+
+    creds_path = os.path.expanduser(_ANTIGRAVITY_CREDS_PATH)
+    os.makedirs(os.path.dirname(creds_path), exist_ok=True)
+    tmp = creds_path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(new_creds, f, indent=2)
+    os.replace(tmp, creds_path)
+    os.chmod(creds_path, 0o600)
+    print(f"Antigravity credentials written to {creds_path}")
+
+    return {
+        **new_creds,
+        "base_url": os.environ.get(_ANTIGRAVITY_BASE_URL_ENV, ""),
+        "base_url_discovered": bool(os.environ.get(_ANTIGRAVITY_BASE_URL_ENV)),
+    }
+
+
 def claude_code_oauth() -> dict[str, Any]:
     """Read Claude Code OAuth token from the local claude CLI config.
 
@@ -387,10 +644,21 @@ def main() -> None:
             token_data = google_vertex_adc()
 
         elif args.provider == "google-antigravity":
-            token_data = google_oauth_device_flow(
-                client_id=args.client_id or "",
-                scope=args.scope or "openid email",
-            )
+            if args.refresh:
+                creds_path = os.path.expanduser(_ANTIGRAVITY_CREDS_PATH)
+                with open(creds_path) as f:
+                    creds = json.load(f)
+                rt = creds.get("refresh_token")
+                if not rt:
+                    raise RuntimeError("No refresh_token in existing Antigravity credentials.")
+                token_data = antigravity_refresh(rt)
+            else:
+                try:
+                    token_data = antigravity_oauth()
+                    print("Using existing Antigravity credentials.", file=sys.stderr)
+                except RuntimeError:
+                    print("No existing credentials, starting browser login...", file=sys.stderr)
+                    token_data = antigravity_login()
 
         else:
             print(f"Unknown provider: {args.provider}", file=sys.stderr)

@@ -606,18 +606,24 @@ _CATALOG: dict[str, dict[str, Any]] = {
     },
     "google-antigravity": {
         "recommended_model": "ag/claude-opus-4-6",
-        "aliases": ["google-antigravity", "antigravity"],
+        "aliases": ["google-antigravity", "antigravity", "agy"],
         "track": "stable",
         "offer_track": "oauth",
         "provider_type": "oauth",
         "auth_modes": ["oauth"],
         "volatility": "low",
-        "evidence_level": "community",
-        "official_source_url": "",
-        "signup_url": "",
+        "evidence_level": "observed",
+        "official_source_url": "https://antigravity.dev/",
+        "signup_url": "https://antigravity.dev/",
         "watch_sources": [],
-        "notes": "Google Antigravity – Google OAuth gateway providing Claude, Gemini, and OSS models",
-        "last_reviewed": "2026-04-03",
+        "notes": (
+            "Google Antigravity (VS Code AI fork) – Google OAuth via Authorization Code + PKCE. "
+            "client_id: 1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com. "
+            "Token: ~/.gemini/oauth_creds.json. "
+            "Inference base_url requires network discovery (set ANTIGRAVITY_BASE_URL). "
+            "Auth: faigate-auth google-antigravity  or sign in to Antigravity IDE."
+        ),
+        "last_reviewed": "2026-04-04",
     },
     "google-gemini-cli": {
         "recommended_model": "gc/gemini-2.5-pro",

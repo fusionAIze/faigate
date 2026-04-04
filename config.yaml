@@ -1025,18 +1025,23 @@ providers:
   #     connect_s: 10
   #     read_s: 60
 
+  # Antigravity (Google OAuth – Authorization Code + PKCE)
+  # Prerequisites:
+  #   1. Sign in to the Antigravity IDE  -OR-  run: faigate-auth google-antigravity
+  #      Token is stored at ~/.gemini/oauth_creds.json
+  #   2. Discover the inference base_url by inspecting Antigravity network traffic
+  #      (DevTools → Network, filter for POST requests with Authorization: Bearer ya29.*)
+  #      Then: export ANTIGRAVITY_BASE_URL=https://<discovered-host>/v1
+  #
+  # OAuth details:
+  #   client_id:  1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com
+  #   scopes:     cloud-platform, userinfo.email, userinfo.profile, cclog, experimentsandconfigs
+  #   token file: ~/.gemini/oauth_creds.json  (shared with Antigravity IDE)
+  #
   antigravity:
-    backend: oauth
-    oauth:
-      # Replace ANTIGRAVITY_CLIENT_ID with your client ID from Antigravity
-      helper: "faigate-auth antigravity --client-id ${ANTIGRAVITY_CLIENT_ID}"
-      client_id: ${ANTIGRAVITY_CLIENT_ID}
-      token_endpoint: "https://oauth2.googleapis.com/token"
-      refresh_endpoint: "https://oauth2.googleapis.com/token"
-      scope: "openid email"
-    underlying_backend: openai-compat
-    # Replace with actual Antigravity endpoint (if known)
-    base_url: "https://antigravity.example.com/v1"
+    backend: openai-compat
+    base_url_env: ANTIGRAVITY_BASE_URL   # set after network discovery
+    api_key_env: ANTIGRAVITY_TOKEN       # set to access_token from ~/.gemini/oauth_creds.json
     model: ag/claude-opus-4-6-thinking
     tier: default
     timeout:
