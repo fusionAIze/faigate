@@ -404,17 +404,17 @@ LOCAL: dict[str, ProviderDef] = {
 # ---------------------------------------------------------------------------
 
 OAUTH: dict[str, ProviderDef] = {
-    # ── Google Vertex AI ──────────────────────────────────────────────────
-    "google-vertex": ProviderDef(
+    # ── Google Gemini CLI (Vertex AI via gcloud ADC) ───────────────────────
+    "google-gemini-cli": ProviderDef(
         backend="openai-compat",
         base_url="https://us-central1-aiplatform.googleapis.com/v1",
         base_url_env="GOOGLE_VERTEX_BASE_URL",
         api_key_env="GOOGLE_APPLICATION_CREDENTIALS",
         auth_optional=True,
         tier="mid",
-        example_model="google-vertex/gemini-2.5-pro",
+        example_model="gc/gemini-2.5-pro",
         pricing={"input": 0.0, "output": 0.0},
-        notes="Google Vertex AI – uses gcloud ADC; interactive setup required",
+        notes="Google Gemini via Vertex AI – uses gcloud ADC; requires: gcloud auth login",
     ),
     # ── Qwen OAuth (free tier) ────────────────────────────────────────────
     "qwen-portal": ProviderDef(
@@ -438,6 +438,17 @@ OAUTH: dict[str, ProviderDef] = {
         example_model="claude-code",
         pricing={"input": 0.0, "output": 0.0},
         notes="Claude Code – special coding model via Anthropic OAuth",
+    ),
+    # ── Google Antigravity (Google OAuth multi‑model gateway) ──────────────
+    "google-antigravity": ProviderDef(
+        backend="openai-compat",
+        base_url="https://antigravity.example.com/v1",  # placeholder; set via oauth
+        api_key_env="ANTIGRAVITY_TOKEN",
+        auth_optional=True,
+        tier="default",
+        example_model="ag/claude-opus-4-6",
+        pricing={"input": 0.0, "output": 0.0},
+        notes="Google Antigravity – Google OAuth gateway providing Claude, Gemini, and OSS models",
     ),
 }
 

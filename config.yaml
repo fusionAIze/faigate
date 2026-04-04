@@ -1025,6 +1025,24 @@ providers:
   #     connect_s: 10
   #     read_s: 60
 
+  antigravity:
+    backend: oauth
+    oauth:
+      # Replace ANTIGRAVITY_CLIENT_ID with your client ID from Antigravity
+      helper: "faigate-auth antigravity --client-id ${ANTIGRAVITY_CLIENT_ID}"
+      client_id: ${ANTIGRAVITY_CLIENT_ID}
+      token_endpoint: "https://oauth2.googleapis.com/token"
+      refresh_endpoint: "https://oauth2.googleapis.com/token"
+      scope: "openid email"
+    underlying_backend: openai-compat
+    # Replace with actual Antigravity endpoint (if known)
+    base_url: "https://antigravity.example.com/v1"
+    model: ag/claude-opus-4-6-thinking
+    tier: default
+    timeout:
+      connect_s: 10
+      read_s: 90
+
 client_profiles:
   enabled: true
   default: generic
