@@ -4,11 +4,11 @@ These benchmarks measure the performance of key operations to detect regressions
 Run with: pytest tests/benchmarks/test_performance.py --benchmark-only
 """
 
-import time
-import pytest
-from pathlib import Path
 import sys
 import types
+from pathlib import Path
+
+import pytest
 
 # Set up mock environment before imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -27,8 +27,8 @@ _httpx.AsyncClient = type(
 )
 sys.modules["httpx"] = _httpx
 
-# Import faigate modules after mocking
-from faigate import config
+# Import faigate modules after mocking  # noqa: E402
+from faigate import config  # noqa: E402
 
 
 @pytest.mark.skip("ProviderCatalog/Router removed in v2.x refactor")
