@@ -325,7 +325,7 @@ def _get_provider_pricing(provider_name: str) -> dict[str, Any]:
             if field in registry_pricing and registry_pricing[field]:
                 # Convert to float if not already
                 value = registry_pricing[field]
-                if isinstance(value, (int, float)) and value > 0 and field not in pricing:  # noqa: E501
+                if isinstance(value, int | float) and value > 0 and field not in pricing:  # noqa: E501
                     pricing[field] = float(value)
 
     return pricing

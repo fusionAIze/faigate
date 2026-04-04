@@ -991,7 +991,7 @@ def _normalize_policy_select(
             raw_limit = normalized.get(limit_field)
             if raw_limit is None:
                 normalized[limit_field] = None
-            elif isinstance(raw_limit, (int, float)) and raw_limit > 0:
+            elif isinstance(raw_limit, int | float) and raw_limit > 0:
                 normalized[limit_field] = float(raw_limit)
             else:
                 raise ConfigError(f"Policy '{name}' field '{limit_field}' must be a positive number (USD)")
@@ -1555,7 +1555,7 @@ def _normalize_update_check(data: dict[str, Any]) -> dict[str, Any]:
         raise ConfigError("'update_check.api_base' must be a non-empty string")
 
     timeout_seconds = raw.get("timeout_seconds", 5)
-    if isinstance(timeout_seconds, bool) or not isinstance(timeout_seconds, (int, float)):
+    if isinstance(timeout_seconds, bool) or not isinstance(timeout_seconds, int | float):
         raise ConfigError("'update_check.timeout_seconds' must be a positive number")
     if timeout_seconds <= 0:
         raise ConfigError("'update_check.timeout_seconds' must be positive")
@@ -1810,7 +1810,7 @@ def _normalize_provider_source_refresh(data: dict[str, Any]) -> dict[str, Any]:
         raise ConfigError("'provider_source_refresh' must be a mapping")
 
     timeout_seconds = raw.get("timeout_seconds", 10.0)
-    if isinstance(timeout_seconds, bool) or not isinstance(timeout_seconds, (int, float)):
+    if isinstance(timeout_seconds, bool) or not isinstance(timeout_seconds, int | float):
         raise ConfigError("'provider_source_refresh.timeout_seconds' must be a number")
     if float(timeout_seconds) <= 0:
         raise ConfigError("'provider_source_refresh.timeout_seconds' must be positive")

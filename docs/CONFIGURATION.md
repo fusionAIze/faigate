@@ -422,7 +422,7 @@ faigate-config discover --no-scan
 
 The discovery command checks:
 - **Ollama** (localhost:11434)
-- **vLLM** (localhost:8000)  
+- **vLLM** (localhost:8000)
 - **LM Studio** (localhost:1234)
 - **LiteLLM** proxy (localhost:4000)
 - **Grid** integration (if available)

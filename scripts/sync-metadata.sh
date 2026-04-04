@@ -25,7 +25,7 @@ echo "Pulling latest metadata from repository..." >> "$LOG_FILE"
 if git pull origin main 2>&1 | tee -a "$LOG_FILE"; then
     echo "$(date): Successfully updated metadata repository" >> "$LOG_FILE"
     echo "Metadata updated successfully."
-    
+
     # Optionally touch the catalog file to ensure mtime changes
     # This ensures Gate picks up changes even if file content identical but metadata updated
     if [ -f "providers/catalog.v1.json" ]; then

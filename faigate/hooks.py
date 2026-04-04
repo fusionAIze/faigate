@@ -161,7 +161,7 @@ def _sanitize_body_updates(updates: dict[str, Any]) -> tuple[dict[str, Any], lis
         if key in {"model", "tool_choice", "user"} and not isinstance(value, str):
             warnings.append(f"Ignored hook body update for '{key}' because it was not a string")
             continue
-        if key in {"temperature"} and not isinstance(value, (int, float)):
+        if key in {"temperature"} and not isinstance(value, int | float):
             warnings.append(f"Ignored hook body update for '{key}' because it was not numeric")
             continue
         if key in {"max_tokens"} and (isinstance(value, bool) or not isinstance(value, int) or value <= 0):
@@ -226,7 +226,7 @@ def _sanitize_routing_hints(hints: dict[str, Any]) -> tuple[dict[str, Any], list
                 normalized_values = [
                     value
                     for value in values
-                    if isinstance(value, (str, bool)) and (not isinstance(value, str) or value.strip())
+                    if isinstance(value, str | bool) and (not isinstance(value, str) or value.strip())
                 ]
                 if normalized_values:
                     cap_values[capability.strip()] = normalized_values

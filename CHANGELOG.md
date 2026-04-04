@@ -29,7 +29,7 @@
   - Dashboard links include matching filters for seamless CLI→dashboard navigation
 - **Safe config workflows**: New `faigate-config` CLI for config management
   - `preview`: Preview config changes before applying
-  - `diff`: Show detailed config differences  
+  - `diff`: Show detailed config differences
   - `apply`: Apply config changes with backup and confirmation
   - `validate`: Validate config syntax and structure
 - **Clipboard integration**: `--copy` flag copies dashboard URLs to clipboard (macOS/Linux/Windows)

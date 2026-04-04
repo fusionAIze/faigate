@@ -1,10 +1,10 @@
 ## What changed
 
-- 
+-
 
 ## Why
 
-- 
+-
 
 ## How verified
 
@@ -16,4 +16,4 @@
 
 ## Risk / follow-up
 
-- 
+-

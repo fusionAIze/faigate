@@ -332,26 +332,24 @@ class ProviderCatalogStore:
             where_clauses.append("source_name=?")
             params.append(source_name)
         where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
-        cur = self._conn.execute(
-            f"""
-            SELECT snap.provider_id, snap.route_name, snap.source_name, snap.checked_at,
-                snap.model_id, snap.available_for_key, snap.request_ready,
-                snap.verified_via, snap.last_issue_type, snap.metadata_json
-            FROM provider_availability_snapshots AS snap
-            INNER JOIN (
-                SELECT provider_id, route_name, source_name, MAX(checked_at) AS checked_at
-                FROM provider_availability_snapshots
-                {where_sql}
-                GROUP BY provider_id, route_name, source_name
-            ) AS latest
-            ON snap.provider_id = latest.provider_id
-                AND snap.route_name = latest.route_name
-                AND snap.source_name = latest.source_name
-                AND snap.checked_at = latest.checked_at
-            ORDER BY snap.provider_id, snap.route_name, snap.source_name
-            """,
-            params,
+        _q = (  # nosec B608 – where_sql built from hardcoded column names only
+            f"SELECT snap.provider_id, snap.route_name, snap.source_name, snap.checked_at,"
+            " snap.model_id, snap.available_for_key, snap.request_ready,"
+            " snap.verified_via, snap.last_issue_type, snap.metadata_json"
+            " FROM provider_availability_snapshots AS snap"
+            " INNER JOIN ("
+            " SELECT provider_id, route_name, source_name, MAX(checked_at) AS checked_at"
+            " FROM provider_availability_snapshots"
+            f" {where_sql}"
+            " GROUP BY provider_id, route_name, source_name"
+            ") AS latest"
+            " ON snap.provider_id = latest.provider_id"
+            " AND snap.route_name = latest.route_name"
+            " AND snap.source_name = latest.source_name"
+            " AND snap.checked_at = latest.checked_at"
+            " ORDER BY snap.provider_id, snap.route_name, snap.source_name"
         )
+        cur = self._conn.execute(_q, params)
         cols = [item[0] for item in cur.description]
         rows = [dict(zip(cols, row)) for row in cur.fetchall()]
         for row in rows:
@@ -465,16 +463,13 @@ class ProviderCatalogStore:
         if provider_id:
             where_sql = " WHERE provider_id=?"
             params.append(provider_id)
-        cur = self._conn.execute(
-            f"""
-            SELECT provider_id, detected_at, source_kind, change_type, severity,
-                model_id, field_name, old_value, new_value, message
-            FROM provider_change_events{where_sql}
-            ORDER BY detected_at DESC
-            LIMIT ?
-            """,
-            (*params, limit),
+        _q = (  # nosec B608 – where_sql built from hardcoded column names only
+            "SELECT provider_id, detected_at, source_kind, change_type, severity,"
+            " model_id, field_name, old_value, new_value, message"
+            f" FROM provider_change_events{where_sql}"
+            " ORDER BY detected_at DESC LIMIT ?"
         )
+        cur = self._conn.execute(_q, (*params, limit))
         cols = [item[0] for item in cur.description]
         return [dict(zip(cols, row)) for row in cur.fetchall()]
 

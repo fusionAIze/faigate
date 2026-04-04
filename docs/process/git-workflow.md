@@ -123,7 +123,7 @@ To prevent branch sprawl and maintain repository hygiene, follow these cleanup g
    ```bash
    # List merged branches
    git branch --merged main | grep -E "^(feature|review|hotfix)/"
-   
+
    # List branches older than 30 days
    git for-each-ref --sort=committerdate refs/heads/ \
      --format='%(committerdate:short) %(refname:short)' | \
@@ -134,7 +134,7 @@ To prevent branch sprawl and maintain repository hygiene, follow these cleanup g
    ```bash
    # Safe deletion of merged branches
    git branch --merged main | grep -E "^(feature|review|hotfix)/" | xargs -n1 git branch -d
-   
+
    # Force deletion of stale unmerged branches (with caution)
    git branch | grep -E "^(feature|review|hotfix)/" | \
      while read branch; do
