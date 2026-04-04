@@ -223,6 +223,105 @@ BUILTIN: dict[str, ProviderDef] = {
         pricing={"input": 0.0, "output": 0.0},
         notes="HuggingFace Inference – OpenAI-compat router",
     ),
+    # ── DeepSeek ──────────────────────────────────────────────────────────
+    "deepseek": ProviderDef(
+        backend="openai-compat",
+        base_url="https://api.deepseek.com/v1",
+        base_url_env="DEEPSEEK_BASE_URL",
+        api_key_env="DEEPSEEK_API_KEY",
+        tier="default",
+        example_model="deepseek-reasoner",
+        pricing={"input": 0.55, "output": 2.19},
+        notes="DeepSeek – deepseek-chat (V3) and deepseek-reasoner (R1)",
+    ),
+    # ── Together AI ───────────────────────────────────────────────────────
+    "together": ProviderDef(
+        backend="openai-compat",
+        base_url="https://api.together.xyz/v1",
+        base_url_env="TOGETHER_BASE_URL",
+        api_key_env="TOGETHER_API_KEY",
+        tier="cheap",
+        example_model="together/meta-llama/Llama-3.3-70B-Instruct-Turbo",
+        pricing={"input": 0.18, "output": 0.18},
+        notes="Together AI – serverless inference, Llama / Mixtral / DeepSeek / Qwen",
+    ),
+    # ── Fireworks AI ──────────────────────────────────────────────────────
+    "fireworks": ProviderDef(
+        backend="openai-compat",
+        base_url="https://api.fireworks.ai/inference/v1",
+        base_url_env="FIREWORKS_BASE_URL",
+        api_key_env="FIREWORKS_API_KEY",
+        tier="cheap",
+        example_model="fireworks/accounts/fireworks/models/deepseek-r1",
+        pricing={"input": 0.22, "output": 0.88},
+        notes="Fireworks AI – fast serverless inference, DeepSeek / Llama / Qwen",
+    ),
+    # ── Cohere ────────────────────────────────────────────────────────────
+    "cohere": ProviderDef(
+        backend="openai-compat",
+        base_url="https://api.cohere.com/compatibility/v1",
+        base_url_env="COHERE_BASE_URL",
+        api_key_env="COHERE_API_KEY",
+        tier="default",
+        example_model="command-a-03-2025",
+        pricing={"input": 2.50, "output": 10.00},
+        notes="Cohere – Command A/R series, OpenAI-compat at /compatibility/v1",
+    ),
+    # ── Nebius AI ─────────────────────────────────────────────────────────
+    "nebius": ProviderDef(
+        backend="openai-compat",
+        base_url="https://api.studio.nebius.ai/v1",
+        base_url_env="NEBIUS_BASE_URL",
+        api_key_env="NEBIUS_API_KEY",
+        tier="cheap",
+        example_model="nebius/deepseek-ai/DeepSeek-R1",
+        pricing={"input": 0.80, "output": 3.20},
+        notes="Nebius AI Studio – DeepSeek / Llama / Qwen on European infra",
+    ),
+    # ── SiliconFlow ───────────────────────────────────────────────────────
+    "siliconflow": ProviderDef(
+        backend="openai-compat",
+        base_url="https://api.siliconflow.cn/v1",
+        base_url_env="SILICONFLOW_BASE_URL",
+        api_key_env="SILICONFLOW_API_KEY",
+        tier="cheap",
+        example_model="siliconflow/deepseek-ai/DeepSeek-R1",
+        pricing={"input": 0.14, "output": 0.55},
+        notes="SiliconFlow – low-cost inference (CN), DeepSeek / Qwen / GLM",
+    ),
+    # ── Hyperbolic ────────────────────────────────────────────────────────
+    "hyperbolic": ProviderDef(
+        backend="openai-compat",
+        base_url="https://api.hyperbolic.xyz/v1",
+        base_url_env="HYPERBOLIC_BASE_URL",
+        api_key_env="HYPERBOLIC_API_KEY",
+        tier="cheap",
+        example_model="hyperbolic/deepseek-ai/DeepSeek-R1",
+        pricing={"input": 0.20, "output": 0.80},
+        notes="Hyperbolic – GPU cloud inference, DeepSeek / Llama / Qwen",
+    ),
+    # ── Perplexity ────────────────────────────────────────────────────────
+    "perplexity": ProviderDef(
+        backend="openai-compat",
+        base_url="https://api.perplexity.ai",
+        base_url_env="PERPLEXITY_BASE_URL",
+        api_key_env="PERPLEXITY_API_KEY",
+        tier="default",
+        example_model="sonar-pro",
+        pricing={"input": 3.00, "output": 15.00},
+        notes="Perplexity – online/search-augmented models (sonar, sonar-pro, sonar-reasoning)",
+    ),
+    # ── NVIDIA NIM ────────────────────────────────────────────────────────
+    "nvidia-nim": ProviderDef(
+        backend="openai-compat",
+        base_url="https://integrate.api.nvidia.com/v1",
+        base_url_env="NVIDIA_NIM_BASE_URL",
+        api_key_env="NVIDIA_API_KEY",
+        tier="default",
+        example_model="nvidia-nim/deepseek-ai/deepseek-r1",
+        pricing={"input": 0.0, "output": 0.0},
+        notes="NVIDIA NIM – optimized inference on NVIDIA infra, DeepSeek / Llama / Mistral",
+    ),
 }
 
 
