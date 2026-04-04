@@ -12,7 +12,7 @@ repos:
       - id: check-added-large-files
         args: ['--maxkb=1024']
       - id: check-case-conflict
-      - id: check-merge-conflicts
+      - id: check-merge-conflict
       - id: detect-private-key
       - id: forbid-new-submodules
 
