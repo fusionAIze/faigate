@@ -2135,7 +2135,7 @@ async def _resolve_image_route_preview(
                         "error": {
                             "type": "budget_exceeded",
                             "message": f"Client profile '{client_profile}' has reached its daily budget limit "
-                                       f"(${spent_day:.4f} / ${limit_day:.4f} USD).",
+                            f"(${spent_day:.4f} / ${limit_day:.4f} USD).",
                             "code": "daily_budget_exceeded",
                         }
                     },
@@ -2149,7 +2149,7 @@ async def _resolve_image_route_preview(
                         "error": {
                             "type": "budget_exceeded",
                             "message": f"Client profile '{client_profile}' has reached its monthly budget limit "
-                                       f"(${spent_month:.4f} / ${limit_month:.4f} USD).",
+                            f"(${spent_month:.4f} / ${limit_month:.4f} USD).",
                             "code": "monthly_budget_exceeded",
                         }
                     },
