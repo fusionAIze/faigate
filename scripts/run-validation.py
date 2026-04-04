@@ -3,10 +3,8 @@
 
 import asyncio
 import os
-import signal
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 # Add project root to path
@@ -46,7 +44,7 @@ async def start_server() -> subprocess.Popen:
                 if resp.status_code == 200:
                     print("Server is ready")
                     return proc
-        except:
+        except Exception:
             pass
 
         await asyncio.sleep(1)
