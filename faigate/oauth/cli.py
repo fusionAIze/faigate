@@ -662,7 +662,10 @@ def main() -> None:
             print("Supported: qwen-portal, claude-code, google-gemini-cli, google-antigravity", file=sys.stderr)
             sys.exit(1)
 
-        print(json.dumps(token_data, indent=2))
+        _SENSITIVE = {"access_token", "refresh_token", "id_token"}
+        safe = {k: ("[REDACTED]" if k in _SENSITIVE else v) for k, v in token_data.items()}
+        print(json.dumps(safe, indent=2))
+        print("\nToken written to credentials file (use it from there).", file=sys.stderr)
 
     except Exception as e:
         logger.error("Failed to obtain token: %s", e)

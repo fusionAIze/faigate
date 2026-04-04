@@ -191,7 +191,7 @@ class OAuthBackend(ProviderBackend):
 
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
-        logger.info("Refreshing OAuth token for %s via %s", self.name, token_endpoint)
+        logger.info("Refreshing OAuth token for %s", self.name)
         try:
             resp = httpx.post(token_endpoint, data=data, headers=headers, timeout=30.0)
             resp.raise_for_status()
