@@ -43,14 +43,14 @@ def test_provider_selection(benchmark):
 
 def test_config_loading(benchmark):
     """Benchmark configuration loading from YAML."""
-    # Create a minimal config YAML content
     config_content = """
 providers:
-  - id: test
-    name: Test Provider
-    enabled: true
-    api_key: "test-key"
-    base_url: "https://api.test.com"
+  test-provider:
+    backend: openai-compat
+    base_url: https://api.test.com/v1
+    api_key: test-key
+    model: test-model
+    tier: default
 """
     config_path = Path("/tmp/test_config.yaml")
     config_path.write_text(config_content)
@@ -63,14 +63,9 @@ providers:
     config_path.unlink(missing_ok=True)
 
 
-def test_cost_calculation(benchmark, sample_router):
-    """Benchmark cost calculation for requests."""
-
-    def calculate_cost():
-        return sample_router.estimate_cost(provider_id="openai", input_tokens=100, output_tokens=50)
-
-    result = benchmark(calculate_cost)
-    assert isinstance(result, (int, float))
+@pytest.mark.skip("Router.estimate_cost removed in v2.x refactor")
+def test_cost_calculation(benchmark):
+    pass
 
 
 @pytest.mark.skip("Requires actual HTTP endpoints")
