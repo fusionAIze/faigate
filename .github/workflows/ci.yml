@@ -63,30 +63,23 @@ jobs:
       - run: bash -n scripts/*
       - run: pre-commit run --all-files --show-diff-on-failure
       - name: Validate version consistency
-        run: python -c "
-import re
-import sys
-from pathlib import Path
-root = Path('.')
-pyproject = root / 'pyproject.toml'
-package = root / 'faigate' / '__init__.py'
-pyproject_content = pyproject.read_text()
-package_content = package.read_text()
-pyproject_match = re.search(r'^version = \"([^\"]+)\"$', pyproject_content, flags=re.MULTILINE)
-package_match = re.search(r'^__version__ = \"([^\"]+)\"$', package_content, flags=re.MULTILINE)
-if not pyproject_match:
-    print('ERROR: Could not find version in pyproject.toml')
-    sys.exit(1)
-if not package_match:
-    print('ERROR: Could not find __version__ in faigate/__init__.py')
-    sys.exit(1)
-if pyproject_match.group(1) != package_match.group(1):
-    print('ERROR: Version mismatch')
-    print(f'pyproject.toml: {pyproject_match.group(1)}')
-    print(f'faigate/__init__.py: {package_match.group(1)}')
-    sys.exit(1)
-print(f'Version OK: {pyproject_match.group(1)}')
-"
+        run: |
+          python - <<'PY'
+          import re, sys
+          from pathlib import Path
+          root = Path('.')
+          pyproject_content = (root / 'pyproject.toml').read_text()
+          package_content   = (root / 'faigate' / '__init__.py').read_text()
+          pv = re.search(r'^version = "([^"]+)"$', pyproject_content, re.MULTILINE)
+          iv = re.search(r'^__version__ = "([^"]+)"$', package_content, re.MULTILINE)
+          if not pv:
+              sys.exit('ERROR: version not found in pyproject.toml')
+          if not iv:
+              sys.exit('ERROR: __version__ not found in faigate/__init__.py')
+          if pv.group(1) != iv.group(1):
+              sys.exit(f'ERROR: version mismatch: pyproject={pv.group(1)} package={iv.group(1)}')
+          print(f'Version OK: {pv.group(1)}')
+          PY
 
   security:
     runs-on: ubuntu-latest
