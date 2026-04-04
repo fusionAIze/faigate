@@ -576,16 +576,17 @@ OAUTH: dict[str, ProviderDef] = {
     # ── Google Antigravity (Google OAuth multi‑model gateway) ──────────────
     "google-antigravity": ProviderDef(
         backend="openai-compat",
-        base_url="",  # dynamic; set ANTIGRAVITY_BASE_URL after discovering from network traffic
-        base_url_env="ANTIGRAVITY_BASE_URL",
+        base_url="https://generativelanguage.googleapis.com/v1beta/openai",
+        base_url_env="ANTIGRAVITY_BASE_URL",  # override if using a different Google endpoint
         api_key_env="ANTIGRAVITY_TOKEN",
         auth_optional=True,
         tier="default",
-        example_model="ag/claude-opus-4-6",
+        example_model="gemini-2.5-pro",
         pricing={"input": 0.0, "output": 0.0},
         notes=(
             "Google Antigravity – Google OAuth (client_id: 1071006060591-...apps.googleusercontent.com); "
-            "token from ~/.gemini/oauth_creds.json; base_url requires network discovery. "
+            "token from ~/.gemini/oauth_creds.json. Antigravity's local gRPC LS (127.0.0.1:<ephemeral-port>) "
+            "is its internal proxy – faigate uses the Google Generative Language API directly. "
             "Run: faigate-auth google-antigravity  or sign in to the Antigravity IDE."
         ),
     ),
