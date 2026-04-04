@@ -859,7 +859,10 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "official_source_url": "https://github.com/QwenLM/qwen-code",
         "signup_url": "https://chat.qwen.ai/",
         "watch_sources": ["https://github.com/QwenLM/qwen-code"],
-        "notes": "Qwen OAuth free tier – token from ~/.qwen/oauth_creds.json; run: qwen auth login. Model: coder-model (Qwen 3 Coder). Endpoint dynamic via resource_url.",
+        "notes": (
+            "Qwen OAuth free tier – token from ~/.qwen/oauth_creds.json; run: qwen auth login. "
+            "Model: coder-model (Qwen 3 Coder). Endpoint dynamic via resource_url."
+        ),
         "last_reviewed": "2026-04-04",
     },
     # ── KiloCode lanes (individual model-level access) ───────────────────────
