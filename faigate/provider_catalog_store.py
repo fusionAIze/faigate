@@ -113,10 +113,7 @@ class ProviderCatalogStore:
     def _migrate_schema(self) -> None:
         if not self._conn:
             return
-        columns = {
-            row[1]
-            for row in self._conn.execute("PRAGMA table_info(provider_availability_snapshots)")
-        }
+        columns = {row[1] for row in self._conn.execute("PRAGMA table_info(provider_availability_snapshots)")}
         if "source_name" not in columns:
             self._conn.execute(
                 """
