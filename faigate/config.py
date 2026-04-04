@@ -986,6 +986,18 @@ def _normalize_policy_select(
         else:
             normalized["routing_mode"] = routing_mode.strip()
 
+    if extra_keys and "cost_limit_usd_day" in extra_keys:
+        for limit_field in ("cost_limit_usd_day", "cost_limit_usd_month"):
+            raw_limit = normalized.get(limit_field)
+            if raw_limit is None:
+                normalized[limit_field] = None
+            elif isinstance(raw_limit, (int, float)) and raw_limit > 0:
+                normalized[limit_field] = float(raw_limit)
+            else:
+                raise ConfigError(
+                    f"Policy '{name}' field '{limit_field}' must be a positive number (USD)"
+                )
+
     return normalized
 
 
@@ -1115,7 +1127,7 @@ def _normalize_client_profiles(data: dict[str, Any]) -> dict[str, Any]:
             f"client profile '{preset_name}'",
             dict(preset["profile"]),
             data.get("providers", {}),
-            extra_keys={"routing_mode"},
+            extra_keys={"routing_mode", "cost_limit_usd_day", "cost_limit_usd_month"},
         )
 
     for profile_name, hints in profiles.items():
@@ -1127,7 +1139,7 @@ def _normalize_client_profiles(data: dict[str, Any]) -> dict[str, Any]:
             f"client profile '{profile_name.strip()}'",
             hints,
             data.get("providers", {}),
-            extra_keys={"routing_mode"},
+            extra_keys={"routing_mode", "cost_limit_usd_day", "cost_limit_usd_month"},
         )
 
     if default_profile not in normalized_profiles:

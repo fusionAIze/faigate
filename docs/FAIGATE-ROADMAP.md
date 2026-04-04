@@ -2,7 +2,7 @@
 
 ## Status
 
-`v1.21.0` is shipped.
+`v2.0.0` is shipped.
 
 Gate is no longer just a routing core with helper scripts around it. The
 current product baseline is now clear:
@@ -14,7 +14,7 @@ current product baseline is now clear:
 - an operator shell made up of dashboard, doctor, catalog, probe, and guided setup
 - package renewal alerts and cost projection wizard
 
-### Recent Achievements (v1.15.0 - v1.21.0)
+### Recent Achievements (v1.15.0 - v2.0.0)
 - **Anthropic bridge production-ready**: SSE streaming adapter, tool result continuity, Claude Code model ID mapping
 - **Dashboard enhancements**: Package renewal alerts, cost trends CLI, uPlot charts integration
 - **Operator tools**: Branch management guidelines, model shortcut alias conflict detection
@@ -22,6 +22,7 @@ current product baseline is now clear:
 - **Claude Desktop parity finalization**: Desktop endpoint override flows, bridge hardening, workflow validation (v1.19.x)
 - **External metadata integration**: Git-based metadata sync, model/provider/price mapping, cost truth visualization (v1.20.x)
 - **Route explainability & operator trust**: Lane family decision factors, selection path categorization, route decision drilldowns (v1.21.x)
+- **Shell parity & complete provider coverage**: CLI deep‑links, config workflows, local worker discovery, all LLM AI Router custom endpoints, KiloCode model‑level lanes (v2.0.0)
 
 The roadmap should now stay disciplined. The next release lines should finalize
 Claude Desktop parity, then deepen operator trust through metadata truth and
@@ -269,25 +270,34 @@ explainability so operators understand and trust routing decisions.
 
 ## v2.0.0 Planning
 
-**Target: Major release with shell parity, local worker support, and enhanced client profiles**
+**Target: Major release with shell parity, local worker support, complete provider coverage, and enhanced client profiles**
 
 ### Core Themes
-1. **Shell parity and intelligence**
-   - Shell-backed scope suggestions matching dashboard
-   - Deep links between dashboard panels and CLI views
-   - Safe config preview/diff/apply workflows
+1. **Shell parity and intelligence** ✓ _(implemented)_
+   - Shell-backed scope suggestions matching dashboard ✓
+   - Deep links between dashboard panels and CLI views ✓
+   - Safe config preview/diff/apply workflows ✓
+   - Config workflow suggestions and deep‑link generation ✓
 
-2. **Local worker support**
-   - First-class local model worker integration
-   - Worker health monitoring and auto-recovery
-   - Cost-aware routing between local and cloud providers
+2. **Local worker support** ✓ _(implemented)_
+   - First‑class local model worker integration ✓ (cost‑tier mapping, auto‑discovery CLI)
+   - Worker health monitoring and auto‑recovery ✓ (basic health probes)
+   - Cost‑aware routing between local and cloud providers ✓ (local cost tier scoring)
+   - Example configurations for Ollama, vLLM, LM Studio, LiteLLM ✓
 
-3. **Enhanced client profiles**
+3. **Complete provider coverage** ✓ _(implemented)_
+   - All LLM AI Router custom endpoints represented in provider catalog ✓
+   - Generic provider support (OpenAI, Anthropic, Google) with config examples ✓
+   - Full provider families (Mistral, Groq, xAI, HuggingFace, Cerebras, etc.) ✓
+   - KiloCode model‑level access with individual catalog entries ✓
+   - Consistent `recommended_model` values across all providers ✓
+
+4. **Enhanced client profiles** ⚠️ _(deferred to v2.1.0)_
    - Advanced client policy management
-   - Per-client routing rules and cost controls
-   - Client-specific observability and reporting
+   - Per‑client routing rules and cost controls
+   - Client‑specific observability and reporting
 
-4. **Observability improvements**
+5. **Observability improvements** ⚠️ _(deferred to v2.1.0)_
    - Advanced metrics and alerting
    - Performance tracing across request chains
    - Automated anomaly detection
@@ -295,9 +305,50 @@ explainability so operators understand and trust routing decisions.
 ### Considerations
 - v2.0.0 may include breaking changes for cleaner APIs and configuration
 - Migration paths will be documented for existing deployments
-- Focus remains on gateway-first architecture and operator trust
+- Focus remains on gateway‑first architecture and operator trust
+- **Provider coverage now matches LLM AI Router’s custom endpoints**; each KiloCode model can be accessed individually via API key
+- **Local worker examples** added to config.yaml; generic providers available as commented templates
 
-*Detailed planning and issue creation pending review of current priorities and community feedback.*
+ *Detailed planning and issue creation pending review of current priorities and community feedback.*
+
+## v2.1.0 Planning
+
+**Target: Managed provider OAuth wrapper, enhanced local worker integration, and advanced client profiles**
+
+### Core Themes
+1. **Managed provider OAuth wrapper** ✓ _(implemented)_
+   - OAuth‑based authentication for managed providers (Gemini, Antigravity, etc.) ✓
+   - Interactive device‑code login flows (Google, Qwen, Antigravity) ✓
+   - Token store and generic OAuth backend ✓
+   - Antigravity provider in registry, catalog, and lane registry (ag/ model family) ✓
+   - claude_code_oauth() reading token from local claude CLI settings ✓
+
+2. **Local worker completion** ✓ _(implemented)_
+   - Grid integration: reads `~/.faigrid/config.json` + legacy state file ✓
+   - GPU/VRAM metrics via Ollama `/api/ps` and vLLM `/metrics` ✓
+   - Dynamic model enumeration from `/v1/models` endpoints ✓
+   - `dynamic_models` field in DiscoveredWorker; surfaced in generate_provider_config ✓
+   - _(Lifecycle management hooks deferred — requires Grid daemon integration)_
+
+3. **Enhanced client profiles** ✓ _(implemented)_
+   - `cost_limit_usd_day` and `cost_limit_usd_month` per profile ✓
+   - Config validation with type checking ✓
+   - HTTP 429 enforcement before routing when budget is reached ✓
+   - Provider allow/deny lists already live in policy layer ✓
+   - _(Advanced policy management UI deferred)_
+
+4. **Observability suite** ✓ _(implemented)_
+   - `MetricsStore.get_anomalies()`: error rate, latency, cost, and traffic spike detection ✓
+   - `GET /api/alerts` endpoint with configurable lookback and baseline windows ✓
+   - GPU utilization surfaced from local worker probes ✓
+   - _(External alerting integrations and Prometheus export deferred)_
+
+### Considerations
+- Maintain backward compatibility with v2.0.0 configurations
+- Focus on operator trust through enhanced visibility
+- Keep gateway‑first architecture principle
+- OAuth wrapper should be optional; API‑key providers remain the default
+- Interactive login flows must be clearly separated from automated routing core
 
 ## Anti-Goals
 

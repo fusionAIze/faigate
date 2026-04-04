@@ -1,5 +1,54 @@
 # fusionAIze Gate Changelog
 
+## v2.0.1 - 2026-04-04
+
+### Added
+
+- **OAuth wrapper for managed providers**: token store, generic OAuth backend, device-code flows for Google, Qwen, and Antigravity; `claude_code_oauth()` reads token from local claude CLI settings
+- **Antigravity provider**: full registry, catalog, and lane-registry integration for `ag/` model family (Claude Opus/Sonnet 4.6, Gemini 3.x variants via Google Antigravity gateway)
+- **Local worker GPU metrics**: probe GPU/VRAM usage from Ollama (`/api/ps`) and vLLM (`/metrics`); `GpuInfo` surfaced in discovery output and provider config
+- **Dynamic model enumeration**: `dynamic_models` field on `DiscoveredWorker`; discovered models preferred over static defaults in `generate_provider_config`
+- **Grid worker discovery**: reads `~/.faigrid/config.json` (JSON format) with fallback to legacy key=value state file
+- **Per-client budget limits**: `cost_limit_usd_day` and `cost_limit_usd_month` fields in client profile config; HTTP 429 returned before routing when threshold is reached
+- **Anomaly detection**: `MetricsStore.get_anomalies()` compares recent window to rolling baseline for error rate, latency, cost, and traffic spikes
+- **Alerts API**: `GET /api/alerts` with configurable `lookback_hours` and `baseline_hours` parameters
+
+### Changed
+
+- `google-vertex` renamed to `google-gemini-cli` in registry and catalog (alias preserved for backward compatibility)
+
+## v2.0.0 - 2026-04-03
+
+### Added
+
+- **Shell parity and intelligence**: CLI commands now integrate deeply with dashboard
+  - `--suggest` argument analyzes metrics to recommend relevant CLI commands
+  - `--link` generates dashboard deep‑link URLs with filters preserved
+  - All CLI commands (`overview`, `recent`, `daily`, `trends`) show dashboard links
+  - Filter arguments (`--provider`, `--modality`, `--client‑profile`, etc.) work across commands
+  - Dashboard links include matching filters for seamless CLI→dashboard navigation
+- **Safe config workflows**: New `faigate-config` CLI for config management
+  - `preview`: Preview config changes before applying
+  - `diff`: Show detailed config differences  
+  - `apply`: Apply config changes with backup and confirmation
+  - `validate`: Validate config syntax and structure
+- **Clipboard integration**: `--copy` flag copies dashboard URLs to clipboard (macOS/Linux/Windows)
+- **Scope suggestions**: CLI suggests relevant commands based on metrics analysis (failure rates, provider concentration, costs, recent activity)
+- **Local worker auto‑discovery**: `faigate-config discover` automatically detects local AI workers (Ollama, vLLM, LM Studio, LiteLLM) and suggests configuration snippets
+- **Complete provider coverage**: All LLM AI Router custom endpoints now represented in the provider catalog
+  - Added missing providers: xAI, Z.AI, Mistral, Groq, HuggingFace, MoonshotAI, MiniMax, Volcano Engine, BytePlus, Qwen, OpenAI Codex, OpenCode Zen, Cerebras, GitHub Copilot, Synthetic, Kimi Coding, Vercel AI Gateway
+  - Generic provider support (OpenAI, Anthropic, Google) with config examples
+  - KiloCode model‑level access: individual catalog entries for `kilo‑auto/frontier`, `kilo‑auto/balanced`, `kilo‑auto/free`
+  - Consistent `recommended_model` values across all providers
+- **Local worker examples**: Commented configuration templates for Ollama, vLLM, LM Studio, LiteLLM in `config.yaml`
+- **Enhanced provider catalog**: 41 curated provider entries (up from 17) with official source URLs, signup links, and volatility ratings
+
+### Changed
+
+- CLI help text updated with new arguments and examples
+- Dashboard deep links use proper URL encoding and parameter validation
+- Existing CLI commands remain fully backward compatible
+
 ## v1.21.0 - 2026-04-02
 
 ### Added

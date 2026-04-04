@@ -42,7 +42,6 @@ from .canonical import CanonicalChatRequest, CanonicalChatResponse, CanonicalRes
 from .config import Config, load_config
 from .dashboard import _metadata_catalogs_summary, _metadata_packages_detail
 from .dashboard_web import DASHBOARD_HTML
-from .dashboard import _metadata_catalogs_summary, _metadata_packages_detail
 from .hooks import (
     AppliedHooks,
     HookExecutionError,
@@ -71,7 +70,7 @@ from .provider_catalog_refresh import (
 )
 from .provider_catalog_store import ProviderCatalogStore
 from .provider_sources import list_provider_sources
-from .providers import ProviderBackend, ProviderError, classify_runtime_issue
+from .providers import ProviderBackend, ProviderError, classify_runtime_issue, create_provider_backend
 from .router import Router, RoutingDecision
 from .updates import (
     UpdateChecker,
@@ -2122,6 +2121,40 @@ async def _resolve_image_route_preview(
     )
     client_tag = _resolve_client_tag(headers, client_profile)
 
+    # Budget enforcement for image endpoints
+    limit_day = profile_hints.get("cost_limit_usd_day")
+    limit_month = profile_hints.get("cost_limit_usd_month")
+    if (limit_day or limit_month) and _metrics:
+        now = time.time()
+        if limit_day:
+            spent_day = _metrics.get_client_cost_since(client_profile, now - 86400)
+            if spent_day >= limit_day:
+                return JSONResponse(
+                    status_code=429,
+                    content={
+                        "error": {
+                            "type": "budget_exceeded",
+                            "message": f"Client profile '{client_profile}' has reached its daily budget limit "
+                                       f"(${spent_day:.4f} / ${limit_day:.4f} USD).",
+                            "code": "daily_budget_exceeded",
+                        }
+                    },
+                )
+        if limit_month:
+            spent_month = _metrics.get_client_cost_since(client_profile, now - 30 * 86400)
+            if spent_month >= limit_month:
+                return JSONResponse(
+                    status_code=429,
+                    content={
+                        "error": {
+                            "type": "budget_exceeded",
+                            "message": f"Client profile '{client_profile}' has reached its monthly budget limit "
+                                       f"(${spent_month:.4f} / ${limit_month:.4f} USD).",
+                            "code": "monthly_budget_exceeded",
+                        }
+                    },
+                )
+
     (
         effective_model_requested,
         direct_provider_name,
@@ -2213,7 +2246,7 @@ async def lifespan(app: FastAPI):
         if not pcfg.get("api_key"):
             logger.warning("Provider %s has no API key, skipping", name)
             continue
-        _providers[name] = ProviderBackend(name, pcfg)
+        _providers[name] = create_provider_backend(name, pcfg)
         logger.info("  ✓ %s → %s (%s)", name, pcfg["model"], pcfg.get("tier", "default"))
 
     # Merge virtual providers registered by community hooks
@@ -2222,7 +2255,7 @@ async def lifespan(app: FastAPI):
             logger.info("  skip virtual:%s — overridden by config-defined provider", vp_name)
             continue
         try:
-            _providers[vp_name] = ProviderBackend(vp_name, vp_cfg)
+            _providers[vp_name] = create_provider_backend(vp_name, vp_cfg)
             logger.info(
                 "  ✓ virtual:%s → %s (%s) [community hook]",
                 vp_name,
@@ -2728,6 +2761,26 @@ async def operator_events(
             update_type=update_type,
             eligible=eligible,
         )
+    }
+
+
+@app.get("/api/alerts")
+async def get_alerts(lookback_hours: int = 1, baseline_hours: int = 24):
+    """Anomaly detection: compare recent window against rolling baseline.
+
+    Returns detected anomalies with severity, description, and thresholds.
+    Useful for operator dashboards and automated alerting integrations.
+    """
+    anomalies = _metrics.get_anomalies(
+        lookback_hours=lookback_hours,
+        baseline_hours=baseline_hours,
+    )
+    return {
+        "anomalies": anomalies,
+        "lookback_hours": lookback_hours,
+        "baseline_hours": baseline_hours,
+        "count": len(anomalies),
+        "has_high_severity": any(a["severity"] == "high" for a in anomalies),
     }
 
 

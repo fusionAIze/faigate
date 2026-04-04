@@ -414,6 +414,7 @@ _COST_TIER_POSTURE_SCORES = {
         "budget": 0,
         "free": -1,
         "variable": 0,
+        "local": 2,
     },
     "balanced": {
         "premium": 1,
@@ -423,6 +424,7 @@ _COST_TIER_POSTURE_SCORES = {
         "budget": 4,
         "free": 4,
         "variable": 2,
+        "local": 5,
     },
     "eco": {
         "premium": -2,
@@ -432,6 +434,7 @@ _COST_TIER_POSTURE_SCORES = {
         "budget": 6,
         "free": 8,
         "variable": 3,
+        "local": 8,
     },
     "free": {
         "premium": -4,
@@ -441,6 +444,7 @@ _COST_TIER_POSTURE_SCORES = {
         "budget": 7,
         "free": 10,
         "variable": 4,
+        "local": 10,
     },
 }
 

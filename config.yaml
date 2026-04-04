@@ -871,6 +871,292 @@ providers:
     timeout:
       connect_s: 10
       read_s: 90
+
+  # ── Local runtimes (uncomment and configure) ──────────────────────────────
+  # ollama:
+  #   api_key: ""
+  #   backend: openai-compat
+  #   base_url: http://127.0.0.1:11434/v1
+  #   auth_optional: true
+  #   capabilities:
+  #     cost_tier: local
+  #     latency_tier: local
+  #   max_tokens: 8192
+  #   model: ollama/llama3.3
+  #   tier: local
+  #   timeout:
+  #     connect_s: 10
+  #     read_s: 120
+
+  # vllm:
+  #   api_key: ""
+  #   backend: openai-compat
+  #   base_url: http://127.0.0.1:8000/v1
+  #   auth_optional: true
+  #   capabilities:
+  #     cost_tier: local
+  #     latency_tier: local
+  #   max_tokens: 8192
+  #   model: vllm/your-model-id
+  #   tier: local
+  #   timeout:
+  #     connect_s: 10
+  #     read_s: 120
+
+  # lmstudio:
+  #   api_key: ""
+  #   backend: openai-compat
+  #   base_url: http://localhost:1234/v1
+  #   auth_optional: true
+  #   capabilities:
+  #     cost_tier: local
+  #     latency_tier: local
+  #   max_tokens: 8192
+  #   model: lmstudio/minimax-m2.1-gs32
+  #   tier: local
+  #   timeout:
+  #     connect_s: 10
+  #     read_s: 120
+
+  # litellm:
+  #   api_key: ""
+  #   backend: openai-compat
+  #   base_url: http://localhost:4000/v1
+  #   auth_optional: true
+  #   capabilities:
+  #     cost_tier: local
+  #     latency_tier: local
+  #   max_tokens: 8192
+  #   model: litellm/your-model-id
+  #   tier: local
+  #   timeout:
+  #     connect_s: 10
+  #     read_s: 120
+
+  # ── Generic providers (use any model) ─────────────────────────────────────
+  # openai:
+  #   api_key: ${OPENAI_API_KEY}
+  #   backend: openai-compat
+  #   base_url: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+  #   capabilities:
+  #     cost_tier: standard
+  #     latency_tier: balanced
+  #   max_tokens: 8192
+  #   model: gpt-4o  # any OpenAI model ID
+  #   tier: default
+  #   timeout:
+  #     connect_s: 10
+  #     read_s: 60
+
+  # anthropic:
+  #   api_key: ${ANTHROPIC_API_KEY}
+  #   backend: anthropic-compat
+  #   base_url: ${ANTHROPIC_BASE_URL:-https://api.anthropic.com/v1}
+  #   capabilities:
+  #     cost_tier: standard
+  #     latency_tier: balanced
+  #   max_tokens: 16000
+  #   model: claude-sonnet-4-6  # any Anthropic model ID
+  #   tier: default
+  #   timeout:
+  #     connect_s: 10
+  #     read_s: 90
+
+  # google:
+  #   api_key: ${GEMINI_API_KEY}
+  #   backend: google-genai
+  #   base_url: ${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta}
+  #   capabilities:
+  #     cost_tier: standard
+  #     latency_tier: balanced
+  #   max_tokens: 65536
+  #   model: gemini-3.1-pro  # any Gemini model ID
+  #   tier: default
+  #   timeout:
+  #     connect_s: 10
+  #     read_s: 90
+
+  # ── OAuth‑managed providers ────────────────────────────────────────────────
+  #
+  # qwen-portal (Qwen OAuth free tier via qwen-code CLI)
+  # Prerequisites: npm install -g @qwen-code/cli && qwen auth login
+  # Token is read from ~/.qwen/oauth_creds.json; base_url from resource_url field.
+  # Set QWEN_PORTAL_TOKEN to the access_token value, or let faigate-auth resolve it.
+  #
+  # qwen-portal:
+  #   backend: openai-compat
+  #   base_url: "https://portal.qwen.ai/compatible-mode/v1"  # or use $QWEN_PORTAL_BASE_URL
+  #   api_key_env: QWEN_PORTAL_TOKEN
+  #   model: coder-model
+  #   tier: default
+  #   timeout:
+  #     connect_s: 10
+  #     read_s: 90
+
+  # claude‑code:
+  #   backend: oauth
+  #   oauth:
+  #     helper: "faigate‑auth claude‑code"
+  #     client_id: "anthropic‑codex‑client"
+  #     token_endpoint: "https://api.anthropic.com/oauth/token"
+  #     refresh_endpoint: "https://api.anthropic.com/oauth/refresh"
+  #     scope: "openid email"
+  #   underlying_backend: anthropic‑compat
+  #   base_url: ${ANTHROPIC_BASE_URL:-https://api.anthropic.com/v1}
+  #   model: claude‑code
+  #   tier: default
+  #   timeout:
+  #     connect_s: 10
+  #     read_s: 90
+
+  # openai‑codex:
+  #   backend: oauth
+  #   oauth:
+  #     helper: "faigate‑auth openai‑codex"
+  #     client_id: "openai‑codex‑client"
+  #     token_endpoint: "https://api.openai.com/oauth/token"
+  #     refresh_endpoint: "https://api.openai.com/oauth/refresh"
+  #     scope: "openid email"
+  #   underlying_backend: openai‑compat
+  #   base_url: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+  #   model: openai‑codex/gpt‑5.3‑codex
+  #   tier: default
+  #   timeout:
+  #     connect_s: 10
+  #     read_s: 60
+
+  # Antigravity (Google OAuth – Authorization Code + PKCE → Google Generative Language API)
+  # Network discovery: Antigravity's client interface is a LOCAL ephemeral gRPC language
+  # server (127.0.0.1:<port>/exa.language_server_pb.LanguageServerService/…) that proxies
+  # to Google internally. faigate uses the Google token to call the upstream API directly.
+  #
+  # Prerequisites:
+  #   1. Sign in to the Antigravity IDE  -OR-  run: faigate-auth google-antigravity
+  #      Token is stored at ~/.gemini/oauth_creds.json
+  #   2. Set ANTIGRAVITY_TOKEN to the access_token from that file
+  #      (Optional: override ANTIGRAVITY_BASE_URL to use a different Google endpoint)
+  #
+  # OAuth details:
+  #   client_id:  1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com
+  #   scopes:     cloud-platform, userinfo.email, userinfo.profile, cclog, experimentsandconfigs
+  #   token file: ~/.gemini/oauth_creds.json  (shared with Antigravity IDE)
+  #
+  antigravity:
+    backend: openai-compat
+    base_url: https://generativelanguage.googleapis.com/v1beta/openai
+    base_url_env: ANTIGRAVITY_BASE_URL   # optional override
+    api_key_env: ANTIGRAVITY_TOKEN       # access_token from ~/.gemini/oauth_creds.json
+    model: gemini-2.5-pro
+    tier: default
+    timeout:
+      connect_s: 10
+      read_s: 90
+
+  # ---------------------------------------------------------------------------
+  # Additional providers (LLMAIRouter parity) – uncomment to activate
+  # ---------------------------------------------------------------------------
+
+  # DeepSeek – NOTE: deepseek-chat and deepseek-reasoner are already configured
+  # above as active providers. This entry is a convenience alias using the
+  # registry key; the active configs above take precedence.
+  # deepseek:
+  #   api_key: ${DEEPSEEK_API_KEY}
+  #   backend: openai-compat
+  #   base_url: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com/v1}
+  #   model: deepseek-reasoner
+  #   tier: reasoning
+  #   timeout:
+  #     connect_s: 10
+  #     read_s: 120
+
+  # Together AI – serverless inference, Llama / Mixtral / DeepSeek / Qwen
+  # together:
+  #   api_key: ${TOGETHER_API_KEY}
+  #   backend: openai-compat
+  #   base_url: ${TOGETHER_BASE_URL:-https://api.together.xyz/v1}
+  #   model: meta-llama/Llama-3.3-70B-Instruct-Turbo
+  #   tier: cheap
+  #   timeout:
+  #     connect_s: 10
+  #     read_s: 60
+
+  # Fireworks AI – fast serverless inference, DeepSeek / Llama / Qwen
+  # fireworks:
+  #   api_key: ${FIREWORKS_API_KEY}
+  #   backend: openai-compat
+  #   base_url: ${FIREWORKS_BASE_URL:-https://api.fireworks.ai/inference/v1}
+  #   model: accounts/fireworks/models/deepseek-r1
+  #   tier: cheap
+  #   timeout:
+  #     connect_s: 10
+  #     read_s: 90
+
+  # Cohere – Command A/R series, OpenAI-compat compatibility endpoint
+  # cohere:
+  #   api_key: ${COHERE_API_KEY}
+  #   backend: openai-compat
+  #   base_url: ${COHERE_BASE_URL:-https://api.cohere.com/compatibility/v1}
+  #   model: command-a-03-2025
+  #   tier: default
+  #   timeout:
+  #     connect_s: 10
+  #     read_s: 60
+
+  # Nebius AI Studio – DeepSeek / Llama / Qwen on European infra
+  # nebius:
+  #   api_key: ${NEBIUS_API_KEY}
+  #   backend: openai-compat
+  #   base_url: ${NEBIUS_BASE_URL:-https://api.studio.nebius.ai/v1}
+  #   model: deepseek-ai/DeepSeek-R1
+  #   tier: cheap
+  #   timeout:
+  #     connect_s: 10
+  #     read_s: 90
+
+  # SiliconFlow – low-cost inference (CN), DeepSeek / Qwen / GLM
+  # siliconflow:
+  #   api_key: ${SILICONFLOW_API_KEY}
+  #   backend: openai-compat
+  #   base_url: ${SILICONFLOW_BASE_URL:-https://api.siliconflow.cn/v1}
+  #   model: deepseek-ai/DeepSeek-R1
+  #   tier: cheap
+  #   timeout:
+  #     connect_s: 10
+  #     read_s: 90
+
+  # Hyperbolic – GPU cloud inference, DeepSeek / Llama / Qwen
+  # hyperbolic:
+  #   api_key: ${HYPERBOLIC_API_KEY}
+  #   backend: openai-compat
+  #   base_url: ${HYPERBOLIC_BASE_URL:-https://api.hyperbolic.xyz/v1}
+  #   model: deepseek-ai/DeepSeek-R1
+  #   tier: cheap
+  #   timeout:
+  #     connect_s: 10
+  #     read_s: 90
+
+  # Perplexity – online/search-augmented models
+  # perplexity:
+  #   api_key: ${PERPLEXITY_API_KEY}
+  #   backend: openai-compat
+  #   base_url: ${PERPLEXITY_BASE_URL:-https://api.perplexity.ai}
+  #   model: sonar-pro
+  #   tier: default
+  #   timeout:
+  #     connect_s: 10
+  #     read_s: 60
+
+  # NVIDIA NIM – optimized inference on NVIDIA infra
+  # nvidia-nim:
+  #   api_key: ${NVIDIA_API_KEY}
+  #   backend: openai-compat
+  #   base_url: ${NVIDIA_NIM_BASE_URL:-https://integrate.api.nvidia.com/v1}
+  #   model: deepseek-ai/deepseek-r1
+  #   tier: default
+  #   timeout:
+  #     connect_s: 10
+  #     read_s: 90
+
 client_profiles:
   enabled: true
   default: generic

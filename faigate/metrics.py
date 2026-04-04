@@ -583,6 +583,120 @@ class MetricsStore:
             return "", ()
         return f" WHERE {' AND '.join(clauses)}", tuple(params)
 
+    def get_client_cost_since(self, client_profile: str, since_ts: float) -> float:
+        """Return total cost_usd for a client_profile since a given Unix timestamp.
+
+        Used for budget enforcement: check daily/monthly spend before routing.
+        Returns 0.0 if the database is not available.
+        """
+        if not self._conn:
+            return 0.0
+        rows = self._q(
+            "SELECT ROUND(SUM(cost_usd),6) AS cost FROM requests WHERE client_profile=? AND timestamp>=?",
+            (client_profile, since_ts),
+        )
+        return float((rows[0].get("cost") or 0.0)) if rows else 0.0
+
+    def get_anomalies(self, lookback_hours: int = 1, baseline_hours: int = 24) -> list[dict]:
+        """Detect anomalies by comparing recent window to a rolling baseline.
+
+        Returns a list of anomaly dicts with keys:
+          type, severity, description, current_value, baseline_value, threshold
+        """
+        if not self._conn:
+            return []
+
+        now = time.time()
+        recent_since = now - lookback_hours * 3600
+        baseline_since = now - baseline_hours * 3600
+
+        recent = self._q(
+            """SELECT COUNT(*) AS reqs,
+                      SUM(CASE WHEN success=0 THEN 1 ELSE 0 END) AS failures,
+                      ROUND(AVG(latency_ms),1) AS avg_latency,
+                      ROUND(SUM(cost_usd),6) AS cost
+               FROM requests WHERE timestamp>=?""",
+            (recent_since,),
+        )
+        baseline = self._q(
+            """SELECT COUNT(*) AS reqs,
+                      SUM(CASE WHEN success=0 THEN 1 ELSE 0 END) AS failures,
+                      ROUND(AVG(latency_ms),1) AS avg_latency,
+                      ROUND(SUM(cost_usd),6) AS cost
+               FROM requests WHERE timestamp>=? AND timestamp<?""",
+            (baseline_since, recent_since),
+        )
+
+        if not recent or not baseline:
+            return []
+
+        r = recent[0]
+        b = baseline[0]
+
+        anomalies: list[dict] = []
+
+        # Normalize baseline to the same time window length as lookback
+        baseline_window_factor = baseline_hours / max(lookback_hours, 1)
+        b_reqs_norm = (b.get("reqs") or 0) / baseline_window_factor
+        b_cost_norm = (b.get("cost") or 0.0) / baseline_window_factor
+
+        r_reqs = r.get("reqs") or 0
+        r_failures = r.get("failures") or 0
+        r_latency = r.get("avg_latency") or 0.0
+        r_cost = r.get("cost") or 0.0
+        b_latency = b.get("avg_latency") or 0.0
+
+        # Error rate spike (>20% failure rate and significantly worse than baseline)
+        if r_reqs > 5:
+            r_error_rate = r_failures / r_reqs
+            b_failures = b.get("failures") or 0
+            b_reqs = b.get("reqs") or 1
+            b_error_rate = b_failures / b_reqs
+            if r_error_rate > 0.2 and r_error_rate > b_error_rate * 2:
+                anomalies.append({
+                    "type": "error_rate_spike",
+                    "severity": "high" if r_error_rate > 0.5 else "medium",
+                    "description": f"Error rate {r_error_rate:.0%} in last {lookback_hours}h (baseline: {b_error_rate:.0%})",
+                    "current_value": round(r_error_rate, 4),
+                    "baseline_value": round(b_error_rate, 4),
+                    "threshold": 0.2,
+                })
+
+        # Latency spike (>2x baseline, and >500ms)
+        if b_latency > 0 and r_latency > 500 and r_latency > b_latency * 2:
+            anomalies.append({
+                "type": "latency_spike",
+                "severity": "medium",
+                "description": f"Avg latency {r_latency:.0f}ms in last {lookback_hours}h (baseline: {b_latency:.0f}ms)",
+                "current_value": r_latency,
+                "baseline_value": b_latency,
+                "threshold": b_latency * 2,
+            })
+
+        # Cost spike (>3x normalized baseline, and >$0.01 absolute)
+        if b_cost_norm > 0 and r_cost > 0.01 and r_cost > b_cost_norm * 3:
+            anomalies.append({
+                "type": "cost_spike",
+                "severity": "high",
+                "description": f"Cost ${r_cost:.4f} in last {lookback_hours}h (baseline rate: ${b_cost_norm:.4f}/h)",
+                "current_value": r_cost,
+                "baseline_value": b_cost_norm,
+                "threshold": b_cost_norm * 3,
+            })
+
+        # Traffic spike (>5x normalized baseline)
+        if b_reqs_norm > 0 and r_reqs > b_reqs_norm * 5:
+            anomalies.append({
+                "type": "traffic_spike",
+                "severity": "low",
+                "description": f"{r_reqs} requests in last {lookback_hours}h (baseline: ~{b_reqs_norm:.0f}/h)",
+                "current_value": r_reqs,
+                "baseline_value": b_reqs_norm,
+                "threshold": b_reqs_norm * 5,
+            })
+
+        return anomalies
+
     def _q(self, sql: str, params: tuple = ()) -> list[dict]:
         if not self._conn:
             return []

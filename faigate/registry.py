@@ -223,6 +223,105 @@ BUILTIN: dict[str, ProviderDef] = {
         pricing={"input": 0.0, "output": 0.0},
         notes="HuggingFace Inference – OpenAI-compat router",
     ),
+    # ── DeepSeek ──────────────────────────────────────────────────────────
+    "deepseek": ProviderDef(
+        backend="openai-compat",
+        base_url="https://api.deepseek.com/v1",
+        base_url_env="DEEPSEEK_BASE_URL",
+        api_key_env="DEEPSEEK_API_KEY",
+        tier="default",
+        example_model="deepseek-reasoner",
+        pricing={"input": 0.55, "output": 2.19},
+        notes="DeepSeek – deepseek-chat (V3) and deepseek-reasoner (R1)",
+    ),
+    # ── Together AI ───────────────────────────────────────────────────────
+    "together": ProviderDef(
+        backend="openai-compat",
+        base_url="https://api.together.xyz/v1",
+        base_url_env="TOGETHER_BASE_URL",
+        api_key_env="TOGETHER_API_KEY",
+        tier="cheap",
+        example_model="together/meta-llama/Llama-3.3-70B-Instruct-Turbo",
+        pricing={"input": 0.18, "output": 0.18},
+        notes="Together AI – serverless inference, Llama / Mixtral / DeepSeek / Qwen",
+    ),
+    # ── Fireworks AI ──────────────────────────────────────────────────────
+    "fireworks": ProviderDef(
+        backend="openai-compat",
+        base_url="https://api.fireworks.ai/inference/v1",
+        base_url_env="FIREWORKS_BASE_URL",
+        api_key_env="FIREWORKS_API_KEY",
+        tier="cheap",
+        example_model="fireworks/accounts/fireworks/models/deepseek-r1",
+        pricing={"input": 0.22, "output": 0.88},
+        notes="Fireworks AI – fast serverless inference, DeepSeek / Llama / Qwen",
+    ),
+    # ── Cohere ────────────────────────────────────────────────────────────
+    "cohere": ProviderDef(
+        backend="openai-compat",
+        base_url="https://api.cohere.com/compatibility/v1",
+        base_url_env="COHERE_BASE_URL",
+        api_key_env="COHERE_API_KEY",
+        tier="default",
+        example_model="command-a-03-2025",
+        pricing={"input": 2.50, "output": 10.00},
+        notes="Cohere – Command A/R series, OpenAI-compat at /compatibility/v1",
+    ),
+    # ── Nebius AI ─────────────────────────────────────────────────────────
+    "nebius": ProviderDef(
+        backend="openai-compat",
+        base_url="https://api.studio.nebius.ai/v1",
+        base_url_env="NEBIUS_BASE_URL",
+        api_key_env="NEBIUS_API_KEY",
+        tier="cheap",
+        example_model="nebius/deepseek-ai/DeepSeek-R1",
+        pricing={"input": 0.80, "output": 3.20},
+        notes="Nebius AI Studio – DeepSeek / Llama / Qwen on European infra",
+    ),
+    # ── SiliconFlow ───────────────────────────────────────────────────────
+    "siliconflow": ProviderDef(
+        backend="openai-compat",
+        base_url="https://api.siliconflow.cn/v1",
+        base_url_env="SILICONFLOW_BASE_URL",
+        api_key_env="SILICONFLOW_API_KEY",
+        tier="cheap",
+        example_model="siliconflow/deepseek-ai/DeepSeek-R1",
+        pricing={"input": 0.14, "output": 0.55},
+        notes="SiliconFlow – low-cost inference (CN), DeepSeek / Qwen / GLM",
+    ),
+    # ── Hyperbolic ────────────────────────────────────────────────────────
+    "hyperbolic": ProviderDef(
+        backend="openai-compat",
+        base_url="https://api.hyperbolic.xyz/v1",
+        base_url_env="HYPERBOLIC_BASE_URL",
+        api_key_env="HYPERBOLIC_API_KEY",
+        tier="cheap",
+        example_model="hyperbolic/deepseek-ai/DeepSeek-R1",
+        pricing={"input": 0.20, "output": 0.80},
+        notes="Hyperbolic – GPU cloud inference, DeepSeek / Llama / Qwen",
+    ),
+    # ── Perplexity ────────────────────────────────────────────────────────
+    "perplexity": ProviderDef(
+        backend="openai-compat",
+        base_url="https://api.perplexity.ai",
+        base_url_env="PERPLEXITY_BASE_URL",
+        api_key_env="PERPLEXITY_API_KEY",
+        tier="default",
+        example_model="sonar-pro",
+        pricing={"input": 3.00, "output": 15.00},
+        notes="Perplexity – online/search-augmented models (sonar, sonar-pro, sonar-reasoning)",
+    ),
+    # ── NVIDIA NIM ────────────────────────────────────────────────────────
+    "nvidia-nim": ProviderDef(
+        backend="openai-compat",
+        base_url="https://integrate.api.nvidia.com/v1",
+        base_url_env="NVIDIA_NIM_BASE_URL",
+        api_key_env="NVIDIA_API_KEY",
+        tier="default",
+        example_model="nvidia-nim/deepseek-ai/deepseek-r1",
+        pricing={"input": 0.0, "output": 0.0},
+        notes="NVIDIA NIM – optimized inference on NVIDIA infra, DeepSeek / Llama / Mistral",
+    ),
 }
 
 
@@ -327,6 +426,17 @@ CUSTOM: dict[str, ProviderDef] = {
         pricing={"input": 0.0, "output": 0.0},
         notes="MiniMax – Anthropic-compat custom endpoint",
     ),
+    # ── Qwen (Alibaba Cloud) ──────────────────────────────────────────────
+    "qwen": ProviderDef(
+        backend="openai-compat",
+        base_url="https://dashscope.aliyun.com/api/v1",
+        base_url_env="QWEN_BASE_URL",
+        api_key_env="QWEN_API_KEY",
+        tier="default",
+        example_model="qwen/qwen3.6-plus",
+        pricing={"input": 0.0, "output": 0.0},
+        notes="Qwen models via Alibaba Cloud – OpenAI-compatible endpoint",
+    ),
 }
 
 
@@ -393,28 +503,63 @@ LOCAL: dict[str, ProviderDef] = {
 # ---------------------------------------------------------------------------
 
 OAUTH: dict[str, ProviderDef] = {
-    # ── Google Vertex AI ──────────────────────────────────────────────────
-    "google-vertex": ProviderDef(
+    # ── Google Gemini CLI (Vertex AI via gcloud ADC) ───────────────────────
+    "google-gemini-cli": ProviderDef(
         backend="openai-compat",
         base_url="https://us-central1-aiplatform.googleapis.com/v1",
         base_url_env="GOOGLE_VERTEX_BASE_URL",
         api_key_env="GOOGLE_APPLICATION_CREDENTIALS",
         auth_optional=True,
         tier="mid",
-        example_model="google-vertex/gemini-2.5-pro",
+        example_model="gc/gemini-2.5-pro",
         pricing={"input": 0.0, "output": 0.0},
-        notes="Google Vertex AI – uses gcloud ADC; interactive setup required",
+        notes="Google Gemini via Vertex AI – uses gcloud ADC; requires: gcloud auth login",
     ),
-    # ── Qwen OAuth (free tier) ────────────────────────────────────────────
+    # ── Qwen OAuth (free tier via qwen-code CLI) ──────────────────────────
     "qwen-portal": ProviderDef(
         backend="openai-compat",
-        base_url="https://qwen-portal.example.com/v1",  # placeholder; set via oauth
+        base_url="https://portal.qwen.ai/compatible-mode/v1",
+        base_url_env="QWEN_PORTAL_BASE_URL",
         api_key_env="QWEN_PORTAL_TOKEN",
         auth_optional=True,
         tier="default",
-        example_model="qwen-portal/coder-model",
+        example_model="coder-model",
         pricing={"input": 0.0, "output": 0.0},
-        notes=("Qwen OAuth (free tier) – device-code flow; requires: openclaw plugins enable qwen-portal-auth"),
+        notes="Qwen OAuth (free tier) – reads token from ~/.qwen/oauth_creds.json; run: qwen auth login",
+    ),
+    # ── Claude Code (OAuth via Anthropic) ──────────────────────────────────
+    "claude-code": ProviderDef(
+        backend="anthropic-compat",
+        base_url="https://api.anthropic.com/v1",
+        base_url_env="ANTHROPIC_BASE_URL",
+        api_key_env="ANTHROPIC_CODEX_TOKEN",
+        auth_optional=True,
+        tier="default",
+        example_model="claude-code",
+        pricing={"input": 0.0, "output": 0.0},
+        notes="Claude Code – special coding model via Anthropic OAuth",
+    ),
+    # ── Google Antigravity (Google OAuth – Generative Language API) ────────
+    # Network discovery result: Antigravity's client-facing interface is a
+    # local ephemeral gRPC language server (127.0.0.1:<port>/exa.language_server_pb…)
+    # that itself proxies to Google's backend. The OAuth token from
+    # ~/.gemini/oauth_creds.json grants access to the Google Generative
+    # Language API directly – that is the correct upstream for faigate.
+    "google-antigravity": ProviderDef(
+        backend="openai-compat",
+        base_url="https://generativelanguage.googleapis.com/v1beta/openai",
+        base_url_env="ANTIGRAVITY_BASE_URL",  # override if using a different Google endpoint
+        api_key_env="ANTIGRAVITY_TOKEN",
+        auth_optional=True,
+        tier="default",
+        example_model="gemini-2.5-pro",
+        pricing={"input": 0.0, "output": 0.0},
+        notes=(
+            "Google Antigravity – Google OAuth (client_id: 1071006060591-...apps.googleusercontent.com); "
+            "token from ~/.gemini/oauth_creds.json. Antigravity's local gRPC LS (127.0.0.1:<ephemeral-port>) "
+            "is its internal proxy – faigate uses the Google Generative Language API directly. "
+            "Run: faigate-auth google-antigravity  or sign in to the Antigravity IDE."
+        ),
     ),
 }
 
