@@ -8,15 +8,14 @@ refresh and interactive login delegation.
 import asyncio
 import json
 import logging
-import subprocess
 import time
 from typing import Any
 
 import httpx
 from httpx import AsyncClient, Request, Response
 
-from .token_store import TokenStore
 from ..providers import ProviderBackend
+from .token_store import TokenStore
 
 logger = logging.getLogger("faigate.oauth.backend")
 
