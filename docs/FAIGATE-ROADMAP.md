@@ -316,31 +316,32 @@ explainability so operators understand and trust routing decisions.
 **Target: Managed provider OAuth wrapper, enhanced local worker integration, and advanced client profiles**
 
 ### Core Themes
-1. **Managed provider OAuth wrapper**
-   - OAuth‑based authentication for “managed providers” (Gemini, Antigravity, etc.)
-   - Interactive login flows with device‑code or web‑auth patterns
-   - Token refresh and session management
-   - Wrapper that presents OAuth‑secured endpoints as regular API‑key providers
-   - Support for Gemini (Google OAuth), Antigravity, and other OAuth‑first gateways
-   - *Infrastructure ready*: token store, generic OAuth backend, config integration, CLI helper stub
+1. **Managed provider OAuth wrapper** ✓ _(implemented)_
+   - OAuth‑based authentication for managed providers (Gemini, Antigravity, etc.) ✓
+   - Interactive device‑code login flows (Google, Qwen, Antigravity) ✓
+   - Token store and generic OAuth backend ✓
+   - Antigravity provider in registry, catalog, and lane registry (ag/ model family) ✓
+   - claude_code_oauth() reading token from local claude CLI settings ✓
 
-2. **Local worker completion**
-   - Grid integration for automatic worker discovery
-   - Enhanced health metrics (GPU, memory, queue depth)
-   - Dynamic model enumeration from `/models` endpoints
-   - Lifecycle management hooks (start/stop/restart)
+2. **Local worker completion** ✓ _(implemented)_
+   - Grid integration: reads `~/.faigrid/config.json` + legacy state file ✓
+   - GPU/VRAM metrics via Ollama `/api/ps` and vLLM `/metrics` ✓
+   - Dynamic model enumeration from `/v1/models` endpoints ✓
+   - `dynamic_models` field in DiscoveredWorker; surfaced in generate_provider_config ✓
+   - _(Lifecycle management hooks deferred — requires Grid daemon integration)_
 
-3. **Enhanced client profiles**
-   - Per‑client budget limits and cost controls
-   - Provider allow/deny lists with locality preferences
-   - Client‑specific observability and reporting
-   - Advanced policy management UI
+3. **Enhanced client profiles** ✓ _(implemented)_
+   - `cost_limit_usd_day` and `cost_limit_usd_month` per profile ✓
+   - Config validation with type checking ✓
+   - HTTP 429 enforcement before routing when budget is reached ✓
+   - Provider allow/deny lists already live in policy layer ✓
+   - _(Advanced policy management UI deferred)_
 
-4. **Observability suite**
-   - Advanced metrics and alerting
-   - Performance tracing across request chains
-   - Automated anomaly detection
-   - GPU/utilization metrics dashboard
+4. **Observability suite** ✓ _(implemented)_
+   - `MetricsStore.get_anomalies()`: error rate, latency, cost, and traffic spike detection ✓
+   - `GET /api/alerts` endpoint with configurable lookback and baseline windows ✓
+   - GPU utilization surfaced from local worker probes ✓
+   - _(External alerting integrations and Prometheus export deferred)_
 
 ### Considerations
 - Maintain backward compatibility with v2.0.0 configurations
