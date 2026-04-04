@@ -1,0 +1,29 @@
+name: Auto-merge
+
+# Enables GitHub's native auto-merge on every non-draft PR.
+# GitHub will merge automatically once all required status checks pass
+# (as configured in branch protection → required status checks → CI Gate).
+#
+# Prerequisites:
+#   1. "Allow auto-merge" must be enabled in repo Settings → General
+#   2. Branch protection for main must have "CI Gate" as a required check
+#      with "Allow administrators to bypass" unchecked
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review]
+
+jobs:
+  enable-automerge:
+    name: Enable auto-merge
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    permissions:
+      pull-requests: write
+      contents: write
+    steps:
+      - name: Enable auto-merge (squash)
+        run: gh pr merge --auto --squash "${{ github.event.pull_request.number }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}

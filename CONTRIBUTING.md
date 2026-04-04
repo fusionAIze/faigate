@@ -9,6 +9,17 @@ git clone https://github.com/fusionAIze/faigate.git faigate
 cd faigate
 python3 -m venv venv && source venv/bin/activate
 pip install -e ".[dev]"
+pre-commit install        # enforce hooks before every commit — required
+```
+
+`pre-commit install` installs git hooks that run the full hook suite (ruff, bandit,
+trailing-whitespace, etc.) before each commit. This catches ~80 % of CI failures
+locally before they ever reach GitHub. **Do not skip this step.**
+
+To run all hooks manually at any time:
+
+```bash
+pre-commit run --all-files
 ```
 
 ## Running Tests
@@ -56,8 +67,15 @@ Important: Never score the system prompt for keywords. See ClawRouter's insight 
 1. Fork the repo
 2. Create a `feature/<topic>-<date>` branch
 3. Add tests for new functionality
-4. Ensure `pytest` and `ruff check` pass
+4. Ensure `pre-commit run --all-files` and `pytest` pass
 5. Open a PR with a clear description
+
+PRs are merged automatically by the CI Gate bot once all required checks pass
+(test, lint, package). You do not need to manually trigger a merge. If checks
+fail the bot will not merge — fix the issues and push again.
+
+See [docs/process/ci-safeguards.md](./docs/process/ci-safeguards.md) for full
+details on the CI enforcement model.
 
 Use the repository templates when possible:
 
