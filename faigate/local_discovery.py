@@ -10,6 +10,26 @@ import asyncio
 import json
 import logging
 import os
+from typing import Any, TypedDict
+
+import httpx
+
+from .registry import LOCAL
+
+logger = logging.getLogger(__name__)
+
+
+class GpuInfo(TypedDict, total=False):
+    """GPU metrics from a local worker."""
+
+    gpu_name: str
+    vram_total_mb: int
+    vram_used_mb: int
+    vram_free_mb: int
+    utilization_pct: float
+    queue_depth: int
+
+
 class DiscoveredWorker(TypedDict):
     """A discovered local worker instance."""
 
@@ -47,6 +67,20 @@ GPU_ENDPOINTS = {
     "litellm": None,
 }
 
+
+async def check_port_open(host: str, port: int, timeout: float = 1.0) -> bool:
+    """Check if a TCP port is open."""
+    try:
+        reader, writer = await asyncio.wait_for(asyncio.open_connection(host, port), timeout=timeout)
+        writer.close()
+        await writer.wait_closed()
+        return True
+    except (TimeoutError, OSError):
+        return False
+
+
+async def probe_worker(base_url: str, worker_type: str, timeout: float = 5.0) -> tuple[bool, list[str]]:
+    """Probe a worker endpoint to check health and discover models dynamically."""
     endpoint, expected_key = HEALTH_CHECKS.get(worker_type, ("/v1/models", {"object": "list"}))
     url = f"{base_url.rstrip('/')}{endpoint}"
 
@@ -117,6 +151,19 @@ async def probe_gpu_info(base_url: str, worker_type: str, timeout: float = 3.0) 
     return None
 
 
+async def discover_local_workers(
+    scan_ports: bool = True, check_grid: bool = True, timeout_per_worker: float = 3.0
+) -> list[DiscoveredWorker]:
+    """Discover local AI workers.
+
+    Args:
+        scan_ports: Whether to scan default ports for known worker types
+        check_grid: Whether to check for fusionAIze Grid configuration
+        timeout_per_worker: Timeout for each worker probe in seconds
+
+    Returns:
+        List of discovered workers with health status, dynamically enumerated models,
+        and GPU metrics where available.
     """
     discovered: list[DiscoveredWorker] = []
 
@@ -138,6 +185,14 @@ async def probe_gpu_info(base_url: str, worker_type: str, timeout: float = 3.0) 
                 "healthy": healthy,
                 "models": models,
                 "dynamic_models": len(models) > 0,
+                "capabilities": {
+                    "local": True,
+                    "cloud": False,
+                    "network_zone": "local",
+                    "cost_tier": "local",
+                    "latency_tier": "local",
+                },
+                "gpu_info": gpu_info,
             }
             discovered.append(worker)
 
