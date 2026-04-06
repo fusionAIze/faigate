@@ -939,10 +939,9 @@ def main() -> None:
             )
             sys.exit(1)
 
-        # Tokens are written to the provider credentials file by each auth function.
-        # Do not print any value derived from token_data to stdout.
-        print(f"Authentication successful for {args.provider}.")
-        print("Token stored in credentials file.")
+        # Output token data as JSON to stdout so OAuthBackend._run_helper() can parse it.
+        # All human-readable status messages go to stderr (see above).
+        print(json.dumps(token_data))
 
     except Exception as e:
         logger.error("Failed to obtain token: %s", e)
