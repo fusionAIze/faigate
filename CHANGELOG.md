@@ -1,5 +1,16 @@
 # fusionAIze Gate Changelog
 
+## v2.1.1 - 2026-04-06
+
+### Added
+
+- **OpenAI Codex OAuth**: full ChatGPT OAuth implementation — reads `~/.codex/auth.json`, Auth Code + PKCE login flow on port 1455, single-use refresh token handling, JWT `exp` claim for expiry detection. Inference via `chatgpt.com/backend-api/codex/responses`. Run: `faigate-auth openai-codex`
+
+### Fixed
+
+- `registry.py`: corrected `openai-codex` base URL to `chatgpt.com/backend-api/codex/responses` (was incorrectly set to `api.openai.com/v1`)
+- `config.yaml`: corrected OAuth endpoints to `auth.openai.com/oauth/token` and client ID to `app_EMoamEEZ73f0CkXaXp7hrann`
+
 ## v2.1.0 - 2026-04-05
 
 ### Added
