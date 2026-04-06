@@ -73,18 +73,22 @@ BUILTIN: dict[str, ProviderDef] = {
         pricing={"input": 15.00, "output": 75.00, "cache_read": 1.50},
         notes="Anthropic – Claude Opus/Sonnet/Haiku",
     ),
-    # ── OpenAI Code / Codex (OAuth via ChatGPT) ────────────────────────────
-    # Auth is OAuth-based; users must run: openclaw models auth login --provider openai-codex
-    # No static API key env var. Documented only.
+    # ── OpenAI Codex (ChatGPT OAuth) ──────────────────────────────────────
+    # Token: ~/.codex/auth.json (auth_mode=chatgpt). Run: faigate-auth openai-codex
+    # Inference endpoint is chatgpt.com/backend-api/codex/responses, NOT api.openai.com.
     "openai-codex": ProviderDef(
-        backend="openai-compat",
-        base_url="https://api.openai.com/v1",
-        api_key_env="OPENAI_CODEX_TOKEN",  # token injected after OAuth login
+        backend="oauth",
+        base_url="https://chatgpt.com/backend-api/codex/responses",
+        api_key_env="OPENAI_CODEX_TOKEN",
         auth_optional=True,
         tier="default",
         example_model="openai-codex/gpt-5.3-codex",
         pricing={"input": 0.0, "output": 0.0},
-        notes="OpenAI Codex (OAuth via ChatGPT) – requires interactive login",
+        notes=(
+            "OpenAI Codex (ChatGPT OAuth) – token from ~/.codex/auth.json. "
+            "Inference via chatgpt.com/backend-api/codex/responses. "
+            "Run: faigate-auth openai-codex"
+        ),
     ),
     # ── OpenCode Zen ───────────────────────────────────────────────────────
     "opencode": ProviderDef(

@@ -1009,17 +1009,20 @@ providers:
   #     connect_s: 10
   #     read_s: 90
 
-  # openai‑codex:
+  # openai-codex:
+  #   # Token from ~/.codex/auth.json (auth_mode=chatgpt). Run: faigate-auth openai-codex
+  #   # Inference endpoint: chatgpt.com/backend-api/codex/responses (NOT api.openai.com)
+  #   # Refresh tokens are single-use; faigate rewrites auth.json after every refresh.
   #   backend: oauth
   #   oauth:
-  #     helper: "faigate‑auth openai‑codex"
-  #     client_id: "openai‑codex‑client"
-  #     token_endpoint: "https://api.openai.com/oauth/token"
-  #     refresh_endpoint: "https://api.openai.com/oauth/refresh"
-  #     scope: "openid email"
-  #   underlying_backend: openai‑compat
-  #   base_url: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
-  #   model: openai‑codex/gpt‑5.3‑codex
+  #     helper: "faigate-auth openai-codex"
+  #     client_id: "app_EMoamEEZ73f0CkXaXp7hrann"
+  #     token_endpoint: "https://auth.openai.com/oauth/token"
+  #     refresh_endpoint: "https://auth.openai.com/oauth/token"
+  #     scope: "openid profile email offline_access"
+  #   underlying_backend: openai-compat
+  #   base_url: "https://chatgpt.com/backend-api/codex/responses"
+  #   model: openai-codex/gpt-5.3-codex
   #   tier: default
   #   timeout:
   #     connect_s: 10

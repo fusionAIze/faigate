@@ -45,6 +45,15 @@ _ANTIGRAVITY_CALLBACK_PORT = 8080
 _ANTIGRAVITY_BASE_URL_DEFAULT = "https://generativelanguage.googleapis.com/v1beta/openai"
 _ANTIGRAVITY_BASE_URL_ENV = "ANTIGRAVITY_BASE_URL"
 
+# ── OpenAI Codex constants (from Codex CLI source / community research) ──────
+_CODEX_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
+_CODEX_AUTH_ENDPOINT = "https://auth.openai.com/oauth/authorize"
+_CODEX_TOKEN_ENDPOINT = "https://auth.openai.com/oauth/token"
+_CODEX_SCOPE = "openid profile email offline_access"
+_CODEX_CREDS_PATH = "~/.codex/auth.json"
+_CODEX_BASE_URL = "https://chatgpt.com/backend-api/codex/responses"
+_CODEX_CALLBACK_PORT = 1455
+
 # ── Qwen constants (from qwen-code source) ───────────────────────────────────
 _QWEN_CLIENT_ID = "f0304373b74a44d2b584a3fb70ca9e56"
 _QWEN_SCOPE = "openid profile email model.completion"
@@ -513,9 +522,262 @@ def claude_code_oauth() -> dict[str, Any]:
     raise RuntimeError("Claude Code token not found.")
 
 
+def _codex_jwt_expiry(token: str) -> float | None:
+    """Decode JWT exp claim without verifying signature. Returns UTC epoch seconds or None."""
+    try:
+        import base64 as _b64
+
+        parts = token.split(".")
+        if len(parts) != 3:
+            return None
+        padding = 4 - len(parts[1]) % 4
+        payload = json.loads(_b64.urlsafe_b64decode(parts[1] + "=" * padding))
+        return float(payload["exp"])
+    except Exception:
+        return None
+
+
 def openai_codex_oauth() -> dict[str, Any]:
-    """Obtain OpenAI Codex token via ChatGPT OAuth."""
-    raise NotImplementedError("OpenAI Codex OAuth not yet implemented")
+    """Read OpenAI Codex credentials from the local Codex CLI token store.
+
+    The OpenAI Codex CLI stores ChatGPT OAuth credentials at ~/.codex/auth.json
+    after completing the interactive login on first run.
+
+    Token format:
+      {
+        "auth_mode": "chatgpt",
+        "OPENAI_API_KEY": null,
+        "tokens": {
+          "access_token":  "eyJ...",   # JWT – sent as Bearer to inference endpoint
+          "refresh_token": "rt_...",   # opaque, single-use
+          "id_token":      "eyJ...",   # JWT – identity only
+          "account_id":    "...",      # UUID
+        },
+        "last_refresh": "2026-04-05T..."  # ISO-8601 UTC
+      }
+
+    Expiry is derived from the JWT exp claim (no expiry_date field in the file).
+    Inference endpoint: https://chatgpt.com/backend-api/codex/responses
+    """
+    creds_path = os.path.expanduser(_CODEX_CREDS_PATH)
+    if not os.path.exists(creds_path):
+        raise RuntimeError(
+            f"OpenAI Codex credentials not found at {creds_path}.\n"
+            "Please install and log in to the OpenAI Codex CLI:\n"
+            "  npm install -g @openai/codex\n"
+            "  codex  # completes OAuth login on first run\n"
+            "Or run: faigate-auth openai-codex --login"
+        )
+
+    try:
+        with open(creds_path) as f:
+            creds = json.load(f)
+    except (OSError, json.JSONDecodeError) as e:
+        raise RuntimeError(f"Failed to read Codex credentials from {creds_path}: {e}")
+
+    if creds.get("auth_mode") != "chatgpt":
+        raise RuntimeError(
+            f"Codex credentials at {creds_path} use auth_mode={creds.get('auth_mode')!r}, "
+            "expected 'chatgpt'. Please log in with: codex  or  faigate-auth openai-codex --login"
+        )
+
+    tokens = creds.get("tokens", {})
+    access_token = tokens.get("access_token")
+    if not access_token:
+        raise RuntimeError(
+            f"No access_token in Codex credentials at {creds_path}. "
+            "Please re-authenticate: codex  or  faigate-auth openai-codex --login"
+        )
+
+    exp = _codex_jwt_expiry(access_token)
+    if exp is not None and exp < time.time():
+        logger.warning(
+            "OpenAI Codex token expired (exp=%s). Run: faigate-auth openai-codex --refresh", exp
+        )
+
+    return {
+        "access_token": access_token,
+        "refresh_token": tokens.get("refresh_token"),
+        "id_token": tokens.get("id_token"),
+        "account_id": tokens.get("account_id"),
+        "token_type": "Bearer",
+        "expires_at": exp,
+        "base_url": _CODEX_BASE_URL,
+    }
+
+
+def openai_codex_refresh(refresh_token: str) -> dict[str, Any]:
+    """Refresh an expired OpenAI Codex token.
+
+    Codex refresh tokens are single-use — the new refresh_token from the
+    response is always written back to ~/.codex/auth.json immediately.
+    """
+    if requests is None:
+        raise RuntimeError("requests package required. Install with: pip install faigate[oauth]")
+
+    resp = requests.post(
+        _CODEX_TOKEN_ENDPOINT,
+        json={
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token,
+            "client_id": _CODEX_CLIENT_ID,
+        },
+        timeout=30,
+    )
+    resp.raise_for_status()
+    token = resp.json()
+
+    new_access_token = token["access_token"]
+    new_refresh_token = token.get("refresh_token", refresh_token)
+    exp = _codex_jwt_expiry(new_access_token)
+
+    # Preserve existing structure; only overwrite token fields
+    creds_path = os.path.expanduser(_CODEX_CREDS_PATH)
+    existing: dict[str, Any] = {}
+    try:
+        with open(creds_path) as f:
+            existing = json.load(f)
+    except Exception:
+        pass
+
+    existing.setdefault("tokens", {})
+    existing["tokens"]["access_token"] = new_access_token
+    existing["tokens"]["refresh_token"] = new_refresh_token
+    if "id_token" in token:
+        existing["tokens"]["id_token"] = token["id_token"]
+    existing["last_refresh"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+    os.makedirs(os.path.dirname(creds_path), exist_ok=True)
+    tmp = creds_path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(existing, f, indent=2)
+    os.replace(tmp, creds_path)
+    os.chmod(creds_path, 0o600)
+    logger.info("OpenAI Codex token refreshed and written to %s", creds_path)
+
+    return {
+        "access_token": new_access_token,
+        "refresh_token": new_refresh_token,
+        "id_token": token.get("id_token"),
+        "token_type": "Bearer",
+        "expires_at": exp,
+        "base_url": _CODEX_BASE_URL,
+    }
+
+
+def openai_codex_login() -> dict[str, Any]:
+    """Full OpenAI Codex login via Authorization Code + PKCE.
+
+    Opens a browser to auth.openai.com, listens on
+    http://localhost:1455/auth/callback for the redirect, exchanges the
+    code for tokens, and writes credentials to ~/.codex/auth.json.
+    """
+    import base64
+    import hashlib
+    import secrets
+    import urllib.parse
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    if requests is None:
+        raise RuntimeError("requests package required. Install with: pip install faigate[oauth]")
+
+    code_verifier = base64.urlsafe_b64encode(secrets.token_bytes(32)).rstrip(b"=").decode()
+    code_challenge = (
+        base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode()).digest()).rstrip(b"=").decode()
+    )
+    state = secrets.token_urlsafe(24)
+    redirect_uri = f"http://localhost:{_CODEX_CALLBACK_PORT}/auth/callback"
+
+    params = {
+        "client_id": _CODEX_CLIENT_ID,
+        "response_type": "code",
+        "redirect_uri": redirect_uri,
+        "scope": _CODEX_SCOPE,
+        "state": state,
+        "code_challenge": code_challenge,
+        "code_challenge_method": "S256",
+    }
+    auth_url = f"{_CODEX_AUTH_ENDPOINT}?{urllib.parse.urlencode(params)}"
+    received: dict[str, str] = {}
+
+    class _CallbackHandler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            parsed = urllib.parse.urlparse(self.path)
+            qs = urllib.parse.parse_qs(parsed.query)
+            received["code"] = qs.get("code", [""])[0]
+            received["state"] = qs.get("state", [""])[0]
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"<h2>OpenAI Codex login complete. You can close this tab.</h2>")
+
+        def log_message(self, *args: Any) -> None:
+            pass
+
+    server = HTTPServer(("localhost", _CODEX_CALLBACK_PORT), _CallbackHandler)
+    server.timeout = 120
+
+    print(f"\nOpening browser for OpenAI Codex login...\n{auth_url}\n")
+    if webbrowser:
+        webbrowser.open(auth_url)
+    else:
+        print(f"Open this URL manually:\n{auth_url}")
+
+    print(f"Waiting for callback on {redirect_uri} ...")
+    server.handle_request()
+    server.server_close()
+
+    code = received.get("code")
+    if not code:
+        raise RuntimeError("No authorization code received from callback.")
+    if received.get("state") != state:
+        raise RuntimeError("OAuth state mismatch — possible CSRF. Aborting.")
+
+    resp = requests.post(
+        _CODEX_TOKEN_ENDPOINT,
+        json={
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": redirect_uri,
+            "client_id": _CODEX_CLIENT_ID,
+            "code_verifier": code_verifier,
+        },
+        timeout=30,
+    )
+    resp.raise_for_status()
+    token = resp.json()
+
+    new_access_token = token["access_token"]
+    exp = _codex_jwt_expiry(new_access_token)
+
+    new_creds = {
+        "auth_mode": "chatgpt",
+        "OPENAI_API_KEY": None,
+        "tokens": {
+            "access_token": new_access_token,
+            "refresh_token": token.get("refresh_token"),
+            "id_token": token.get("id_token"),
+            "account_id": None,
+        },
+        "last_refresh": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+
+    creds_path = os.path.expanduser(_CODEX_CREDS_PATH)
+    os.makedirs(os.path.dirname(creds_path), exist_ok=True)
+    tmp = creds_path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(new_creds, f, indent=2)
+    os.replace(tmp, creds_path)
+    os.chmod(creds_path, 0o600)
+    print(f"OpenAI Codex credentials written to {creds_path}")
+
+    return {
+        "access_token": new_access_token,
+        "refresh_token": token.get("refresh_token"),
+        "id_token": token.get("id_token"),
+        "token_type": "Bearer",
+        "expires_at": exp,
+        "base_url": _CODEX_BASE_URL,
+    }
 
 
 def google_vertex_adc() -> dict[str, Any]:
@@ -601,6 +863,7 @@ def main() -> None:
     parser.add_argument("--client-id", help="OAuth client ID (for Google flows)")
     parser.add_argument("--scope", help="OAuth scope override")
     parser.add_argument("--refresh", action="store_true", help="Refresh existing token instead of new login")
+    parser.add_argument("--login", action="store_true", help="Force interactive browser login (openai-codex, google-antigravity)")
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose logging")
     args = parser.parse_args()
 
@@ -632,7 +895,23 @@ def main() -> None:
             token_data = claude_code_oauth()
 
         elif args.provider == "openai-codex":
-            token_data = openai_codex_oauth()
+            if args.refresh:
+                creds_path = os.path.expanduser(_CODEX_CREDS_PATH)
+                with open(creds_path) as f:
+                    creds = json.load(f)
+                rt = creds.get("tokens", {}).get("refresh_token")
+                if not rt:
+                    raise RuntimeError("No refresh_token in existing Codex credentials.")
+                token_data = openai_codex_refresh(rt)
+            elif args.login:
+                token_data = openai_codex_login()
+            else:
+                try:
+                    token_data = openai_codex_oauth()
+                    print("Using existing OpenAI Codex credentials.", file=sys.stderr)
+                except RuntimeError:
+                    print("No valid credentials found, starting browser login...", file=sys.stderr)
+                    token_data = openai_codex_login()
 
         elif args.provider == "google-gemini-cli":
             token_data = google_vertex_adc()
@@ -656,7 +935,7 @@ def main() -> None:
 
         else:
             print(f"Unknown provider: {args.provider}", file=sys.stderr)
-            print("Supported: qwen-portal, claude-code, google-gemini-cli, google-antigravity", file=sys.stderr)
+            print("Supported: qwen-portal, claude-code, openai-codex, google-gemini-cli, google-antigravity", file=sys.stderr)
             sys.exit(1)
 
         # Tokens are written to the provider credentials file by each auth function.
