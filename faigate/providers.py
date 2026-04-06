@@ -131,6 +131,7 @@ class ProviderBackend:
         self.cache = dict(cfg.get("cache", {}))
         self.image = dict(cfg.get("image", {}))
         self.lane = dict(cfg.get("lane", {}))
+        self.default_extra_body = dict(cfg.get("extra_body", {}) or {})
         self.transport = {
             **get_provider_transport_binding(
                 name,
@@ -647,6 +648,8 @@ class ProviderBackend:
             body["tools"] = tools
         if stream:
             body["stream"] = True
+        if self.default_extra_body:
+            body.update(self.default_extra_body)
         if extra_body:
             body.update(extra_body)
 
