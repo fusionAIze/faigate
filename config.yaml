@@ -1009,24 +1009,137 @@ providers:
   #     connect_s: 10
   #     read_s: 90
 
-  # openai-codex:
-  #   # Token from ~/.codex/auth.json (auth_mode=chatgpt). Run: faigate-auth openai-codex
-  #   # Inference endpoint: chatgpt.com/backend-api/codex/responses (NOT api.openai.com)
-  #   # Refresh tokens are single-use; faigate rewrites auth.json after every refresh.
-  #   backend: oauth
-  #   oauth:
-  #     helper: "faigate-auth openai-codex"
-  #     client_id: "app_EMoamEEZ73f0CkXaXp7hrann"
-  #     token_endpoint: "https://auth.openai.com/oauth/token"
-  #     refresh_endpoint: "https://auth.openai.com/oauth/token"
-  #     scope: "openid profile email offline_access"
-  #   underlying_backend: openai-compat
-  #   base_url: "https://chatgpt.com/backend-api/codex/responses"
-  #   model: openai-codex/gpt-5.3-codex
-  #   tier: default
-  #   timeout:
-  #     connect_s: 10
-  #     read_s: 60
+  openai-codex:
+    # Token from ~/.codex/auth.json (auth_mode=chatgpt). Run: faigate-auth openai-codex
+    # Inference endpoint: chatgpt.com/backend-api/codex/responses (NOT api.openai.com)
+    # Refresh tokens are single-use; faigate rewrites auth.json after every refresh.
+    backend: oauth
+    oauth:
+      helper: "faigate-auth openai-codex"
+      client_id: "app_EMoamEEZ73f0CkXaXp7hrann"
+      token_endpoint: "https://auth.openai.com/oauth/token"
+      refresh_endpoint: "https://auth.openai.com/oauth/token"
+      scope: "openid profile email offline_access"
+    underlying_backend: openai-compat
+    base_url: "https://chatgpt.com/backend-api/codex/responses"
+    model: gpt-5.4
+    tier: default
+    capabilities:
+      cost_tier: free
+      latency_tier: balanced
+      reasoning: true
+      streaming: true
+    lane:
+      canonical_model: openai-codex/gpt-5.4
+      cluster: elite-reasoning
+      benchmark_cluster: quality-coding
+      quality_tier: premium
+      reasoning_strength: high
+      context_strength: high
+      tool_strength: medium
+      route_type: direct
+      name: codex
+    pricing:
+      input: 0.0
+      output: 0.0
+    timeout:
+      connect_s: 10
+      read_s: 90
+  openai-codex-mini:
+    backend: oauth
+    oauth:
+      helper: "faigate-auth openai-codex"
+      client_id: "app_EMoamEEZ73f0CkXaXp7hrann"
+      token_endpoint: "https://auth.openai.com/oauth/token"
+      refresh_endpoint: "https://auth.openai.com/oauth/token"
+      scope: "openid profile email offline_access"
+    underlying_backend: openai-compat
+    base_url: "https://chatgpt.com/backend-api/codex/responses"
+    model: gpt-5.1-codex-mini
+    tier: default
+    capabilities:
+      cost_tier: free
+      latency_tier: fast
+      reasoning: true
+      streaming: true
+    lane:
+      canonical_model: openai-codex/gpt-5.1-codex-mini
+      cluster: fast-workhorse
+      benchmark_cluster: fast-coding
+      quality_tier: mid
+      reasoning_strength: mid
+      context_strength: high
+      tool_strength: medium
+      route_type: direct
+      name: codex-mini
+    pricing:
+      input: 0.0
+      output: 0.0
+    timeout:
+      connect_s: 10
+      read_s: 60
+  openai-codex-spark:
+    backend: oauth
+    oauth:
+      helper: "faigate-auth openai-codex"
+      client_id: "app_EMoamEEZ73f0CkXaXp7hrann"
+      token_endpoint: "https://auth.openai.com/oauth/token"
+      refresh_endpoint: "https://auth.openai.com/oauth/token"
+      scope: "openid profile email offline_access"
+    underlying_backend: openai-compat
+    base_url: "https://chatgpt.com/backend-api/codex/responses"
+    model: gpt-5.3-codex-spark
+    tier: default
+    capabilities:
+      cost_tier: free
+      latency_tier: fast
+      streaming: true
+    lane:
+      canonical_model: openai-codex/gpt-5.3-codex-spark
+      cluster: fast-workhorse
+      benchmark_cluster: fast-coding
+      quality_tier: mid
+      route_type: direct
+      name: codex-spark
+    pricing:
+      input: 0.0
+      output: 0.0
+    timeout:
+      connect_s: 10
+      read_s: 60
+  openai-codex-high:
+    backend: oauth
+    oauth:
+      helper: "faigate-auth openai-codex"
+      client_id: "app_EMoamEEZ73f0CkXaXp7hrann"
+      token_endpoint: "https://auth.openai.com/oauth/token"
+      refresh_endpoint: "https://auth.openai.com/oauth/token"
+      scope: "openid profile email offline_access"
+    underlying_backend: openai-compat
+    base_url: "https://chatgpt.com/backend-api/codex/responses"
+    model: gpt-5.3-codex-high
+    tier: default
+    capabilities:
+      cost_tier: free
+      latency_tier: balanced
+      reasoning: true
+      streaming: true
+    lane:
+      canonical_model: openai-codex/gpt-5.3-codex-high
+      cluster: elite-reasoning
+      benchmark_cluster: quality-coding
+      quality_tier: premium
+      reasoning_strength: high
+      context_strength: high
+      tool_strength: medium
+      route_type: direct
+      name: codex-high
+    pricing:
+      input: 0.0
+      output: 0.0
+    timeout:
+      connect_s: 10
+      read_s: 90
 
   # Antigravity (Google OAuth – Authorization Code + PKCE → Google Generative Language API)
   # Network discovery: Antigravity's client interface is a LOCAL ephemeral gRPC language
@@ -1389,6 +1502,31 @@ static_rules:
       - deepseek-chat
     name: explicit-chat
     route_to: deepseek-chat
+  - match:
+      model_requested:
+      - codex-mini
+      - openai-codex-mini
+      - gpt-5.1-codex-mini
+      - codex-spark
+      - openai-codex-spark
+      - gpt-5.3-codex-spark
+    name: explicit-codex-mini
+    route_to: openai-codex-mini
+  - match:
+      model_requested:
+      - codex-high
+      - openai-codex-high
+      - gpt-5.3-codex-high
+    name: explicit-codex-high
+    route_to: openai-codex-high
+  - match:
+      model_requested:
+      - codex
+      - openai-codex
+      - gpt-5.4
+      - gpt-5.3-codex
+    name: explicit-codex
+    route_to: openai-codex
   - match:
       any:
       - system_prompt_contains:
