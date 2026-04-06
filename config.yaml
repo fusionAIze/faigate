@@ -1140,6 +1140,71 @@ providers:
     timeout:
       connect_s: 10
       read_s: 90
+  openai-codex-xhigh:
+    backend: oauth
+    oauth:
+      helper: "faigate-auth openai-codex"
+      client_id: "app_EMoamEEZ73f0CkXaXp7hrann"
+      token_endpoint: "https://auth.openai.com/oauth/token"
+      refresh_endpoint: "https://auth.openai.com/oauth/token"
+      scope: "openid profile email offline_access"
+    underlying_backend: openai-compat
+    base_url: "https://chatgpt.com/backend-api/codex/responses"
+    model: gpt-5.3-codex-xhigh
+    tier: default
+    capabilities:
+      cost_tier: free
+      latency_tier: quality
+      reasoning: true
+      streaming: true
+    lane:
+      canonical_model: openai-codex/gpt-5.3-codex-xhigh
+      cluster: elite-reasoning
+      benchmark_cluster: quality-coding
+      quality_tier: premium
+      reasoning_strength: high
+      context_strength: high
+      tool_strength: medium
+      route_type: direct
+      name: codex-xhigh
+    pricing:
+      input: 0.0
+      output: 0.0
+    timeout:
+      connect_s: 10
+      read_s: 120
+  openai-codex-low:
+    backend: oauth
+    oauth:
+      helper: "faigate-auth openai-codex"
+      client_id: "app_EMoamEEZ73f0CkXaXp7hrann"
+      token_endpoint: "https://auth.openai.com/oauth/token"
+      refresh_endpoint: "https://auth.openai.com/oauth/token"
+      scope: "openid profile email offline_access"
+    underlying_backend: openai-compat
+    base_url: "https://chatgpt.com/backend-api/codex/responses"
+    model: gpt-5.3-codex-low
+    tier: default
+    capabilities:
+      cost_tier: free
+      latency_tier: fast
+      streaming: true
+    lane:
+      canonical_model: openai-codex/gpt-5.3-codex-low
+      cluster: fast-workhorse
+      benchmark_cluster: fast-coding
+      quality_tier: mid
+      reasoning_strength: low
+      context_strength: high
+      tool_strength: medium
+      route_type: direct
+      name: codex-low
+    pricing:
+      input: 0.0
+      output: 0.0
+    timeout:
+      connect_s: 10
+      read_s: 60
 
   # Antigravity (Google OAuth – Authorization Code + PKCE → Google Generative Language API)
   # Network discovery: Antigravity's client interface is a LOCAL ephemeral gRPC language
@@ -1514,11 +1579,25 @@ static_rules:
     route_to: openai-codex-mini
   - match:
       model_requested:
+      - codex-xhigh
+      - openai-codex-xhigh
+      - gpt-5.3-codex-xhigh
+    name: explicit-codex-xhigh
+    route_to: openai-codex-xhigh
+  - match:
+      model_requested:
       - codex-high
       - openai-codex-high
       - gpt-5.3-codex-high
     name: explicit-codex-high
     route_to: openai-codex-high
+  - match:
+      model_requested:
+      - codex-low
+      - openai-codex-low
+      - gpt-5.3-codex-low
+    name: explicit-codex-low
+    route_to: openai-codex-low
   - match:
       model_requested:
       - codex
