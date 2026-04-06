@@ -31,7 +31,7 @@ from dotenv import load_dotenv
 from .hooks import get_registered_request_hooks, load_community_hooks
 from .lane_registry import get_provider_lane_binding, get_provider_transport_binding
 
-_SUPPORTED_BACKENDS = {"openai-compat", "google-genai", "anthropic-compat"}
+_SUPPORTED_BACKENDS = {"openai-compat", "google-genai", "anthropic-compat", "oauth"}
 _SUPPORTED_PROVIDER_CONTRACTS = {"generic", "local-worker", "image-provider"}
 _SUPPORTED_CACHE_MODES = {"none", "implicit", "explicit"}
 _BOOL_CAPABILITY_FIELDS = {

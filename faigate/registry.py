@@ -82,7 +82,7 @@ BUILTIN: dict[str, ProviderDef] = {
         api_key_env="OPENAI_CODEX_TOKEN",
         auth_optional=True,
         tier="default",
-        example_model="openai-codex/gpt-5.3-codex",
+        example_model="openai-codex/gpt-5.4",
         pricing={"input": 0.0, "output": 0.0},
         notes=(
             "OpenAI Codex (ChatGPT OAuth) – token from ~/.codex/auth.json. "
