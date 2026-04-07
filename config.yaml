@@ -1375,32 +1375,57 @@ providers:
       connect_s: 10
       read_s: 45
 
-  # Antigravity (Google OAuth – Authorization Code + PKCE → Google Generative Language API)
-  # Network discovery: Antigravity's client interface is a LOCAL ephemeral gRPC language
-  # server (127.0.0.1:<port>/exa.language_server_pb.LanguageServerService/…) that proxies
-  # to Google internally. faigate uses the Google token to call the upstream API directly.
+  # Antigravity / Gemini CLI (Google OAuth → cloudcode-pa.googleapis.com free tier)
+  # Both tools share ~/.gemini/oauth_creds.json. Token is refreshed automatically by
+  # the gemini CLI binary; faigate reads it via faigate-auth google-antigravity.
   #
-  # Prerequisites:
-  #   1. Sign in to the Antigravity IDE  -OR-  run: faigate-auth google-antigravity
-  #      Token is stored at ~/.gemini/oauth_creds.json
-  #   2. Set ANTIGRAVITY_TOKEN to the access_token from that file
-  #      (Optional: override ANTIGRAVITY_BASE_URL to use a different Google endpoint)
+  # cloudcode-pa API: custom Gemini wrapper with {model, project, request: <gemini_body>}
+  #   Backend: google-codeassist  (Bearer auth, wraps Gemini format)
+  #   Endpoint: https://cloudcode-pa.googleapis.com/v1internal
+  #   google_project: your Google project ID (from gemini-cli token exchange)
   #
-  # OAuth details:
-  #   client_id:  1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com
-  #   scopes:     cloud-platform, userinfo.email, userinfo.profile, cclog, experimentsandconfigs
-  #   token file: ~/.gemini/oauth_creds.json  (shared with Antigravity IDE)
+  # Prerequisites: gemini CLI must be authenticated (gemini auth login)
+  #   Token file: ~/.gemini/oauth_creds.json
   #
   antigravity:
-    backend: openai-compat
-    base_url: https://generativelanguage.googleapis.com/v1beta/openai
-    base_url_env: ANTIGRAVITY_BASE_URL   # optional override
-    api_key_env: ANTIGRAVITY_TOKEN       # access_token from ~/.gemini/oauth_creds.json
+    backend: oauth
+    oauth:
+      helper: "faigate-auth google-antigravity"
+      client_id: "1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com"
+      token_endpoint: "https://oauth2.googleapis.com/token"
+      refresh_endpoint: "https://oauth2.googleapis.com/token"
+    underlying_backend: google-codeassist
+    base_url: "https://cloudcode-pa.googleapis.com/v1internal"
+    google_project: "yarling-bloom-d80f5"
     model: gemini-2.5-pro
     tier: default
+    capabilities:
+      cost_tier: free
+      latency_tier: balanced
+      streaming: false
     timeout:
       connect_s: 10
       read_s: 90
+
+  gemini-cli:
+    backend: oauth
+    oauth:
+      helper: "faigate-auth google-antigravity"
+      client_id: "1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com"
+      token_endpoint: "https://oauth2.googleapis.com/token"
+      refresh_endpoint: "https://oauth2.googleapis.com/token"
+    underlying_backend: google-codeassist
+    base_url: "https://cloudcode-pa.googleapis.com/v1internal"
+    google_project: "yarling-bloom-d80f5"
+    model: gemini-2.5-flash-lite
+    tier: default
+    capabilities:
+      cost_tier: free
+      latency_tier: fast
+      streaming: false
+    timeout:
+      connect_s: 10
+      read_s: 60
 
   # ---------------------------------------------------------------------------
   # Additional providers (LLMAIRouter parity) – uncomment to activate

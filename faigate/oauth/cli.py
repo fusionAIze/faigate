@@ -200,9 +200,7 @@ def qwen_device_code_flow() -> dict[str, Any]:
 
     # Generate PKCE pair (required by qwen-code OAuth server)
     code_verifier = secrets.token_urlsafe(64)
-    code_challenge = base64.urlsafe_b64encode(
-        hashlib.sha256(code_verifier.encode()).digest()
-    ).rstrip(b"=").decode()
+    code_challenge = base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode()).digest()).rstrip(b"=").decode()
 
     _QWEN_HEADERS = {
         "Content-Type": "application/x-www-form-urlencoded",
@@ -227,7 +225,9 @@ def qwen_device_code_flow() -> dict[str, Any]:
 
     device_code = device["device_code"]
     user_code = device["user_code"]
-    verification_uri = device.get("verification_uri_complete") or device.get("verification_uri", "https://chat.qwen.ai/authorize")
+    verification_uri = device.get("verification_uri_complete") or device.get(
+        "verification_uri", "https://chat.qwen.ai/authorize"
+    )
     interval = device.get("interval", 5)
     expires_in = device.get("expires_in", 900)
 
@@ -334,14 +334,13 @@ def antigravity_oauth() -> dict[str, Any]:
 
     expiry_ms = creds.get("expiry_date")
     if expiry_ms and expiry_ms < time.time() * 1000:
-        logger.warning(
-            "Antigravity token appears expired. "
-            "Run: faigate-auth google-antigravity --refresh  or sign in to Antigravity."
+        raise RuntimeError(
+            "Antigravity token is expired. Run: faigate-auth google-antigravity  to re-authenticate via browser."
         )
 
     base_url = os.environ.get(_ANTIGRAVITY_BASE_URL_ENV, _ANTIGRAVITY_BASE_URL_DEFAULT)
 
-    return {
+    result: dict[str, Any] = {
         "access_token": access_token,
         "refresh_token": creds.get("refresh_token"),
         "token_type": creds.get("token_type", "Bearer"),
@@ -351,6 +350,10 @@ def antigravity_oauth() -> dict[str, Any]:
         "base_url": base_url,
         "base_url_discovered": True,
     }
+    # token_store.is_expired() uses expires_at (seconds); convert from expiry_date (ms)
+    if expiry_ms:
+        result["expires_at"] = expiry_ms / 1000.0
+    return result
 
 
 def antigravity_refresh(refresh_token: str) -> dict[str, Any]:
@@ -402,10 +405,14 @@ def antigravity_refresh(refresh_token: str) -> dict[str, Any]:
     os.chmod(creds_path, 0o600)
     logger.info("Antigravity token refreshed and written to %s", creds_path)
 
-    return {
+    expiry_ms_new = new_creds.get("expiry_date")
+    result_refresh: dict[str, Any] = {
         **new_creds,
         "base_url": os.environ.get(_ANTIGRAVITY_BASE_URL_ENV, _ANTIGRAVITY_BASE_URL_DEFAULT),
     }
+    if expiry_ms_new:
+        result_refresh["expires_at"] = expiry_ms_new / 1000.0
+    return result_refresh
 
 
 def antigravity_login() -> dict[str, Any]:
@@ -1043,9 +1050,12 @@ def main() -> None:
                 if not kc or not kc.get("refreshToken"):
                     raise RuntimeError("No refresh_token in Claude Code keychain credentials.")
                 token_data = claude_code_refresh(kc["refreshToken"])
-                new_creds = {**(kc or {}), "accessToken": token_data["access_token"],
-                             "refreshToken": token_data.get("refresh_token", kc.get("refreshToken", "")),
-                             "expiresAt": int((time.time() + token_data.get("expires_in", 28800)) * 1000)}
+                new_creds = {
+                    **(kc or {}),
+                    "accessToken": token_data["access_token"],
+                    "refreshToken": token_data.get("refresh_token", kc.get("refreshToken", "")),
+                    "expiresAt": int((time.time() + token_data.get("expires_in", 28800)) * 1000),
+                }
                 _claude_code_write_keychain(new_creds)
                 print("Token refreshed and stored in keychain.", file=sys.stderr)
             else:
@@ -1053,9 +1063,7 @@ def main() -> None:
                     token_data = claude_code_oauth()
                     print("Using existing Claude Code credentials.", file=sys.stderr)
                 except RuntimeError:
-                    raise RuntimeError(
-                        "No Claude Code credentials found. Please run: claude login"
-                    )
+                    raise RuntimeError("No Claude Code credentials found. Please run: claude login")
 
         elif args.provider == "openai-codex":
             if args.refresh:
@@ -1082,18 +1090,22 @@ def main() -> None:
         elif args.provider == "google-antigravity":
             if args.refresh:
                 creds_path = os.path.expanduser(_ANTIGRAVITY_CREDS_PATH)
-                with open(creds_path) as f:
-                    creds = json.load(f)
-                rt = creds.get("refresh_token")
-                if not rt:
-                    raise RuntimeError("No refresh_token in existing Antigravity credentials.")
-                token_data = antigravity_refresh(rt)
+                try:
+                    with open(creds_path) as f:
+                        creds = json.load(f)
+                    rt = creds.get("refresh_token")
+                    if not rt:
+                        raise RuntimeError("No refresh_token in existing Antigravity credentials.")
+                    token_data = antigravity_refresh(rt)
+                except RuntimeError as e:
+                    print(f"Token refresh failed ({e}), falling back to browser login...", file=sys.stderr)
+                    token_data = antigravity_login()
             else:
                 try:
                     token_data = antigravity_oauth()
                     print("Using existing Antigravity credentials.", file=sys.stderr)
                 except RuntimeError:
-                    print("No existing credentials, starting browser login...", file=sys.stderr)
+                    print("Token expired or missing, starting browser login...", file=sys.stderr)
                     token_data = antigravity_login()
 
         else:

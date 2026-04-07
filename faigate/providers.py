@@ -419,7 +419,7 @@ class ProviderBackend:
         For OpenAI-compatible providers this uses GET /models. For Google GenAI,
         which does not expose a compatible models listing here, probing is skipped.
         """
-        if self.backend_type == "google-genai":
+        if self.backend_type in ("google-genai", "google-codeassist"):
             return self.health.healthy
         strategy = str(self.transport.get("probe_strategy", "models") or "models").strip().lower()
         strategy = strategy.replace("-", "_")
@@ -640,6 +640,15 @@ class ProviderBackend:
                 max_tokens=max_tokens,
             )
 
+        if self.backend_type == "google-codeassist":
+            return await self._complete_codeassist(
+                messages,
+                model=model,
+                stream=stream,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+
         # OpenAI-compatible path (DeepSeek, OpenRouter, etc.)
         body: dict[str, Any] = {
             "model": model,
@@ -777,6 +786,79 @@ class ProviderBackend:
             google_data = resp.json()
 
             # Convert Google response → OpenAI format
+            return self._google_to_openai(google_data, model, latency)
+
+        except httpx.TimeoutException as e:
+            self.health.record_failure(f"Timeout: {e}")
+            raise ProviderError(self.name, 0, f"Timeout: {e}") from e
+
+    async def _complete_codeassist(
+        self,
+        messages: list[dict],
+        model: str,
+        stream: bool,
+        temperature: float | None,
+        max_tokens: int | None,
+    ) -> dict:
+        """Send a request to cloudcode-pa.googleapis.com/v1internal (Google Code Assist).
+
+        This API wraps the standard Gemini request in {model, project, request: <gemini_body>}.
+        The Bearer token is injected via Authorization header (set via OAuthBackend).
+        Required config fields: base_url, project (google_project), model.
+        """
+        import uuid
+
+        # Build Gemini-format contents from OpenAI messages
+        contents = []
+        system_instruction = None
+        for msg in messages:
+            role = msg.get("role", "user")
+            text = msg.get("content") or ""
+            if isinstance(text, list):
+                text = " ".join(part.get("text") or "" for part in text if isinstance(part, dict))
+            if role == "system":
+                system_instruction = text
+            elif role == "assistant":
+                contents.append({"role": "model", "parts": [{"text": text}]})
+            else:
+                contents.append({"role": "user", "parts": [{"text": text}]})
+
+        gemini_request: dict[str, Any] = {"contents": contents}
+        if system_instruction:
+            gemini_request["systemInstruction"] = {"parts": [{"text": system_instruction}]}
+        gen_config: dict[str, Any] = {}
+        if max_tokens:
+            gen_config["maxOutputTokens"] = max_tokens
+        if temperature is not None:
+            gen_config["temperature"] = temperature
+        if gen_config:
+            gemini_request["generationConfig"] = gen_config
+
+        project = self.cfg.get("google_project", "")
+        body = {
+            "model": model,
+            "project": project,
+            "user_prompt_id": str(uuid.uuid4()),
+            "request": gemini_request,
+        }
+
+        headers = self._authorization_headers(content_type="application/json")
+        url = f"{self.base_url}:generateContent"
+        t0 = time.time()
+
+        try:
+            resp = await self._client.post(url, json=body, headers=headers)
+            latency = (time.time() - t0) * 1000
+
+            if resp.status_code >= 400:
+                error_text = resp.text[:500]
+                self.health.record_failure(f"HTTP {resp.status_code}: {error_text}")
+                raise ProviderError(self.name, resp.status_code, error_text)
+
+            self.health.record_success(latency)
+            # cloudcode-pa wraps response: {"response": <gemini_response>}
+            outer = resp.json()
+            google_data = outer.get("response", outer)
             return self._google_to_openai(google_data, model, latency)
 
         except httpx.TimeoutException as e:
