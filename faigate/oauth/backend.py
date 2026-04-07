@@ -62,6 +62,8 @@ class OAuthBackend(ProviderBackend):
         self.underlying_backend_type = (
             cfg.get("underlying_backend") or self.oauth_cfg.get("underlying_backend", "openai-compat")
         )
+        # Optional: inject a system message if none is present in the request
+        self.require_system_message: str | None = cfg.get("require_system_message")
         self.token_store = TokenStore()
         self._wrapped_backend = self._create_wrapped_backend()
 
@@ -219,9 +221,19 @@ class OAuthBackend(ProviderBackend):
         token = await self._ensure_token()
         self._wrapped_backend.api_key = token
 
+    def _ensure_system_message(self, messages: list) -> list:
+        """Inject a system message at the start if none exists and require_system_message is set."""
+        if not self.require_system_message:
+            return messages
+        has_system = any(m.get("role") == "system" for m in messages if isinstance(m, dict))
+        if has_system:
+            return messages
+        return [{"role": "system", "content": self.require_system_message}] + list(messages)
+
     async def complete(self, messages: list, **kwargs):  # type: ignore[override]
         """Inject OAuth token, then delegate to wrapped backend."""
         await self._inject_token()
+        messages = self._ensure_system_message(messages)
         return await self._wrapped_backend.complete(messages, **kwargs)
 
     async def _request(self, client: AsyncClient, req: Request) -> Response:

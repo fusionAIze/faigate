@@ -979,19 +979,41 @@ providers:
   # ── OAuth‑managed providers ────────────────────────────────────────────────
   #
   # qwen-portal (Qwen OAuth free tier via qwen-code CLI)
-  # Prerequisites: npm install -g @qwen-code/cli && qwen auth login
-  # Token is read from ~/.qwen/oauth_creds.json; base_url from resource_url field.
-  # Set QWEN_PORTAL_TOKEN to the access_token value, or let faigate-auth resolve it.
-  #
-  # qwen-portal:
-  #   backend: openai-compat
-  #   base_url: "https://portal.qwen.ai/compatible-mode/v1"  # or use $QWEN_PORTAL_BASE_URL
-  #   api_key_env: QWEN_PORTAL_TOKEN
-  #   model: coder-model
-  #   tier: default
-  #   timeout:
-  #     connect_s: 10
-  #     read_s: 90
+  # Prerequisites: faigate-auth qwen-portal  (browser flow, no node required)
+  # Token read from ~/.qwen/oauth_creds.json; auto-refresh on expiry.
+  qwen-portal:
+    backend: oauth
+    oauth:
+      helper: "faigate-auth qwen-portal"
+      client_id: "f0304373b74a44d2b584a3fb70ca9e56"
+      token_endpoint: "https://chat.qwen.ai/api/v1/oauth2/token"
+      refresh_endpoint: "https://chat.qwen.ai/api/v1/oauth2/token"
+      scope: "openid profile email model.completion"
+    underlying_backend: openai-compat
+    base_url: "https://portal.qwen.ai/v1"
+    model: coder-model
+    tier: default
+    # portal.qwen.ai requires a system message in every request
+    require_system_message: "You are a helpful assistant."
+    capabilities:
+      cost_tier: free
+      latency_tier: balanced
+      streaming: true
+    # Required headers for portal.qwen.ai (same as qwen-code CLI sends)
+    extra_headers:
+      user-agent: "QwenCode/0.14.0 (darwin; arm64)"
+      x-dashscope-authtype: "qwen-oauth"
+      x-dashscope-cachecontrol: "enable"
+      x-dashscope-useragent: "QwenCode/0.14.0 (darwin; arm64)"
+      x-stainless-arch: "arm64"
+      x-stainless-lang: "js"
+      x-stainless-os: "MacOS"
+      x-stainless-package-version: "5.11.0"
+      x-stainless-runtime: "node"
+      x-stainless-runtime-version: "v25.9.0"
+    timeout:
+      connect_s: 10
+      read_s: 90
 
   claude-code:
     # Token from macOS Keychain (Claude Code-credentials). Run: faigate-auth claude-code

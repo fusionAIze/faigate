@@ -76,14 +76,15 @@ def _qwen_base_url_from_resource(resource_url: str | None) -> str:
     """Build the inference base URL from the resource_url field in Qwen credentials.
 
     resource_url is a hostname (e.g. 'portal.qwen.ai'). The full API path
-    follows DashScope's compatible-mode convention.
+    matches qwen-code's getCurrentEndpoint() which appends '/v1' directly
+    (not '/compatible-mode/v1').
     """
     if not resource_url:
         return _QWEN_FALLBACK_BASE_URL
     host = resource_url.rstrip("/")
     if not host.startswith("http"):
         host = f"https://{host}"
-    return f"{host}/compatible-mode/v1"
+    return f"{host}/v1"
 
 
 def qwen_oauth() -> dict[str, Any]:
@@ -127,10 +128,7 @@ def qwen_oauth() -> dict[str, Any]:
     # Check expiry (expiry_date is in milliseconds)
     expiry_ms = creds.get("expiry_date")
     if expiry_ms and expiry_ms < time.time() * 1000:
-        logger.warning(
-            "Qwen token appears expired (expiry: %s). Consider refreshing: qwen auth login",
-            expiry_ms,
-        )
+        raise RuntimeError(f"Qwen token expired (expiry: {expiry_ms}). Run: faigate-auth qwen-portal")
 
     resource_url = creds.get("resource_url")
     base_url = _qwen_base_url_from_resource(resource_url)
@@ -196,13 +194,32 @@ def qwen_device_code_flow() -> dict[str, Any]:
     if requests is None:
         raise RuntimeError("requests package required. Install with: pip install faigate[oauth]")
 
+    import base64
+    import hashlib
+    import secrets
+
+    # Generate PKCE pair (required by qwen-code OAuth server)
+    code_verifier = secrets.token_urlsafe(64)
+    code_challenge = base64.urlsafe_b64encode(
+        hashlib.sha256(code_verifier.encode()).digest()
+    ).rstrip(b"=").decode()
+
+    _QWEN_HEADERS = {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Accept": "application/json",
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+    }
+
     # Step 1: Request device code
     resp = requests.post(
         _QWEN_DEVICE_ENDPOINT,
-        json={
+        data={
             "client_id": _QWEN_CLIENT_ID,
             "scope": _QWEN_SCOPE,
+            "code_challenge": code_challenge,
+            "code_challenge_method": "S256",
         },
+        headers=_QWEN_HEADERS,
         timeout=30,
     )
     resp.raise_for_status()
@@ -210,12 +227,12 @@ def qwen_device_code_flow() -> dict[str, Any]:
 
     device_code = device["device_code"]
     user_code = device["user_code"]
-    verification_uri = device.get("verification_uri", "https://chat.qwen.ai/activate")
+    verification_uri = device.get("verification_uri_complete") or device.get("verification_uri", "https://chat.qwen.ai/authorize")
     interval = device.get("interval", 5)
-    expires_in = device.get("expires_in", 300)
+    expires_in = device.get("expires_in", 900)
 
-    print(f"\nPlease visit: {verification_uri}")
-    print(f"Enter code:   {user_code}\n")
+    print(f"\nPlease visit: {verification_uri}", file=sys.stderr)
+    print(f"User code:    {user_code}  (pre-filled in URL above)\n", file=sys.stderr)
     if webbrowser:
         webbrowser.open(verification_uri)
 
@@ -226,11 +243,13 @@ def qwen_device_code_flow() -> dict[str, Any]:
         try:
             resp = requests.post(
                 _QWEN_TOKEN_ENDPOINT,
-                json={
+                data={
                     "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
                     "device_code": device_code,
                     "client_id": _QWEN_CLIENT_ID,
+                    "code_verifier": code_verifier,
                 },
+                headers=_QWEN_HEADERS,
                 timeout=30,
             )
             if resp.status_code == 200:
