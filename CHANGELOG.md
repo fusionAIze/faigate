@@ -1,5 +1,18 @@
 # fusionAIze Gate Changelog
 
+## v2.1.3 - 2026-04-08
+
+### Added
+
+- **Claude Code OAuth**: reads Claude Code credentials from the macOS Keychain, refreshes expired tokens, and injects the required Anthropic OAuth headers on requests
+- **Antigravity + Gemini CLI OAuth**: activates Google OAuth-backed `antigravity` and `gemini-cli` providers via `cloudcode-pa.googleapis.com/v1internal`
+
+### Fixed
+
+- **Qwen Portal inference**: corrected the portal base URL, request headers, and required system-message behavior for OAuth-backed inference
+- **Gate-namespaced Codex models**: model IDs such as `faigate/openai-codex-5.4-medium` now normalize correctly before provider routing
+- **Local artifact hygiene**: `.codenomad/` and `catalog_output.json` are no longer tracked release artifacts
+
 ## v2.1.2 - 2026-04-07
 
 ### Fixed
