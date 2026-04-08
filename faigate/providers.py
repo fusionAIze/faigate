@@ -11,13 +11,11 @@ from typing import Any
 
 import httpx
 
-# OAuth backend (optional)
-try:
-    from .oauth.backend import OAuthBackend
-except ImportError:
-    OAuthBackend = None
-
 from .lane_registry import get_provider_transport_binding
+
+# OAuthBackend is imported lazily in create_provider_backend() to avoid
+# a circular import: oauth/backend.py imports ProviderBackend from this module.
+OAuthBackend = None
 
 logger = logging.getLogger("faigate.providers")
 _UNRESOLVED_ENV_RE = re.compile(r"\$\{[^}]+}")
@@ -59,12 +57,14 @@ def create_provider_backend(name: str, cfg: dict) -> ProviderBackend:
     """Create a provider backend instance, handling OAuth wrapping if needed."""
     backend_type = cfg.get("backend", "openai-compat")
     if backend_type == "oauth":
-        if OAuthBackend is None:
+        try:
+            from .oauth.backend import OAuthBackend as _OAuthBackend
+        except ImportError as exc:
             raise ImportError(
                 "OAuth backend requested but faigate.oauth.backend could not be imported. "
                 "Make sure optional OAuth dependencies are installed."
-            )
-        return OAuthBackend(name, cfg)
+            ) from exc
+        return _OAuthBackend(name, cfg)
     return ProviderBackend(name, cfg)
 
 
@@ -118,6 +118,7 @@ class ProviderBackend:
 
     def __init__(self, name: str, cfg: dict):
         self.name = name
+        self.cfg = cfg  # stored for OAuthBackend._create_wrapped_backend()
         self.contract = cfg.get("contract", "generic")
         self.backend_type = cfg.get("backend", "openai-compat")
         self.base_url = cfg["base_url"].rstrip("/")
@@ -132,6 +133,7 @@ class ProviderBackend:
         self.image = dict(cfg.get("image", {}))
         self.lane = dict(cfg.get("lane", {}))
         self.default_extra_body = dict(cfg.get("extra_body", {}) or {})
+        self.default_extra_headers = dict(cfg.get("extra_headers", {}) or {})
         self.transport = {
             **get_provider_transport_binding(
                 name,
@@ -173,6 +175,8 @@ class ProviderBackend:
         if "openrouter" in self.base_url:
             headers["HTTP-Referer"] = "https://faigate.local"
             headers["X-Title"] = "fusionAIze Gate"
+        if self.default_extra_headers:
+            headers.update(self.default_extra_headers)
         return headers
 
     def _classify_request_readiness_issue(self, detail: str) -> tuple[str, str]:
@@ -415,7 +419,7 @@ class ProviderBackend:
         For OpenAI-compatible providers this uses GET /models. For Google GenAI,
         which does not expose a compatible models listing here, probing is skipped.
         """
-        if self.backend_type == "google-genai":
+        if self.backend_type in ("google-genai", "google-codeassist"):
             return self.health.healthy
         strategy = str(self.transport.get("probe_strategy", "models") or "models").strip().lower()
         strategy = strategy.replace("-", "_")
@@ -636,6 +640,15 @@ class ProviderBackend:
                 max_tokens=max_tokens,
             )
 
+        if self.backend_type == "google-codeassist":
+            return await self._complete_codeassist(
+                messages,
+                model=model,
+                stream=stream,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+
         # OpenAI-compatible path (DeepSeek, OpenRouter, etc.)
         body: dict[str, Any] = {
             "model": model,
@@ -773,6 +786,79 @@ class ProviderBackend:
             google_data = resp.json()
 
             # Convert Google response → OpenAI format
+            return self._google_to_openai(google_data, model, latency)
+
+        except httpx.TimeoutException as e:
+            self.health.record_failure(f"Timeout: {e}")
+            raise ProviderError(self.name, 0, f"Timeout: {e}") from e
+
+    async def _complete_codeassist(
+        self,
+        messages: list[dict],
+        model: str,
+        stream: bool,
+        temperature: float | None,
+        max_tokens: int | None,
+    ) -> dict:
+        """Send a request to cloudcode-pa.googleapis.com/v1internal (Google Code Assist).
+
+        This API wraps the standard Gemini request in {model, project, request: <gemini_body>}.
+        The Bearer token is injected via Authorization header (set via OAuthBackend).
+        Required config fields: base_url, project (google_project), model.
+        """
+        import uuid
+
+        # Build Gemini-format contents from OpenAI messages
+        contents = []
+        system_instruction = None
+        for msg in messages:
+            role = msg.get("role", "user")
+            text = msg.get("content") or ""
+            if isinstance(text, list):
+                text = " ".join(part.get("text") or "" for part in text if isinstance(part, dict))
+            if role == "system":
+                system_instruction = text
+            elif role == "assistant":
+                contents.append({"role": "model", "parts": [{"text": text}]})
+            else:
+                contents.append({"role": "user", "parts": [{"text": text}]})
+
+        gemini_request: dict[str, Any] = {"contents": contents}
+        if system_instruction:
+            gemini_request["systemInstruction"] = {"parts": [{"text": system_instruction}]}
+        gen_config: dict[str, Any] = {}
+        if max_tokens:
+            gen_config["maxOutputTokens"] = max_tokens
+        if temperature is not None:
+            gen_config["temperature"] = temperature
+        if gen_config:
+            gemini_request["generationConfig"] = gen_config
+
+        project = self.cfg.get("google_project", "")
+        body = {
+            "model": model,
+            "project": project,
+            "user_prompt_id": str(uuid.uuid4()),
+            "request": gemini_request,
+        }
+
+        headers = self._authorization_headers(content_type="application/json")
+        url = f"{self.base_url}:generateContent"
+        t0 = time.time()
+
+        try:
+            resp = await self._client.post(url, json=body, headers=headers)
+            latency = (time.time() - t0) * 1000
+
+            if resp.status_code >= 400:
+                error_text = resp.text[:500]
+                self.health.record_failure(f"HTTP {resp.status_code}: {error_text}")
+                raise ProviderError(self.name, resp.status_code, error_text)
+
+            self.health.record_success(latency)
+            # cloudcode-pa wraps response: {"response": <gemini_response>}
+            outer = resp.json()
+            google_data = outer.get("response", outer)
             return self._google_to_openai(google_data, model, latency)
 
         except httpx.TimeoutException as e:

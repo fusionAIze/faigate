@@ -522,7 +522,7 @@ OAUTH: dict[str, ProviderDef] = {
     # ── Qwen OAuth (free tier via qwen-code CLI) ──────────────────────────
     "qwen-portal": ProviderDef(
         backend="openai-compat",
-        base_url="https://portal.qwen.ai/compatible-mode/v1",
+        base_url="https://portal.qwen.ai/v1",
         base_url_env="QWEN_PORTAL_BASE_URL",
         api_key_env="QWEN_PORTAL_TOKEN",
         auth_optional=True,

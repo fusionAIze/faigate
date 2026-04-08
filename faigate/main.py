@@ -706,6 +706,12 @@ def _resolve_requested_model(
     """
     normalized = str(model_requested or "auto").strip().lower() or "auto"
 
+    # Some clients namespace model IDs with the gateway name (for example
+    # "faigate/openai-codex-5.4-medium"). Strip the faigate namespace before
+    # resolving providers, shortcuts, or routing modes.
+    if normalized.startswith("faigate/"):
+        normalized = normalized.split("/", 1)[1] or "auto"
+
     if normalized != "auto" and normalized in _providers:
         return normalized, normalized, None, None, {}
 

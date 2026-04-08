@@ -46,8 +46,10 @@ The real publish flow stays tag-driven through [release-artifacts](../.github/wo
 2. run `python scripts/faigate-release --version x.y.z`
 3. tag the release from `main`
 4. push the tag
+   - this is the release-bot trigger; `.github/workflows/release-artifacts.yml` runs automatically for `v*` tags
 5. let `release-artifacts` validate the tag/version match, build Python distributions, and push the GHCR image
 6. publish the GitHub Release
+   - this is the separate tap trigger; `.github/workflows/notify-tap.yml` runs when the release is published
 7. let `notify-tap` dispatch the Homebrew update to [`fusionAIze/homebrew-tap`](https://github.com/fusionAIze/homebrew-tap)
 8. optionally allow PyPI publication through trusted publishing
 9. publish the separate npm CLI package only when you are ready to version the Node-facing surface independently

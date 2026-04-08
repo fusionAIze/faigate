@@ -38,7 +38,7 @@ _httpx.ConnectError = Exception
 sys.modules["httpx"] = _httpx
 
 from faigate.config import ConfigError, load_config
-from faigate.main import _resolve_client_profile
+from faigate.main import _resolve_client_profile, _resolve_requested_model
 from faigate.router import Router
 
 
@@ -49,6 +49,38 @@ def _write_config(tmp_path: Path, body: str) -> Path:
 
 
 class TestClientProfileResolution:
+    def test_resolve_requested_model_strips_faigate_namespace(self, tmp_path):
+        cfg = load_config(
+            _write_config(
+                tmp_path,
+                """
+server:
+  host: "127.0.0.1"
+  port: 8090
+providers:
+  openai-codex-5.4-medium:
+    backend: openai-compat
+    base_url: "https://api.example.com/v1"
+    api_key: "secret"
+    model: "gpt-5.4"
+fallback_chain: []
+metrics:
+  enabled: false
+""",
+            )
+        )
+
+        effective, provider_name, mode_name, shortcut_name, hints = _resolve_requested_model(
+            cfg,
+            "faigate/openai-codex-5.4-medium",
+        )
+
+        assert effective == "openai-codex-5.4-medium"
+        assert provider_name is None
+        assert mode_name is None
+        assert shortcut_name is None
+        assert hints == {}
+
     def test_resolve_n8n_profile_from_headers(self, tmp_path):
         cfg = load_config(
             _write_config(
