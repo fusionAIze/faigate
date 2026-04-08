@@ -38,7 +38,11 @@ _httpx.ConnectError = Exception
 sys.modules["httpx"] = _httpx
 
 from faigate.config import ConfigError, load_config
-from faigate.main import _resolve_client_profile, _resolve_requested_model
+from faigate.main import (
+    _provider_requires_static_api_key,
+    _resolve_client_profile,
+    _resolve_requested_model,
+)
 from faigate.router import Router
 
 
@@ -80,6 +84,65 @@ metrics:
         assert mode_name is None
         assert shortcut_name is None
         assert hints == {}
+
+    def test_oauth_codex_provider_does_not_require_static_api_key(self, tmp_path):
+        cfg = load_config(
+            _write_config(
+                tmp_path,
+                """
+server:
+  host: "127.0.0.1"
+  port: 8090
+providers:
+  openai-codex-5.4-medium:
+    backend: oauth
+    base_url: "https://chatgpt.com/backend-api/codex/responses"
+    model: "openai-codex/gpt-5.4"
+    underlying_backend: openai-compat
+    oauth:
+      helper: "faigate-auth openai-codex"
+fallback_chain: []
+metrics:
+  enabled: false
+""",
+            )
+        )
+
+        assert (
+            _provider_requires_static_api_key(
+                "openai-codex-5.4-medium",
+                cfg.providers["openai-codex-5.4-medium"],
+            )
+            is False
+        )
+
+    def test_standard_openai_provider_still_requires_static_api_key(self, tmp_path):
+        cfg = load_config(
+            _write_config(
+                tmp_path,
+                """
+server:
+  host: "127.0.0.1"
+  port: 8090
+providers:
+  openai-gpt4o:
+    backend: openai-compat
+    base_url: "https://api.openai.com/v1"
+    model: "gpt-4o"
+fallback_chain: []
+metrics:
+  enabled: false
+""",
+            )
+        )
+
+        assert (
+            _provider_requires_static_api_key(
+                "openai-gpt4o",
+                cfg.providers["openai-gpt4o"],
+            )
+            is True
+        )
 
     def test_resolve_n8n_profile_from_headers(self, tmp_path):
         cfg = load_config(

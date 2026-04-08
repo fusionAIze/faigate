@@ -1,5 +1,14 @@
 # fusionAIze Gate Changelog
 
+## v2.1.4 - 2026-04-08
+
+### Fixed
+
+- **Codex OAuth provider startup gating**: OAuth-backed Codex providers no longer get skipped during startup just because they do not use a static `api_key`
+- **Codex helper resolution in Brew/libexec installs**: `faigate-auth` is now resolved robustly from the packaged runtime so Codex OAuth refresh works in Homebrew-managed installs
+- **Codex responses endpoint handling**: explicit empty `chat_path` values are preserved, so Codex requests stay on `chatgpt.com/backend-api/codex/responses` instead of drifting back to `/chat/completions`
+- **Codex streaming compatibility**: `stream=true` now uses the same responses adapter as non-stream requests and returns OpenAI-compatible SSE chunks without falling back to another provider
+
 ## v2.1.3 - 2026-04-08
 
 ### Added

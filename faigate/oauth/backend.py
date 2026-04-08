@@ -8,7 +8,12 @@ refresh and interactive login delegation.
 import asyncio
 import json
 import logging
+import os
+import shlex
+import shutil
+import sys
 import time
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -77,6 +82,43 @@ class OAuthBackend(ProviderBackend):
         wrapped_cfg["auth_optional"] = True
         return ProviderBackend(self.name, wrapped_cfg)
 
+    def _resolve_helper_argv(self) -> list[str] | None:
+        """Return an executable argv for helper commands when possible.
+
+        Brew installs the real helper in ``libexec/bin``. Service and temporary
+        runtime PATHs do not always include that directory, so a bare
+        ``faigate-auth ...`` command can fail even when the helper is installed.
+        """
+
+        try:
+            argv = shlex.split(self.helper_cmd)
+        except ValueError:
+            return None
+        if not argv:
+            return None
+
+        helper = argv[0]
+        if os.path.isabs(helper) or "/" in helper:
+            return argv
+
+        resolved = shutil.which(helper)
+        if not resolved:
+            python_bin = Path(sys.executable).parent
+            prefix_bin = Path(sys.prefix) / "bin"
+            candidates = (
+                python_bin / helper,
+                prefix_bin / helper,
+                python_bin.parent / "bin" / helper,
+            )
+            for candidate in candidates:
+                if candidate.exists() and os.access(candidate, os.X_OK):
+                    resolved = str(candidate)
+                    break
+        if not resolved:
+            return None
+        argv[0] = resolved
+        return argv
+
     async def _ensure_token(self) -> str:
         """Ensure a valid access token exists, refreshing or logging in if needed.
 
@@ -128,12 +170,20 @@ class OAuthBackend(ProviderBackend):
 
         logger.info("Running OAuth helper: %s", self.helper_cmd)
         try:
-            # Run helper command
-            proc = await asyncio.create_subprocess_shell(
-                self.helper_cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
+            argv = self._resolve_helper_argv()
+            if argv is not None:
+                proc = await asyncio.create_subprocess_exec(
+                    *argv,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+            else:
+                # Fall back to shell execution for intentionally shell-based helpers.
+                proc = await asyncio.create_subprocess_shell(
+                    self.helper_cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
             stdout, stderr = await proc.communicate()
             if proc.returncode != 0:
                 stderr_text = stderr.decode("utf-8", errors="replace").strip()
