@@ -59,8 +59,8 @@ class OAuthBackend(ProviderBackend):
         self.oauth_cfg = cfg.get("oauth", {})
         self.helper_cmd = self.oauth_cfg.get("helper", "")
         # underlying_backend may be at top-level cfg or nested in the oauth sub-dict
-        self.underlying_backend_type = (
-            cfg.get("underlying_backend") or self.oauth_cfg.get("underlying_backend", "openai-compat")
+        self.underlying_backend_type = cfg.get("underlying_backend") or self.oauth_cfg.get(
+            "underlying_backend", "openai-compat"
         )
         # Optional: inject a system message if none is present in the request
         self.require_system_message: str | None = cfg.get("require_system_message")
