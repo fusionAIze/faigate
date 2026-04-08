@@ -45,6 +45,14 @@ _ANTIGRAVITY_CALLBACK_PORT = 8080
 _ANTIGRAVITY_BASE_URL_DEFAULT = "https://generativelanguage.googleapis.com/v1beta/openai"
 _ANTIGRAVITY_BASE_URL_ENV = "ANTIGRAVITY_BASE_URL"
 
+# ── Claude Code constants (reverse-engineered from claude-code binary) ────────
+_CLAUDE_CODE_CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
+_CLAUDE_CODE_TOKEN_ENDPOINT = "https://platform.claude.com/v1/oauth/token"
+_CLAUDE_CODE_KEYCHAIN_SERVICE = "Claude Code-credentials"
+_CLAUDE_CODE_SETTINGS_PATH = "~/.config/claude/settings.json"
+# Required beta header for OAuth Bearer auth on api.anthropic.com/v1/messages
+_CLAUDE_CODE_OAUTH_BETA = "oauth-2025-04-20"
+
 # ── OpenAI Codex constants (from Codex CLI source / community research) ──────
 _CODEX_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
 _CODEX_AUTH_ENDPOINT = "https://auth.openai.com/oauth/authorize"
@@ -68,14 +76,15 @@ def _qwen_base_url_from_resource(resource_url: str | None) -> str:
     """Build the inference base URL from the resource_url field in Qwen credentials.
 
     resource_url is a hostname (e.g. 'portal.qwen.ai'). The full API path
-    follows DashScope's compatible-mode convention.
+    matches qwen-code's getCurrentEndpoint() which appends '/v1' directly
+    (not '/compatible-mode/v1').
     """
     if not resource_url:
         return _QWEN_FALLBACK_BASE_URL
     host = resource_url.rstrip("/")
     if not host.startswith("http"):
         host = f"https://{host}"
-    return f"{host}/compatible-mode/v1"
+    return f"{host}/v1"
 
 
 def qwen_oauth() -> dict[str, Any]:
@@ -119,10 +128,7 @@ def qwen_oauth() -> dict[str, Any]:
     # Check expiry (expiry_date is in milliseconds)
     expiry_ms = creds.get("expiry_date")
     if expiry_ms and expiry_ms < time.time() * 1000:
-        logger.warning(
-            "Qwen token appears expired (expiry: %s). Consider refreshing: qwen auth login",
-            expiry_ms,
-        )
+        raise RuntimeError(f"Qwen token expired (expiry: {expiry_ms}). Run: faigate-auth qwen-portal")
 
     resource_url = creds.get("resource_url")
     base_url = _qwen_base_url_from_resource(resource_url)
@@ -188,13 +194,30 @@ def qwen_device_code_flow() -> dict[str, Any]:
     if requests is None:
         raise RuntimeError("requests package required. Install with: pip install faigate[oauth]")
 
+    import base64
+    import hashlib
+    import secrets
+
+    # Generate PKCE pair (required by qwen-code OAuth server)
+    code_verifier = secrets.token_urlsafe(64)
+    code_challenge = base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode()).digest()).rstrip(b"=").decode()
+
+    _QWEN_HEADERS = {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Accept": "application/json",
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+    }
+
     # Step 1: Request device code
     resp = requests.post(
         _QWEN_DEVICE_ENDPOINT,
-        json={
+        data={
             "client_id": _QWEN_CLIENT_ID,
             "scope": _QWEN_SCOPE,
+            "code_challenge": code_challenge,
+            "code_challenge_method": "S256",
         },
+        headers=_QWEN_HEADERS,
         timeout=30,
     )
     resp.raise_for_status()
@@ -202,12 +225,14 @@ def qwen_device_code_flow() -> dict[str, Any]:
 
     device_code = device["device_code"]
     user_code = device["user_code"]
-    verification_uri = device.get("verification_uri", "https://chat.qwen.ai/activate")
+    verification_uri = device.get("verification_uri_complete") or device.get(
+        "verification_uri", "https://chat.qwen.ai/authorize"
+    )
     interval = device.get("interval", 5)
-    expires_in = device.get("expires_in", 300)
+    expires_in = device.get("expires_in", 900)
 
-    print(f"\nPlease visit: {verification_uri}")
-    print(f"Enter code:   {user_code}\n")
+    print(f"\nPlease visit: {verification_uri}", file=sys.stderr)
+    print(f"User code:    {user_code}  (pre-filled in URL above)\n", file=sys.stderr)
     if webbrowser:
         webbrowser.open(verification_uri)
 
@@ -218,11 +243,13 @@ def qwen_device_code_flow() -> dict[str, Any]:
         try:
             resp = requests.post(
                 _QWEN_TOKEN_ENDPOINT,
-                json={
+                data={
                     "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
                     "device_code": device_code,
                     "client_id": _QWEN_CLIENT_ID,
+                    "code_verifier": code_verifier,
                 },
+                headers=_QWEN_HEADERS,
                 timeout=30,
             )
             if resp.status_code == 200:
@@ -307,14 +334,13 @@ def antigravity_oauth() -> dict[str, Any]:
 
     expiry_ms = creds.get("expiry_date")
     if expiry_ms and expiry_ms < time.time() * 1000:
-        logger.warning(
-            "Antigravity token appears expired. "
-            "Run: faigate-auth google-antigravity --refresh  or sign in to Antigravity."
+        raise RuntimeError(
+            "Antigravity token is expired. Run: faigate-auth google-antigravity  to re-authenticate via browser."
         )
 
     base_url = os.environ.get(_ANTIGRAVITY_BASE_URL_ENV, _ANTIGRAVITY_BASE_URL_DEFAULT)
 
-    return {
+    result: dict[str, Any] = {
         "access_token": access_token,
         "refresh_token": creds.get("refresh_token"),
         "token_type": creds.get("token_type", "Bearer"),
@@ -324,6 +350,10 @@ def antigravity_oauth() -> dict[str, Any]:
         "base_url": base_url,
         "base_url_discovered": True,
     }
+    # token_store.is_expired() uses expires_at (seconds); convert from expiry_date (ms)
+    if expiry_ms:
+        result["expires_at"] = expiry_ms / 1000.0
+    return result
 
 
 def antigravity_refresh(refresh_token: str) -> dict[str, Any]:
@@ -375,10 +405,14 @@ def antigravity_refresh(refresh_token: str) -> dict[str, Any]:
     os.chmod(creds_path, 0o600)
     logger.info("Antigravity token refreshed and written to %s", creds_path)
 
-    return {
+    expiry_ms_new = new_creds.get("expiry_date")
+    result_refresh: dict[str, Any] = {
         **new_creds,
         "base_url": os.environ.get(_ANTIGRAVITY_BASE_URL_ENV, _ANTIGRAVITY_BASE_URL_DEFAULT),
     }
+    if expiry_ms_new:
+        result_refresh["expires_at"] = expiry_ms_new / 1000.0
+    return result_refresh
 
 
 def antigravity_login() -> dict[str, Any]:
@@ -495,13 +529,134 @@ def antigravity_login() -> dict[str, Any]:
     }
 
 
-def claude_code_oauth() -> dict[str, Any]:
-    """Read Claude Code OAuth token from the local claude CLI config.
+def _claude_code_read_keychain() -> dict[str, Any] | None:
+    """Read Claude Code OAuth credentials from macOS Keychain.
 
-    Requires: npm install -g @anthropic-ai/claude-code && claude login
-    Token stored at: ~/.config/claude/settings.json
+    Claude Code stores tokens in the macOS Keychain under the service
+    'Claude Code-credentials' as a JSON blob with shape:
+      { "claudeAiOauth": { "accessToken": "sk-ant-oat01-...",
+                           "refreshToken": "sk-ant-ort01-...",
+                           "expiresAt": <ms-epoch>,
+                           "scopes": [...], ... } }
     """
-    settings_path = os.path.expanduser("~/.config/claude/settings.json")
+    import subprocess
+
+    try:
+        raw = subprocess.check_output(
+            ["security", "find-generic-password", "-s", _CLAUDE_CODE_KEYCHAIN_SERVICE, "-w"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+        data = json.loads(raw)
+        return data.get("claudeAiOauth") or {}
+    except (subprocess.CalledProcessError, json.JSONDecodeError, FileNotFoundError):
+        return None
+
+
+def _claude_code_write_keychain(creds: dict[str, Any]) -> None:
+    """Write refreshed Claude Code OAuth credentials back to macOS Keychain."""
+    import getpass
+    import subprocess
+
+    payload = json.dumps({"claudeAiOauth": creds})
+    subprocess.run(
+        [
+            "security",
+            "add-generic-password",
+            "-U",
+            "-s",
+            _CLAUDE_CODE_KEYCHAIN_SERVICE,
+            "-a",
+            getpass.getuser(),
+            "-w",
+            payload,
+        ],
+        check=True,
+        stderr=subprocess.DEVNULL,
+    )
+
+
+def claude_code_refresh(refresh_token: str) -> dict[str, Any]:
+    """Refresh a Claude Code OAuth token via platform.claude.com.
+
+    Single-use refresh tokens: the response includes a new refresh_token
+    which must replace the old one in the keychain.
+    """
+    if requests is None:
+        raise RuntimeError("requests package required: pip install faigate[oauth]")
+
+    resp = requests.post(
+        _CLAUDE_CODE_TOKEN_ENDPOINT,
+        data={
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token,
+            "client_id": _CLAUDE_CODE_CLIENT_ID,
+        },
+        headers={
+            "Content-Type": "application/x-www-form-urlencoded",
+            "User-Agent": "claude-cli/2.1 faigate-auth",
+        },
+        timeout=30,
+    )
+    if not resp.ok:
+        raise RuntimeError(f"Claude Code token refresh failed ({resp.status_code}): {resp.text[:300]}")
+    data = resp.json()
+    return {
+        "access_token": data["access_token"],
+        "refresh_token": data.get("refresh_token", refresh_token),
+        "expires_in": data.get("expires_in", 28800),
+        "token_type": "Bearer",
+        "scope": data.get("scope", "user:inference"),
+    }
+
+
+def claude_code_oauth() -> dict[str, Any]:
+    """Read Claude Code OAuth token from macOS Keychain (or settings.json fallback).
+
+    Prerequisites: claude login  (from @anthropic-ai/claude-code or Claude desktop app)
+
+    The Claude Code desktop app and CLI store OAuth credentials in the macOS Keychain
+    under 'Claude Code-credentials'. If the access token is expired, the refresh token
+    is used automatically and the new credentials are written back.
+
+    On non-macOS systems, falls back to ~/.config/claude/settings.json.
+    """
+    # 1. Try macOS Keychain
+    kc = _claude_code_read_keychain()
+    if kc and kc.get("accessToken"):
+        at = kc["accessToken"]
+        rt = kc.get("refreshToken")
+        expires_at_ms = kc.get("expiresAt", 0)
+        now_ms = time.time() * 1000
+        # Refresh if expired or expiring within 5 minutes
+        if expires_at_ms and now_ms >= expires_at_ms - 300_000 and rt:
+            print("Claude Code token expired, refreshing...", file=sys.stderr)
+            try:
+                refreshed = claude_code_refresh(rt)
+                new_creds = {
+                    **kc,
+                    "accessToken": refreshed["access_token"],
+                    "refreshToken": refreshed.get("refresh_token", rt),
+                    "expiresAt": int((time.time() + refreshed.get("expires_in", 28800)) * 1000),
+                }
+                _claude_code_write_keychain(new_creds)
+                print("Token refreshed and stored in keychain.", file=sys.stderr)
+                at = refreshed["access_token"]
+                expires_at_ms = new_creds["expiresAt"]
+            except Exception as e:
+                logger.warning("Token refresh failed, using potentially expired token: %s", e)
+
+        expires_in = max(0, int((expires_at_ms / 1000) - time.time())) if expires_at_ms else 28800
+        return {
+            "access_token": at,
+            "refresh_token": rt,
+            "token_type": "Bearer",
+            "expires_in": expires_in,
+            "scope": " ".join(kc.get("scopes", ["user:inference"])),
+        }
+
+    # 2. Fall back to ~/.config/claude/settings.json (Linux / older installs)
+    settings_path = os.path.expanduser(_CLAUDE_CODE_SETTINGS_PATH)
     if os.path.exists(settings_path):
         try:
             with open(settings_path) as f:
@@ -512,13 +667,13 @@ def claude_code_oauth() -> dict[str, Any]:
                     "access_token": token,
                     "token_type": "Bearer",
                     "expires_in": 3600 * 24 * 365,
-                    "scope": "claude-code",
+                    "scope": "user:inference",
                 }
         except (OSError, json.JSONDecodeError) as e:
             logger.warning("Failed to read claude settings: %s", e)
 
-    print("Claude Code token not found.")
-    print("Please install and login:\n  npm install -g @anthropic-ai/claude-code\n  claude login")
+    print("Claude Code token not found.", file=sys.stderr)
+    print("Please log in with: claude login", file=sys.stderr)
     raise RuntimeError("Claude Code token not found.")
 
 
@@ -890,7 +1045,25 @@ def main() -> None:
                     token_data = qwen_device_code_flow()
 
         elif args.provider == "claude-code":
-            token_data = claude_code_oauth()
+            if args.refresh:
+                kc = _claude_code_read_keychain()
+                if not kc or not kc.get("refreshToken"):
+                    raise RuntimeError("No refresh_token in Claude Code keychain credentials.")
+                token_data = claude_code_refresh(kc["refreshToken"])
+                new_creds = {
+                    **(kc or {}),
+                    "accessToken": token_data["access_token"],
+                    "refreshToken": token_data.get("refresh_token", kc.get("refreshToken", "")),
+                    "expiresAt": int((time.time() + token_data.get("expires_in", 28800)) * 1000),
+                }
+                _claude_code_write_keychain(new_creds)
+                print("Token refreshed and stored in keychain.", file=sys.stderr)
+            else:
+                try:
+                    token_data = claude_code_oauth()
+                    print("Using existing Claude Code credentials.", file=sys.stderr)
+                except RuntimeError:
+                    raise RuntimeError("No Claude Code credentials found. Please run: claude login")
 
         elif args.provider == "openai-codex":
             if args.refresh:
@@ -917,18 +1090,22 @@ def main() -> None:
         elif args.provider == "google-antigravity":
             if args.refresh:
                 creds_path = os.path.expanduser(_ANTIGRAVITY_CREDS_PATH)
-                with open(creds_path) as f:
-                    creds = json.load(f)
-                rt = creds.get("refresh_token")
-                if not rt:
-                    raise RuntimeError("No refresh_token in existing Antigravity credentials.")
-                token_data = antigravity_refresh(rt)
+                try:
+                    with open(creds_path) as f:
+                        creds = json.load(f)
+                    rt = creds.get("refresh_token")
+                    if not rt:
+                        raise RuntimeError("No refresh_token in existing Antigravity credentials.")
+                    token_data = antigravity_refresh(rt)
+                except RuntimeError as e:
+                    print(f"Token refresh failed ({e}), falling back to browser login...", file=sys.stderr)
+                    token_data = antigravity_login()
             else:
                 try:
                     token_data = antigravity_oauth()
                     print("Using existing Antigravity credentials.", file=sys.stderr)
                 except RuntimeError:
-                    print("No existing credentials, starting browser login...", file=sys.stderr)
+                    print("Token expired or missing, starting browser login...", file=sys.stderr)
                     token_data = antigravity_login()
 
         else:

@@ -10,8 +10,10 @@ This repo does not require a heavy release process. Use lightweight tags plus Gi
    - Keep the notes focused on user-visible changes.
 3. Create an annotated tag from `main`.
 4. Push the tag to GitHub.
+   - This is the trigger for the release pipeline: `.github/workflows/release-artifacts.yml` runs on `push` for tags matching `v*`.
 5. Let the release-artifacts workflow build Python distributions and the GHCR image.
 6. Create a GitHub Release from that tag.
+   - Publishing the GitHub Release is the separate trigger for `.github/workflows/notify-tap.yml`.
 7. Use the changelog entry as the release notes, then add any short upgrade notes if needed.
 8. Confirm that README plus the relevant docs pages still match the shipped runtime behavior.
 9. If packaging or Docker changed shortly before the release, run the publish dry run first.
@@ -31,7 +33,7 @@ git push origin v1.8.0
 
 Then open GitHub Releases and publish a release for `v1.8.0`.
 
-Publishing the GitHub Release should trigger the tap notification automatically. If the tap still needs a manual follow-up, use [`fusionAIze/homebrew-tap`](https://github.com/fusionAIze/homebrew-tap):
+The tag push should trigger the release-artifacts bot automatically. Publishing the GitHub Release should then trigger the tap notification automatically. If the tap still needs a manual follow-up, use [`fusionAIze/homebrew-tap`](https://github.com/fusionAIze/homebrew-tap):
 
 ```bash
 git clone https://github.com/fusionAIze/homebrew-tap.git

@@ -41,3 +41,5 @@ venv/
 .claude/
 .codex/
 .understand-anything/
+.codenomad/
+catalog_output.json
