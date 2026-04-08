@@ -481,6 +481,96 @@ async def test_codex_responses_normalizes_tool_messages():
 
 
 @pytest.mark.asyncio
+async def test_codex_responses_forward_tools_and_return_tool_calls():
+    backend = ProviderBackend(
+        "openai-codex-5.4-medium",
+        {
+            "backend": "openai-compat",
+            "base_url": "https://chatgpt.com/backend-api/codex/responses",
+            "api_key": "secret",
+            "model": "gpt-5.4",
+            "transport": {"profile": "oauth-codex", "chat_path": ""},
+            "extra_body": {"reasoning_effort": "medium"},
+        },
+    )
+    captured: dict = {}
+
+    class _FakeResp:
+        status_code = 200
+        text = (
+            "event: response.output_item.added\n"
+            'data: {"type":"response.output_item.added","item":{"id":"fc_1",'
+            '"type":"function_call","status":"in_progress","arguments":"","call_id":"call_1",'
+            '"name":"respira_get_site_context"},"output_index":1,"sequence_number":4}\n\n'
+            "event: response.function_call_arguments.delta\n"
+            'data: {"type":"response.function_call_arguments.delta","delta":"{}",'
+            '"item_id":"fc_1","output_index":1,"sequence_number":5}\n\n'
+            "event: response.function_call_arguments.done\n"
+            'data: {"type":"response.function_call_arguments.done","arguments":"{}",'
+            '"item_id":"fc_1","output_index":1,"sequence_number":6}\n\n'
+            "event: response.output_item.done\n"
+            'data: {"type":"response.output_item.done","item":{"id":"fc_1",'
+            '"type":"function_call","status":"completed","arguments":"{}","call_id":"call_1",'
+            '"name":"respira_get_site_context"},"output_index":1,"sequence_number":7}\n\n'
+            "event: response.completed\n"
+            'data: {"type":"response.completed","response":{"id":"resp_test",'
+            '"created_at":1775616020,"model":"gpt-5-codex","usage":{"input_tokens":19,'
+            '"output_tokens":5,"total_tokens":24}}}\n\n'
+        )
+
+    async def _fake_post(url, json=None, headers=None, **_kw):
+        captured["url"] = url
+        captured["json"] = json or {}
+        return _FakeResp()
+
+    backend._client.post = _fake_post  # type: ignore[attr-defined]
+
+    result = await backend.complete(
+        [{"role": "user", "content": "Use the site context tool."}],
+        tools=[
+            {
+                "type": "function",
+                "function": {
+                    "name": "respira_get_site_context",
+                    "description": "Get the current site context.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {},
+                        "additionalProperties": False,
+                    },
+                },
+            }
+        ],
+        extra_body={"tool_choice": "auto"},
+    )
+
+    assert captured["json"]["tools"] == [
+        {
+            "type": "function",
+            "name": "respira_get_site_context",
+            "description": "Get the current site context.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": False,
+            },
+        }
+    ]
+    assert captured["json"]["tool_choice"] == "auto"
+    assert result["choices"][0]["finish_reason"] == "tool_calls"
+    assert result["choices"][0]["message"]["tool_calls"] == [
+        {
+            "id": "call_1",
+            "type": "function",
+            "function": {
+                "name": "respira_get_site_context",
+                "arguments": "{}",
+            },
+        }
+    ]
+
+
+@pytest.mark.asyncio
 async def test_codex_responses_stream_maps_to_openai_chunks():
     backend = ProviderBackend(
         "openai-codex-5.4-medium",
@@ -545,6 +635,82 @@ async def test_codex_responses_stream_maps_to_openai_chunks():
     assert 'data: {"id":"resp_stream","object":"chat.completion.chunk"' in payload
     assert '"role":"assistant"' in payload
     assert '"content":"ok"' in payload
+    assert "data: [DONE]" in payload
+
+
+@pytest.mark.asyncio
+async def test_codex_responses_stream_maps_tool_calls_to_openai_chunks():
+    backend = ProviderBackend(
+        "openai-codex-5.4-medium",
+        {
+            "backend": "openai-compat",
+            "base_url": "https://chatgpt.com/backend-api/codex/responses",
+            "api_key": "secret",
+            "model": "gpt-5.4",
+            "transport": {"profile": "oauth-codex", "chat_path": ""},
+        },
+    )
+
+    class _FakeStreamResp:
+        status_code = 200
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def aiter_lines(self):
+            for line in [
+                (
+                    'data: {"type":"response.created","response":{"id":"resp_stream",'
+                    '"created_at":1775616020,"model":"gpt-5-codex"}}'
+                ),
+                "",
+                (
+                    'data: {"type":"response.output_item.done","item":{"id":"fc_1",'
+                    '"type":"function_call",'
+                    '"status":"completed","arguments":"{}","call_id":"call_1",'
+                    '"name":"respira_get_site_context"}}'
+                ),
+                "",
+                (
+                    'data: {"type":"response.completed","response":{"id":"resp_stream",'
+                    '"created_at":1775616020,"model":"gpt-5-codex","usage":{"input_tokens":19,'
+                    '"output_tokens":5,"total_tokens":24}}}'
+                ),
+                "",
+            ]:
+                yield line
+
+    def _fake_stream(method, url, json=None, headers=None, **_kw):
+        return _FakeStreamResp()
+
+    backend._client.stream = _fake_stream  # type: ignore[attr-defined]
+
+    stream_iter = await backend.complete(
+        [{"role": "user", "content": "Use the site context tool."}],
+        tools=[
+            {
+                "type": "function",
+                "function": {
+                    "name": "respira_get_site_context",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {},
+                        "additionalProperties": False,
+                    },
+                },
+            }
+        ],
+        stream=True,
+    )
+    payload = b"".join([chunk async for chunk in stream_iter]).decode("utf-8")
+
+    assert '"tool_calls":[{"index":0,"id":"call_1","type":"function"' in payload
+    assert '"name":"respira_get_site_context"' in payload
+    assert '"arguments":"{}"' in payload
+    assert '"finish_reason":"tool_calls"' in payload
     assert "data: [DONE]" in payload
 
 

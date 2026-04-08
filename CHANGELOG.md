@@ -1,5 +1,11 @@
 # fusionAIze Gate Changelog
 
+## v2.1.6 - 2026-04-08
+
+### Fixed
+
+- **Codex function tool calling**: Codex-backed requests now forward OpenAI-style `tools` and `tool_choice` to the ChatGPT Codex responses endpoint and translate returned function-call events back into OpenAI-compatible `tool_calls`, so tool-using clients like Codenomad can execute MCP-style tool flows instead of only seeing text or pseudo-JSON
+
 ## v2.1.5 - 2026-04-08
 
 ### Fixed

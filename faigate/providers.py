@@ -239,6 +239,7 @@ class ProviderBackend:
         *,
         model: str,
         stream: bool,
+        tools: list[dict[str, Any]] | None = None,
         extra_body: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Build a ChatGPT Codex responses payload from OpenAI-style messages."""
@@ -282,10 +283,55 @@ class ProviderBackend:
             "store": False,
             "stream": True,
         }
+        codex_tools = self._codex_tools(tools)
+        if codex_tools:
+            body["tools"] = codex_tools
+        codex_tool_choice = self._codex_tool_choice(extra_body=extra_body)
+        if codex_tool_choice not in (None, "", [], {}):
+            body["tool_choice"] = codex_tool_choice
         reasoning = self._codex_reasoning_config(extra_body=extra_body)
         if reasoning:
             body["reasoning"] = reasoning
         return body
+
+    def _codex_tools(self, tools: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+        """Translate OpenAI chat tools into Codex responses tools."""
+        if not tools:
+            return []
+        translated: list[dict[str, Any]] = []
+        for tool in tools:
+            if str(tool.get("type") or "") != "function":
+                continue
+            fn = dict(tool.get("function") or {})
+            name = str(fn.get("name") or "").strip()
+            if not name:
+                continue
+            entry: dict[str, Any] = {"type": "function", "name": name}
+            description = str(fn.get("description") or "").strip()
+            if description:
+                entry["description"] = description
+            parameters = fn.get("parameters")
+            if isinstance(parameters, dict):
+                entry["parameters"] = parameters
+            translated.append(entry)
+        return translated
+
+    def _codex_tool_choice(self, *, extra_body: dict[str, Any] | None = None) -> Any:
+        """Translate OpenAI chat tool_choice into Codex responses shape."""
+        if not extra_body:
+            return None
+        choice = extra_body.get("tool_choice")
+        if isinstance(choice, str):
+            return choice
+        if not isinstance(choice, dict):
+            return None
+        if str(choice.get("type") or "") != "function":
+            return choice
+        fn = dict(choice.get("function") or {})
+        name = str(fn.get("name") or "").strip()
+        if not name:
+            return "auto"
+        return {"type": "function", "name": name}
 
     def _iter_sse_events(self, payload: str) -> list[dict[str, Any]]:
         """Parse one completed SSE payload into JSON event objects."""
@@ -328,12 +374,26 @@ class ProviderBackend:
         events = self._iter_sse_events(payload)
         response_meta: dict[str, Any] = {}
         text_parts: list[str] = []
+        tool_calls: list[dict[str, Any]] = []
         for event in events:
             event_type = str(event.get("type", "") or "")
             if event_type == "response.output_text.delta":
                 text_parts.append(str(event.get("delta") or ""))
             elif event_type == "response.output_text.done" and not text_parts:
                 text_parts.append(str(event.get("text") or ""))
+            elif event_type == "response.output_item.done":
+                item = dict(event.get("item") or {})
+                if str(item.get("type") or "") == "function_call":
+                    tool_calls.append(
+                        {
+                            "id": str(item.get("call_id") or item.get("id") or ""),
+                            "type": "function",
+                            "function": {
+                                "name": str(item.get("name") or ""),
+                                "arguments": str(item.get("arguments") or "{}"),
+                            },
+                        }
+                    )
             elif event_type == "response.completed":
                 response_meta = dict(event.get("response") or {})
 
@@ -343,6 +403,7 @@ class ProviderBackend:
         total_tokens = int(usage.get("total_tokens") or (prompt_tokens + completion_tokens))
         content = "".join(text_parts).strip()
 
+        finish_reason = "tool_calls" if tool_calls else "stop"
         return {
             "id": response_meta.get("id") or f"chatcmpl-{int(time.time() * 1000)}",
             "object": "chat.completion",
@@ -351,8 +412,12 @@ class ProviderBackend:
             "choices": [
                 {
                     "index": 0,
-                    "message": {"role": "assistant", "content": content},
-                    "finish_reason": "stop",
+                    "message": {
+                        "role": "assistant",
+                        "content": content,
+                        **({"tool_calls": tool_calls} if tool_calls else {}),
+                    },
+                    "finish_reason": finish_reason,
                 }
             ],
             "usage": {
@@ -395,6 +460,7 @@ class ProviderBackend:
             emitted_role = False
             data_lines: list[str] = []
             saw_content = False
+            saw_tool_calls = False
 
             async for raw_line in resp.aiter_lines():
                 line = raw_line.strip()
@@ -448,10 +514,60 @@ class ProviderBackend:
                     )
                     continue
 
+                if event_type == "response.output_item.done":
+                    item = dict(event.get("item") or {})
+                    if str(item.get("type") or "") != "function_call":
+                        continue
+                    saw_tool_calls = True
+                    if not emitted_role:
+                        yield self._openai_sse_chunk(
+                            {
+                                "id": completion_id,
+                                "object": "chat.completion.chunk",
+                                "created": created,
+                                "model": model_name,
+                                "choices": [{"index": 0, "delta": {"role": "assistant"}, "finish_reason": None}],
+                            }
+                        )
+                        emitted_role = True
+                    yield self._openai_sse_chunk(
+                        {
+                            "id": completion_id,
+                            "object": "chat.completion.chunk",
+                            "created": created,
+                            "model": model_name,
+                            "choices": [
+                                {
+                                    "index": 0,
+                                    "delta": {
+                                        "tool_calls": [
+                                            {
+                                                "index": 0,
+                                                "id": str(item.get("call_id") or item.get("id") or ""),
+                                                "type": "function",
+                                                "function": {
+                                                    "name": str(item.get("name") or ""),
+                                                    "arguments": str(item.get("arguments") or "{}"),
+                                                },
+                                            }
+                                        ]
+                                    },
+                                    "finish_reason": None,
+                                }
+                            ],
+                        }
+                    )
+                    continue
+
                 if event_type == "response.completed":
                     response = dict(event.get("response") or {})
                     completion_id = str(response.get("id") or completion_id)
                     model_name = str(response.get("model") or model_name)
+                    finish_reason = "tool_calls" if saw_tool_calls else "stop"
+                    for output_item in list(response.get("output") or []):
+                        if str(dict(output_item).get("type") or "") == "function_call":
+                            finish_reason = "tool_calls"
+                            break
                     if not saw_content:
                         self.health.record_success((time.time() - t0) * 1000)
                     yield self._openai_sse_chunk(
@@ -460,7 +576,7 @@ class ProviderBackend:
                             "object": "chat.completion.chunk",
                             "created": int(response.get("created_at") or created),
                             "model": model_name,
-                            "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+                            "choices": [{"index": 0, "delta": {}, "finish_reason": finish_reason}],
                         }
                     )
                     yield b"data: [DONE]\n\n"
@@ -953,6 +1069,7 @@ class ProviderBackend:
                 messages,
                 model=model,
                 stream=stream,
+                tools=tools,
                 extra_body=extra_body,
             )
             headers = self._authorization_headers(content_type="application/json")
