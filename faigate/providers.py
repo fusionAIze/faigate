@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 import time
@@ -156,8 +157,9 @@ class ProviderBackend:
         await self._client.aclose()
 
     def _transport_path(self, key: str, default: str = "") -> str:
-        value = str(self.transport.get(key, default) or default).strip()
-        return value
+        if key in self.transport:
+            return str(self.transport.get(key, "") or "").strip()
+        return str(default).strip()
 
     def _transport_url(self, path: str) -> str:
         cleaned = str(path or "").strip()
@@ -178,6 +180,283 @@ class ProviderBackend:
         if self.default_extra_headers:
             headers.update(self.default_extra_headers)
         return headers
+
+    def _uses_codex_responses_api(self) -> bool:
+        """Return whether this provider targets the ChatGPT Codex responses API."""
+        return str(self.transport.get("profile", "") or "").strip().lower() == "oauth-codex"
+
+    def _flatten_text_content(self, content: Any) -> str:
+        """Collapse OpenAI-style message content into plain text for upstreams."""
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts: list[str] = []
+            for item in content:
+                if isinstance(item, dict):
+                    if item.get("type") == "text":
+                        parts.append(str(item.get("text") or ""))
+                    elif item.get("type") == "input_text":
+                        parts.append(str(item.get("text") or ""))
+            return " ".join(part for part in parts if part).strip()
+        return str(content or "")
+
+    def _codex_effective_model(self, model: str) -> str:
+        """Map Gate-facing Codex aliases onto currently accepted upstream models."""
+        normalized = str(model or "").strip()
+        if normalized == "gpt-5.4":
+            return "gpt-5-codex"
+        if normalized in {"gpt-5.3-codex-high", "gpt-5.3-codex-xhigh", "gpt-5.3-codex-low"}:
+            return "gpt-5.3-codex"
+        return normalized
+
+    def _codex_reasoning_config(
+        self,
+        *,
+        extra_body: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
+        """Translate Gate reasoning hints into the Codex responses schema."""
+        source = {**self.default_extra_body, **dict(extra_body or {})}
+        effort = str(source.get("reasoning_effort", "") or "").strip().lower()
+        if not effort:
+            return None
+        effort_map = {
+            "extra_high": "high",
+            "xhigh": "high",
+            "high": "high",
+            "medium": "medium",
+            "low": "low",
+            "minimal": "low",
+            "none": "low",
+        }
+        mapped = effort_map.get(effort)
+        if not mapped:
+            return None
+        return {"effort": mapped}
+
+    def _build_codex_request_body(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        model: str,
+        stream: bool,
+        extra_body: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Build a ChatGPT Codex responses payload from OpenAI-style messages."""
+        instructions_parts: list[str] = []
+        input_messages: list[dict[str, Any]] = []
+        for msg in messages:
+            role = str(msg.get("role", "user") or "user")
+            text = self._flatten_text_content(msg.get("content"))
+            if role == "system":
+                if text:
+                    instructions_parts.append(text)
+                continue
+            if not text:
+                continue
+            input_messages.append({"role": role, "content": text})
+
+        body: dict[str, Any] = {
+            "model": self._codex_effective_model(model),
+            "instructions": "\n\n".join(instructions_parts),
+            "input": input_messages,
+            "store": False,
+            "stream": True,
+        }
+        reasoning = self._codex_reasoning_config(extra_body=extra_body)
+        if reasoning:
+            body["reasoning"] = reasoning
+        return body
+
+    def _iter_sse_events(self, payload: str) -> list[dict[str, Any]]:
+        """Parse one completed SSE payload into JSON event objects."""
+        events: list[dict[str, Any]] = []
+        data_lines: list[str] = []
+        for raw_line in payload.splitlines():
+            line = raw_line.strip()
+            if line.startswith("data:"):
+                data_lines.append(line[5:].strip())
+                continue
+            if line:
+                continue
+            if not data_lines:
+                continue
+            data_blob = "\n".join(data_lines)
+            data_lines = []
+            try:
+                event = json.loads(data_blob)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(event, dict):
+                events.append(event)
+        if data_lines:
+            try:
+                event = json.loads("\n".join(data_lines))
+            except json.JSONDecodeError:
+                event = None
+            if isinstance(event, dict):
+                events.append(event)
+        return events
+
+    def _codex_completion_from_sse(
+        self,
+        payload: str,
+        *,
+        requested_model: str,
+        latency_ms: float,
+    ) -> dict[str, Any]:
+        """Translate a completed Codex SSE transcript into one chat completion."""
+        events = self._iter_sse_events(payload)
+        response_meta: dict[str, Any] = {}
+        text_parts: list[str] = []
+        for event in events:
+            event_type = str(event.get("type", "") or "")
+            if event_type == "response.output_text.delta":
+                text_parts.append(str(event.get("delta") or ""))
+            elif event_type == "response.output_text.done" and not text_parts:
+                text_parts.append(str(event.get("text") or ""))
+            elif event_type == "response.completed":
+                response_meta = dict(event.get("response") or {})
+
+        usage = dict(response_meta.get("usage") or {})
+        prompt_tokens = int(usage.get("input_tokens") or 0)
+        completion_tokens = int(usage.get("output_tokens") or 0)
+        total_tokens = int(usage.get("total_tokens") or (prompt_tokens + completion_tokens))
+        content = "".join(text_parts).strip()
+
+        return {
+            "id": response_meta.get("id") or f"chatcmpl-{int(time.time() * 1000)}",
+            "object": "chat.completion",
+            "created": int(response_meta.get("created_at") or time.time()),
+            "model": response_meta.get("model") or requested_model,
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {"role": "assistant", "content": content},
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": total_tokens,
+            },
+            "_faigate": {
+                "provider": self.name,
+                "model": response_meta.get("model") or requested_model,
+                "latency_ms": round(latency_ms, 1),
+                "cache_hit_tokens": 0,
+                "cache_miss_tokens": 0,
+            },
+        }
+
+    def _openai_sse_chunk(self, payload: dict[str, Any]) -> bytes:
+        """Encode one OpenAI-style SSE chunk."""
+        return f"data: {json.dumps(payload, separators=(',', ':'))}\n\n".encode()
+
+    async def _stream_codex_response(
+        self,
+        url: str,
+        headers: dict[str, str],
+        body: dict[str, Any],
+        *,
+        requested_model: str,
+        t0: float,
+    ) -> AsyncIterator[bytes]:
+        """Translate Codex responses SSE into OpenAI-compatible chat chunks."""
+        async with self._client.stream("POST", url, json=body, headers=headers) as resp:
+            if resp.status_code >= 400:
+                error_text = await resp.aread()
+                self.health.record_failure(f"HTTP {resp.status_code}")
+                raise ProviderError(self.name, resp.status_code, error_text.decode()[:500])
+
+            completion_id = f"chatcmpl-{int(time.time() * 1000)}"
+            created = int(time.time())
+            model_name = requested_model
+            emitted_role = False
+            data_lines: list[str] = []
+            saw_content = False
+
+            async for raw_line in resp.aiter_lines():
+                line = raw_line.strip()
+                if line.startswith("data:"):
+                    data_lines.append(line[5:].strip())
+                    continue
+                if line:
+                    continue
+                if not data_lines:
+                    continue
+                payload_blob = "\n".join(data_lines)
+                data_lines = []
+                try:
+                    event = json.loads(payload_blob)
+                except json.JSONDecodeError:
+                    continue
+
+                event_type = str(event.get("type", "") or "")
+                if event_type == "response.created":
+                    response = dict(event.get("response") or {})
+                    completion_id = str(response.get("id") or completion_id)
+                    created = int(response.get("created_at") or created)
+                    model_name = str(response.get("model") or model_name)
+                    continue
+
+                if event_type == "response.output_text.delta":
+                    delta = str(event.get("delta") or "")
+                    if not delta:
+                        continue
+                    if not emitted_role:
+                        yield self._openai_sse_chunk(
+                            {
+                                "id": completion_id,
+                                "object": "chat.completion.chunk",
+                                "created": created,
+                                "model": model_name,
+                                "choices": [{"index": 0, "delta": {"role": "assistant"}, "finish_reason": None}],
+                            }
+                        )
+                        emitted_role = True
+                    saw_content = True
+                    self.health.record_success((time.time() - t0) * 1000)
+                    yield self._openai_sse_chunk(
+                        {
+                            "id": completion_id,
+                            "object": "chat.completion.chunk",
+                            "created": created,
+                            "model": model_name,
+                            "choices": [{"index": 0, "delta": {"content": delta}, "finish_reason": None}],
+                        }
+                    )
+                    continue
+
+                if event_type == "response.completed":
+                    response = dict(event.get("response") or {})
+                    completion_id = str(response.get("id") or completion_id)
+                    model_name = str(response.get("model") or model_name)
+                    if not saw_content:
+                        self.health.record_success((time.time() - t0) * 1000)
+                    yield self._openai_sse_chunk(
+                        {
+                            "id": completion_id,
+                            "object": "chat.completion.chunk",
+                            "created": int(response.get("created_at") or created),
+                            "model": model_name,
+                            "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+                        }
+                    )
+                    yield b"data: [DONE]\n\n"
+                    return
+
+            self.health.record_success((time.time() - t0) * 1000)
+            yield self._openai_sse_chunk(
+                {
+                    "id": completion_id,
+                    "object": "chat.completion.chunk",
+                    "created": created,
+                    "model": model_name,
+                    "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+                }
+            )
+            yield b"data: [DONE]\n\n"
 
     def _classify_request_readiness_issue(self, detail: str) -> tuple[str, str]:
         lowered = str(detail or "").lower()
@@ -648,6 +927,45 @@ class ProviderBackend:
                 temperature=temperature,
                 max_tokens=max_tokens,
             )
+
+        if self._uses_codex_responses_api():
+            body = self._build_codex_request_body(
+                messages,
+                model=model,
+                stream=stream,
+                extra_body=extra_body,
+            )
+            headers = self._authorization_headers(content_type="application/json")
+            url = self._transport_url(self._transport_path("chat_path", "/chat/completions"))
+            try:
+                if stream:
+                    return self._stream_codex_response(
+                        url,
+                        headers,
+                        body,
+                        requested_model=model,
+                        t0=t0,
+                    )
+
+                resp = await self._client.post(url, json=body, headers=headers)
+                latency = (time.time() - t0) * 1000
+                if resp.status_code >= 400:
+                    error_text = resp.text[:500]
+                    self.health.record_failure(f"HTTP {resp.status_code}: {error_text}")
+                    raise ProviderError(self.name, resp.status_code, error_text)
+
+                self.health.record_success(latency)
+                return self._codex_completion_from_sse(
+                    resp.text,
+                    requested_model=model,
+                    latency_ms=latency,
+                )
+            except httpx.TimeoutException as e:
+                self.health.record_failure(f"Timeout: {e}")
+                raise ProviderError(self.name, 0, f"Timeout: {e}") from e
+            except httpx.ConnectError as e:
+                self.health.record_failure(f"Connection error: {e}")
+                raise ProviderError(self.name, 0, f"Connection error: {e}") from e
 
         # OpenAI-compatible path (DeepSeek, OpenRouter, etc.)
         body: dict[str, Any] = {

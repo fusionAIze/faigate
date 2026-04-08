@@ -50,7 +50,11 @@ from .hooks import (
     get_community_hooks_loaded,
     get_virtual_providers,
 )
-from .lane_registry import get_provider_lane_binding, get_route_add_recommendations
+from .lane_registry import (
+    get_provider_lane_binding,
+    get_provider_transport_binding,
+    get_route_add_recommendations,
+)
 from .metrics import MetricsStore, calc_cost
 from .provider_availability import (
     record_availability_from_config,
@@ -95,6 +99,24 @@ _provider_catalog_refresh_task: asyncio.Task[None] | None = None
 
 def _provider_catalog_config_path() -> str:
     return str(os.environ.get("FAIGATE_CONFIG_FILE") or "config.yaml")
+
+
+def _provider_requires_static_api_key(name: str, cfg: dict[str, Any]) -> bool:
+    """Return whether one configured provider needs a static API key at startup.
+
+    OAuth-backed routes inject credentials at request time via helper flows, so
+    they must not be filtered out just because ``api_key`` is empty in
+    ``config.yaml``.
+    """
+
+    transport = cfg.get("transport")
+    if not isinstance(transport, dict) or "requires_api_key" not in transport:
+        transport = get_provider_transport_binding(
+            name,
+            backend=str(cfg.get("backend", "openai-compat") or "openai-compat"),
+            contract=str(cfg.get("contract", "generic") or "generic"),
+        )
+    return bool(transport.get("requires_api_key", True))
 
 
 class PayloadTooLargeError(ValueError):
@@ -2249,7 +2271,7 @@ async def lifespan(app: FastAPI):
 
     # Initialize provider backends
     for name, pcfg in _config.providers.items():
-        if not pcfg.get("api_key"):
+        if _provider_requires_static_api_key(name, pcfg) and not pcfg.get("api_key"):
             logger.warning("Provider %s has no API key, skipping", name)
             continue
         _providers[name] = create_provider_backend(name, pcfg)

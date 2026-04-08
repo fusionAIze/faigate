@@ -9,6 +9,7 @@ invalid payloads to upstream APIs.
 
 import sys
 import types
+from pathlib import Path
 
 import pytest
 
@@ -37,10 +38,13 @@ class _AsyncClient:
 _httpx.Timeout = _Timeout
 _httpx.Limits = _Limits
 _httpx.AsyncClient = _AsyncClient
+_httpx.Request = object
+_httpx.Response = object
 _httpx.TimeoutException = Exception
 _httpx.ConnectError = Exception
 sys.modules["httpx"] = _httpx
 
+from faigate.oauth.backend import OAuthBackend  # noqa: E402
 from faigate.providers import ProviderBackend  # noqa: E402
 
 
@@ -344,6 +348,167 @@ class TestProviderHealthProbes:
         for item in captured.get("contents", []):
             for part in item.get("parts", []):
                 assert isinstance(part.get("text"), str), f"Non-string text in part: {part}"
+
+
+def test_transport_path_preserves_explicit_empty_chat_path():
+    backend = ProviderBackend(
+        "openai-codex-5.4-medium",
+        {
+            "backend": "openai-compat",
+            "base_url": "https://chatgpt.com/backend-api/codex/responses",
+            "api_key": "secret",
+            "model": "openai-codex/gpt-5.4",
+            "transport": {"chat_path": ""},
+        },
+    )
+
+    path = backend._transport_path("chat_path", "/chat/completions")
+
+    assert path == ""
+    assert backend._transport_url(path) == "https://chatgpt.com/backend-api/codex/responses"
+
+
+@pytest.mark.asyncio
+async def test_codex_responses_payload_maps_to_supported_model_and_openai_output():
+    backend = ProviderBackend(
+        "openai-codex-5.4-medium",
+        {
+            "backend": "openai-compat",
+            "base_url": "https://chatgpt.com/backend-api/codex/responses",
+            "api_key": "secret",
+            "model": "gpt-5.4",
+            "transport": {"profile": "oauth-codex", "chat_path": ""},
+            "extra_body": {"reasoning_effort": "medium"},
+        },
+    )
+    captured: dict = {}
+
+    class _FakeResp:
+        status_code = 200
+        text = (
+            "event: response.output_text.delta\n"
+            'data: {"type":"response.output_text.delta","delta":"ok"}\n\n'
+            "event: response.completed\n"
+            'data: {"type":"response.completed","response":{"id":"resp_test","created_at":1775616020,'
+            '"model":"gpt-5-codex","usage":{"input_tokens":19,"output_tokens":5,"total_tokens":24}}}\n\n'
+        )
+
+    async def _fake_post(url, json=None, headers=None, **_kw):
+        captured["url"] = url
+        captured["json"] = json or {}
+        captured["headers"] = headers or {}
+        return _FakeResp()
+
+    backend._client.post = _fake_post  # type: ignore[attr-defined]
+
+    result = await backend.complete([{"role": "user", "content": "Reply with exactly ok."}])
+
+    assert captured["url"] == "https://chatgpt.com/backend-api/codex/responses"
+    assert captured["json"]["model"] == "gpt-5-codex"
+    assert captured["json"]["stream"] is True
+    assert captured["json"]["store"] is False
+    assert captured["json"]["instructions"] == ""
+    assert captured["json"]["input"] == [{"role": "user", "content": "Reply with exactly ok."}]
+    assert captured["json"]["reasoning"] == {"effort": "medium"}
+    assert result["choices"][0]["message"]["content"] == "ok"
+    assert result["model"] == "gpt-5-codex"
+    assert result["usage"]["total_tokens"] == 24
+
+
+@pytest.mark.asyncio
+async def test_codex_responses_stream_maps_to_openai_chunks():
+    backend = ProviderBackend(
+        "openai-codex-5.4-medium",
+        {
+            "backend": "openai-compat",
+            "base_url": "https://chatgpt.com/backend-api/codex/responses",
+            "api_key": "secret",
+            "model": "gpt-5.4",
+            "transport": {"profile": "oauth-codex", "chat_path": ""},
+            "extra_body": {"reasoning_effort": "medium"},
+        },
+    )
+    captured: dict = {}
+
+    class _FakeStreamResp:
+        status_code = 200
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def aiter_lines(self):
+            for line in [
+                (
+                    'data: {"type":"response.created","response":{"id":"resp_stream",'
+                    '"created_at":1775616020,"model":"gpt-5-codex"}}'
+                ),
+                "",
+                'data: {"type":"response.output_text.delta","delta":"ok"}',
+                "",
+                (
+                    'data: {"type":"response.completed","response":{"id":"resp_stream",'
+                    '"created_at":1775616020,"model":"gpt-5-codex","usage":{"input_tokens":19,'
+                    '"output_tokens":5,"total_tokens":24}}}'
+                ),
+                "",
+            ]:
+                yield line
+
+    def _fake_stream(method, url, json=None, headers=None, **_kw):
+        captured["method"] = method
+        captured["url"] = url
+        captured["json"] = json or {}
+        captured["headers"] = headers or {}
+        return _FakeStreamResp()
+
+    backend._client.stream = _fake_stream  # type: ignore[attr-defined]
+
+    stream_iter = await backend.complete(
+        [{"role": "user", "content": "Reply with exactly ok."}],
+        stream=True,
+    )
+    chunks = [chunk async for chunk in stream_iter]
+    payload = b"".join(chunks).decode("utf-8")
+
+    assert captured["method"] == "POST"
+    assert captured["url"] == "https://chatgpt.com/backend-api/codex/responses"
+    assert captured["json"]["model"] == "gpt-5-codex"
+    assert captured["json"]["stream"] is True
+    assert 'data: {"id":"resp_stream","object":"chat.completion.chunk"' in payload
+    assert '"role":"assistant"' in payload
+    assert '"content":"ok"' in payload
+    assert "data: [DONE]" in payload
+
+
+def test_oauth_backend_resolves_brew_libexec_helper(monkeypatch, tmp_path: Path):
+    libexec_bin = tmp_path / "libexec" / "bin"
+    libexec_bin.mkdir(parents=True)
+    helper_path = libexec_bin / "faigate-auth"
+    helper_path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    helper_path.chmod(0o755)
+
+    monkeypatch.setattr("faigate.oauth.backend.shutil.which", lambda _name: None)
+    monkeypatch.setattr("faigate.oauth.backend.sys.executable", str(libexec_bin / "python"))
+
+    backend = OAuthBackend(
+        "openai-codex-5.4-medium",
+        {
+            "backend": "oauth",
+            "base_url": "https://chatgpt.com/backend-api/codex/responses",
+            "model": "openai-codex/gpt-5.4",
+            "underlying_backend": "openai-compat",
+            "oauth": {"helper": "faigate-auth openai-codex"},
+        },
+    )
+
+    argv = backend._resolve_helper_argv()
+
+    assert argv is not None
+    assert argv[0] == str(helper_path)
+    assert argv[1:] == ["openai-codex"]
 
     @pytest.mark.asyncio
     async def test_multimodal_content_array_flattened(self):
