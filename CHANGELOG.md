@@ -1,5 +1,26 @@
 # fusionAIze Gate Changelog
 
+## v2.2.0 - 2026-04-18
+
+### Added
+
+- **Unified QuotaStatus abstraction** (`faigate/quota_tracker.py`): single view covering three package types — `credits`, `rolling_window`, `daily` — with EWMA burn rate, runway projection, and a five-level alert classifier (ok / watch / topup / use_or_lose / exhausted)
+- **Background balance poller** (`faigate/quota_poller.py`): refreshes provider balances on a fast lane (15m) for packages within 14 days of expiry and a default 1h otherwise; covers DeepSeek via `/user/balance` and probes Kilo across a candidate endpoint list; atomic JSON persistence; disabled by default (opt-in via `quota_poll.enabled`)
+- **Passive header-capture middleware** (`faigate/quota_headers.py`): dialect-aware parser for `x-ratelimit-*` (OpenAI / DeepSeek / OpenRouter) and `anthropic-ratelimit-*` families; hooked into `ProviderBackend.complete` so rolling-window packages get a free, near-realtime quota signal
+- **Operator cockpit endpoints**: `GET /api/quotas` returns the full QuotaStatus list plus latest header snapshots; `GET /dashboard/quotas` is a self-contained HTML page with color-coded progress bars sorted by alert urgency, polling every 60s
+- **7-provider catalog template** at `docs/examples/fusionaize-metadata-repo/packages/catalog.v1.json` covering Kilo, DeepSeek, Blackbox, Anthropic Pro, OpenAI Plus, Qwen, and Gemini (free + Pro + CLI + Antigravity) with documented field semantics
+- **`quota_poll` config block** with sane defaults (`enabled: false`, `interval_seconds: 3600`, `fast_lane_interval_seconds: 900`)
+
+### Changed
+
+- **Router package scoring** now picks up `QuotaStatus.alert == "use_or_lose"` and applies a +3 boost so expiring packages with real burn pressure decisively win ties over static-runway packages
+- **Router** now awards `rolling_window` and `daily` package types up to +5 points based on remaining ratio (parity with `credits`, no provider class dominates solely by type)
+- **`faigate-install`** refuses to run alongside an existing Homebrew formula / service or a loaded LaunchAgent / systemd unit; `--force` override available; defensive timestamped backups before any write
+
+### Fixed
+
+- **`faigate-install` SIGPIPE bug**: install now uses explicit if/elif file-existence checks instead of `ls | head -1`, which under `set -euo pipefail` would silently kill the script when `head` closed the pipe
+
 ## v2.1.6 - 2026-04-08
 
 ### Fixed
