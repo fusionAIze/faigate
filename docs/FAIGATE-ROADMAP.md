@@ -350,6 +350,93 @@ explainability so operators understand and trust routing decisions.
 - OAuth wrapper should be optional; API‑key providers remain the default
 - Interactive login flows must be clearly separated from automated routing core
 
+## v2.3.0 Planning
+
+**Target: Quota visibility parity with CodexBar, a desktop menubar companion, and generic multi-provider balance fetchers**
+
+Motivation: the v2.2.x release line landed real package polling (DeepSeek
+`/user/balance`, Kilo tRPC batch) and an external catalog with nine real
+packages, but the quotas dashboard still shows placeholder numbers for
+OpenRouter, OpenAI, Anthropic subscriptions, Codex, and Blackbox. The inspiration
+is [steipete/CodexBar](https://github.com/steipete/CodexBar) — a small macOS
+menubar app that already aggregates subscription and credit state for several
+providers. The next larger UI batch should bring Gate's quota surface up to that
+level and give operators a native OS affordance.
+
+### Core Themes
+
+1. **CodexBar-style quota dashboard widget** _(informed by items 3 from the
+   v2.2.3 triage)_
+   - Re-skin `/dashboard/quotas` so every package surfaces the same visual shape
+     regardless of `package_type` (credits / rolling_window / daily)
+   - Per-package card: provider logo, remaining amount, progress bar, confidence
+     badge, source provenance (api_poll / header_capture / local_count /
+     manual), last-refreshed timestamp, and renewal/expiry countdown
+   - Group cards by client-facing routing lane (coding-auto / coding-premium /
+     eco / free) so operators see "which lane will start throttling next"
+   - Retain the CodexBar pattern of collapsing providers with no introspection
+     path into a discreet "manual" section rather than hiding them
+
+2. **Faigate menubar companion** _(item 4)_
+   - Native macOS menubar app (SwiftUI, Sparkle auto-update) that pulls from the
+     local `GET /api/quotas` endpoint every 30–60 s
+   - One compact status line per provider: glyph + remaining % + next-reset
+     hint; colour-coded via the shared `QuotaStatus.alert` levels
+   - Click-through actions: open dashboard, run `faigate doctor`, copy the
+     current `OPENAI_BASE_URL`, toggle the fast-lane poll interval
+   - Ship as an optional Homebrew cask (`faigate-menubar`) so the core CLI/LLM
+     gateway stays headless
+
+3. **Generic multi-provider balance fetchers** _(item 5 — the engine behind 1+2)_
+   - Extend `quota_poller.py` with the same provider coverage CodexBar has,
+     starting with the six that still show placeholder data today:
+     - OpenRouter `/auth/key` (JSON balance + usage)
+     - OpenAI billing (best-effort: `x-ratelimit-remaining-tokens` header +
+       dashboard-scrape fallback, documented as medium-confidence)
+     - Anthropic subscription state (scrape-based like CodexBar, gated behind
+       explicit opt-in because there is no official API)
+     - GitHub Copilot entitlement + Amp/Cursor subscription probes
+     - Gemini free-tier token-count via `aistudio` metadata when user opts in
+     - Blackbox free-tier via session cookie
+   - Split each fetcher into a small Strategy class so third-party contributors
+     can add new providers without touching the poller core
+   - Surface each provider's status on the dashboard and in the menubar widget
+     through the existing `QuotaPackage` schema — no second data model
+
+### Sequencing
+
+- **v2.3.0-alpha1**: refactor `quota_poller` into a Strategy registry, port the
+  existing DeepSeek + Kilo fetchers onto it, land the OpenRouter
+  `/auth/key` fetcher as the first new provider (lowest-risk, official API).
+- **v2.3.0-beta1**: ship the redesigned `/dashboard/quotas` widget backed by
+  the new Strategy registry, including source/confidence badges.
+- **v2.3.0**: cut the menubar companion into a separate GitHub repo / Homebrew
+  cask, documented as an optional add-on; the core Gate release only gains the
+  `/api/quotas` contract guarantees the menubar relies on.
+- **v2.3.x patch line**: add one provider fetcher per patch release (OpenAI,
+  Anthropic subscription, Copilot, Amp, Cursor, Gemini, Blackbox) so each ships
+  with its own live-verification note in the CHANGELOG.
+
+### Success bar
+
+- Every package in the external catalog has a `source != "manual"` path, or an
+  explicit documented reason why it has to stay manual.
+- Operators can glance at the menubar and predict which lane will throttle next
+  without opening the dashboard.
+- Contributors can add a new provider fetcher by implementing one Strategy
+  class and one JSON catalog entry.
+
+### Scope boundaries
+
+- The menubar is an _optional_ companion — no feature of Gate's routing core
+  may depend on it being installed.
+- CodexBar-style subscription scrapes must stay behind an explicit opt-in flag;
+  headless defaults remain the three official levels (`api_poll`,
+  `header_capture`, `local_count`).
+- No new hosted metadata or control-plane requirement. The Strategy registry
+  reads from the same `fusionaize-metadata/packages/catalog.v1.json` that
+  v2.2.x already consumes.
+
 ## Anti-Goals
 
 - no second routing runtime just for Anthropic traffic
