@@ -95,6 +95,7 @@ _update_checker: UpdateChecker
 _adaptive_state: AdaptiveRouteState = AdaptiveRouteState()
 _provider_catalog_store: ProviderCatalogStore | None = None
 _provider_catalog_refresh_task: asyncio.Task[None] | None = None
+_quota_poll_task: asyncio.Task[None] | None = None
 
 
 def _provider_catalog_config_path() -> str:
@@ -2259,6 +2260,7 @@ async def lifespan(app: FastAPI):
     """Startup / shutdown lifecycle."""
     global _config, _providers, _router, _metrics, _update_checker, _adaptive_state
     global _provider_catalog_store, _provider_catalog_refresh_task
+    global _quota_poll_task
 
     logging.basicConfig(
         level=logging.INFO,
@@ -2325,6 +2327,34 @@ async def lifespan(app: FastAPI):
     except Exception as exc:  # noqa: BLE001
         logger.warning("Provider source catalog startup refresh skipped: %s", exc)
 
+    # Quota balance poller (Phase 2: DeepSeek + Kilo). Disabled by default —
+    # only activates when config.quota_poll.enabled is true AND at least one
+    # api_poll package is present in the external catalog. Missing API keys
+    # degrade individual packages, never the whole loop.
+    try:
+        quota_poll_cfg = _config.quota_poll
+        if quota_poll_cfg.get("enabled"):
+            from .quota_poller import quota_poll_loop, run_poll_once
+
+            if quota_poll_cfg.get("on_startup"):
+                try:
+                    await run_poll_once(providers_cfg=_config.providers)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("Quota poll startup warmup failed: %s", exc)
+            interval = int(quota_poll_cfg.get("interval_seconds") or 3600)
+            fast = int(quota_poll_cfg.get("fast_lane_interval_seconds") or 900)
+            _quota_poll_task = asyncio.create_task(
+                quota_poll_loop(
+                    providers_cfg=_config.providers,
+                    interval_seconds=interval,
+                    fast_lane_interval_seconds=fast,
+                ),
+                name="faigate-quota-poll",
+            )
+            logger.info("Quota poller started (interval=%ds, fast_lane=%ds)", interval, fast)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Quota poller startup skipped: %s", exc)
+
     community_hooks = get_community_hooks_loaded()
     if community_hooks:
         logger.info("Community hooks loaded: %s", ", ".join(community_hooks))
@@ -2347,6 +2377,11 @@ async def lifespan(app: FastAPI):
         with suppress(asyncio.CancelledError):
             await _provider_catalog_refresh_task
         _provider_catalog_refresh_task = None
+    if _quota_poll_task is not None:
+        _quota_poll_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await _quota_poll_task
+        _quota_poll_task = None
     if _provider_catalog_store is not None:
         _provider_catalog_store.close()
         _provider_catalog_store = None
