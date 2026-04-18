@@ -1,5 +1,11 @@
 # fusionAIze Gate Changelog
 
+## v2.2.1 - 2026-04-18
+
+### Fixed
+
+- **Slow `brew upgrade` / `pip install` caused by source-only pydantic-core**: `pyproject.toml` now caps `pydantic`, `fastapi`, `httpx`, and `uvicorn` to version ranges that ship prebuilt wheels for all supported Python versions (3.10–3.13) and platforms (incl. macOS 15 Tahoe arm64). Without these caps pip could drift onto a bleeding-edge pydantic-core release with no wheel, forcing a 3–5 minute Rust/cargo source build during upgrade. This is a packaging-only change — no runtime behavior difference.
+
 ## v2.2.0 - 2026-04-18
 
 ### Added

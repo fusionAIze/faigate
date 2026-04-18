@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "faigate"
-version = "2.2.0"
+version = "2.2.1"
 description = "Local OpenAI-compatible routing gateway for OpenClaw and other AI-native clients."
 readme = "README.md"
 license = "Apache-2.0"
@@ -22,9 +22,14 @@ classifiers = [
     "Topic :: Internet :: Proxy Servers",
 ]
 dependencies = [
-    "fastapi>=0.115.0",
-    "uvicorn[standard]>=0.32.0",
-    "httpx>=0.27.0",
+    # Upper bounds on fastapi/pydantic/httpx keep us on versions that ship
+    # prebuilt wheels (esp. pydantic-core) for all supported Python/macOS/Linux
+    # combinations. Without these caps, `brew upgrade` and fresh `pip install`
+    # can drift onto source-only releases and trigger a 3–5 min cargo build.
+    "fastapi>=0.115.0,<0.120",
+    "uvicorn[standard]>=0.32.0,<0.40",
+    "httpx>=0.27.0,<0.29",
+    "pydantic>=2.9,<2.14",
     "pyyaml>=6.0.2",
     "python-dotenv>=1.0.1",
     "python-multipart>=0.0.9",
