@@ -123,6 +123,7 @@ class QuotaStatus:
     """
 
     provider_id: str
+    provider_group: str
     package_id: str
     package_type: PackageType
     total: float
@@ -169,6 +170,7 @@ def compute_quota_status(
     now = now or datetime.now(UTC)
     package_id = package.get("package_id") or _synthesize_package_id(package)
     provider_id = package.get("provider_id") or "unknown"
+    provider_group = package.get("provider_group") or _derive_provider_group(provider_id)
     pkg_type: PackageType = package.get("package_type") or "credits"
     source: SourceType = package.get("source") or "manual"
     confidence: ConfidenceLevel = package.get("confidence") or "medium"
@@ -177,14 +179,31 @@ def compute_quota_status(
 
     if pkg_type == "rolling_window":
         return _status_rolling_window(
-            package, package_id, provider_id, source, confidence, last_updated, notes, now, sqlite_path
+            package, package_id, provider_id, provider_group, source, confidence, last_updated, notes, now, sqlite_path
         )
     if pkg_type == "daily":
         return _status_daily(
-            package, package_id, provider_id, source, confidence, last_updated, notes, now, sqlite_path
+            package, package_id, provider_id, provider_group, source, confidence, last_updated, notes, now, sqlite_path
         )
     # Default: credits
-    return _status_credits(package, package_id, provider_id, source, confidence, last_updated, notes, now, sqlite_path)
+    return _status_credits(
+        package, package_id, provider_id, provider_group, source, confidence, last_updated, notes, now, sqlite_path
+    )
+
+
+def _derive_provider_group(provider_id: str) -> str:
+    """Fallback grouping key when the catalog omits provider_group.
+
+    Strips a trailing -<variant> segment (gemini-flash-lite -> gemini-flash;
+    deepseek-chat -> deepseek) and collapses common family prefixes. Kept
+    deliberately conservative so catalog-specified groups always win."""
+    if not provider_id or provider_id == "unknown":
+        return "unknown"
+    for prefix in ("deepseek", "kilo", "gemini", "openai", "anthropic", "openrouter", "blackbox"):
+        if provider_id.startswith(prefix):
+            return prefix
+    # Otherwise use the first dash-separated token.
+    return provider_id.split("-", 1)[0]
 
 
 # -----------------------------------------------------------------------------
@@ -196,6 +215,7 @@ def _status_credits(
     package: dict[str, Any],
     package_id: str,
     provider_id: str,
+    provider_group: str,
     source: SourceType,
     confidence: ConfidenceLevel,
     last_updated: str | None,
@@ -227,6 +247,7 @@ def _status_credits(
 
     return QuotaStatus(
         provider_id=provider_id,
+        provider_group=provider_group,
         package_id=package_id,
         package_type="credits",
         total=total,
@@ -249,6 +270,7 @@ def _status_rolling_window(
     package: dict[str, Any],
     package_id: str,
     provider_id: str,
+    provider_group: str,
     source: SourceType,
     confidence: ConfidenceLevel,
     last_updated: str | None,
@@ -259,15 +281,21 @@ def _status_rolling_window(
     window_hours = int(package.get("window_hours") or 5)
     limit = float(package.get("limit_per_window") or 0)
     model_weights: dict[str, float] = package.get("model_weights") or {}
+    extra_ids = [str(p) for p in (package.get("extra_provider_ids") or [])]
+    counted_ids = [provider_id, *extra_ids]
 
-    # Local count: weighted request count over the last window_hours
-    used = _local_count_in_window(provider_id, now, sqlite_path, window_hours=window_hours, model_weights=model_weights)
+    # Local count: weighted request count over the last window_hours, summed
+    # across provider_id + any extra_provider_ids sharing the same quota.
+    used = 0.0
+    earliest: datetime | None = None
+    for pid in counted_ids:
+        used += _local_count_in_window(pid, now, sqlite_path, window_hours=window_hours, model_weights=model_weights)
+        cand = _earliest_request_in_window(pid, now, sqlite_path, window_hours=window_hours)
+        if cand and (earliest is None or cand < earliest):
+            earliest = cand
     remaining = max(0.0, limit - used)
     ratio = (remaining / limit) if limit > 0 else 0.0
 
-    # Reset: earliest request in window expires at `earliest + window_hours`.
-    # If we don't know, conservative estimate: now + window_hours.
-    earliest = _earliest_request_in_window(provider_id, now, sqlite_path, window_hours=window_hours)
     if earliest:
         reset_at = (earliest + timedelta(hours=window_hours)).isoformat()
     else:
@@ -277,6 +305,7 @@ def _status_rolling_window(
 
     return QuotaStatus(
         provider_id=provider_id,
+        provider_group=provider_group,
         package_id=package_id,
         package_type="rolling_window",
         total=limit,
@@ -298,6 +327,7 @@ def _status_daily(
     package: dict[str, Any],
     package_id: str,
     provider_id: str,
+    provider_group: str,
     source: SourceType,
     confidence: ConfidenceLevel,
     last_updated: str | None,
@@ -306,12 +336,17 @@ def _status_daily(
     sqlite_path: Path | None,
 ) -> QuotaStatus:
     limit = float(package.get("limit_per_day") or 0)
+    extra_ids = [str(p) for p in (package.get("extra_provider_ids") or [])]
+    counted_ids = [provider_id, *extra_ids]
 
-    # Count requests since UTC midnight
+    # Count requests since UTC midnight — summed across counted_ids so a daily
+    # quota shared by multiple router provider IDs (e.g. Gemini free tier
+    # covers both gemini-flash and gemini-flash-lite) reads accurately.
     midnight = datetime(now.year, now.month, now.day, tzinfo=UTC)
     hours_since_midnight = (now - midnight).total_seconds() / 3600.0
-    used = _local_count_in_window(
-        provider_id, now, sqlite_path, window_hours=max(hours_since_midnight, 0.01), model_weights={}
+    window = max(hours_since_midnight, 0.01)
+    used = sum(
+        _local_count_in_window(pid, now, sqlite_path, window_hours=window, model_weights={}) for pid in counted_ids
     )
     remaining = max(0.0, limit - used)
     ratio = (remaining / limit) if limit > 0 else 0.0
@@ -323,6 +358,7 @@ def _status_daily(
 
     return QuotaStatus(
         provider_id=provider_id,
+        provider_group=provider_group,
         package_id=package_id,
         package_type="daily",
         total=limit,

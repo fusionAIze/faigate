@@ -2827,16 +2827,75 @@ async def operator_events(
     }
 
 
+def _credential_available(hint: str | None) -> bool:
+    """True when ``hint`` names a credential that's actually present.
+
+    Accepts two shapes:
+      * env-var name (ALL_CAPS): looked up in ``os.environ``; values that
+        contain ``your-`` or ``your_`` are treated as placeholders.
+      * OAuth subject: looked up in the local token store's provider list.
+
+    ``None`` / empty hints pass through as "no gating required" → True.
+    """
+    if not hint:
+        return True
+    value = str(hint).strip()
+    if not value:
+        return True
+    # env-var heuristic: all-caps + underscores, no hyphens
+    if value.replace("_", "").isalnum() and value.isupper():
+        raw = os.environ.get(value)
+        if not raw:
+            return False
+        low = raw.lower()
+        if "your-" in low or "your_" in low or low.endswith("-key"):
+            return False
+        return True
+    # OAuth subject: consult token store
+    try:
+        from .oauth.token_store import TokenStore
+
+        providers = TokenStore().list_providers()
+        return value in providers
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _filter_packages_by_credentials(
+    packages: dict[str, dict[str, Any]],
+) -> tuple[dict[str, dict[str, Any]], list[dict[str, str]]]:
+    """Return (kept, skipped) after applying ``_requires_credential`` gating."""
+    kept: dict[str, dict[str, Any]] = {}
+    skipped: list[dict[str, str]] = []
+    for pkg_id, pkg in packages.items():
+        hint = pkg.get("_requires_credential")
+        if _credential_available(hint):
+            kept[pkg_id] = pkg
+        else:
+            skipped.append(
+                {
+                    "package_id": pkg_id,
+                    "provider_group": str(pkg.get("provider_group") or ""),
+                    "requires": str(hint or ""),
+                }
+            )
+    return kept, skipped
+
+
 @app.get("/api/quotas")
 async def quotas():
     """Unified view across all quota packages (credits / rolling / daily).
 
     Returns the QuotaStatus list the dashboard renders as progress bars plus
-    the latest header-capture snapshot per provider (diagnostic). Never
-    errors: missing catalog / SQLite path → empty lists.
+    the latest header-capture snapshot per provider (diagnostic). Packages
+    whose ``_requires_credential`` cannot be resolved (missing env var,
+    placeholder value, missing OAuth token) are skipped and reported under
+    ``skipped_packages``. Never errors: missing catalog / SQLite path →
+    empty lists.
     """
     from pathlib import Path
 
+    from .provider_catalog import get_packages_catalog
     from .quota_headers import all_latest_snapshots
     from .quota_tracker import compute_all_statuses
 
@@ -2849,7 +2908,15 @@ async def quotas():
         sqlite_path = None
 
     try:
-        statuses = compute_all_statuses(sqlite_path=sqlite_path)
+        raw_packages = get_packages_catalog() or {}
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("get_packages_catalog failed: %s", exc)
+        raw_packages = {}
+
+    filtered_packages, skipped_packages = _filter_packages_by_credentials(raw_packages)
+
+    try:
+        statuses = compute_all_statuses(sqlite_path=sqlite_path, packages_cache=filtered_packages)
     except Exception as exc:  # noqa: BLE001
         logger.warning("compute_all_statuses failed: %s", exc)
         statuses = []
@@ -2882,6 +2949,7 @@ async def quotas():
         "has_use_or_lose": any(s.get("alert") == "use_or_lose" for s in statuses_json),
         "has_exhausted": any(s.get("alert") == "exhausted" for s in statuses_json),
         "header_snapshots": snapshots_out,
+        "skipped_packages": skipped_packages,
     }
 
 
@@ -3377,22 +3445,39 @@ _QUOTAS_DASHBOARD_HTML = """<!doctype html>
       background: var(--card); border: 1px solid var(--border);
     }
     .pill.urgent { border-color: var(--uol); color: var(--uol); }
-    .grid { display: grid; gap: 12px; grid-template-columns: 1fr; max-width: 980px; }
-    .card {
+    .grid { display: grid; gap: 14px; grid-template-columns: 1fr; max-width: 980px; }
+    .provider {
       background: var(--card); border: 1px solid var(--border);
-      border-radius: 8px; padding: 14px 16px;
+      border-radius: 10px; padding: 14px 16px;
     }
-    .card.urgent { border-left: 3px solid var(--uol); }
-    .card.watch { border-left: 3px solid var(--watch); }
-    .card.ok { border-left: 3px solid var(--ok); }
-    .card.topup { border-left: 3px solid var(--topup); }
-    .card.exhausted { border-left: 3px solid var(--exhausted); opacity: 0.7; }
+    .provider.urgent { border-left: 3px solid var(--uol); }
+    .provider.watch { border-left: 3px solid var(--watch); }
+    .provider.ok { border-left: 3px solid var(--ok); }
+    .provider.topup { border-left: 3px solid var(--topup); }
+    .provider.exhausted { border-left: 3px solid var(--exhausted); opacity: 0.85; }
+    .provider-head {
+      display: flex; justify-content: space-between; align-items: baseline;
+      margin-bottom: 4px;
+    }
+    .provider-name {
+      font-weight: 700; font-size: 15px; text-transform: capitalize;
+      letter-spacing: .3px;
+    }
+    .provider-ids { color: var(--dim); font-size: 11px; }
+    .pkg {
+      padding: 10px 0 2px;
+      border-top: 1px dashed var(--border);
+      margin-top: 8px;
+    }
+    .pkg:first-of-type { border-top: none; margin-top: 0; padding-top: 2px; }
     .row1 { display: flex; justify-content: space-between; align-items: baseline; }
-    .title { font-weight: 600; font-size: 14px; }
-    .type { color: var(--dim); font-size: 11px; text-transform: uppercase; }
+    .title { font-weight: 500; font-size: 13px; }
+    .title .emoji { margin-right: 4px; }
+    .title .pkg-id { color: var(--dim); font-weight: 400; }
+    .type { color: var(--dim); font-size: 10px; text-transform: uppercase; letter-spacing: .5px; }
     .bar {
       height: 6px; background: #262a36; border-radius: 3px;
-      margin: 8px 0 6px; overflow: hidden;
+      margin: 6px 0 6px; overflow: hidden;
     }
     .bar-fill { height: 100%; transition: width .3s; }
     .bar-fill.ok { background: var(--ok); }
@@ -3401,11 +3486,11 @@ _QUOTAS_DASHBOARD_HTML = """<!doctype html>
     .bar-fill.use_or_lose { background: var(--uol); }
     .bar-fill.exhausted { background: var(--exhausted); }
     .meta {
-      display: flex; gap: 16px; flex-wrap: wrap;
-      font-size: 12px; color: var(--dim);
+      display: flex; gap: 14px; flex-wrap: wrap;
+      font-size: 11.5px; color: var(--dim);
     }
     .meta .k { color: var(--fg); font-weight: 500; }
-    .notes { margin-top: 6px; font-size: 11px; color: var(--dim); font-style: italic; }
+    .notes { margin-top: 4px; font-size: 10.5px; color: var(--dim); font-style: italic; }
     .empty { padding: 40px; text-align: center; color: var(--dim); }
     a { color: #60a5fa; text-decoration: none; }
     a:hover { text-decoration: underline; }
@@ -3419,9 +3504,11 @@ _QUOTAS_DASHBOARD_HTML = """<!doctype html>
   </div>
   <div class="summary" id="summary"></div>
   <div class="grid" id="grid"><div class="empty">Loading…</div></div>
+  <div id="skipped" style="margin-top:18px;color:var(--dim);font-size:12px;"></div>
 
 <script>
 const ALERT_ORDER = ["use_or_lose", "exhausted", "topup", "watch", "ok", "unknown"];
+const ALERT_RANK = Object.fromEntries(ALERT_ORDER.map((a, i) => [a, i]));
 const EMOJI = {ok: "🟢", watch: "🟡", topup: "🟠", use_or_lose: "⚠️", exhausted: "🔴"};
 
 function pct(x) { return Math.max(0, Math.min(100, Math.round(x * 100))); }
@@ -3431,8 +3518,15 @@ function fmtNum(n) {
   return (Math.round(n * 100) / 100).toString();
 }
 
-function renderCard(s) {
-  const alertClass = s.alert === "use_or_lose" ? "urgent" : s.alert;
+function worstAlert(statuses) {
+  let worst = "ok";
+  for (const s of statuses) {
+    if ((ALERT_RANK[s.alert] ?? 99) < (ALERT_RANK[worst] ?? 99)) worst = s.alert;
+  }
+  return worst;
+}
+
+function renderPackage(s) {
   const ratioPct = pct(s.remaining_ratio);
   const usedPct = 100 - ratioPct;
   const unit = s.package_type === "credits" ? "$" : "req";
@@ -3446,7 +3540,7 @@ function renderCard(s) {
     meta.push(`<span>window: <span class="k">${s.window_hours}h</span></span>`);
   }
   if (s.reset_at) {
-    meta.push(`<span>resets: <span class="k">${new Date(s.reset_at).toLocaleTimeString()}</span></span>`);
+    meta.push(`<span>resets: <span class="k">${new Date(s.reset_at).toLocaleString()}</span></span>`);
   }
   if (s.burn_per_day) {
     meta.push(`<span>burn/day: <span class="k">${fmtNum(s.burn_per_day)}</span></span>`);
@@ -3456,14 +3550,35 @@ function renderCard(s) {
   }
   meta.push(`<span>source: <span class="k">${s.source}</span> (${s.confidence})</span>`);
 
-  return `<div class="card ${alertClass}">
+  return `<div class="pkg">
     <div class="row1">
-      <div class="title">${EMOJI[s.alert] || "·"} ${s.provider_id} <span style="color:var(--dim);font-weight:400">· ${s.package_id}</span></div>
+      <div class="title"><span class="emoji">${EMOJI[s.alert] || "·"}</span>${s.package_id.replace(/-/g, " ")} <span class="pkg-id">· ${s.provider_id}</span></div>
       <div class="type">${s.package_type}</div>
     </div>
     <div class="bar"><div class="bar-fill ${s.alert}" style="width:${usedPct}%"></div></div>
     <div class="meta">${meta.join("")}</div>
     ${s.notes ? `<div class="notes">${s.notes}</div>` : ""}
+  </div>`;
+}
+
+function renderProvider(group, statuses) {
+  const worst = worstAlert(statuses);
+  const alertClass = worst === "use_or_lose" ? "urgent" : worst;
+  // Collect distinct provider IDs covered by this group
+  const pids = new Set();
+  statuses.forEach(s => {
+    pids.add(s.provider_id);
+  });
+  const idsLabel = [...pids].join(", ");
+  const packages = [...statuses].sort(
+    (a, b) => (ALERT_RANK[a.alert] ?? 99) - (ALERT_RANK[b.alert] ?? 99)
+  );
+  return `<div class="provider ${alertClass}">
+    <div class="provider-head">
+      <div class="provider-name">${EMOJI[worst] || "·"} ${group}</div>
+      <div class="provider-ids">${idsLabel}</div>
+    </div>
+    ${packages.map(renderPackage).join("")}
   </div>`;
 }
 
@@ -3486,10 +3601,27 @@ async function refresh() {
       .map(a => `<span class="pill${a === "use_or_lose" || a === "exhausted" ? " urgent" : ""}">${EMOJI[a] || "·"} ${a}: ${byAlert[a]}</span>`)
       .join("");
 
-    const sorted = [...data.packages].sort((a, b) => {
-      return ALERT_ORDER.indexOf(a.alert) - ALERT_ORDER.indexOf(b.alert);
+    // Group by provider_group (fallback to provider_id when missing)
+    const groups = new Map();
+    for (const s of data.packages) {
+      const key = s.provider_group || s.provider_id || "unknown";
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(s);
+    }
+    // Sort groups by worst alert level so urgent providers bubble up
+    const groupEntries = [...groups.entries()].sort((a, b) => {
+      return (ALERT_RANK[worstAlert(a[1])] ?? 99) - (ALERT_RANK[worstAlert(b[1])] ?? 99);
     });
-    grid.innerHTML = sorted.map(renderCard).join("");
+    grid.innerHTML = groupEntries.map(([g, s]) => renderProvider(g, s)).join("");
+
+    const skippedEl = document.getElementById("skipped");
+    const skipped = data.skipped_packages || [];
+    if (skipped.length > 0) {
+      const lines = skipped.map(x => `<li><code>${x.package_id}</code> (${x.provider_group || "?"}) — needs <code>${x.requires || "?"}</code></li>`).join("");
+      skippedEl.innerHTML = `<div style="padding:10px 14px;border:1px dashed var(--border);border-radius:8px;"><strong>Hidden (${skipped.length})</strong> — no credential resolvable:<ul style="margin:6px 0 0 18px;padding:0;">${lines}</ul></div>`;
+    } else {
+      skippedEl.innerHTML = "";
+    }
   } catch (e) {
     document.getElementById("grid").innerHTML = `<div class="empty">Error: ${e.message}</div>`;
   }
