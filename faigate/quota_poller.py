@@ -219,13 +219,32 @@ def _extract_numeric_balance(payload: Any) -> tuple[float | None, float | None]:
 # ---------------------------------------------------------------------------
 
 
+def _provider_family(provider_id: str) -> str:
+    """Collapse a concrete provider_id (e.g. ``deepseek-chat``,
+    ``kilo-sonnet``, ``kilocode``) to its balance-polling family
+    (``deepseek`` / ``kilo``). Returns the input unchanged if no family
+    prefix matches.
+
+    This exists because the catalog's ``provider_id`` matches the router's
+    provider instance (so the dashboard can attribute packages correctly),
+    but the poller only knows balance fetchers per provider *family*.
+    """
+    if provider_id.startswith("deepseek"):
+        return "deepseek"
+    if provider_id.startswith("kilo"):  # kilocode, kilo-sonnet, kilo-opus
+        return "kilo"
+    return provider_id
+
+
 def _resolve_api_key(provider_id: str, providers_cfg: dict[str, Any] | None) -> str | None:
     """Find the API key for a provider. Env vars first, then config."""
     env_map = {
         "deepseek": "DEEPSEEK_API_KEY",
-        "kilocode": "KILO_API_KEY",
+        "kilo": "KILOCODE_API_KEY",
+        "kilocode": "KILOCODE_API_KEY",
     }
-    env_name = env_map.get(provider_id)
+    family = _provider_family(provider_id)
+    env_name = env_map.get(family) or env_map.get(provider_id)
     if env_name:
         val = os.environ.get(env_name, "").strip()
         if val:
@@ -289,18 +308,19 @@ async def _poll_package(
             error=f"no API key for {provider_id} (set {provider_id.upper()}_API_KEY)",
         )
 
+    family = _provider_family(provider_id)
     try:
-        if provider_id == "deepseek":
+        if family == "deepseek":
             total, used = await _fetch_deepseek_balance(client, api_key)
             endpoint = "https://api.deepseek.com/user/balance"
-        elif provider_id == "kilocode":
+        elif family == "kilo":
             total, used, endpoint = await _fetch_kilo_balance(client, api_key)
         else:
             return PollResult(
                 package_id=pkg_id,
                 provider_id=provider_id,
                 ok=False,
-                error=f"no balance fetcher for provider {provider_id}",
+                error=f"no balance fetcher for provider {provider_id} (family={family})",
             )
     except Exception as exc:  # noqa: BLE001 — poller must never crash caller
         return PollResult(

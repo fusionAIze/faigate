@@ -1,5 +1,11 @@
 # fusionAIze Gate Changelog
 
+## v2.2.2 - 2026-04-18
+
+### Fixed
+
+- **Quota poller ignored concrete provider instances** (`faigate/quota_poller.py`): the dispatcher compared `provider_id` against literal `"deepseek"` / `"kilocode"`, so catalog entries using the real router-facing IDs (`deepseek-chat`, `deepseek-reasoner`, `kilo-sonnet`, `kilo-opus`) silently fell through with "no balance fetcher for provider X". Introduced `_provider_family()` that collapses concrete IDs to balance-polling families, and updated both the fetcher dispatch and the `env_map` API-key lookup (now recognises `KILOCODE_API_KEY` for the kilo family).
+
 ## v2.2.1 - 2026-04-18
 
 ### Fixed
