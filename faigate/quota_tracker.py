@@ -134,6 +134,10 @@ class QuotaStatus:
     source: SourceType
     confidence: ConfidenceLevel
     last_updated: str | None = None  # ISO 8601
+    # Brand naming (v1.3) — product/brand label for the operator-facing UI
+    # (Claude/Codex/Gemini/…). Routing keeps reading provider_group/_id.
+    brand: str = ""
+    brand_slug: str = ""
     # Window-specific
     window_hours: int | None = None
     reset_at: str | None = None  # ISO 8601, when window resets
@@ -142,6 +146,15 @@ class QuotaStatus:
     days_until_expiry: int | None = None
     burn_per_day: float | None = None
     projected_days_left: float | None = None
+    # Pace (how the operator is burning this quota vs. a linear schedule).
+    # Positive = ahead of pace (burning faster than linear), negative = under.
+    # None for credits packages (use projected_days_left instead).
+    pace_delta: float | None = None
+    elapsed_ratio: float | None = None
+    # Identity of the credential backing this package — used by the widget
+    # header line ("Pro · OAuth", "API · env ANTHROPIC_API_KEY"). None when
+    # the package has no credential requirement.
+    identity: dict[str, str] | None = None
     # Diagnostics (not part of stable UI contract)
     notes: str | None = None
     extras: dict[str, Any] = field(default_factory=dict)
@@ -171,24 +184,34 @@ def compute_quota_status(
     package_id = package.get("package_id") or _synthesize_package_id(package)
     provider_id = package.get("provider_id") or "unknown"
     provider_group = package.get("provider_group") or _derive_provider_group(provider_id)
+    brand = package.get("brand") or _derive_brand(provider_group)
+    brand_slug = package.get("brand_slug") or _slugify_brand(brand)
+    identity = _derive_identity(package.get("_requires_credential"))
     pkg_type: PackageType = package.get("package_type") or "credits"
     source: SourceType = package.get("source") or "manual"
     confidence: ConfidenceLevel = package.get("confidence") or "medium"
     last_updated = package.get("last_updated")
     notes = package.get("notes")
 
-    if pkg_type == "rolling_window":
-        return _status_rolling_window(
-            package, package_id, provider_id, provider_group, source, confidence, last_updated, notes, now, sqlite_path
-        )
-    if pkg_type == "daily":
-        return _status_daily(
-            package, package_id, provider_id, provider_group, source, confidence, last_updated, notes, now, sqlite_path
-        )
-    # Default: credits
-    return _status_credits(
-        package, package_id, provider_id, provider_group, source, confidence, last_updated, notes, now, sqlite_path
+    ctx = _StatusCtx(
+        package_id=package_id,
+        provider_id=provider_id,
+        provider_group=provider_group,
+        brand=brand,
+        brand_slug=brand_slug,
+        identity=identity,
+        source=source,
+        confidence=confidence,
+        last_updated=last_updated,
+        notes=notes,
     )
+
+    if pkg_type == "rolling_window":
+        return _status_rolling_window(package, ctx, now, sqlite_path)
+    if pkg_type == "daily":
+        return _status_daily(package, ctx, now, sqlite_path)
+    # Default: credits
+    return _status_credits(package, ctx, now, sqlite_path)
 
 
 def _derive_provider_group(provider_id: str) -> str:
@@ -206,6 +229,102 @@ def _derive_provider_group(provider_id: str) -> str:
     return provider_id.split("-", 1)[0]
 
 
+# Operator-facing brand names keyed on the routing-side provider_group.
+# Catalog v1.3 ships an explicit `brand` field per package; this table is the
+# fallback for older catalogs and for packages the catalog forgot to label.
+# See docs/GATE-BAR-DESIGN.md §1 for the full naming pivot.
+_BRAND_BY_GROUP: dict[str, str] = {
+    "anthropic": "Claude",
+    "openai": "Codex",
+    "gemini": "Gemini",
+    "deepseek": "DeepSeek",
+    "kilocode": "Kilo Code",
+    "kilo": "Kilo Code",
+    "openrouter": "OpenRouter",
+    "qwen": "Qwen",
+    "blackbox": "Blackbox",
+}
+
+
+def _derive_brand(provider_group: str) -> str:
+    """Fallback brand label for catalogs still on pre-v1.3 schema."""
+    if not provider_group or provider_group == "unknown":
+        return "Unknown"
+    return _BRAND_BY_GROUP.get(provider_group, provider_group.title())
+
+
+def _slugify_brand(brand: str) -> str:
+    """URL-safe kebab-case version of a brand name.
+
+    ``"Kilo Code"`` -> ``"kilo-code"``, ``"Claude"`` -> ``"claude"``,
+    ``"OpenRouter"`` -> ``"openrouter"``. Used as the path segment in
+    /dashboard/quotas/<brand_slug>.
+    """
+    if not brand:
+        return "unknown"
+    out: list[str] = []
+    for ch in brand.strip().lower():
+        if ch.isalnum():
+            out.append(ch)
+        elif ch in (" ", "_", "-", "."):
+            if out and out[-1] != "-":
+                out.append("-")
+    slug = "".join(out).strip("-")
+    return slug or "unknown"
+
+
+def _derive_identity(requires: str | None) -> dict[str, str] | None:
+    """Describe the credential backing a package.
+
+    Produces what the widget needs for the "plan · login method" line. Env
+    vars render as "API · env <NAME>", OAuth subjects as "OAuth · <subject>".
+    Plan / email enrichment (e.g. Claude Pro vs Max) is deferred to a
+    follow-up that reads the OAuth token store — this is the on-disk MVP.
+    """
+    if not requires:
+        return None
+    value = str(requires).strip()
+    if not value:
+        return None
+    if value.replace("_", "").isalnum() and value.isupper():
+        return {"login_method": "API key", "credential": value}
+    return {"login_method": "OAuth", "credential": value}
+
+
+def _compute_pace(used: float, total: float, elapsed_ratio: float) -> tuple[float | None, float | None]:
+    """Return ``(pace_delta, elapsed_ratio)`` for a window-based package.
+
+    ``pace_delta = used_ratio - elapsed_ratio``. Positive means the operator
+    is burning faster than a linear schedule; negative means they're under
+    pace. ``None`` when the package has no meaningful total (limit=0).
+    """
+    if total <= 0:
+        return None, None
+    er = max(0.0, min(1.0, elapsed_ratio))
+    used_ratio = used / total
+    return used_ratio - er, er
+
+
+@dataclass
+class _StatusCtx:
+    """Immutable per-package context threaded into the _status_* helpers.
+
+    Keeping this as a dataclass (not positional args) stops the signatures
+    from drifting every time we add a new field.
+    """
+
+    package_id: str
+    provider_id: str
+    provider_group: str
+    brand: str
+    brand_slug: str
+    identity: dict[str, str] | None
+    source: SourceType
+    confidence: ConfidenceLevel
+    last_updated: str | None
+    notes: str | None
+
+
 # -----------------------------------------------------------------------------
 # Per-package-type computation
 # -----------------------------------------------------------------------------
@@ -213,13 +332,7 @@ def _derive_provider_group(provider_id: str) -> str:
 
 def _status_credits(
     package: dict[str, Any],
-    package_id: str,
-    provider_id: str,
-    provider_group: str,
-    source: SourceType,
-    confidence: ConfidenceLevel,
-    last_updated: str | None,
-    notes: str | None,
+    ctx: _StatusCtx,
     now: datetime,
     sqlite_path: Path | None,
 ) -> QuotaStatus:
@@ -235,10 +348,10 @@ def _status_credits(
             expiry_date = date.fromisoformat(expiry_iso)
             days_until_expiry = (expiry_date - now.date()).days
         except ValueError:
-            logger.warning("Invalid expiry_date %r on package %s", expiry_iso, package_id)
+            logger.warning("Invalid expiry_date %r on package %s", expiry_iso, ctx.package_id)
 
     # Burn rate: look at the last 7d of requests for this provider
-    burn = _local_burn_per_day_usd(provider_id, now, sqlite_path, days=7)
+    burn = _local_burn_per_day_usd(ctx.provider_id, now, sqlite_path, days=7)
     projected_days_left: float | None = None
     if burn and burn > 0:
         projected_days_left = remaining / burn
@@ -246,35 +359,36 @@ def _status_credits(
     alert = _classify_credits_alert(remaining, days_until_expiry, projected_days_left)
 
     return QuotaStatus(
-        provider_id=provider_id,
-        provider_group=provider_group,
-        package_id=package_id,
+        provider_id=ctx.provider_id,
+        provider_group=ctx.provider_group,
+        package_id=ctx.package_id,
         package_type="credits",
         total=total,
         used=used,
         remaining=remaining,
         remaining_ratio=ratio,
         alert=alert,
-        source=source,
-        confidence=confidence,
-        last_updated=last_updated,
+        source=ctx.source,
+        confidence=ctx.confidence,
+        last_updated=ctx.last_updated,
+        brand=ctx.brand,
+        brand_slug=ctx.brand_slug,
+        identity=ctx.identity,
         expiry_date=expiry_iso,
         days_until_expiry=days_until_expiry,
         burn_per_day=burn,
         projected_days_left=projected_days_left,
-        notes=notes,
+        # Pace is not meaningful for credits packages — projected_days_left
+        # already carries the "am I burning too fast?" signal.
+        pace_delta=None,
+        elapsed_ratio=None,
+        notes=ctx.notes,
     )
 
 
 def _status_rolling_window(
     package: dict[str, Any],
-    package_id: str,
-    provider_id: str,
-    provider_group: str,
-    source: SourceType,
-    confidence: ConfidenceLevel,
-    last_updated: str | None,
-    notes: str | None,
+    ctx: _StatusCtx,
     now: datetime,
     sqlite_path: Path | None,
 ) -> QuotaStatus:
@@ -282,7 +396,7 @@ def _status_rolling_window(
     limit = float(package.get("limit_per_window") or 0)
     model_weights: dict[str, float] = package.get("model_weights") or {}
     extra_ids = [str(p) for p in (package.get("extra_provider_ids") or [])]
-    counted_ids = [provider_id, *extra_ids]
+    counted_ids = [ctx.provider_id, *extra_ids]
 
     # Local count: weighted request count over the last window_hours, summed
     # across provider_id + any extra_provider_ids sharing the same quota.
@@ -297,47 +411,53 @@ def _status_rolling_window(
     ratio = (remaining / limit) if limit > 0 else 0.0
 
     if earliest:
+        window_start = earliest
         reset_at = (earliest + timedelta(hours=window_hours)).isoformat()
     else:
+        window_start = now  # fresh window
         reset_at = (now + timedelta(hours=window_hours)).isoformat()
+
+    # Elapsed fraction of this rolling window — used for the pace marker.
+    elapsed_hours = max(0.0, (now - window_start).total_seconds() / 3600.0)
+    elapsed_ratio = elapsed_hours / window_hours if window_hours > 0 else 0.0
+    pace_delta, elapsed_clamped = _compute_pace(used, limit, elapsed_ratio)
 
     alert = _classify_window_alert(remaining, limit)
 
     return QuotaStatus(
-        provider_id=provider_id,
-        provider_group=provider_group,
-        package_id=package_id,
+        provider_id=ctx.provider_id,
+        provider_group=ctx.provider_group,
+        package_id=ctx.package_id,
         package_type="rolling_window",
         total=limit,
         used=used,
         remaining=remaining,
         remaining_ratio=ratio,
         alert=alert,
-        source=source,
-        confidence=confidence,
-        last_updated=last_updated,
+        source=ctx.source,
+        confidence=ctx.confidence,
+        last_updated=ctx.last_updated,
+        brand=ctx.brand,
+        brand_slug=ctx.brand_slug,
+        identity=ctx.identity,
         window_hours=window_hours,
         reset_at=reset_at,
-        notes=notes,
+        pace_delta=pace_delta,
+        elapsed_ratio=elapsed_clamped,
+        notes=ctx.notes,
         extras={"model_weights": model_weights} if model_weights else {},
     )
 
 
 def _status_daily(
     package: dict[str, Any],
-    package_id: str,
-    provider_id: str,
-    provider_group: str,
-    source: SourceType,
-    confidence: ConfidenceLevel,
-    last_updated: str | None,
-    notes: str | None,
+    ctx: _StatusCtx,
     now: datetime,
     sqlite_path: Path | None,
 ) -> QuotaStatus:
     limit = float(package.get("limit_per_day") or 0)
     extra_ids = [str(p) for p in (package.get("extra_provider_ids") or [])]
-    counted_ids = [provider_id, *extra_ids]
+    counted_ids = [ctx.provider_id, *extra_ids]
 
     # Count requests since UTC midnight — summed across counted_ids so a daily
     # quota shared by multiple router provider IDs (e.g. Gemini free tier
@@ -354,23 +474,32 @@ def _status_daily(
     next_midnight = midnight + timedelta(days=1)
     reset_at = next_midnight.isoformat()
 
+    # Daily pace: how far into the 24h we are vs. how much we've burnt.
+    elapsed_ratio = hours_since_midnight / 24.0
+    pace_delta, elapsed_clamped = _compute_pace(used, limit, elapsed_ratio)
+
     alert = _classify_window_alert(remaining, limit)
 
     return QuotaStatus(
-        provider_id=provider_id,
-        provider_group=provider_group,
-        package_id=package_id,
+        provider_id=ctx.provider_id,
+        provider_group=ctx.provider_group,
+        package_id=ctx.package_id,
         package_type="daily",
         total=limit,
         used=used,
         remaining=remaining,
         remaining_ratio=ratio,
         alert=alert,
-        source=source,
-        confidence=confidence,
-        last_updated=last_updated,
+        source=ctx.source,
+        confidence=ctx.confidence,
+        last_updated=ctx.last_updated,
+        brand=ctx.brand,
+        brand_slug=ctx.brand_slug,
+        identity=ctx.identity,
         reset_at=reset_at,
-        notes=notes,
+        pace_delta=pace_delta,
+        elapsed_ratio=elapsed_clamped,
+        notes=ctx.notes,
     )
 
 

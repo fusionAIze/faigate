@@ -2864,7 +2864,14 @@ def _credential_available(hint: str | None) -> bool:
 def _filter_packages_by_credentials(
     packages: dict[str, dict[str, Any]],
 ) -> tuple[dict[str, dict[str, Any]], list[dict[str, str]]]:
-    """Return (kept, skipped) after applying ``_requires_credential`` gating."""
+    """Return (kept, skipped) after applying ``_requires_credential`` gating.
+
+    Skipped entries carry the brand label so the widget can render
+    "Qwen — no OAuth token" instead of "qwen-free-daily". Falls back to the
+    provider_group-derived brand when the catalog is pre-v1.3.
+    """
+    from .quota_tracker import _derive_brand, _slugify_brand  # local import to avoid cycles
+
     kept: dict[str, dict[str, Any]] = {}
     skipped: list[dict[str, str]] = []
     for pkg_id, pkg in packages.items():
@@ -2872,10 +2879,15 @@ def _filter_packages_by_credentials(
         if _credential_available(hint):
             kept[pkg_id] = pkg
         else:
+            provider_group = str(pkg.get("provider_group") or "")
+            brand = str(pkg.get("brand") or _derive_brand(provider_group))
+            brand_slug = str(pkg.get("brand_slug") or _slugify_brand(brand))
             skipped.append(
                 {
                     "package_id": pkg_id,
-                    "provider_group": str(pkg.get("provider_group") or ""),
+                    "provider_group": provider_group,
+                    "brand": brand,
+                    "brand_slug": brand_slug,
                     "requires": str(hint or ""),
                 }
             )
@@ -2942,6 +2954,27 @@ async def quotas():
         key = str(s.get("alert") or "unknown")
         by_alert[key] = by_alert.get(key, 0) + 1
 
+    # "Available to add" — brands that exist in the shared catalog but have
+    # no active package on this machine. Filters out brands the operator
+    # already uses so the widget's mini-block doesn't nudge them toward
+    # something already wired up.
+    active_brand_slugs = {str(s.get("brand_slug") or "") for s in statuses_json}
+    catalog_suggestions: list[dict[str, str]] = []
+    seen_slugs: set[str] = set()
+    for pkg_id, pkg in raw_packages.items():
+        brand_slug = str(pkg.get("brand_slug") or "")
+        if not brand_slug or brand_slug in active_brand_slugs or brand_slug in seen_slugs:
+            continue
+        tagline = pkg.get("catalog_tagline") or pkg.get("name") or pkg_id
+        catalog_suggestions.append(
+            {
+                "brand": str(pkg.get("brand") or ""),
+                "brand_slug": brand_slug,
+                "tagline": str(tagline),
+            }
+        )
+        seen_slugs.add(brand_slug)
+
     return {
         "packages": statuses_json,
         "count": len(statuses_json),
@@ -2950,6 +2983,7 @@ async def quotas():
         "has_exhausted": any(s.get("alert") == "exhausted" for s in statuses_json),
         "header_snapshots": snapshots_out,
         "skipped_packages": skipped_packages,
+        "catalog_suggestions": catalog_suggestions,
     }
 
 
