@@ -2090,6 +2090,26 @@ class Config:
         )
 
     @property
+    def quota_poll(self) -> dict:
+        """Quota balance poller settings (Phase 2 of the quota-tracking work).
+
+        Only governs provider API-balance refreshes (DeepSeek, Kilo). The
+        local counter in :mod:`quota_tracker` and the header-capture
+        middleware are independent of this block. Poller is disabled by
+        default because it requires operator-provided API keys that aren't
+        present in a fresh install.
+        """
+        return self._data.get(
+            "quota_poll",
+            {
+                "enabled": False,
+                "on_startup": True,
+                "interval_seconds": 3600,
+                "fast_lane_interval_seconds": 900,
+            },
+        )
+
+    @property
     def anthropic_bridge(self) -> dict:
         return self._data.get(
             "anthropic_bridge",

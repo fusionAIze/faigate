@@ -3,18 +3,89 @@ set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/faigate-service-lib.sh"
 
+FORCE=0
 case "${1:-}" in
   --help|-h)
     cat <<'EOF'
 Usage:
-  ./scripts/faigate-install
+  ./scripts/faigate-install [--force]
 
 Install fusionAIze Gate as a managed service and create helper links for the
 current platform.
+
+SAFETY: If an existing faigate installation is detected (Homebrew or a
+running user-level LaunchAgent/systemd unit), the script refuses to run to
+avoid creating a parallel, conflicting install. Use --force to override.
+
+For Homebrew-managed installs, upgrade with:
+  brew upgrade faigate
 EOF
     exit 0
     ;;
+  --force)
+    FORCE=1
+    ;;
 esac
+
+# ---- Collision detection: refuse to install alongside existing faigate ----
+faigate_detect_existing_install() {
+  local detected=()
+  # 1. Homebrew-managed install (the common MacOS case)
+  if command -v brew >/dev/null 2>&1; then
+    if brew list --formula 2>/dev/null | grep -qx "faigate"; then
+      detected+=("Homebrew: $(brew --prefix)/Cellar/faigate (use: brew upgrade faigate)")
+    fi
+    if brew services list 2>/dev/null | awk '{print $1}' | grep -qx "faigate"; then
+      detected+=("Homebrew service active: 'homebrew.mxcl.faigate'")
+    fi
+  fi
+  # 2. Running launchd agent from a previous user-level install
+  if [ "$(uname -s)" = "Darwin" ]; then
+    if launchctl list 2>/dev/null | awk '{print $3}' | grep -qx "com.fusionaize.faigate"; then
+      detected+=("LaunchAgent 'com.fusionaize.faigate' already loaded")
+    fi
+    local brew_cfg=""
+    if [ -f "/opt/homebrew/etc/faigate/config.yaml" ]; then
+      brew_cfg="/opt/homebrew/etc/faigate/config.yaml"
+    elif [ -f "/usr/local/etc/faigate/config.yaml" ]; then
+      brew_cfg="/usr/local/etc/faigate/config.yaml"
+    fi
+    if [ -n "$brew_cfg" ]; then
+      detected+=("Homebrew config present at: $brew_cfg")
+    fi
+  fi
+  # 3. Running systemd unit (Linux)
+  if [ "$(uname -s)" = "Linux" ] && command -v systemctl >/dev/null 2>&1; then
+    if systemctl list-unit-files faigate.service 2>/dev/null | grep -q faigate.service; then
+      detected+=("systemd unit 'faigate.service' present")
+    fi
+  fi
+  if [ "${#detected[@]}" -gt 0 ]; then
+    echo "ERROR: existing faigate installation(s) detected:" >&2
+    printf '  - %s\n' "${detected[@]}" >&2
+    echo "" >&2
+    echo "Refusing to install in parallel (would create conflicting service + duplicate config)." >&2
+    echo "Homebrew upgrade: brew upgrade faigate" >&2
+    echo "Override with: $(basename "$0") --force    (not recommended)" >&2
+    return 1
+  fi
+  return 0
+}
+
+# Defensive backup: timestamped copy of an existing file before any write.
+# Called even though downstream uses 'if [ ! -f ]' guards — cheap insurance.
+faigate_backup_if_exists() {
+  local target="$1"
+  [ -f "$target" ] || return 0
+  local stamp
+  stamp="$(date +%Y%m%d%H%M%S)"
+  cp -p "$target" "${target}.bak.${stamp}"
+  echo "backup: ${target} -> ${target}.bak.${stamp}"
+}
+
+if [ "$FORCE" -ne 1 ]; then
+  faigate_detect_existing_install
+fi
 
 repo_root="$(faigate_repo_root)"
 helpers=(
@@ -53,10 +124,16 @@ case "$(faigate_platform)" in
     if [ ! -f "$(faigate_mac_config_path)" ]; then
       cp "$repo_root/config.yaml" "$(faigate_mac_config_path)"
       echo "copied config template to: $(faigate_mac_config_path)"
+    else
+      faigate_backup_if_exists "$(faigate_mac_config_path)"
+      echo "config already exists, keeping current: $(faigate_mac_config_path)"
     fi
     if [ ! -f "$(faigate_mac_config_dir)/faigate.env" ]; then
       cp "$repo_root/.env.example" "$(faigate_mac_config_dir)/faigate.env"
       echo "copied env template to: $(faigate_mac_config_dir)/faigate.env"
+    else
+      faigate_backup_if_exists "$(faigate_mac_config_dir)/faigate.env"
+      echo "env already exists, keeping current: $(faigate_mac_config_dir)/faigate.env"
     fi
     faigate_render_mac_plist
     faigate_install_helper_links "${helpers[@]}"
@@ -69,6 +146,10 @@ case "$(faigate_platform)" in
     fi
 
     sudo install -d -o faigate -g faigate -m 755 /var/lib/faigate
+    if [ -f /etc/systemd/system/faigate.service ]; then
+      sudo cp -p /etc/systemd/system/faigate.service \
+        "/etc/systemd/system/faigate.service.bak.$(date +%Y%m%d%H%M%S)"
+    fi
     sudo install -m 644 "$repo_root/faigate.service" /etc/systemd/system/faigate.service
 
     for helper in "${helpers[@]}"; do

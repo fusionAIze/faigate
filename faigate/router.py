@@ -1652,15 +1652,31 @@ class Router:
         kilo_score = int(kilo_fit.get("score") or 0)
         adaptation_penalty = int(runtime_state.get("penalty", 0) or 0)
         recovery_score = self._recovery_posture_score(lane, runtime_state, routing_posture)
-        # Package score based on remaining credits and expiry
+        # Package score: remaining credits, expiry bonus, and — if quota_tracker
+        # classified the package as `use_or_lose` or `topup` — an urgency boost
+        # that overrides the simple "days_left <= 7" heuristic. Also handles
+        # rolling_window / daily types introduced in Phase 1 of quota tracking.
         package_score = 0
-        package_details = []
+        package_details: list[dict[str, Any]] = []
         packages = _get_packages_for_provider(name)
         for pkg in packages:
+            ptype = str(pkg.get("package_type") or "credits")
+            # Compute a unified QuotaStatus when possible; fall back to the
+            # legacy credits-only path if quota_tracker isn't importable (e.g.
+            # stripped-down test harness).
+            status = None
+            try:
+                from .quota_tracker import compute_quota_status
+
+                status = compute_quota_status(pkg)
+            except Exception:  # noqa: BLE001
+                status = None
+
             total = pkg.get("total_credits")
             used = pkg.get("used_credits", 0)
             expiry = pkg.get("expiry_date")
-            if total is not None and total > 0:
+
+            if ptype == "credits" and total is not None and total > 0:
                 remaining = total - used
                 remaining_ratio = remaining / total
                 # Score based on remaining ratio (0-5 points)
@@ -1688,6 +1704,31 @@ class Router:
                         "remaining_ratio": remaining_ratio,
                     }
                 )
+            elif status is not None and ptype in ("rolling_window", "daily") and status.total > 0:
+                # Prefer subscription/daily buckets that still have headroom.
+                # Max bonus = 5 (parity with credits) so no provider class
+                # dominates routing purely via package type.
+                package_score += min(5, int(status.remaining_ratio * 5))
+                package_details.append(
+                    {
+                        "package_id": status.package_id,
+                        "package_type": ptype,
+                        "remaining": status.remaining,
+                        "total": status.total,
+                        "remaining_ratio": status.remaining_ratio,
+                        "alert": status.alert,
+                        "source": status.source,
+                    }
+                )
+
+            # Cross-type urgency boost: quota_tracker's use_or_lose alert is
+            # strictly more informed than the raw "days_left <= 7" rule —
+            # it combines expiry *with* projected burn rate, so a package
+            # with 8 days to expiry and only 2 days of projected spend will
+            # correctly light up. Add +3 on top of the existing expiry_score
+            # so an urgent package decisively wins a tie.
+            if status is not None and status.alert == "use_or_lose":
+                package_score += 3
         image_score = 0
         image_policy_score = 0
         image_outputs_fit = True

@@ -95,6 +95,7 @@ _update_checker: UpdateChecker
 _adaptive_state: AdaptiveRouteState = AdaptiveRouteState()
 _provider_catalog_store: ProviderCatalogStore | None = None
 _provider_catalog_refresh_task: asyncio.Task[None] | None = None
+_quota_poll_task: asyncio.Task[None] | None = None
 
 
 def _provider_catalog_config_path() -> str:
@@ -2259,6 +2260,7 @@ async def lifespan(app: FastAPI):
     """Startup / shutdown lifecycle."""
     global _config, _providers, _router, _metrics, _update_checker, _adaptive_state
     global _provider_catalog_store, _provider_catalog_refresh_task
+    global _quota_poll_task
 
     logging.basicConfig(
         level=logging.INFO,
@@ -2325,6 +2327,34 @@ async def lifespan(app: FastAPI):
     except Exception as exc:  # noqa: BLE001
         logger.warning("Provider source catalog startup refresh skipped: %s", exc)
 
+    # Quota balance poller (Phase 2: DeepSeek + Kilo). Disabled by default —
+    # only activates when config.quota_poll.enabled is true AND at least one
+    # api_poll package is present in the external catalog. Missing API keys
+    # degrade individual packages, never the whole loop.
+    try:
+        quota_poll_cfg = _config.quota_poll
+        if quota_poll_cfg.get("enabled"):
+            from .quota_poller import quota_poll_loop, run_poll_once
+
+            if quota_poll_cfg.get("on_startup"):
+                try:
+                    await run_poll_once(providers_cfg=_config.providers)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("Quota poll startup warmup failed: %s", exc)
+            interval = int(quota_poll_cfg.get("interval_seconds") or 3600)
+            fast = int(quota_poll_cfg.get("fast_lane_interval_seconds") or 900)
+            _quota_poll_task = asyncio.create_task(
+                quota_poll_loop(
+                    providers_cfg=_config.providers,
+                    interval_seconds=interval,
+                    fast_lane_interval_seconds=fast,
+                ),
+                name="faigate-quota-poll",
+            )
+            logger.info("Quota poller started (interval=%ds, fast_lane=%ds)", interval, fast)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Quota poller startup skipped: %s", exc)
+
     community_hooks = get_community_hooks_loaded()
     if community_hooks:
         logger.info("Community hooks loaded: %s", ", ".join(community_hooks))
@@ -2347,6 +2377,11 @@ async def lifespan(app: FastAPI):
         with suppress(asyncio.CancelledError):
             await _provider_catalog_refresh_task
         _provider_catalog_refresh_task = None
+    if _quota_poll_task is not None:
+        _quota_poll_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await _quota_poll_task
+        _quota_poll_task = None
     if _provider_catalog_store is not None:
         _provider_catalog_store.close()
         _provider_catalog_store = None
@@ -2789,6 +2824,64 @@ async def operator_events(
             update_type=update_type,
             eligible=eligible,
         )
+    }
+
+
+@app.get("/api/quotas")
+async def quotas():
+    """Unified view across all quota packages (credits / rolling / daily).
+
+    Returns the QuotaStatus list the dashboard renders as progress bars plus
+    the latest header-capture snapshot per provider (diagnostic). Never
+    errors: missing catalog / SQLite path → empty lists.
+    """
+    from pathlib import Path
+
+    from .quota_headers import all_latest_snapshots
+    from .quota_tracker import compute_all_statuses
+
+    sqlite_path = None
+    try:
+        db_path = _config.metrics.get("db_path") if _config else None
+        if db_path:
+            sqlite_path = Path(db_path)
+    except Exception:  # noqa: BLE001
+        sqlite_path = None
+
+    try:
+        statuses = compute_all_statuses(sqlite_path=sqlite_path)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("compute_all_statuses failed: %s", exc)
+        statuses = []
+
+    # Group by alert level for quick operator triage.
+    snapshots_raw = all_latest_snapshots()
+    snapshots_out: dict[str, dict[str, Any]] = {}
+    for pid, snap in snapshots_raw.items():
+        snapshots_out[pid] = {
+            "dialect": snap.dialect,
+            "limit_requests": snap.limit_requests,
+            "remaining_requests": snap.remaining_requests,
+            "reset_requests_at": (snap.reset_requests_at.isoformat() if snap.reset_requests_at else None),
+            "limit_tokens": snap.limit_tokens,
+            "remaining_tokens": snap.remaining_tokens,
+            "reset_tokens_at": (snap.reset_tokens_at.isoformat() if snap.reset_tokens_at else None),
+            "retry_after_seconds": snap.retry_after_seconds,
+        }
+
+    statuses_json = [s.to_dict() for s in statuses]
+    by_alert: dict[str, int] = {}
+    for s in statuses_json:
+        key = str(s.get("alert") or "unknown")
+        by_alert[key] = by_alert.get(key, 0) + 1
+
+    return {
+        "packages": statuses_json,
+        "count": len(statuses_json),
+        "by_alert": by_alert,
+        "has_use_or_lose": any(s.get("alert") == "use_or_lose" for s in statuses_json),
+        "has_exhausted": any(s.get("alert") == "exhausted" for s in statuses_json),
+        "header_snapshots": snapshots_out,
     }
 
 
@@ -3253,6 +3346,167 @@ async def image_edits(request: Request):
 async def dashboard():
     """Minimal self-contained dashboard – no build step, no deps."""
     return _DASHBOARD_HTML
+
+
+_QUOTAS_DASHBOARD_HTML = """<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>faigate · Quotas</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      --bg: #0f1117; --fg: #e6e9ef; --dim: #8a93a6;
+      --card: #1a1d27; --border: #2a2f3d;
+      --ok: #4ade80; --watch: #fbbf24; --topup: #fb923c;
+      --uol: #ef4444; --exhausted: #7f1d1d;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 24px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg); color: var(--fg); line-height: 1.45;
+    }
+    h1 { font-size: 20px; margin: 0 0 4px; }
+    .sub { color: var(--dim); font-size: 13px; margin-bottom: 24px; }
+    .summary {
+      display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px;
+    }
+    .pill {
+      padding: 4px 10px; border-radius: 999px; font-size: 12px;
+      background: var(--card); border: 1px solid var(--border);
+    }
+    .pill.urgent { border-color: var(--uol); color: var(--uol); }
+    .grid { display: grid; gap: 12px; grid-template-columns: 1fr; max-width: 980px; }
+    .card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 8px; padding: 14px 16px;
+    }
+    .card.urgent { border-left: 3px solid var(--uol); }
+    .card.watch { border-left: 3px solid var(--watch); }
+    .card.ok { border-left: 3px solid var(--ok); }
+    .card.topup { border-left: 3px solid var(--topup); }
+    .card.exhausted { border-left: 3px solid var(--exhausted); opacity: 0.7; }
+    .row1 { display: flex; justify-content: space-between; align-items: baseline; }
+    .title { font-weight: 600; font-size: 14px; }
+    .type { color: var(--dim); font-size: 11px; text-transform: uppercase; }
+    .bar {
+      height: 6px; background: #262a36; border-radius: 3px;
+      margin: 8px 0 6px; overflow: hidden;
+    }
+    .bar-fill { height: 100%; transition: width .3s; }
+    .bar-fill.ok { background: var(--ok); }
+    .bar-fill.watch { background: var(--watch); }
+    .bar-fill.topup { background: var(--topup); }
+    .bar-fill.use_or_lose { background: var(--uol); }
+    .bar-fill.exhausted { background: var(--exhausted); }
+    .meta {
+      display: flex; gap: 16px; flex-wrap: wrap;
+      font-size: 12px; color: var(--dim);
+    }
+    .meta .k { color: var(--fg); font-weight: 500; }
+    .notes { margin-top: 6px; font-size: 11px; color: var(--dim); font-style: italic; }
+    .empty { padding: 40px; text-align: center; color: var(--dim); }
+    a { color: #60a5fa; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <h1>Quotas</h1>
+  <div class="sub">
+    Live view of all configured packages — updated every 60s. Source:
+    <a href="/api/quotas">/api/quotas</a>
+  </div>
+  <div class="summary" id="summary"></div>
+  <div class="grid" id="grid"><div class="empty">Loading…</div></div>
+
+<script>
+const ALERT_ORDER = ["use_or_lose", "exhausted", "topup", "watch", "ok", "unknown"];
+const EMOJI = {ok: "🟢", watch: "🟡", topup: "🟠", use_or_lose: "⚠️", exhausted: "🔴"};
+
+function pct(x) { return Math.max(0, Math.min(100, Math.round(x * 100))); }
+function fmtNum(n) {
+  if (n === null || n === undefined) return "–";
+  if (Math.abs(n) >= 100) return Math.round(n).toString();
+  return (Math.round(n * 100) / 100).toString();
+}
+
+function renderCard(s) {
+  const alertClass = s.alert === "use_or_lose" ? "urgent" : s.alert;
+  const ratioPct = pct(s.remaining_ratio);
+  const usedPct = 100 - ratioPct;
+  const unit = s.package_type === "credits" ? "$" : "req";
+  const meta = [];
+  meta.push(`<span><span class="k">${fmtNum(s.remaining)}</span> / ${fmtNum(s.total)} ${unit} left</span>`);
+  if (s.expiry_date) {
+    const urgencyMark = s.days_until_expiry !== null && s.days_until_expiry <= 7 ? " ⚠️" : "";
+    meta.push(`<span>expires <span class="k">${s.expiry_date}</span> (${s.days_until_expiry}d${urgencyMark})</span>`);
+  }
+  if (s.window_hours) {
+    meta.push(`<span>window: <span class="k">${s.window_hours}h</span></span>`);
+  }
+  if (s.reset_at) {
+    meta.push(`<span>resets: <span class="k">${new Date(s.reset_at).toLocaleTimeString()}</span></span>`);
+  }
+  if (s.burn_per_day) {
+    meta.push(`<span>burn/day: <span class="k">${fmtNum(s.burn_per_day)}</span></span>`);
+  }
+  if (s.projected_days_left !== null && s.projected_days_left !== undefined) {
+    meta.push(`<span>runway: <span class="k">${fmtNum(s.projected_days_left)}d</span></span>`);
+  }
+  meta.push(`<span>source: <span class="k">${s.source}</span> (${s.confidence})</span>`);
+
+  return `<div class="card ${alertClass}">
+    <div class="row1">
+      <div class="title">${EMOJI[s.alert] || "·"} ${s.provider_id} <span style="color:var(--dim);font-weight:400">· ${s.package_id}</span></div>
+      <div class="type">${s.package_type}</div>
+    </div>
+    <div class="bar"><div class="bar-fill ${s.alert}" style="width:${usedPct}%"></div></div>
+    <div class="meta">${meta.join("")}</div>
+    ${s.notes ? `<div class="notes">${s.notes}</div>` : ""}
+  </div>`;
+}
+
+async function refresh() {
+  try {
+    const r = await fetch("/api/quotas");
+    const data = await r.json();
+    const grid = document.getElementById("grid");
+    const summary = document.getElementById("summary");
+
+    if (!data.packages || data.packages.length === 0) {
+      grid.innerHTML = '<div class="empty">No packages configured. Set <code>FAIGATE_PROVIDER_METADATA_DIR</code> and drop a <code>packages/catalog.v1.json</code> to get started.</div>';
+      summary.innerHTML = "";
+      return;
+    }
+
+    const byAlert = data.by_alert || {};
+    summary.innerHTML = ALERT_ORDER
+      .filter(a => byAlert[a])
+      .map(a => `<span class="pill${a === "use_or_lose" || a === "exhausted" ? " urgent" : ""}">${EMOJI[a] || "·"} ${a}: ${byAlert[a]}</span>`)
+      .join("");
+
+    const sorted = [...data.packages].sort((a, b) => {
+      return ALERT_ORDER.indexOf(a.alert) - ALERT_ORDER.indexOf(b.alert);
+    });
+    grid.innerHTML = sorted.map(renderCard).join("");
+  } catch (e) {
+    document.getElementById("grid").innerHTML = `<div class="empty">Error: ${e.message}</div>`;
+  }
+}
+
+refresh();
+setInterval(refresh, 60000);
+</script>
+</body>
+</html>
+"""
+
+
+@app.get("/dashboard/quotas", response_class=HTMLResponse)
+async def dashboard_quotas():
+    """Self-contained quotas page. Polls /api/quotas every 60s."""
+    return _QUOTAS_DASHBOARD_HTML
 
 
 @app.get("/dashboard/assets/{asset_kind}/{asset_name:path}")

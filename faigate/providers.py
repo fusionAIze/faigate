@@ -1092,6 +1092,12 @@ class ProviderBackend:
                     raise ProviderError(self.name, resp.status_code, error_text)
 
                 self.health.record_success(latency)
+                try:
+                    from .quota_headers import record_response_headers
+
+                    record_response_headers(self.name, dict(resp.headers))
+                except Exception:  # noqa: BLE001
+                    pass
                 return self._codex_completion_from_sse(
                     resp.text,
                     requested_model=model,
@@ -1138,6 +1144,15 @@ class ProviderBackend:
 
             self.health.record_success(latency)
             data = resp.json()
+
+            # Passive quota signal: mine rate-limit headers into the catalog.
+            # No-op for providers without recognised headers; never raises.
+            try:
+                from .quota_headers import record_response_headers
+
+                record_response_headers(self.name, dict(resp.headers))
+            except Exception:  # noqa: BLE001 — observer must not break the request
+                pass
 
             # Extract cache metrics from DeepSeek/OpenAI responses
             usage = data.get("usage", {})

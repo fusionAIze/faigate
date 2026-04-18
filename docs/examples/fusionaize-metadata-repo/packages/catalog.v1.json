@@ -1,0 +1,159 @@
+{
+  "schema_version": "1.1",
+  "generated_at": "2026-04-17T23:50:00Z",
+  "source_repo": "faigate/docs/examples",
+  "_notes": [
+    "Template for a personal packages catalog covering all 7 providers that",
+    "faigate can route to. Copy this file to your FAIGATE_PROVIDER_METADATA_DIR",
+    "at packages/catalog.v1.json and edit the numbers to match your reality.",
+    "",
+    "Fields (see faigate/quota_tracker.py for the authoritative spec):",
+    "  provider_id       — must match a provider name in config.yaml",
+    "  package_type      — 'credits' | 'rolling_window' | 'daily'  (default credits)",
+    "  total_credits     — for credits: your balance; updated by api_poll/manual",
+    "  used_credits      — for credits: derived or manual",
+    "  expiry_date       — for credits: YYYY-MM-DD, triggers use-or-lose alerts",
+    "  window_hours      — for rolling_window: e.g. 5 for Claude Pro",
+    "  limit_per_window  — for rolling_window: max requests in the window",
+    "  limit_per_day     — for daily: max requests since UTC midnight",
+    "  model_weights     — optional per-model cost multipliers (e.g. Opus ~5x)",
+    "  source            — 'api_poll' | 'header_capture' | 'local_count' | 'manual'",
+    "  confidence        — 'high' (API-verified) | 'medium' | 'low' | 'estimated' (heuristic)",
+    "  last_updated      — ISO 8601; automatically refreshed by the poller",
+    "",
+    "TIER RATIONALE:",
+    "  Kilo         : credits with 10-day expiry → use-or-lose boost makes router prefer it",
+    "  DeepSeek     : credits, no expiry → normal cost-based routing",
+    "  Blackbox     : credits, no expiry → normal cost-based routing",
+    "  Claude Pro   : subscription, rolling 5h window → heuristic limits, local counter",
+    "  OpenAI Plus  : subscription, rolling 3h window → heuristic limits, local counter",
+    "  Qwen free    : daily limit (2000 req/day public heuristic) → local counter",
+    "  Gemini free  : daily limit (1500 req/day public heuristic) → local counter"
+  ],
+  "packages": {
+    "kilo-credits-2026q2": {
+      "provider_id": "kilocode",
+      "package_type": "credits",
+      "total_credits": 25.00,
+      "used_credits": 0.00,
+      "expiry_date": "2026-04-27",
+      "source": "manual",
+      "confidence": "medium",
+      "last_updated": "2026-04-17T23:50:00Z",
+      "notes": "Replace total/used with real balance from kilo.ai dashboard. Poller will update once KILO_API_KEY is configured."
+    },
+
+    "deepseek-credits": {
+      "provider_id": "deepseek",
+      "package_type": "credits",
+      "total_credits": 10.00,
+      "used_credits": 0.00,
+      "expiry_date": null,
+      "source": "api_poll",
+      "confidence": "high",
+      "last_updated": "2026-04-17T23:50:00Z",
+      "notes": "Auto-refreshed every 1h via GET https://api.deepseek.com/user/balance"
+    },
+
+    "blackbox-credits": {
+      "provider_id": "blackbox-free",
+      "package_type": "credits",
+      "total_credits": 5.00,
+      "used_credits": 0.00,
+      "expiry_date": null,
+      "source": "manual",
+      "confidence": "low",
+      "last_updated": "2026-04-17T23:50:00Z",
+      "notes": "Blackbox has no public balance API. Update manually or rely on local counter."
+    },
+
+    "claude-pro-sonnet-5h": {
+      "provider_id": "claude-code",
+      "package_type": "rolling_window",
+      "window_hours": 5,
+      "limit_per_window": 40,
+      "model_weights": {
+        "claude-opus-4-7": 5,
+        "claude-opus-4-5": 5,
+        "claude-sonnet-4-7": 1,
+        "claude-sonnet-4-6": 1,
+        "claude-haiku-4-7": 1
+      },
+      "source": "local_count",
+      "confidence": "estimated",
+      "notes": "Anthropic does NOT publish Pro plan limits. 40 msg/5h is community-reported heuristic. 1 Opus message counts as ~5 Sonnet messages. Adjust after seeing real rate-limit errors."
+    },
+
+    "openai-plus-3h": {
+      "provider_id": "openai-codex",
+      "package_type": "rolling_window",
+      "window_hours": 3,
+      "limit_per_window": 40,
+      "model_weights": {
+        "gpt-5.4": 1,
+        "gpt-5.4-low": 1,
+        "gpt-5.4-high": 2,
+        "gpt-5.4-xhigh": 3,
+        "o1": 5,
+        "o1-mini": 2
+      },
+      "source": "local_count",
+      "confidence": "estimated",
+      "notes": "OpenAI does NOT publish Plus plan limits. 40 msg/3h is community-reported heuristic for GPT-4o-class. Reasoning models count heavier."
+    },
+
+    "qwen-portal-daily": {
+      "provider_id": "qwen-portal",
+      "package_type": "daily",
+      "limit_per_day": 2000,
+      "source": "local_count",
+      "confidence": "estimated",
+      "notes": "Qwen free tier approx. 2000 requests/day. Resets at UTC midnight. No public quota API."
+    },
+
+    "gemini-flash-lite-daily": {
+      "provider_id": "gemini-flash-lite",
+      "package_type": "daily",
+      "limit_per_day": 1500,
+      "source": "local_count",
+      "confidence": "estimated",
+      "notes": "Google AI Studio free tier for flash-lite: 1500 req/day documented. Resets at UTC midnight."
+    },
+
+    "gemini-flash-daily": {
+      "provider_id": "gemini-flash",
+      "package_type": "daily",
+      "limit_per_day": 1500,
+      "source": "local_count",
+      "confidence": "estimated",
+      "notes": "Same free tier bucket as flash-lite. Antigravity OAuth has higher limits if you're on AI Pro."
+    },
+
+    "gemini-pro-daily": {
+      "provider_id": "gemini-pro-high",
+      "package_type": "daily",
+      "limit_per_day": 50,
+      "source": "local_count",
+      "confidence": "estimated",
+      "notes": "Gemini 2.5 Pro free tier: ~50 req/day. Via Antigravity-OAuth (AI Pro) higher."
+    },
+
+    "antigravity-daily": {
+      "provider_id": "antigravity",
+      "package_type": "daily",
+      "limit_per_day": 1000,
+      "source": "local_count",
+      "confidence": "estimated",
+      "notes": "AI Pro via Antigravity OAuth. Limit is a guess; adjust based on real 429s."
+    },
+
+    "gemini-cli-daily": {
+      "provider_id": "gemini-cli",
+      "package_type": "daily",
+      "limit_per_day": 1000,
+      "source": "local_count",
+      "confidence": "estimated",
+      "notes": "Gemini CLI OAuth shares the same Google quota pool as antigravity."
+    }
+  }
+}
