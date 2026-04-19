@@ -1,5 +1,25 @@
 # fusionAIze Gate Changelog
 
+## v2.3.0 - 2026-04-19
+
+### Added
+
+- **Brand-first quota widget** (`/dashboard/quotas`): replaces the flat package list with one card per brand (Claude, DeepSeek, Kilo, …). Cards are sorted worst-alert first so the thing about to break is at the top. Each card stacks its sub-packages (session vs weekly, pay-as-you-go vs credits) with a pace marker on every window-based bar and an identity line (`OAuth · claude-code`, `API key · ${KEY}`) so you can tell which account feeds the meter.
+- **Per-brand detail view** (`/dashboard/quotas/<brand_slug>`): a focused page that shows the same quota panel plus a 24h totals strip, clients-by-profile table, routes/lanes breakdown, and an hourly sparkline. Shares CSS variables with the overview so scanning between them needs no retraining.
+- **Read-only brand endpoints** (`/api/quotas/<slug>/clients`, `/routes`, `/analytics`): the data feed behind the detail view. 404 on unknown brands (distinguishes "typo" from "no traffic yet"); analytics clamps `hours=1..168` and `days=1..90` to prevent URL-typo DB scans. Catalog surfaces `catalog_tagline` so the "Available to add" mini-block can show tier/price/quota shape at a glance.
+- **Default landing view** (`dashboard.quotas.default_view` in `config.yaml`): three options — `overview` (default), `brand:<slug>`, `cockpit`. `GET /dashboard/quotas` honors the setting via 302; `?view=overview` is an always-available escape hatch. A `Pin as Home` / `📌 Home` button sits on every brand card and the detail-page header — one-click promotion, no modal. Writes go through `ruamel.yaml` round-trip so the 220+ operator comments in a real `config.yaml` survive a pin toggle (`yaml.safe_dump` would flatten them). `GET/POST /api/dashboard/settings` drives the widget and is available to external consumers.
+- **Gate Bar 0.1 (macOS menubar companion)** at `apps/gate-bar/`: SwiftUI `MenuBarExtra` app that reads the same `/api/quotas` feed and shows `fAI · 83%` in the menubar (tightest window across all brands, colour-coded). Popover renders brand cards with the web widget's visual vocabulary; footer links to `Dashboard ↗` (server-side redirect honours `default_view`) and `Cockpit ↗`. Preferences: gateway URL, Cockpit URL, refresh cadence (manual / 1 / 2 / 5 / 15 min). 13 Swift-Testing tests green on both Xcode.app and Command Line Tools via `scripts/swift-test.sh`. Read-only — every write path links out to the Operator Cockpit. Sparkle auto-update + notifications + code signing + Homebrew cask tracked for 0.2+ (`apps/gate-bar/README.md`).
+
+### Changed
+
+- Quota widget groups by `provider_id` first and gates on credential availability so brands without a resolvable API key / OAuth token land in the collapsed "Skipped" block instead of showing a perpetually-empty bar.
+- `QuotaStatus` payload carries `brand`, `brand_slug`, `pace_delta`, and `identity` on every package (v1.3 catalog schema). Older v1.2 catalogs still decode through the brand-fallback table in `quota_tracker.py`.
+
+### Upgrade notes
+
+- New runtime dependency: `ruamel.yaml>=0.18.6` (already added to `requirements.txt` + `pyproject.toml`). Fresh `pip install faigate` or `brew upgrade faigate` picks it up automatically.
+- The Gate Bar macOS app is a separate artifact. v0.1 is source-only — build it with `cd apps/gate-bar && ./scripts/install-local.sh` for local testing. A notarized Homebrew cask ships with Gate Bar 0.2.
+
 ## v2.2.3 - 2026-04-18
 
 ### Fixed
