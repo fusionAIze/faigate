@@ -3458,60 +3458,81 @@ _QUOTAS_DASHBOARD_HTML = """<!doctype html>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     :root {
-      --bg: #0f1117; --fg: #e6e9ef; --dim: #8a93a6;
-      --card: #1a1d27; --border: #2a2f3d;
+      --bg: #0f1117; --fg: #e6e9ef; --dim: #8a93a6; --mid: #b9c1d1;
+      --card: #1a1d27; --border: #2a2f3d; --track: #262a36;
       --ok: #4ade80; --watch: #fbbf24; --topup: #fb923c;
       --uol: #ef4444; --exhausted: #7f1d1d;
+      --accent: #8b5cf6;
     }
     * { box-sizing: border-box; }
     body {
-      margin: 0; padding: 24px;
+      margin: 0; padding: 24px 28px 40px;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       background: var(--bg); color: var(--fg); line-height: 1.45;
     }
+    a { color: #60a5fa; text-decoration: none; }
+    a:hover { text-decoration: underline; }
     h1 { font-size: 20px; margin: 0 0 4px; }
-    .sub { color: var(--dim); font-size: 13px; margin-bottom: 24px; }
-    .summary {
-      display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px;
-    }
+    .sub { color: var(--dim); font-size: 13px; margin-bottom: 18px; }
+    .summary { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
     .pill {
       padding: 4px 10px; border-radius: 999px; font-size: 12px;
       background: var(--card); border: 1px solid var(--border);
     }
     .pill.urgent { border-color: var(--uol); color: var(--uol); }
-    .grid { display: grid; gap: 14px; grid-template-columns: 1fr; max-width: 980px; }
-    .provider {
+
+    /* ── Brand-card overview grid ─────────────────────────────────────── */
+    .grid {
+      display: grid; gap: 14px;
+      grid-template-columns: 1fr;
+      max-width: 1400px;
+    }
+    @media (min-width: 640px) { .grid { grid-template-columns: 1fr 1fr; } }
+    @media (min-width: 1100px) { .grid { grid-template-columns: 1fr 1fr 1fr; } }
+
+    .brand {
       background: var(--card); border: 1px solid var(--border);
-      border-radius: 10px; padding: 14px 16px;
+      border-radius: 10px; padding: 14px 16px 12px;
+      display: flex; flex-direction: column; gap: 10px;
     }
-    .provider.urgent { border-left: 3px solid var(--uol); }
-    .provider.watch { border-left: 3px solid var(--watch); }
-    .provider.ok { border-left: 3px solid var(--ok); }
-    .provider.topup { border-left: 3px solid var(--topup); }
-    .provider.exhausted { border-left: 3px solid var(--exhausted); opacity: 0.85; }
-    .provider-head {
+    .brand.urgent { border-left: 3px solid var(--uol); }
+    .brand.watch { border-left: 3px solid var(--watch); }
+    .brand.ok { border-left: 3px solid var(--ok); }
+    .brand.topup { border-left: 3px solid var(--topup); }
+    .brand.exhausted { border-left: 3px solid var(--exhausted); opacity: 0.88; }
+
+    .brand-head {
       display: flex; justify-content: space-between; align-items: baseline;
-      margin-bottom: 4px;
+      gap: 8px;
     }
-    .provider-name {
-      font-weight: 700; font-size: 15px; text-transform: capitalize;
-      letter-spacing: .3px;
+    .brand-name {
+      font-weight: 700; font-size: 16px; letter-spacing: .2px;
     }
-    .provider-ids { color: var(--dim); font-size: 11px; }
-    .pkg {
-      padding: 10px 0 2px;
+    .brand-name .emoji { margin-right: 4px; }
+    .brand-identity {
+      color: var(--dim); font-size: 11px; text-align: right;
+      font-feature-settings: "tnum";
+    }
+
+    .pkg-row {
+      padding: 8px 0 2px;
       border-top: 1px dashed var(--border);
-      margin-top: 8px;
     }
-    .pkg:first-of-type { border-top: none; margin-top: 0; padding-top: 2px; }
-    .row1 { display: flex; justify-content: space-between; align-items: baseline; }
-    .title { font-weight: 500; font-size: 13px; }
-    .title .emoji { margin-right: 4px; }
-    .title .pkg-id { color: var(--dim); font-weight: 400; }
-    .type { color: var(--dim); font-size: 10px; text-transform: uppercase; letter-spacing: .5px; }
+    .pkg-row:first-of-type { border-top: none; padding-top: 0; }
+    .pkg-head {
+      display: flex; justify-content: space-between; align-items: baseline;
+      gap: 8px; margin-bottom: 4px;
+    }
+    .pkg-title { font-weight: 500; font-size: 12.5px; color: var(--mid); }
+    .pkg-pct {
+      color: var(--fg); font-size: 12px; font-weight: 600;
+      font-feature-settings: "tnum";
+    }
+
+    /* Progress bar with inline pace marker */
     .bar {
-      height: 6px; background: #262a36; border-radius: 3px;
-      margin: 6px 0 6px; overflow: hidden;
+      position: relative; height: 8px;
+      background: var(--track); border-radius: 4px; overflow: hidden;
     }
     .bar-fill { height: 100%; transition: width .3s; }
     .bar-fill.ok { background: var(--ok); }
@@ -3519,39 +3540,119 @@ _QUOTAS_DASHBOARD_HTML = """<!doctype html>
     .bar-fill.topup { background: var(--topup); }
     .bar-fill.use_or_lose { background: var(--uol); }
     .bar-fill.exhausted { background: var(--exhausted); }
-    .meta {
-      display: flex; gap: 14px; flex-wrap: wrap;
-      font-size: 11.5px; color: var(--dim);
+    .bar-pace {
+      position: absolute; top: -1px; bottom: -1px;
+      width: 2px; background: rgba(255,255,255,0.72);
+      box-shadow: 0 0 0 1px rgba(0,0,0,0.4);
     }
-    .meta .k { color: var(--fg); font-weight: 500; }
-    .notes { margin-top: 4px; font-size: 10.5px; color: var(--dim); font-style: italic; }
+
+    .pkg-meta {
+      display: flex; gap: 10px; flex-wrap: wrap;
+      margin-top: 5px;
+      font-size: 11px; color: var(--dim);
+    }
+    .pkg-meta .k { color: var(--fg); font-weight: 500; }
+    .pkg-meta .pace-pos { color: var(--topup); }
+    .pkg-meta .pace-neg { color: var(--ok); }
+
+    .brand-foot {
+      display: flex; justify-content: space-between; align-items: center;
+      gap: 8px; padding-top: 4px;
+      border-top: 1px solid var(--border);
+    }
+    .btn {
+      display: inline-block; padding: 4px 10px; border-radius: 6px;
+      font-size: 11.5px; font-weight: 500;
+      border: 1px solid var(--border); color: var(--fg);
+      background: transparent; cursor: pointer;
+    }
+    .btn:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
+    .brand-foot .when { color: var(--dim); font-size: 11px; }
+
+    /* ── "Available to add" mini catalog block ────────────────────────── */
+    .catalog {
+      margin-top: 22px; max-width: 1400px;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 10px; padding: 14px 16px 10px;
+    }
+    .catalog-head {
+      display: flex; justify-content: space-between; align-items: baseline;
+      margin-bottom: 8px;
+    }
+    .catalog-title {
+      font-weight: 600; font-size: 13.5px; letter-spacing: .2px;
+    }
+    .catalog-sub { color: var(--dim); font-size: 11px; }
+    .cat-row {
+      display: grid; grid-template-columns: 130px 1fr auto;
+      gap: 12px; align-items: baseline;
+      padding: 7px 0;
+      border-top: 1px dashed var(--border);
+    }
+    .cat-row:first-child { border-top: none; }
+    .cat-brand { font-weight: 600; font-size: 13px; color: var(--fg); opacity: 0.8; }
+    .cat-tag { color: var(--mid); font-size: 12.5px; }
+    .cat-more {
+      padding: 8px 0 2px; color: var(--dim); font-size: 11.5px;
+    }
+
+    /* ── Skipped block ─────────────────────────────────────────────────── */
+    .skipped {
+      margin-top: 18px; max-width: 1400px;
+      padding: 10px 14px; border: 1px dashed var(--border); border-radius: 8px;
+      color: var(--dim); font-size: 12px;
+    }
+    .skipped strong { color: var(--fg); }
+    .skipped ul { margin: 6px 0 0 18px; padding: 0; }
+
     .empty { padding: 40px; text-align: center; color: var(--dim); }
-    a { color: #60a5fa; text-decoration: none; }
-    a:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
   <h1>Quotas</h1>
   <div class="sub">
-    Live view of all configured packages — updated every 60s. Source:
+    Live view of every active provider — updated every 60s. Raw feed:
     <a href="/api/quotas">/api/quotas</a>
   </div>
   <div class="summary" id="summary"></div>
   <div class="grid" id="grid"><div class="empty">Loading…</div></div>
-  <div id="skipped" style="margin-top:18px;color:var(--dim);font-size:12px;"></div>
+  <div id="catalog"></div>
+  <div id="skipped"></div>
 
 <script>
+// ── Config ────────────────────────────────────────────────────────────
+const COCKPIT_URL = "__COCKPIT_URL__";
 const ALERT_ORDER = ["use_or_lose", "exhausted", "topup", "watch", "ok", "unknown"];
 const ALERT_RANK = Object.fromEntries(ALERT_ORDER.map((a, i) => [a, i]));
 const EMOJI = {ok: "🟢", watch: "🟡", topup: "🟠", use_or_lose: "⚠️", exhausted: "🔴"};
 
+// ── Small helpers ─────────────────────────────────────────────────────
 function pct(x) { return Math.max(0, Math.min(100, Math.round(x * 100))); }
+function pctRaw(x) { return Math.max(0, x * 100); }
 function fmtNum(n) {
   if (n === null || n === undefined) return "–";
   if (Math.abs(n) >= 100) return Math.round(n).toString();
   return (Math.round(n * 100) / 100).toString();
 }
-
+function fmtPace(d) {
+  if (d === null || d === undefined) return null;
+  const pct = d * 100;
+  if (Math.abs(pct) < 0.5) return { text: "on pace", cls: "" };
+  const sign = pct > 0 ? "+" : "";
+  const cls = pct > 0 ? "pace-pos" : "pace-neg";
+  return { text: `pace ${sign}${pct.toFixed(1)}%`, cls };
+}
+function fmtResetRelative(iso) {
+  if (!iso) return "";
+  const ms = new Date(iso).getTime() - Date.now();
+  if (Number.isNaN(ms)) return "";
+  if (ms <= 0) return "resetting";
+  const h = Math.floor(ms / 3600000);
+  const m = Math.floor((ms % 3600000) / 60000);
+  if (h >= 24) return `resets in ${Math.floor(h / 24)}d ${h % 24}h`;
+  if (h >= 1) return `resets in ${h}h ${m}m`;
+  return `resets in ${m}m`;
+}
 function worstAlert(statuses) {
   let worst = "ok";
   for (const s of statuses) {
@@ -3559,63 +3660,158 @@ function worstAlert(statuses) {
   }
   return worst;
 }
+function escapeHtml(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[c]));
+}
 
-function renderPackage(s) {
+// ── Per-package row inside a brand card ───────────────────────────────
+function renderPackageRow(s) {
   const ratioPct = pct(s.remaining_ratio);
   const usedPct = 100 - ratioPct;
-  const unit = s.package_type === "credits" ? "$" : "req";
-  const meta = [];
-  meta.push(`<span><span class="k">${fmtNum(s.remaining)}</span> / ${fmtNum(s.total)} ${unit} left</span>`);
-  if (s.expiry_date) {
-    const urgencyMark = s.days_until_expiry !== null && s.days_until_expiry <= 7 ? " ⚠️" : "";
-    meta.push(`<span>expires <span class="k">${s.expiry_date}</span> (${s.days_until_expiry}d${urgencyMark})</span>`);
-  }
-  if (s.window_hours) {
-    meta.push(`<span>window: <span class="k">${s.window_hours}h</span></span>`);
-  }
-  if (s.reset_at) {
-    meta.push(`<span>resets: <span class="k">${new Date(s.reset_at).toLocaleString()}</span></span>`);
-  }
-  if (s.burn_per_day) {
-    meta.push(`<span>burn/day: <span class="k">${fmtNum(s.burn_per_day)}</span></span>`);
-  }
-  if (s.projected_days_left !== null && s.projected_days_left !== undefined) {
-    meta.push(`<span>runway: <span class="k">${fmtNum(s.projected_days_left)}d</span></span>`);
-  }
-  meta.push(`<span>source: <span class="k">${s.source}</span> (${s.confidence})</span>`);
+  const unit = s.package_type === "credits" ? "" : " req";
+  const currency = s.package_type === "credits" ? "$" : "";
 
-  return `<div class="pkg">
-    <div class="row1">
-      <div class="title"><span class="emoji">${EMOJI[s.alert] || "·"}</span>${s.package_id.replace(/-/g, " ")} <span class="pkg-id">· ${s.provider_id}</span></div>
-      <div class="type">${s.package_type}</div>
+  // Concise title: strip the brand prefix from the package name if present.
+  const title = (s.package_id || "").replace(/-/g, " ");
+
+  // Meta line: remaining/total · reset (window) or expiry (credits) · pace
+  const meta = [];
+  meta.push(`<span><span class="k">${currency}${fmtNum(s.remaining)}</span> / ${currency}${fmtNum(s.total)}${unit}</span>`);
+
+  if (s.package_type === "credits") {
+    if (s.expiry_date) {
+      const urgencyMark = s.days_until_expiry !== null && s.days_until_expiry <= 7 ? " ⚠️" : "";
+      meta.push(`<span>expires <span class="k">${escapeHtml(s.expiry_date)}</span> (${s.days_until_expiry}d${urgencyMark})</span>`);
+    }
+    if (s.projected_days_left !== null && s.projected_days_left !== undefined) {
+      meta.push(`<span>runway <span class="k">${fmtNum(s.projected_days_left)}d</span></span>`);
+    }
+  } else {
+    const rel = fmtResetRelative(s.reset_at);
+    if (rel) meta.push(`<span>${rel}</span>`);
+    const p = fmtPace(s.pace_delta);
+    if (p) meta.push(`<span class="${p.cls}">${p.text}</span>`);
+  }
+
+  // Pace marker inside the bar — only for window-based packages.
+  let paceMarker = "";
+  if (s.elapsed_ratio !== null && s.elapsed_ratio !== undefined) {
+    const left = Math.max(0, Math.min(100, pctRaw(s.elapsed_ratio)));
+    paceMarker = `<div class="bar-pace" style="left:${left}%"></div>`;
+  }
+
+  return `<div class="pkg-row">
+    <div class="pkg-head">
+      <div class="pkg-title">${EMOJI[s.alert] || "·"} ${escapeHtml(title)}</div>
+      <div class="pkg-pct">${usedPct}%</div>
     </div>
-    <div class="bar"><div class="bar-fill ${s.alert}" style="width:${usedPct}%"></div></div>
-    <div class="meta">${meta.join("")}</div>
-    ${s.notes ? `<div class="notes">${s.notes}</div>` : ""}
+    <div class="bar"><div class="bar-fill ${s.alert}" style="width:${usedPct}%"></div>${paceMarker}</div>
+    <div class="pkg-meta">${meta.join("")}</div>
   </div>`;
 }
 
-function renderProvider(group, statuses) {
+// ── Brand card — one brand, stacked sub-packages ──────────────────────
+function renderBrandCard(brand, statuses) {
   const worst = worstAlert(statuses);
   const alertClass = worst === "use_or_lose" ? "urgent" : worst;
-  // Collect distinct provider IDs covered by this group
-  const pids = new Set();
-  statuses.forEach(s => {
-    pids.add(s.provider_id);
-  });
-  const idsLabel = [...pids].join(", ");
+  // Identity line: show the best-evidence identity across packages.
+  // For MVP — first non-null identity wins; OAuth before API key where
+  // both are present (OAuth = personal subscription, API = raw key).
+  let identity = null;
+  for (const s of statuses) {
+    if (s.identity) {
+      if (!identity || s.identity.login_method === "OAuth") identity = s.identity;
+    }
+  }
+  const identityHtml = identity
+    ? `<div class="brand-identity">${escapeHtml(identity.login_method)}${identity.credential ? ` · <span style="opacity:.75">${escapeHtml(identity.credential)}</span>` : ""}</div>`
+    : "";
+
+  // Sort packages by alert level so urgent ones bubble up inside the card
   const packages = [...statuses].sort(
     (a, b) => (ALERT_RANK[a.alert] ?? 99) - (ALERT_RANK[b.alert] ?? 99)
   );
-  return `<div class="provider ${alertClass}">
-    <div class="provider-head">
-      <div class="provider-name">${EMOJI[worst] || "·"} ${group}</div>
-      <div class="provider-ids">${idsLabel}</div>
+  const slug = statuses[0]?.brand_slug || "";
+  const detailHref = slug ? `/dashboard/quotas/${encodeURIComponent(slug)}` : "#";
+  const cockpitHref = slug
+    ? `${COCKPIT_URL}/providers/${encodeURIComponent(slug)}`
+    : COCKPIT_URL;
+
+  // Latest updated timestamp across packages
+  let mostRecent = null;
+  for (const s of statuses) {
+    if (s.last_updated) {
+      const t = new Date(s.last_updated).getTime();
+      if (!mostRecent || t > mostRecent) mostRecent = t;
+    }
+  }
+  const when = mostRecent
+    ? `updated ${Math.max(1, Math.round((Date.now() - mostRecent) / 1000))}s ago`
+    : "";
+
+  return `<div class="brand ${alertClass}" data-slug="${escapeHtml(slug)}">
+    <div class="brand-head">
+      <div class="brand-name"><span class="emoji">${EMOJI[worst] || "·"}</span>${escapeHtml(brand)}</div>
+      ${identityHtml}
     </div>
-    ${packages.map(renderPackage).join("")}
+    ${packages.map(renderPackageRow).join("")}
+    <div class="brand-foot">
+      <span class="when">${when}</span>
+      <span>
+        <a class="btn" href="${detailHref}">Details →</a>
+        <a class="btn" href="${cockpitHref}" target="_blank" rel="noopener">Cockpit ↗</a>
+      </span>
+    </div>
   </div>`;
 }
 
+// ── "Available to add" mini catalog block ─────────────────────────────
+function renderCatalog(suggestions) {
+  const el = document.getElementById("catalog");
+  if (!suggestions || suggestions.length === 0) { el.innerHTML = ""; return; }
+  const MAX_ROWS = 6;
+  const shown = suggestions.slice(0, MAX_ROWS);
+  const rest = Math.max(0, suggestions.length - shown.length);
+  const rows = shown.map(s => {
+    const href = `${COCKPIT_URL}/providers/add?brand=${encodeURIComponent(s.brand_slug || "")}`;
+    return `<div class="cat-row">
+      <div class="cat-brand">${escapeHtml(s.brand || s.brand_slug || "")}</div>
+      <div class="cat-tag">${escapeHtml(s.tagline || "")}</div>
+      <a class="btn" href="${href}" target="_blank" rel="noopener">Add in Cockpit ↗</a>
+    </div>`;
+  }).join("");
+  const more = rest > 0
+    ? `<div class="cat-more">… ${rest} more · <a href="${COCKPIT_URL}/providers/add" target="_blank" rel="noopener">see all in Cockpit ↗</a></div>`
+    : "";
+  el.innerHTML = `<div class="catalog">
+    <div class="catalog-head">
+      <div class="catalog-title">Available to add</div>
+      <div class="catalog-sub">from catalog</div>
+    </div>
+    ${rows}
+    ${more}
+  </div>`;
+}
+
+// ── Skipped (credential missing) ──────────────────────────────────────
+function renderSkipped(skipped) {
+  const el = document.getElementById("skipped");
+  if (!skipped || skipped.length === 0) { el.innerHTML = ""; return; }
+  const lines = skipped.map(x => {
+    const brand = escapeHtml(x.brand || x.provider_group || "?");
+    const pid = escapeHtml(x.package_id || "");
+    const req = escapeHtml(x.requires || "?");
+    return `<li><strong>${brand}</strong> · <code>${pid}</code> — needs <code>${req}</code></li>`;
+  }).join("");
+  el.innerHTML = `<div class="skipped">
+    <strong>Hidden (${skipped.length})</strong> — no credential resolvable:
+    <ul>${lines}</ul>
+  </div>`;
+}
+
+// ── Main refresh loop ────────────────────────────────────────────────
 async function refresh() {
   try {
     const r = await fetch("/api/quotas");
@@ -3626,6 +3822,8 @@ async function refresh() {
     if (!data.packages || data.packages.length === 0) {
       grid.innerHTML = '<div class="empty">No packages configured. Set <code>FAIGATE_PROVIDER_METADATA_DIR</code> and drop a <code>packages/catalog.v1.json</code> to get started.</div>';
       summary.innerHTML = "";
+      renderCatalog(data.catalog_suggestions || []);
+      renderSkipped(data.skipped_packages || []);
       return;
     }
 
@@ -3635,27 +3833,25 @@ async function refresh() {
       .map(a => `<span class="pill${a === "use_or_lose" || a === "exhausted" ? " urgent" : ""}">${EMOJI[a] || "·"} ${a}: ${byAlert[a]}</span>`)
       .join("");
 
-    // Group by provider_group (fallback to provider_id when missing)
+    // Group by brand_slug (fallback to provider_group → provider_id)
     const groups = new Map();
+    const labels = new Map();
     for (const s of data.packages) {
-      const key = s.provider_group || s.provider_id || "unknown";
-      if (!groups.has(key)) groups.set(key, []);
+      const key = s.brand_slug || s.provider_group || s.provider_id || "unknown";
+      if (!groups.has(key)) {
+        groups.set(key, []);
+        labels.set(key, s.brand || s.provider_group || s.provider_id || key);
+      }
       groups.get(key).push(s);
     }
-    // Sort groups by worst alert level so urgent providers bubble up
-    const groupEntries = [...groups.entries()].sort((a, b) => {
+    // Sort groups by worst alert level so urgent brands bubble to the top.
+    const entries = [...groups.entries()].sort((a, b) => {
       return (ALERT_RANK[worstAlert(a[1])] ?? 99) - (ALERT_RANK[worstAlert(b[1])] ?? 99);
     });
-    grid.innerHTML = groupEntries.map(([g, s]) => renderProvider(g, s)).join("");
+    grid.innerHTML = entries.map(([k, s]) => renderBrandCard(labels.get(k), s)).join("");
 
-    const skippedEl = document.getElementById("skipped");
-    const skipped = data.skipped_packages || [];
-    if (skipped.length > 0) {
-      const lines = skipped.map(x => `<li><code>${x.package_id}</code> (${x.provider_group || "?"}) — needs <code>${x.requires || "?"}</code></li>`).join("");
-      skippedEl.innerHTML = `<div style="padding:10px 14px;border:1px dashed var(--border);border-radius:8px;"><strong>Hidden (${skipped.length})</strong> — no credential resolvable:<ul style="margin:6px 0 0 18px;padding:0;">${lines}</ul></div>`;
-    } else {
-      skippedEl.innerHTML = "";
-    }
+    renderCatalog(data.catalog_suggestions || []);
+    renderSkipped(data.skipped_packages || []);
   } catch (e) {
     document.getElementById("grid").innerHTML = `<div class="empty">Error: ${e.message}</div>`;
   }
@@ -3669,10 +3865,20 @@ setInterval(refresh, 60000);
 """
 
 
+def _cockpit_base_url() -> str:
+    """Resolve the Operator Cockpit base URL the widget links out to.
+
+    Read order: ``FAIGATE_COCKPIT_URL`` env var → public default. Trailing
+    slash is stripped so deep links compose cleanly (``${base}/providers/…``).
+    """
+    url = os.environ.get("FAIGATE_COCKPIT_URL") or "https://cockpit.fusionaize.ai"
+    return url.rstrip("/")
+
+
 @app.get("/dashboard/quotas", response_class=HTMLResponse)
 async def dashboard_quotas():
     """Self-contained quotas page. Polls /api/quotas every 60s."""
-    return _QUOTAS_DASHBOARD_HTML
+    return _QUOTAS_DASHBOARD_HTML.replace("__COCKPIT_URL__", _cockpit_base_url())
 
 
 @app.get("/dashboard/assets/{asset_kind}/{asset_name:path}")
