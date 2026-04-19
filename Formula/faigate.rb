@@ -1,8 +1,30 @@
+################################################################################
+# MIRROR — DO NOT INSTALL FROM THIS FILE
+#
+# The canonical Homebrew formula for fusionAIze Gate lives in the separate tap:
+#   https://github.com/fusionAIze/homebrew-tap/blob/main/Formula/faigate.rb
+#
+# This file is kept here as the *golden reference* for what the tap formula
+# must look like, in particular the macOS-packaging hardening flags below.
+# When you bump the tap, mirror those flags here too.
+#
+# Why this file exists at all:
+#   We've already lost the pydantic-core headerpad hardening once. The tap was
+#   switched to `pip install --prefer-binary` to skip the 3–5 min cargo build,
+#   which silently re-introduced the `Failed changing dylib ID` linkage error
+#   on every `brew upgrade`. Keeping a hardened reference in the source repo
+#   makes it harder to lose the hardening again — and easier to spot in PR
+#   review when someone proposes dropping `PIP_NO_BINARY` or adding
+#   `--prefer-binary` in the tap.
+#
+# See docs/PUBLISHING.md ("macOS packaging guard") for the rationale.
+################################################################################
+
 class Faigate < Formula
   desc "Local OpenAI-compatible AI gateway for OpenClaw and other AI-native clients"
   homepage "https://github.com/fusionAIze/faigate"
-  url "https://github.com/fusionAIze/faigate/archive/refs/tags/v1.11.2.tar.gz"
-  sha256 "4eb0ee6ca72d4b6abf6653fc61b8adff6ddbd7e29342436dd3305367ce067e71"
+  url "https://github.com/fusionAIze/faigate/archive/refs/tags/v2.3.0.tar.gz"
+  sha256 "0cedffbdbbeb5914be787a140ccf87afc48100068a5b3997ff04c92f4cba236b"
   license "Apache-2.0"
   head "https://github.com/fusionAIze/faigate.git", branch: "main"
 
@@ -12,14 +34,24 @@ class Faigate < Formula
   def install
     python = Formula["python@3.12"].opt_bin/"python3.12"
 
-    # Build native Python extensions from source with extra Mach-O header
-    # space so Homebrew's linkage fixups do not trip over vendored wheels.
+    # macOS packaging guard — DO NOT REMOVE.
+    #
+    # Prebuilt pydantic-core / watchfiles wheels are linked upstream without
+    # extra Mach-O headerpad space. Homebrew's post-install `install_name_tool
+    # -id` rewrite then fails with:
+    #   "Updated load commands do not fit in the header ...
+    #    needs to be relinked, possibly with -headerpad_max_install_names"
+    # Forcing a source build with the headerpad linker flag is the only known
+    # fix. The 3–5 min cargo cost is the price of a clean linkage audit and a
+    # silent `brew upgrade` for users.
     ENV["PIP_NO_BINARY"] = "pydantic-core,watchfiles"
     ENV.append "RUSTFLAGS", " -C link-arg=-Wl,-headerpad_max_install_names"
     ENV.append "LDFLAGS", " -Wl,-headerpad_max_install_names"
 
     system python, "-m", "venv", libexec
     system libexec/"bin/pip", "install", "--upgrade", "pip", "setuptools", "wheel"
+    # NB: no `--prefer-binary` here — it would override PIP_NO_BINARY for the
+    # two packages that actually need source builds.
     system libexec/"bin/pip", "install", buildpath
 
     pkgshare.install buildpath.children

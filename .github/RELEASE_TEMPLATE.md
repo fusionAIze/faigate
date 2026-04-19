@@ -12,3 +12,4 @@
 - [ ] Compatibility notes are included if older runtime identifiers are still mentioned
 - [ ] Any upgrade notes or rollback notes are included
 - [ ] PyPI publishing status is noted (published, intentionally skipped, or blocked on trusted publishing)
+- [ ] `brew upgrade fusionaize/tap/faigate` runs clean on macOS arm64 with zero `Failed changing dylib ID` / `Failed to fix install linkage` lines (see docs/PUBLISHING.md "macOS packaging guard")

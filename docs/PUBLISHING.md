@@ -63,6 +63,25 @@ The local release helper now updates:
 
 It no longer rewrites a Homebrew formula inside this repo because the tap lives in the separate [`fusionAIze/homebrew-tap`](https://github.com/fusionAIze/homebrew-tap) repository.
 
+## macOS Packaging Guard
+
+The Homebrew formula in [`fusionAIze/homebrew-tap`](https://github.com/fusionAIze/homebrew-tap) is the canonical install path for macOS workstations. It has one non-obvious hardening requirement that has already been lost (and rediscovered) once:
+
+- The pip install in the formula **must** force a source build of `pydantic-core` and `watchfiles` with `-headerpad_max_install_names`. The prebuilt PyPI wheels for these packages are linked upstream without extra Mach-O headerpad space, and Homebrew's post-install `install_name_tool -id` rewrite then fails with `Failed changing dylib ID … Updated load commands do not fit in the header … needs to be relinked, possibly with -headerpad_max_install_names`.
+- This was fixed once in `v1.2.2` ("`pydantic-core` from source with explicit header padding") and re-broken when the tap formula was switched to `pip install --prefer-binary` to avoid the 3–5 minute cargo build during `brew upgrade`. The shorter upgrade was not worth the linkage-audit failure on every install.
+- The known-good shape (mirrored in this repo's `Formula/faigate.rb` as a golden reference) is:
+  ```ruby
+  ENV["PIP_NO_BINARY"] = "pydantic-core,watchfiles"
+  ENV.append "RUSTFLAGS", " -C link-arg=-Wl,-headerpad_max_install_names"
+  ENV.append "LDFLAGS",   " -Wl,-headerpad_max_install_names"
+  depends_on "rust" => :build
+  # NB: no --prefer-binary
+  system libexec/"bin/pip", "install", buildpath
+  ```
+- Do not drop `PIP_NO_BINARY=pydantic-core,watchfiles`, do not add `--prefer-binary`, and do not remove the `rust` build dependency without first verifying that pydantic-core upstream now ships wheels with sufficient headerpad. As of `v2.3.0` they do not.
+
+Before announcing any `vX.Y.Z` release, run an end-to-end `brew upgrade fusionaize/tap/faigate` on a fresh macOS arm64 environment and confirm that the install output contains **zero** `Failed changing dylib ID` or `Failed to fix install linkage` lines. Runtime startup succeeding is not enough — those errors signal a broken linkage audit even when `faigate --version` happens to work.
+
 ## Trust Boundaries
 
 - Dry-run workflows should never require production credentials.
