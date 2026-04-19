@@ -54,7 +54,7 @@ import logging
 import threading
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from .quota_tracker import update_package_usage
@@ -136,7 +136,7 @@ def _parse_reset(val: Any, *, now: datetime | None = None) -> datetime | None:
         secs = float(raw)
         if secs < 0:
             return None
-        base = now or datetime.now(UTC)
+        base = now or datetime.now(timezone.utc)
         # Sanity: seconds-delta should fit in ~24h for rate-limit resets.
         if secs < 86400 * 2:
             return base + timedelta(seconds=secs)
@@ -147,8 +147,8 @@ def _parse_reset(val: Any, *, now: datetime | None = None) -> datetime | None:
         iso = raw.replace("Z", "+00:00")
         dt = datetime.fromisoformat(iso)
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=UTC)
-        return dt.astimezone(UTC)
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
     except ValueError:
         return None
 
@@ -178,7 +178,7 @@ def parse_headers(provider_id: str, headers: Mapping[str, str]) -> HeaderSnapsho
     # Normalise to lowercase keys while keeping original case in raw payload.
     low = {k.lower(): v for k, v in headers.items()}
     dialect = _detect_dialect(headers)
-    now = datetime.now(UTC)
+    now = datetime.now(timezone.utc)
 
     if dialect == "anthropic":
         return HeaderSnapshot(

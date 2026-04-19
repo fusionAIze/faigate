@@ -36,7 +36,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -320,7 +320,7 @@ def _select_due_packages(
     A package is "due" if it has ``source == "api_poll"`` and package_type in
     the credits family. Fast-lane cadence kicks in for expiring credits.
     """
-    now = now or datetime.now(UTC)
+    now = now or datetime.now(timezone.utc)
     today = now.date()
     out: list[tuple[str, dict[str, Any], int]] = []
     for pkg_id, entry in packages.items():
@@ -435,7 +435,7 @@ def _persist_cache_to_disk(
             envelope = {}
     envelope.setdefault("schema_version", "1.1")
     envelope["packages"] = packages_cache
-    envelope["generated_at"] = datetime.now(UTC).isoformat(timespec="seconds")
+    envelope["generated_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
     tmp_path = path.with_suffix(path.suffix + ".tmp")
     tmp_path.parent.mkdir(parents=True, exist_ok=True)

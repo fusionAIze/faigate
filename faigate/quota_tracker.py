@@ -97,7 +97,7 @@ from __future__ import annotations
 import logging
 import sqlite3
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Literal
 
@@ -175,12 +175,12 @@ def compute_quota_status(
       * ``package``: a dict exactly as stored in the packages catalog (one
         value from ``packages_catalog.items()``). Must contain at least
         ``provider_id``. Everything else is defaulted or computed.
-      * ``now``: injected for test determinism; defaults to ``datetime.now(UTC)``.
+      * ``now``: injected for test determinism; defaults to ``datetime.now(timezone.utc)``.
       * ``sqlite_path``: faigate.db path for looking up ``used`` for window
         types via local request counts. If ``None`` and the package is
         window-based, ``used`` falls back to the catalog-stored value.
     """
-    now = now or datetime.now(UTC)
+    now = now or datetime.now(timezone.utc)
     package_id = package.get("package_id") or _synthesize_package_id(package)
     provider_id = package.get("provider_id") or "unknown"
     provider_group = package.get("provider_group") or _derive_provider_group(provider_id)
@@ -462,7 +462,7 @@ def _status_daily(
     # Count requests since UTC midnight — summed across counted_ids so a daily
     # quota shared by multiple router provider IDs (e.g. Gemini free tier
     # covers both gemini-flash and gemini-flash-lite) reads accurately.
-    midnight = datetime(now.year, now.month, now.day, tzinfo=UTC)
+    midnight = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
     hours_since_midnight = (now - midnight).total_seconds() / 3600.0
     window = max(hours_since_midnight, 0.01)
     used = sum(
@@ -624,7 +624,7 @@ def _earliest_request_in_window(
         )
         row = cur.fetchone()
         if row and row["t"] is not None:
-            return datetime.fromtimestamp(int(row["t"]), tz=UTC)
+            return datetime.fromtimestamp(int(row["t"]), tz=timezone.utc)
         return None
     except sqlite3.Error:
         return None
@@ -704,7 +704,7 @@ def update_package_usage(
         entry["source"] = source
     if confidence is not None:
         entry["confidence"] = confidence
-    entry["last_updated"] = datetime.now(UTC).isoformat(timespec="seconds")
+    entry["last_updated"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
     return True
 
 
@@ -805,7 +805,7 @@ if __name__ == "__main__":
             "confidence": "estimated",
         },
     }
-    now = datetime.now(UTC)
+    now = datetime.now(timezone.utc)
     for pid, pkg in demo_packages.items():
         pkg["package_id"] = pid
         status = compute_quota_status(pkg, now=now)
