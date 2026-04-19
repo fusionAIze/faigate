@@ -9,7 +9,7 @@ See ``docs/GATE-BAR-DESIGN.md`` §1 (naming pivot) and §4 (pace computation).
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 from faigate.quota_tracker import (
     _derive_brand,

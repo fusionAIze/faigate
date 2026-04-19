@@ -29,7 +29,6 @@ Pins (v2.3 Phase B.5):
 from __future__ import annotations
 
 import importlib
-import shutil
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path

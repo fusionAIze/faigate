@@ -4478,16 +4478,21 @@ async def api_dashboard_settings_post(request: Request):
 
     try:
         validate_default_view(raw_view)
-    except ValueError as exc:
-        return JSONResponse({"error": str(exc)}, status_code=400)
+    except ValueError:
+        # Don't echo the raw exception text — it may contain user-supplied
+        # fragments that a future refactor could forward to a templated
+        # error page. Keep the surface message static; the real cause is
+        # knowable from the client (it just sent the value).
+        return JSONResponse({"error": "default_view is not a valid view identifier"}, status_code=400)
 
     try:
         return set_default_view(raw_view)
-    except FileNotFoundError as exc:
-        return JSONResponse({"error": f"config.yaml not found: {exc}"}, status_code=500)
-    except Exception as exc:  # noqa: BLE001
+    except FileNotFoundError:
+        logger.exception("api_dashboard_settings_post: config.yaml missing")
+        return JSONResponse({"error": "config.yaml not found"}, status_code=500)
+    except Exception:  # noqa: BLE001
         logger.exception("api_dashboard_settings_post: write failed")
-        return JSONResponse({"error": f"write failed: {exc}"}, status_code=500)
+        return JSONResponse({"error": "write failed"}, status_code=500)
 
 
 def _brand_context(brand_slug: str) -> dict[str, Any] | None:
@@ -4665,7 +4670,10 @@ async def dashboard_quota_brand(brand_slug: str):
     showing the "Back to overview" link.
     """
     slug = (brand_slug or "").strip().lower()
-    if not slug:
+    # Strict whitelist: the slug is spliced into an HTML template below via
+    # str.replace, so anything outside this grammar would be a reflected-XSS
+    # vector. Valid catalog slugs (claude/codex/gemini/…) all fit.
+    if not slug or not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,63}", slug):
         return JSONResponse({"error": {"message": "Unknown brand"}}, status_code=404)
     html = _QUOTAS_BRAND_DETAIL_HTML
     html = html.replace("__COCKPIT_URL__", _cockpit_base_url())
