@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import html as html_lib
 import json
 import logging
 import mimetypes
@@ -4675,9 +4676,13 @@ async def dashboard_quota_brand(brand_slug: str):
     # vector. Valid catalog slugs (claude/codex/gemini/…) all fit.
     if not slug or not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,63}", slug):
         return JSONResponse({"error": {"message": "Unknown brand"}}, status_code=404)
+    # Belt-and-suspenders: even though the regex above already guarantees the
+    # slug is safe, run it through html.escape so CodeQL's taint tracker
+    # (which doesn't recognise arbitrary regex sanitisers) can prove it.
+    safe_slug = html_lib.escape(slug, quote=True)
     html = _QUOTAS_BRAND_DETAIL_HTML
     html = html.replace("__COCKPIT_URL__", _cockpit_base_url())
-    html = html.replace("__BRAND_SLUG__", slug)
+    html = html.replace("__BRAND_SLUG__", safe_slug)
     return html
 
 

@@ -83,7 +83,10 @@ faigate = [
 
 [tool.ruff]
 line-length = 120
-target-version = "py312"
+# Must match ``requires-python`` above: ruff/UP rules otherwise rewrite
+# e.g. ``datetime.timezone.utc`` → ``datetime.UTC`` (added in 3.11) and
+# break CI on the 3.10 job.
+target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W", "UP"]

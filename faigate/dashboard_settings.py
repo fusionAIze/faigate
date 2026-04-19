@@ -18,6 +18,7 @@ Reads are cheap (safe_load-style) and happen on every request. Writes
 go through a POSIX atomic rename so a crash mid-write can't leave the
 operator with a half-written config.
 """
+
 from __future__ import annotations
 
 import io
@@ -67,9 +68,7 @@ def validate_default_view(value: str) -> str:
         slug = candidate[len("brand:") :]
         if _slug_is_valid(slug):
             return f"brand:{slug}"
-    raise ValueError(
-        f"default_view must be 'overview', 'cockpit', or 'brand:<slug>' — got {value!r}"
-    )
+    raise ValueError(f"default_view must be 'overview', 'cockpit', or 'brand:<slug>' — got {value!r}")
 
 
 def get_settings(path: str | Path | None = None) -> dict[str, Any]:

@@ -9,7 +9,7 @@ See ``docs/GATE-BAR-DESIGN.md`` §1 (naming pivot) and §4 (pace computation).
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 from faigate.quota_tracker import (
     _derive_brand,
@@ -120,7 +120,7 @@ class TestComputeQuotaStatusBrand:
             "limit_per_day": 1500,
             "_requires_credential": "GEMINI_API_KEY",
         }
-        fixed_now = datetime(2026, 4, 19, 22, 0, tzinfo=UTC)
+        fixed_now = datetime(2026, 4, 19, 22, 0, tzinfo=timezone.utc)
         status = compute_quota_status(pkg, now=fixed_now)
         assert status.brand == "Gemini"
         assert status.pace_delta is not None
@@ -140,7 +140,7 @@ class TestComputeQuotaStatusBrand:
             "window_hours": 5,
             "limit_per_window": 100,
         }
-        fixed_now = datetime(2026, 4, 19, 12, 0, tzinfo=UTC)
+        fixed_now = datetime(2026, 4, 19, 12, 0, tzinfo=timezone.utc)
         status = compute_quota_status(pkg, now=fixed_now)
         assert status.brand == "Claude"
         assert status.brand_slug == "claude"
@@ -158,7 +158,7 @@ class TestComputeQuotaStatusBrand:
             "limit_per_day": 2000,
             "_requires_credential": "qwen-portal",
         }
-        fixed_now = datetime(2026, 4, 19, 12, 0, tzinfo=UTC)
+        fixed_now = datetime(2026, 4, 19, 12, 0, tzinfo=timezone.utc)
         data = compute_quota_status(pkg, now=fixed_now).to_dict()
         assert data["brand"] == "Qwen"
         assert data["brand_slug"] == "qwen"
