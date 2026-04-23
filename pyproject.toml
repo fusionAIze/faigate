@@ -27,7 +27,7 @@ dependencies = [
     # combinations. Without these caps, `brew upgrade` and fresh `pip install`
     # can drift onto source-only releases and trigger a 3–5 min cargo build.
     "fastapi>=0.115.0,<0.137",
-    "uvicorn[standard]>=0.32.0,<0.40",
+    "uvicorn[standard]>=0.32.0,<0.47",
     "httpx>=0.27.0,<0.29",
     "pydantic>=2.9,<2.14",
     "pyyaml>=6.0.2",
