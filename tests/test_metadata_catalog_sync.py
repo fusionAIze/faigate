@@ -135,10 +135,13 @@ def test_fetch_missing_providers_key_returns_invalid():
 def test_fetch_network_error_returns_error_does_not_raise():
     import httpx
 
-    sync = MetadataCatalogSync(fetcher=RaisingFetcher(httpx.ConnectError("dns")))
+    sync = MetadataCatalogSync(fetcher=RaisingFetcher(httpx.ConnectError("dns failure")))
     result = sync.fetch("https://example/c.json")
+    # Don't assert on prefix — httpx version drift means ConnectError may
+    # land in either except branch. What matters: caller gets an error
+    # status without an exception bubbling up.
     assert result.status == SyncStatus.ERROR
-    assert "network" in result.error
+    assert "dns failure" in result.error
 
 
 def test_fetch_does_not_log_token_value(caplog: pytest.LogCaptureFixture):
