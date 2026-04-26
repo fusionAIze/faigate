@@ -40,6 +40,7 @@ from .bridges.anthropic import (
     openai_sse_to_anthropic,
 )
 from .canonical import CanonicalChatRequest, CanonicalChatResponse, CanonicalResponseMessage
+from .catalog_resolver import CatalogResolver, ResolverConfig
 from .config import Config, load_config
 from .dashboard import _metadata_catalogs_summary, _metadata_packages_detail
 from .dashboard_web import DASHBOARD_HTML
@@ -96,6 +97,7 @@ _update_checker: UpdateChecker
 _adaptive_state: AdaptiveRouteState = AdaptiveRouteState()
 _provider_catalog_store: ProviderCatalogStore | None = None
 _provider_catalog_refresh_task: asyncio.Task[None] | None = None
+_metadata_catalog_sync_task: asyncio.Task[None] | None = None
 _quota_poll_task: asyncio.Task[None] | None = None
 
 
@@ -465,6 +467,68 @@ async def _provider_source_refresh_loop() -> None:
             raise
         except Exception as exc:  # noqa: BLE001
             logger.warning("Provider source catalog scheduled refresh skipped: %s", exc)
+
+
+def _metadata_resolver_config() -> ResolverConfig:
+    metadata_cfg = _config.metadata
+    config = ResolverConfig.from_env()
+    public_url = str(metadata_cfg.get("public_catalog_url") or "").strip()
+    private_url = str(metadata_cfg.get("private_catalog_url") or "").strip()
+    refresh_hours = float(metadata_cfg.get("refresh_interval_hours") or 0.0)
+    timeout_seconds = float(metadata_cfg.get("timeout_seconds") or config.timeout_seconds)
+    return ResolverConfig(
+        public_url=public_url or config.public_url,
+        private_url=private_url or config.private_url,
+        token=config.token,
+        refresh_interval_seconds=refresh_hours * 3600,
+        timeout_seconds=timeout_seconds,
+    )
+
+
+async def _refresh_metadata_catalog(*, force: bool = False) -> dict[str, Any]:
+    """Refresh the curated metadata catalog cache outside the request path."""
+    metadata_cfg = _config.metadata
+    if not metadata_cfg.get("enabled", True):
+        return {"skipped": True, "reason": "disabled"}
+    refresh_hours = float(metadata_cfg.get("refresh_interval_hours") or 0.0)
+    if refresh_hours <= 0:
+        return {"skipped": True, "reason": "refresh disabled"}
+
+    resolver = CatalogResolver(config=_metadata_resolver_config())
+    resolved = await asyncio.to_thread(resolver.resolve, force_refresh=force)
+    provider_count = len(resolved.payload.get("providers", {}))
+    logger.info(
+        "Metadata catalog refresh completed: source=%s providers=%s%s",
+        resolved.source,
+        provider_count,
+        " force" if force else "",
+    )
+    return {
+        "source": resolved.source,
+        "providers": provider_count,
+        "etag": resolved.etag,
+        "notes": resolved.notes,
+    }
+
+
+async def _metadata_catalog_sync_loop() -> None:
+    """Refresh remote metadata catalog on the configured cadence with backoff."""
+    refresh_hours = float(_config.metadata.get("refresh_interval_hours") or 0.0)
+    interval_seconds = max(int(refresh_hours * 3600), 0)
+    if interval_seconds <= 0:
+        return
+    backoff_steps = [300, 900, 3600]
+    failure_count = 0
+    while True:
+        await asyncio.sleep(interval_seconds if failure_count == 0 else backoff_steps[min(failure_count - 1, 2)])
+        try:
+            await _refresh_metadata_catalog(force=True)
+            failure_count = 0
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            failure_count += 1
+            logger.warning("Metadata catalog scheduled refresh failed: %s", exc)
 
 
 def _collect_routing_headers(request: Request) -> dict[str, str]:
@@ -2260,7 +2324,7 @@ async def _resolve_image_route_preview(
 async def lifespan(app: FastAPI):
     """Startup / shutdown lifecycle."""
     global _config, _providers, _router, _metrics, _update_checker, _adaptive_state
-    global _provider_catalog_store, _provider_catalog_refresh_task
+    global _provider_catalog_store, _provider_catalog_refresh_task, _metadata_catalog_sync_task
     global _quota_poll_task
 
     logging.basicConfig(
@@ -2328,6 +2392,23 @@ async def lifespan(app: FastAPI):
     except Exception as exc:  # noqa: BLE001
         logger.warning("Provider source catalog startup refresh skipped: %s", exc)
 
+    try:
+        metadata_cfg = _config.metadata
+        refresh_hours = float(metadata_cfg.get("refresh_interval_hours") or 0.0)
+        if metadata_cfg.get("enabled", True) and refresh_hours > 0:
+            if metadata_cfg.get("on_startup"):
+                try:
+                    await _refresh_metadata_catalog(force=True)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("Metadata catalog startup refresh failed: %s", exc)
+            _metadata_catalog_sync_task = asyncio.create_task(
+                _metadata_catalog_sync_loop(),
+                name="faigate-metadata-catalog-sync",
+            )
+            logger.info("Metadata catalog sync started (interval=%.2fh)", refresh_hours)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Metadata catalog sync startup skipped: %s", exc)
+
     # Quota balance poller (Phase 2: DeepSeek + Kilo). Disabled by default —
     # only activates when config.quota_poll.enabled is true AND at least one
     # api_poll package is present in the external catalog. Missing API keys
@@ -2378,6 +2459,11 @@ async def lifespan(app: FastAPI):
         with suppress(asyncio.CancelledError):
             await _provider_catalog_refresh_task
         _provider_catalog_refresh_task = None
+    if _metadata_catalog_sync_task is not None:
+        _metadata_catalog_sync_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await _metadata_catalog_sync_task
+        _metadata_catalog_sync_task = None
     if _quota_poll_task is not None:
         _quota_poll_task.cancel()
         with suppress(asyncio.CancelledError):
@@ -2499,6 +2585,7 @@ async def provider_catalog():
             _provider_catalog_store,
             provider_ids=list(_config.provider_source_refresh.get("providers") or []),
         )
+        source_catalog["metadata_sync"] = CatalogResolver().status().get("tiers", {})
         source_catalog["alerts"] = build_catalog_alerts(source_catalog)
         source_catalog["alert_summary"] = build_catalog_alert_summary(list(source_catalog.get("alerts") or []))
     return {

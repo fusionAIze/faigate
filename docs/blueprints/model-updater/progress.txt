@@ -26,12 +26,18 @@ CODE-004, CODE-005, CODE-006, CAT-001, CAT-002, CAT-003, TEST-001, TEST-002,
 TEST-003, DOCS-001, plus the bundled-snapshot piece (added during execution
 when we discovered the wheel had no fallback today).
 
+### Tasks completed in follow-up
+- 2026-04-26 / iter 4 — Completed remaining v1 sync work:
+  CODE-007 daemon tick with 24h default, disable-by-zero config, and
+  5m/15m/1h error backoff; CODE-008 sync alerts via build_catalog_alerts
+  (`sync-stale`, `sync-invalid`, `sync-auth`); HOT-002 OpenRouter audit
+  against official OpenRouter pricing/auto-router docs; pricing verified for
+  Opus 4.7, Haiku 4.5, GPT-5.5, and DeepSeek V4. Bundled snapshot refreshed
+  from the public catalog.
+
 ### Tasks deferred to follow-up
-- HOT-002: openrouter audit (needs live pricing research)
 - INFRA-003: standalone PAT-setup screenshots (covered briefly in
   CATALOG-UPDATER.md; full doc deferred)
-- CODE-007: 24h daemon-tick (lazy refresh + manual CLI works for now)
-- CODE-008: alert integration via build_catalog_alerts
 
 ### Key Decisions
 - D-001 Catalog sync is a NEW layer next to existing ProviderCatalogRefresher,
@@ -51,4 +57,6 @@ when we discovered the wheel had no fallback today).
 ### Open Questions
 - Should we publish a stable Raw URL via githubusercontent.com or use
   jsdelivr CDN from day one? (jsdelivr has better caching but adds dep)
-- Daemon tick interval default — confirm 24h is right for OSS users.
+- Gate Bar should likely be carved out into its own repo/package track; it is
+  useful as a helper prototype, but should not make the gateway core feel like
+  a desktop app repo.

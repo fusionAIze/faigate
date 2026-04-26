@@ -10,6 +10,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+from .catalog_resolver import CatalogResolver
 from .lane_registry import get_route_add_recommendations
 from .metrics import MetricsStore
 from .provider_catalog import (
@@ -207,6 +208,7 @@ def _provider_catalog_summary(db_path: str) -> dict[str, Any]:
     store.init()
     try:
         summary = build_catalog_summary(store)
+        summary["metadata_sync"] = CatalogResolver().status().get("tiers", {})
         summary["alerts"] = build_catalog_alerts(summary)
         summary["alert_summary"] = build_catalog_alert_summary(list(summary.get("alerts") or []))
         return summary

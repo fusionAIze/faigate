@@ -111,6 +111,69 @@ def _catalog_change_suggestion(event: dict[str, Any]) -> str:
     return f"Review recent provider catalog changes for {provider_id}."
 
 
+def _sync_alert_action(kind: str, severity: str) -> str:
+    if severity in {"critical", "warning"} and kind in {"sync-invalid", "sync-auth"}:
+        return "fix-now"
+    if severity in {"critical", "warning"}:
+        return "review-now"
+    return "inspect"
+
+
+def _build_sync_alert(tier: str, sync: dict[str, Any]) -> dict[str, Any] | None:
+    status = str(sync.get("last_status") or "")
+    last_error = str(sync.get("last_error") or "")
+    seconds_since_success = sync.get("seconds_since_success")
+    age = float(seconds_since_success) if seconds_since_success is not None else None
+
+    kind = ""
+    severity = ""
+    headline = ""
+    detail = ""
+    suggestion = ""
+
+    if status == "invalid":
+        kind = "sync-invalid"
+        severity = "critical"
+        headline = f"Metadata catalog sync returned invalid {tier} payload"
+        detail = last_error or "The latest remote payload failed validation and was not swapped into cache."
+        suggestion = "Fix the remote catalog JSON/schema before trusting synced provider metadata."
+    elif status == "auth_failed":
+        kind = "sync-auth"
+        severity = "warning"
+        headline = f"Metadata catalog auth failed for {tier}"
+        detail = last_error or "The metadata catalog request was rejected by the remote."
+        suggestion = (
+            "Check FAIGATE_METADATA_TOKEN permissions or remove the private URL/token if public metadata is enough."
+        )
+    elif age is not None and age > 7 * 86400:
+        kind = "sync-stale"
+        severity = "warning"
+        headline = f"Metadata catalog cache is stale for {tier}"
+        detail = f"The last successful metadata sync for {tier} was {int(age)}s ago."
+        suggestion = "Run faigate-models update --diff and inspect remote catalog availability."
+    elif status in {"error", "not_found"} and not sync.get("last_success_at"):
+        kind = "sync-stale"
+        severity = "warning"
+        headline = f"Metadata catalog sync has not succeeded for {tier}"
+        detail = last_error or f"Latest status: {status}"
+        suggestion = "Run faigate-models update --diff and verify metadata catalog URLs."
+
+    if not kind:
+        return None
+    return {
+        "kind": kind,
+        "severity": severity,
+        "action": _sync_alert_action(kind, severity),
+        "provider_id": f"metadata:{tier}",
+        "headline": headline,
+        "detail": detail,
+        "suggestion": suggestion,
+        "source_kind": "metadata-sync",
+        "sync_tier": tier,
+        "last_status": status,
+    }
+
+
 def build_catalog_alerts(
     summary: dict[str, Any],
     *,
@@ -118,6 +181,11 @@ def build_catalog_alerts(
 ) -> list[dict[str, Any]]:
     """Return structured provider source alerts ordered by urgency."""
     alerts: list[dict[str, Any]] = []
+    for tier, entry in dict(summary.get("metadata_sync") or {}).items():
+        sync = dict(entry.get("sync") or {})
+        alert = _build_sync_alert(str(tier), sync)
+        if alert is not None:
+            alerts.append(alert)
     for item in list(summary.get("items") or []):
         provider_id = str(item.get("provider_id") or "")
         status = str(item.get("status") or "")

@@ -107,13 +107,36 @@ print(resolved.source, len(resolved.payload["providers"]))
 # "public", 41
 ```
 
-## Daemon-tick refresh (planned)
+## Daemon-tick refresh
 
-Phase-3 ships the resolver and CLI; the background tick that calls
-`resolver.resolve(force_refresh=True)` every `refresh_interval_hours` is on
-the roadmap (see `docs/blueprints/model-updater/prd.json` task `CODE-007`).
-Until then, refresh happens lazily on the first request after a cache
-miss, plus whenever a developer runs `faigate-models update`.
+The gateway starts a background metadata refresh task when `metadata.enabled`
+is true and `metadata.refresh_interval_hours` is greater than zero. The
+default interval is 24h. Set the interval to `0` to disable the daemon tick
+and rely on lazy cache resolution plus manual `faigate-models update`.
+
+```yaml
+metadata:
+  enabled: true
+  refresh_interval_hours: 24
+  timeout_seconds: 10
+```
+
+Scheduled failures do not crash the gateway. The loop backs off through 5m,
+15m, and 1h retry delays, then returns to the configured interval after a
+successful refresh.
+
+## Sync alerts
+
+Metadata sync state is written next to each cache tier and surfaced through
+the existing catalog alert pipeline:
+
+- `sync-stale` — last successful sync is older than 7 days, or no sync has
+  ever succeeded.
+- `sync-invalid` — remote JSON parsed but failed catalog validation.
+- `sync-auth` — private metadata request returned 401/403.
+
+The alerts appear in `/api/provider-catalog`, dashboard summaries, and any
+surface already consuming `build_catalog_alerts`.
 
 ## Troubleshooting
 

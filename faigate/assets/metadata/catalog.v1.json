@@ -25,16 +25,16 @@
       "official_source_url": "https://docs.anthropic.com/en/docs/about-claude/models",
       "signup_url": "https://console.anthropic.com/",
       "watch_sources": [],
-      "notes": "Anthropic Claude models (Opus, Sonnet, Haiku) - direct API. Recommended bumped to Opus 4.7 on 2026-04-26.",
+      "notes": "Anthropic Claude Opus 4.7 direct API pricing verified from the official Opus page on 2026-04-26.",
       "last_reviewed": "2026-04-26",
       "pricing": {
         "source_type": "provider-docs",
-        "source_url": "https://www.anthropic.com/pricing#api",
+        "source_url": "https://www.anthropic.com/claude/opus",
         "refreshed_at": "2026-04-26T00:00:00Z",
-        "freshness_status": "stale",
-        "input_cost_per_1m": 15.0,
-        "output_cost_per_1m": 75.0,
-        "cache_read_cost_per_1m": 1.5
+        "freshness_status": "fresh",
+        "input_cost_per_1m": 5.0,
+        "output_cost_per_1m": 25.0,
+        "cache_read_cost_per_1m": 0.5
       }
     },
     "anthropic-haiku": {
@@ -56,16 +56,16 @@
       "official_source_url": "https://docs.anthropic.com/en/docs/about-claude/models",
       "signup_url": "https://console.anthropic.com/",
       "watch_sources": [],
-      "notes": "Anthropic Claude Haiku 4.5 - fast, cost-effective model for general tasks. Pricing carried forward from 3.5; verify against provider docs.",
+      "notes": "Anthropic Claude Haiku 4.5 pricing verified from the official Haiku page on 2026-04-26.",
       "last_reviewed": "2026-04-26",
       "pricing": {
         "source_type": "provider-docs",
-        "source_url": "https://www.anthropic.com/pricing#api",
+        "source_url": "https://www.anthropic.com/claude/haiku",
         "refreshed_at": "2026-04-26T00:00:00Z",
-        "freshness_status": "stale",
-        "input_cost_per_1m": 0.8,
-        "output_cost_per_1m": 4.0,
-        "cache_read_cost_per_1m": 0.08
+        "freshness_status": "fresh",
+        "input_cost_per_1m": 1.0,
+        "output_cost_per_1m": 5.0,
+        "cache_read_cost_per_1m": 0.1
       }
     },
     "anthropic-sonnet": {
@@ -116,16 +116,16 @@
       "official_source_url": "https://docs.anthropic.com/en/docs/about-claude/models",
       "signup_url": "https://console.anthropic.com/",
       "watch_sources": [],
-      "notes": "Anthropic Claude Opus 4.6 - premium reasoning and quality for complex tasks.",
-      "last_reviewed": "2026-04-01",
+      "notes": "Anthropic Claude Opus 4.7 direct API pricing verified from the official Opus page on 2026-04-26.",
+      "last_reviewed": "2026-04-26",
       "pricing": {
         "source_type": "provider-docs",
-        "source_url": "https://www.anthropic.com/pricing#api",
-        "refreshed_at": "2026-04-01T12:00:00Z",
+        "source_url": "https://www.anthropic.com/claude/opus",
+        "refreshed_at": "2026-04-26T00:00:00Z",
         "freshness_status": "fresh",
-        "input_cost_per_1m": 15.0,
-        "output_cost_per_1m": 75.0,
-        "cache_read_cost_per_1m": 1.5
+        "input_cost_per_1m": 5.0,
+        "output_cost_per_1m": 25.0,
+        "cache_read_cost_per_1m": 0.5
       }
     },
     "openai": {
@@ -360,11 +360,13 @@
       }
     },
     "deepseek-chat": {
-      "recommended_model": "deepseek-chat",
+      "recommended_model": "deepseek-v4-flash",
       "aliases": [
         "deepseek-chat",
         "ds-v4",
-        "ds-v3"
+        "ds-v3",
+        "deepseek-v4-flash",
+        "deepseek:chat"
       ],
       "track": "stable",
       "offer_track": "direct",
@@ -378,23 +380,25 @@
       "official_source_url": "https://api-docs.deepseek.com/",
       "signup_url": "https://platform.deepseek.com/",
       "watch_sources": [],
-      "notes": "DeepSeek Chat (V4 backing as of 2026-04). API model name stays 'deepseek-chat'; underlying weights/pricing may shift across versions. Verify pricing against api-docs.deepseek.com.",
+      "notes": "DeepSeek V4 Flash pricing verified from official DeepSeek API pricing on 2026-04-26; OpenAI-format base URL remains https://api.deepseek.com.",
       "last_reviewed": "2026-04-26",
       "pricing": {
         "source_type": "provider-docs",
         "source_url": "https://api-docs.deepseek.com/quick_start/pricing",
         "refreshed_at": "2026-04-26T00:00:00Z",
-        "freshness_status": "stale",
+        "freshness_status": "fresh",
         "input_cost_per_1m": 0.14,
         "output_cost_per_1m": 0.28,
-        "cache_read_cost_per_1m": 0.014
+        "cache_read_cost_per_1m": 0.028
       }
     },
     "deepseek-reasoner": {
-      "recommended_model": "deepseek-reasoner",
+      "recommended_model": "deepseek-v4-pro",
       "aliases": [
         "deepseek-reasoner",
-        "r1"
+        "r1",
+        "deepseek-v4-pro",
+        "deepseek:reasoner"
       ],
       "track": "stable",
       "offer_track": "direct",
@@ -408,16 +412,16 @@
       "official_source_url": "https://api-docs.deepseek.com/",
       "signup_url": "https://platform.deepseek.com/",
       "watch_sources": [],
-      "notes": "DeepSeek Reasoner (V4 backing as of 2026-04). High-reasoning model. Verify pricing against api-docs.deepseek.com.",
+      "notes": "DeepSeek V4 Pro pricing verified from official DeepSeek API pricing on 2026-04-26; supports thinking and non-thinking modes.",
       "last_reviewed": "2026-04-26",
       "pricing": {
         "source_type": "provider-docs",
         "source_url": "https://api-docs.deepseek.com/quick_start/pricing",
         "refreshed_at": "2026-04-26T00:00:00Z",
-        "freshness_status": "stale",
-        "input_cost_per_1m": 0.5,
-        "output_cost_per_1m": 1.0,
-        "cache_read_cost_per_1m": 0.05
+        "freshness_status": "fresh",
+        "input_cost_per_1m": 1.74,
+        "output_cost_per_1m": 3.48,
+        "cache_read_cost_per_1m": 0.145
       }
     },
     "blackbox-free": {
@@ -486,7 +490,9 @@
     "openrouter-fallback": {
       "recommended_model": "openrouter/auto",
       "aliases": [
-        "openrouter/auto"
+        "openrouter/auto",
+        "openrouter:auto",
+        "auto-router"
       ],
       "track": "stable",
       "offer_track": "byok",
@@ -497,19 +503,18 @@
       ],
       "volatility": "medium",
       "evidence_level": "official",
-      "official_source_url": "https://openrouter.ai/docs/features/provider-routing",
+      "official_source_url": "https://openrouter.ai/openrouter/auto",
       "signup_url": "https://openrouter.ai/",
       "watch_sources": [],
-      "notes": "OpenRouter fallback path with official provider routing and BYOK support.",
-      "last_reviewed": "2026-04-01",
+      "notes": "OpenRouter Auto Router pricing audited 2026-04-26: openrouter/auto is billed at the routed model rate; OpenRouter states posted model pricing is not marked up and failed/fallback attempts are not billed.",
+      "last_reviewed": "2026-04-26",
       "pricing": {
         "source_type": "provider-docs",
-        "source_url": "https://openrouter.ai/pricing",
-        "refreshed_at": "2026-04-01T12:00:00Z",
+        "source_url": "https://openrouter.ai/openrouter/auto",
+        "refreshed_at": "2026-04-26T00:00:00Z",
         "freshness_status": "fresh",
-        "input_cost_per_1m": 0.5,
-        "output_cost_per_1m": 1.5,
-        "cache_read_cost_per_1m": 0.1
+        "routed_model_pricing": true,
+        "platform_fee": "Pay-as-you-go lists a 5.5% platform fee; BYOK has monthly included request allowances, then OpenRouter fee policy applies."
       }
     },
     "openai-codex": {
@@ -533,13 +538,15 @@
       "official_source_url": "https://platform.openai.com/docs/models",
       "signup_url": "https://platform.openai.com/",
       "watch_sources": [],
-      "notes": "OpenAI Codex via OAuth. GPT-5.5-codex ships in 3 reasoning tiers (low/medium/high) — alias suffix selects the tier. Pricing per tier pending verification.",
+      "notes": "OpenAI Codex GPT-5.5 pricing verified from the official GPT-5.5 release page on 2026-04-26. Low/medium/high are reasoning-effort profiles with the same base text-token API price; reasoning tokens are billed as output tokens.",
       "last_reviewed": "2026-04-26",
       "pricing": {
         "source_type": "provider-docs",
-        "source_url": "https://openai.com/api/pricing/",
+        "source_url": "https://openai.com/index/introducing-gpt-5-5/",
         "refreshed_at": "2026-04-26T00:00:00Z",
-        "freshness_status": "stale"
+        "freshness_status": "fresh",
+        "input_cost_per_1m": 5.0,
+        "output_cost_per_1m": 30.0
       }
     },
     "opencode": {

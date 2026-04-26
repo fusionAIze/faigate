@@ -41,6 +41,8 @@ ENV_PUBLIC_URL = "FAIGATE_METADATA_PUBLIC_URL"
 ENV_PRIVATE_URL = "FAIGATE_METADATA_PRIVATE_URL"
 ENV_REFRESH_INTERVAL = "FAIGATE_METADATA_REFRESH_INTERVAL_SECONDS"
 
+_SUCCESS_STATUSES = {SyncStatus.FRESH, SyncStatus.NOT_MODIFIED}
+
 
 @dataclass
 class ResolverConfig:
@@ -186,6 +188,12 @@ class CatalogResolver:
             token=token,
             timeout_seconds=self._config.timeout_seconds,
         )
+        self._cache.save_state(
+            tier,
+            status=result.status.value,
+            success=result.status in _SUCCESS_STATUSES,
+            error=result.error,
+        )
 
         if result.status == SyncStatus.FRESH and result.payload is not None:
             saved = self._cache.save(tier, result.payload, result.etag)
@@ -242,6 +250,17 @@ class CatalogResolver:
                 "age_seconds": time.time() - cached.written_at,
                 "providers_count": len(cached.payload.get("providers", {})),
             }
+            state = self._cache.load_state(tier)
+            if state is not None:
+                out["tiers"][tier]["sync"] = {
+                    "last_attempt_at": state.last_attempt_at,
+                    "last_success_at": state.last_success_at,
+                    "last_status": state.last_status,
+                    "last_error": state.last_error,
+                    "success_count": state.success_count,
+                    "failure_count": state.failure_count,
+                    "seconds_since_success": (time.time() - state.last_success_at if state.last_success_at else None),
+                }
         bundled = _load_bundled_snapshot()
         out["bundled_present"] = bundled is not None
         if bundled is not None:

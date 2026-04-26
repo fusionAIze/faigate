@@ -23,6 +23,11 @@ auto_update:
     enabled: false
     rollback_command: ''
     timeout_seconds: 30
+metadata:
+  enabled: true
+  on_startup: false
+  refresh_interval_hours: 24
+  timeout_seconds: 10
 client_profiles:
   default: generic
   enabled: true
@@ -782,6 +787,58 @@ providers:
     max_tokens: 8000
     model: z-ai/glm-5:free
     tier: fallback
+    timeout:
+      connect_s: 10
+      read_s: 60
+  kilo-auto/frontier:
+    api_key: ${KILOCODE_API_KEY}
+    backend: openai-compat
+    base_url: ${KILOCODE_BASE_URL:-https://api.kilo.ai/api/gateway}
+    capabilities:
+      cost_tier: premium
+      latency_tier: balanced
+    max_tokens: 32000
+    model: kilo-auto/frontier
+    tier: premium
+    timeout:
+      connect_s: 10
+      read_s: 120
+  kilo-auto/balanced:
+    api_key: ${KILOCODE_API_KEY}
+    backend: openai-compat
+    base_url: ${KILOCODE_BASE_URL:-https://api.kilo.ai/api/gateway}
+    capabilities:
+      cost_tier: mid
+      latency_tier: balanced
+    max_tokens: 16000
+    model: kilo-auto/balanced
+    tier: mid
+    timeout:
+      connect_s: 10
+      read_s: 90
+  kilo-auto/free:
+    api_key: ${KILOCODE_API_KEY}
+    backend: openai-compat
+    base_url: ${KILOCODE_BASE_URL:-https://api.kilo.ai/api/gateway}
+    capabilities:
+      cost_tier: free
+      latency_tier: balanced
+    max_tokens: 8000
+    model: kilo-auto/free
+    tier: fallback
+    timeout:
+      connect_s: 10
+      read_s: 60
+  kilo-auto/small:
+    api_key: ${KILOCODE_API_KEY}
+    backend: openai-compat
+    base_url: ${KILOCODE_BASE_URL:-https://api.kilo.ai/api/gateway}
+    capabilities:
+      cost_tier: cheap
+      latency_tier: fast
+    max_tokens: 8000
+    model: kilo-auto/small
+    tier: cheap
     timeout:
       connect_s: 10
       read_s: 60

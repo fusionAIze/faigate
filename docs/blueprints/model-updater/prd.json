@@ -1,7 +1,7 @@
 {
   "projectName": "faigate-model-updater",
   "version": "1.0",
-  "status": "draft",
+  "status": "ready-for-review",
   "created": "2026-04-26",
   "execution_recommendation": {
     "mode": "complex",
@@ -24,7 +24,9 @@
       "estimatedEffort": "1",
       "dependsOn": [],
       "type": "data",
-      "required_capabilities": ["code_generation"],
+      "required_capabilities": [
+        "code_generation"
+      ],
       "passes": false
     },
     {
@@ -40,8 +42,13 @@
       "estimatedEffort": "1",
       "dependsOn": [],
       "type": "data",
-      "required_capabilities": ["research", "code_generation"],
-      "passes": false
+      "required_capabilities": [
+        "research",
+        "code_generation"
+      ],
+      "passes": true,
+      "completed_at": "2026-04-26",
+      "status": "done"
     },
     {
       "id": "INFRA-001",
@@ -56,7 +63,9 @@
       "estimatedEffort": "1",
       "dependsOn": [],
       "type": "infrastructure",
-      "required_capabilities": ["infrastructure"],
+      "required_capabilities": [
+        "infrastructure"
+      ],
       "passes": false
     },
     {
@@ -71,9 +80,13 @@
       ],
       "priority": "high",
       "estimatedEffort": "2",
-      "dependsOn": ["INFRA-001"],
+      "dependsOn": [
+        "INFRA-001"
+      ],
       "type": "infrastructure",
-      "required_capabilities": ["infrastructure"],
+      "required_capabilities": [
+        "infrastructure"
+      ],
       "passes": false
     },
     {
@@ -87,9 +100,13 @@
       ],
       "priority": "medium",
       "estimatedEffort": "1",
-      "dependsOn": ["INFRA-002"],
+      "dependsOn": [
+        "INFRA-002"
+      ],
       "type": "docs",
-      "required_capabilities": ["code_generation"],
+      "required_capabilities": [
+        "code_generation"
+      ],
       "passes": false
     },
     {
@@ -104,9 +121,13 @@
       ],
       "priority": "high",
       "estimatedEffort": "2",
-      "dependsOn": ["INFRA-002"],
+      "dependsOn": [
+        "INFRA-002"
+      ],
       "type": "schema",
-      "required_capabilities": ["code_generation"],
+      "required_capabilities": [
+        "code_generation"
+      ],
       "passes": false
     },
     {
@@ -122,9 +143,14 @@
       ],
       "priority": "high",
       "estimatedEffort": "3",
-      "dependsOn": ["INFRA-002"],
+      "dependsOn": [
+        "INFRA-002"
+      ],
       "type": "feature",
-      "required_capabilities": ["code_generation", "testing"],
+      "required_capabilities": [
+        "code_generation",
+        "testing"
+      ],
       "passes": false
     },
     {
@@ -139,9 +165,14 @@
       ],
       "priority": "high",
       "estimatedEffort": "2",
-      "dependsOn": ["CODE-001"],
+      "dependsOn": [
+        "CODE-001"
+      ],
       "type": "feature",
-      "required_capabilities": ["code_generation", "testing"],
+      "required_capabilities": [
+        "code_generation",
+        "testing"
+      ],
       "passes": false
     },
     {
@@ -156,9 +187,14 @@
       ],
       "priority": "high",
       "estimatedEffort": "2",
-      "dependsOn": ["CODE-002"],
+      "dependsOn": [
+        "CODE-002"
+      ],
       "type": "feature",
-      "required_capabilities": ["code_generation", "testing"],
+      "required_capabilities": [
+        "code_generation",
+        "testing"
+      ],
       "passes": false
     },
     {
@@ -173,9 +209,15 @@
       ],
       "priority": "high",
       "estimatedEffort": "1",
-      "dependsOn": ["CODE-003", "SCHEMA-001"],
+      "dependsOn": [
+        "CODE-003",
+        "SCHEMA-001"
+      ],
       "type": "feature",
-      "required_capabilities": ["code_generation", "testing"],
+      "required_capabilities": [
+        "code_generation",
+        "testing"
+      ],
       "passes": false
     },
     {
@@ -190,9 +232,14 @@
       ],
       "priority": "high",
       "estimatedEffort": "2",
-      "dependsOn": ["CODE-003"],
+      "dependsOn": [
+        "CODE-003"
+      ],
       "type": "feature",
-      "required_capabilities": ["code_generation", "testing"],
+      "required_capabilities": [
+        "code_generation",
+        "testing"
+      ],
       "passes": false
     },
     {
@@ -208,9 +255,13 @@
       ],
       "priority": "high",
       "estimatedEffort": "2",
-      "dependsOn": ["CODE-005"],
+      "dependsOn": [
+        "CODE-005"
+      ],
       "type": "feature",
-      "required_capabilities": ["code_generation"],
+      "required_capabilities": [
+        "code_generation"
+      ],
       "passes": false
     },
     {
@@ -225,10 +276,17 @@
       ],
       "priority": "high",
       "estimatedEffort": "2",
-      "dependsOn": ["CODE-005"],
+      "dependsOn": [
+        "CODE-005"
+      ],
       "type": "feature",
-      "required_capabilities": ["code_generation", "testing"],
-      "passes": false
+      "required_capabilities": [
+        "code_generation",
+        "testing"
+      ],
+      "passes": true,
+      "completed_at": "2026-04-26",
+      "status": "done"
     },
     {
       "id": "CODE-008",
@@ -241,10 +299,16 @@
       ],
       "priority": "medium",
       "estimatedEffort": "1",
-      "dependsOn": ["CODE-007"],
+      "dependsOn": [
+        "CODE-007"
+      ],
       "type": "feature",
-      "required_capabilities": ["code_generation"],
-      "passes": false
+      "required_capabilities": [
+        "code_generation"
+      ],
+      "passes": true,
+      "completed_at": "2026-04-26",
+      "status": "done"
     },
     {
       "id": "CAT-001",
@@ -258,10 +322,17 @@
       ],
       "priority": "high",
       "estimatedEffort": "1",
-      "dependsOn": ["INFRA-002"],
+      "dependsOn": [
+        "INFRA-002"
+      ],
       "type": "data",
-      "required_capabilities": ["research", "code_generation"],
-      "passes": false
+      "required_capabilities": [
+        "research",
+        "code_generation"
+      ],
+      "passes": true,
+      "completed_at": "2026-04-26",
+      "status": "done"
     },
     {
       "id": "CAT-002",
@@ -274,10 +345,17 @@
       ],
       "priority": "high",
       "estimatedEffort": "1",
-      "dependsOn": ["INFRA-002"],
+      "dependsOn": [
+        "INFRA-002"
+      ],
       "type": "data",
-      "required_capabilities": ["research", "code_generation"],
-      "passes": false
+      "required_capabilities": [
+        "research",
+        "code_generation"
+      ],
+      "passes": true,
+      "completed_at": "2026-04-26",
+      "status": "done"
     },
     {
       "id": "CAT-003",
@@ -290,10 +368,17 @@
       ],
       "priority": "high",
       "estimatedEffort": "1",
-      "dependsOn": ["INFRA-002"],
+      "dependsOn": [
+        "INFRA-002"
+      ],
       "type": "data",
-      "required_capabilities": ["research", "code_generation"],
-      "passes": false
+      "required_capabilities": [
+        "research",
+        "code_generation"
+      ],
+      "passes": true,
+      "completed_at": "2026-04-26",
+      "status": "done"
     },
     {
       "id": "TEST-001",
@@ -307,9 +392,13 @@
       ],
       "priority": "high",
       "estimatedEffort": "2",
-      "dependsOn": ["CODE-007"],
+      "dependsOn": [
+        "CODE-007"
+      ],
       "type": "test",
-      "required_capabilities": ["testing"],
+      "required_capabilities": [
+        "testing"
+      ],
       "passes": false
     },
     {
@@ -324,9 +413,13 @@
       ],
       "priority": "high",
       "estimatedEffort": "1",
-      "dependsOn": ["CODE-003"],
+      "dependsOn": [
+        "CODE-003"
+      ],
       "type": "test",
-      "required_capabilities": ["testing"],
+      "required_capabilities": [
+        "testing"
+      ],
       "passes": false
     },
     {
@@ -340,9 +433,13 @@
       ],
       "priority": "high",
       "estimatedEffort": "1",
-      "dependsOn": ["CODE-001"],
+      "dependsOn": [
+        "CODE-001"
+      ],
       "type": "test",
-      "required_capabilities": ["testing"],
+      "required_capabilities": [
+        "testing"
+      ],
       "passes": false
     },
     {
@@ -357,10 +454,17 @@
       ],
       "priority": "medium",
       "estimatedEffort": "1",
-      "dependsOn": ["CODE-006", "CODE-007"],
+      "dependsOn": [
+        "CODE-006",
+        "CODE-007"
+      ],
       "type": "docs",
-      "required_capabilities": ["code_generation"],
-      "passes": false
+      "required_capabilities": [
+        "code_generation"
+      ],
+      "passes": true,
+      "completed_at": "2026-04-26",
+      "status": "done"
     }
   ],
   "roadmap": [
@@ -383,6 +487,11 @@
       "id": "ROADMAP-004",
       "title": "Schema v2 with capability matrix per model",
       "rationale": "vision/audio/tools/json-mode flags per model — enables smarter routing"
+    },
+    {
+      "id": "ROADMAP-005",
+      "title": "Outcarve Gate Bar into its own repo/package track",
+      "rationale": "Gate Bar is a useful helper prototype, but keeping the gateway product clean argues for a separate repo and release/cask lifecycle."
     }
   ]
 }

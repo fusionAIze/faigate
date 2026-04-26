@@ -1838,6 +1838,41 @@ def _normalize_provider_source_refresh(data: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
+def _normalize_metadata_sync(data: dict[str, Any]) -> dict[str, Any]:
+    raw = data.get("metadata") or {}
+    if not isinstance(raw, dict):
+        raise ConfigError("'metadata' must be a mapping")
+
+    refresh_interval_hours = raw.get("refresh_interval_hours", 24)
+    if isinstance(refresh_interval_hours, bool) or not isinstance(refresh_interval_hours, int | float):
+        raise ConfigError("'metadata.refresh_interval_hours' must be a number")
+    if float(refresh_interval_hours) < 0:
+        raise ConfigError("'metadata.refresh_interval_hours' must be non-negative")
+
+    timeout_seconds = raw.get("timeout_seconds", 10.0)
+    if isinstance(timeout_seconds, bool) or not isinstance(timeout_seconds, int | float):
+        raise ConfigError("'metadata.timeout_seconds' must be a number")
+    if float(timeout_seconds) <= 0:
+        raise ConfigError("'metadata.timeout_seconds' must be positive")
+
+    public_url = raw.get("public_catalog_url", "")
+    private_url = raw.get("private_catalog_url", "")
+    for key, value in (("public_catalog_url", public_url), ("private_catalog_url", private_url)):
+        if value not in ("", None) and not isinstance(value, str):
+            raise ConfigError(f"'metadata.{key}' must be a string")
+
+    normalized = dict(data)
+    normalized["metadata"] = {
+        "enabled": bool(raw.get("enabled", True)),
+        "public_catalog_url": str(public_url or "").strip(),
+        "private_catalog_url": str(private_url or "").strip(),
+        "refresh_interval_hours": float(refresh_interval_hours),
+        "timeout_seconds": float(timeout_seconds),
+        "on_startup": bool(raw.get("on_startup", False)),
+    }
+    return normalized
+
+
 def _normalize_api_surfaces(data: dict[str, Any]) -> dict[str, Any]:
     """Validate top-level API-surface toggles.
 
@@ -2090,6 +2125,20 @@ class Config:
         )
 
     @property
+    def metadata(self) -> dict:
+        return self._data.get(
+            "metadata",
+            {
+                "enabled": True,
+                "public_catalog_url": "",
+                "private_catalog_url": "",
+                "refresh_interval_hours": 24.0,
+                "timeout_seconds": 10.0,
+                "on_startup": False,
+            },
+        )
+
+    @property
     def quota_poll(self) -> dict:
         """Quota balance poller settings (Phase 2 of the quota-tracking work).
 
@@ -2170,21 +2219,23 @@ def load_config(path: str | Path | None = None) -> Config:
     with path.open() as f:
         raw = yaml.safe_load(f)
 
-    expanded = _normalize_provider_source_refresh(
-        _normalize_api_surfaces(
-            _normalize_anthropic_bridge(
-                _normalize_provider_catalog_check(
-                    _normalize_security(
-                        _normalize_auto_update(
-                            _normalize_update_check(
-                                _normalize_request_hooks(
-                                    _validate_routing_mode_references(
-                                        _normalize_model_shortcuts(
-                                            _normalize_routing_modes(
-                                                _normalize_client_profiles(
-                                                    _normalize_routing_policies(
-                                                        _normalize_fallback_chain(
-                                                            _normalize_providers(_walk_expand(raw))
+    expanded = _normalize_metadata_sync(
+        _normalize_provider_source_refresh(
+            _normalize_api_surfaces(
+                _normalize_anthropic_bridge(
+                    _normalize_provider_catalog_check(
+                        _normalize_security(
+                            _normalize_auto_update(
+                                _normalize_update_check(
+                                    _normalize_request_hooks(
+                                        _validate_routing_mode_references(
+                                            _normalize_model_shortcuts(
+                                                _normalize_routing_modes(
+                                                    _normalize_client_profiles(
+                                                        _normalize_routing_policies(
+                                                            _normalize_fallback_chain(
+                                                                _normalize_providers(_walk_expand(raw))
+                                                            )
                                                         )
                                                     )
                                                 )

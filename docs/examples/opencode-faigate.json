@@ -60,6 +60,34 @@
             "context": 128000,
             "output": 8000
           }
+        },
+        "kilo-auto/frontier": {
+          "name": "Kilo Auto Frontier",
+          "limit": {
+            "context": 200000,
+            "output": 32000
+          }
+        },
+        "kilo-auto/balanced": {
+          "name": "Kilo Auto Balanced",
+          "limit": {
+            "context": 200000,
+            "output": 16000
+          }
+        },
+        "kilo-auto/free": {
+          "name": "Kilo Auto Free",
+          "limit": {
+            "context": 128000,
+            "output": 8000
+          }
+        },
+        "kilo-auto/small": {
+          "name": "Kilo Auto Small",
+          "limit": {
+            "context": 128000,
+            "output": 8000
+          }
         }
       }
     }

@@ -389,6 +389,43 @@ def test_provider_source_refresh_defaults_are_exposed():
     }
 
 
+def test_metadata_sync_defaults_are_exposed():
+    cfg = load_config(SHIPPED_CONFIG)
+    assert cfg.metadata == {
+        "enabled": True,
+        "public_catalog_url": "",
+        "private_catalog_url": "",
+        "refresh_interval_hours": 24.0,
+        "timeout_seconds": 10.0,
+        "on_startup": False,
+    }
+
+
+def test_metadata_sync_can_be_disabled_with_zero_interval(tmp_path):
+    path = tmp_path / "config.yaml"
+    path.write_text(
+        """
+server:
+  host: "127.0.0.1"
+  port: 8090
+providers:
+  cloud-default:
+    backend: openai-compat
+    base_url: "https://api.example.com/v1"
+    api_key: "secret"
+    model: "chat-model"
+metadata:
+  refresh_interval_hours: 0
+fallback_chain: []
+metrics:
+  enabled: false
+"""
+    )
+
+    cfg = load_config(path)
+    assert cfg.metadata["refresh_interval_hours"] == 0.0
+
+
 def test_provider_source_refresh_rejects_invalid_interval(tmp_path):
     path = tmp_path / "config.yaml"
     path.write_text(

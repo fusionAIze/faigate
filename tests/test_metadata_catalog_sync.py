@@ -15,6 +15,7 @@ from faigate.metadata_catalog_sync import (
     MetadataCatalogSync,
     SyncStatus,
 )
+from faigate.provider_catalog_refresh import build_catalog_alerts
 
 # ── fakes ─────────────────────────────────────────────────────────────
 
@@ -199,6 +200,23 @@ def test_cache_age_seconds(tmp_path: Path):
     assert age is not None and age >= 0
 
 
+def test_cache_records_sync_state(tmp_path: Path):
+    cache = CatalogCache(root=tmp_path)
+    cache.save_state("public", status="invalid", success=False, error="schema mismatch", when=100.0)
+    state = cache.load_state("public")
+    assert state is not None
+    assert state.last_status == "invalid"
+    assert state.last_error == "schema mismatch"
+    assert state.failure_count == 1
+
+    cache.save_state("public", status="fresh", success=True, when=200.0)
+    state = cache.load_state("public")
+    assert state is not None
+    assert state.last_success_at == 200.0
+    assert state.success_count == 1
+    assert state.failure_count == 1
+
+
 # ── CatalogResolver chain ─────────────────────────────────────────────
 
 
@@ -345,3 +363,59 @@ def test_resolver_status_reports_cache_state(tmp_path: Path):
     assert status["tiers"]["public"]["present"] is True
     assert status["tiers"]["public"]["providers_count"] == 1
     assert status["tiers"]["private"]["present"] is False
+    assert status["tiers"]["public"]["sync"]["last_status"] == "fresh"
+
+
+def test_build_catalog_alerts_includes_metadata_sync_invalid():
+    alerts = build_catalog_alerts(
+        {
+            "metadata_sync": {
+                "public": {
+                    "sync": {
+                        "last_status": "invalid",
+                        "last_error": "schema mismatch",
+                        "last_success_at": None,
+                        "seconds_since_success": None,
+                    }
+                }
+            }
+        }
+    )
+    assert alerts[0]["kind"] == "sync-invalid"
+    assert alerts[0]["severity"] == "critical"
+
+
+def test_build_catalog_alerts_includes_metadata_sync_auth():
+    alerts = build_catalog_alerts(
+        {
+            "metadata_sync": {
+                "private": {
+                    "sync": {
+                        "last_status": "auth_failed",
+                        "last_error": "http 403",
+                        "last_success_at": None,
+                        "seconds_since_success": None,
+                    }
+                }
+            }
+        }
+    )
+    assert alerts[0]["kind"] == "sync-auth"
+
+
+def test_build_catalog_alerts_includes_metadata_sync_stale():
+    alerts = build_catalog_alerts(
+        {
+            "metadata_sync": {
+                "public": {
+                    "sync": {
+                        "last_status": "fresh",
+                        "last_error": "",
+                        "last_success_at": 1.0,
+                        "seconds_since_success": 8 * 86400,
+                    }
+                }
+            }
+        }
+    )
+    assert alerts[0]["kind"] == "sync-stale"

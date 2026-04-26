@@ -1,5 +1,14 @@
 # fusionAIze Gate Changelog
 
+## v2.4.0 - 2026-04-26
+
+### Added
+
+- **Metadata catalog sync loop**: the gateway now runs a lazy startup refresh plus an optional 24h background tick for the public/private metadata catalog. Failed syncs back off through 5m/15m/1h windows and persist sync state alongside the cached catalog.
+- **Catalog sync alerts**: provider catalog, health, dashboard, and API surfaces now feed sync failures, stale caches, invalid payloads, and auth issues through the existing `build_catalog_alerts` alert path.
+- **Kilo Auto profile examples**: the shipped config and OpenCode example now expose `kilo-auto/frontier`, `kilo-auto/balanced`, `kilo-auto/free`, and `kilo-auto/small` for FAIGate-backed OpenCode/Codenomad use.
+- **Fresh bundled catalog snapshot**: refreshed the embedded metadata catalog with newly verified Opus 4.7, Haiku 4.5, GPT-5.5, DeepSeek V4, and OpenRouter Auto pricing metadata.
+
 ## v2.3.0 - 2026-04-19
 
 ### Added
