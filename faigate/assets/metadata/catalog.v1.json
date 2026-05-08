@@ -626,32 +626,32 @@
       }
     },
     "groq": {
-      "recommended_model": "llama-3.3-70b-versatile",
+      "recommended_model": "groq/llama-3.3-70b",
       "aliases": [
-        "llama-3.3-70b-versatile",
-        "groq/llama",
-        "mixtral-8x7b"
+        "groq",
+        "groq/llama-3.3-70b",
+        "llama-3.3-70b"
       ],
-      "track": "stable",
-      "offer_track": "direct",
+      "track": "free",
+      "offer_track": "free",
       "provider_type": "direct",
       "auth_modes": [
         "api_key"
       ],
       "volatility": "low",
       "evidence_level": "official",
-      "official_source_url": "https://console.groq.com/docs/models",
-      "signup_url": "https://console.groq.com/",
+      "official_source_url": "https://console.groq.com/",
+      "signup_url": "https://console.groq.com/keys",
       "watch_sources": [],
-      "notes": "Groq \u2013 ultra-fast inference (LPU), Llama / DeepSeek models.",
-      "last_reviewed": "2026-04-01",
+      "notes": "Groq ultra-fast LPU inference \u2014 300-500 tok/s. Free tier: 30 RPM, 14,400 RPD, 6K TPM.",
+      "last_reviewed": "2026-05-04",
       "pricing": {
         "source_type": "provider-docs",
-        "source_url": "https://console.groq.com/docs/pricing",
-        "refreshed_at": "2026-04-01T12:00:00Z",
+        "source_url": "https://console.groq.com/docs/rate-limits",
+        "refreshed_at": "2026-05-04T00:00:00Z",
         "freshness_status": "fresh",
-        "input_cost_per_1m": 0.05,
-        "output_cost_per_1m": 0.1
+        "input_cost_per_1m": 0.0,
+        "output_cost_per_1m": 0.0
       }
     },
     "mistral": {
@@ -889,30 +889,31 @@
       }
     },
     "cerebras": {
-      "recommended_model": "llama3.3-70b",
+      "recommended_model": "cerebras/qwen3-235b",
       "aliases": [
-        "llama3.3-70b"
+        "cerebras",
+        "cerebras/qwen3-235b"
       ],
-      "track": "stable",
-      "offer_track": "direct",
+      "track": "free",
+      "offer_track": "free",
       "provider_type": "direct",
       "auth_modes": [
         "api_key"
       ],
       "volatility": "low",
       "evidence_level": "official",
-      "official_source_url": "https://docs.cerebras.ai/",
-      "signup_url": "https://cerebras.ai/",
+      "official_source_url": "https://cloud.cerebras.ai/",
+      "signup_url": "https://cloud.cerebras.ai/",
       "watch_sources": [],
-      "notes": "Cerebras \u2013 fast inference, zai-glm-4.7 / zai-glm-4.6 compatible",
-      "last_reviewed": "2026-04-01",
+      "notes": "Cerebras wafer-scale inference ~2600 tok/s. Free tier: 30 RPM, 1M TPD.",
+      "last_reviewed": "2026-05-04",
       "pricing": {
-        "source_type": "registry-default",
-        "source_url": "",
-        "refreshed_at": "2026-04-01T02:22:11Z",
+        "source_type": "provider-docs",
+        "source_url": "https://cloud.cerebras.ai/",
+        "refreshed_at": "2026-05-04T00:00:00Z",
         "freshness_status": "fresh",
-        "input_cost_per_1m": 0.1,
-        "output_cost_per_1m": 0.1
+        "input_cost_per_1m": 0.0,
+        "output_cost_per_1m": 0.0
       }
     },
     "github-copilot": {
@@ -1144,17 +1145,23 @@
     },
     "pollinations": {
       "recommended_model": "pollinations/openai",
-      "aliases": ["pollinations", "pol", "pollinations/openai"],
+      "aliases": [
+        "pollinations",
+        "pol",
+        "pollinations/openai"
+      ],
       "track": "free",
       "offer_track": "free",
       "provider_type": "aggregator",
-      "auth_modes": ["none"],
+      "auth_modes": [
+        "none"
+      ],
       "volatility": "high",
       "evidence_level": "official",
       "official_source_url": "https://pollinations.ai/",
       "signup_url": "https://enter.pollinations.ai",
       "watch_sources": [],
-      "notes": "Pollinations free text+image+video+audio — no API key required. Supports GPT-5, Claude, Llama 4.",
+      "notes": "Pollinations free text+image+video+audio \u2014 no API key required. Supports GPT-5, Claude, Llama 4.",
       "last_reviewed": "2026-05-04",
       "pricing": {
         "source_type": "provider-docs",
@@ -1165,59 +1172,19 @@
         "output_cost_per_1m": 0.0
       }
     },
-    "groq": {
-      "recommended_model": "groq/llama-3.3-70b",
-      "aliases": ["groq", "groq/llama-3.3-70b", "llama-3.3-70b"],
-      "track": "free",
-      "offer_track": "free",
-      "provider_type": "direct",
-      "auth_modes": ["api_key"],
-      "volatility": "low",
-      "evidence_level": "official",
-      "official_source_url": "https://console.groq.com/",
-      "signup_url": "https://console.groq.com/keys",
-      "watch_sources": [],
-      "notes": "Groq ultra-fast LPU inference — 300-500 tok/s. Free tier: 30 RPM, 14,400 RPD, 6K TPM.",
-      "last_reviewed": "2026-05-04",
-      "pricing": {
-        "source_type": "provider-docs",
-        "source_url": "https://console.groq.com/docs/rate-limits",
-        "refreshed_at": "2026-05-04T00:00:00Z",
-        "freshness_status": "fresh",
-        "input_cost_per_1m": 0.0,
-        "output_cost_per_1m": 0.0
-      }
-    },
-    "cerebras": {
-      "recommended_model": "cerebras/qwen3-235b",
-      "aliases": ["cerebras", "cerebras/qwen3-235b"],
-      "track": "free",
-      "offer_track": "free",
-      "provider_type": "direct",
-      "auth_modes": ["api_key"],
-      "volatility": "low",
-      "evidence_level": "official",
-      "official_source_url": "https://cloud.cerebras.ai/",
-      "signup_url": "https://cloud.cerebras.ai/",
-      "watch_sources": [],
-      "notes": "Cerebras wafer-scale inference ~2600 tok/s. Free tier: 30 RPM, 1M TPD.",
-      "last_reviewed": "2026-05-04",
-      "pricing": {
-        "source_type": "provider-docs",
-        "source_url": "https://cloud.cerebras.ai/",
-        "refreshed_at": "2026-05-04T00:00:00Z",
-        "freshness_status": "fresh",
-        "input_cost_per_1m": 0.0,
-        "output_cost_per_1m": 0.0
-      }
-    },
     "longcat": {
       "recommended_model": "longcat/flash-lite",
-      "aliases": ["longcat", "lc", "longcat/flash-lite"],
+      "aliases": [
+        "longcat",
+        "lc",
+        "longcat/flash-lite"
+      ],
       "track": "free",
       "offer_track": "free",
       "provider_type": "direct",
-      "auth_modes": ["api_key"],
+      "auth_modes": [
+        "api_key"
+      ],
       "volatility": "high",
       "evidence_level": "official",
       "official_source_url": "https://longcat.ai/",
@@ -1236,11 +1203,17 @@
     },
     "nvidia-nim": {
       "recommended_model": "nvidia/nemotron",
-      "aliases": ["nvidia-nim", "nvidia", "nim"],
+      "aliases": [
+        "nvidia-nim",
+        "nvidia",
+        "nim"
+      ],
       "track": "free",
       "offer_track": "free",
       "provider_type": "direct",
-      "auth_modes": ["api_key"],
+      "auth_modes": [
+        "api_key"
+      ],
       "volatility": "medium",
       "evidence_level": "official",
       "official_source_url": "https://build.nvidia.com/",
@@ -1259,17 +1232,23 @@
     },
     "kiro": {
       "recommended_model": "kiro/claude-sonnet",
-      "aliases": ["kiro", "kr", "kiro/claude-sonnet"],
+      "aliases": [
+        "kiro",
+        "kr",
+        "kiro/claude-sonnet"
+      ],
       "track": "free",
       "offer_track": "free",
       "provider_type": "aggregator",
-      "auth_modes": ["oauth"],
+      "auth_modes": [
+        "oauth"
+      ],
       "volatility": "high",
       "evidence_level": "official",
       "official_source_url": "https://kiro.dev/",
       "signup_url": "https://kiro.dev/",
       "watch_sources": [],
-      "notes": "Kiro free tier via AWS Builder ID OAuth — Claude Sonnet 4.5 and Haiku 4.5 unlimited.",
+      "notes": "Kiro free tier via AWS Builder ID OAuth \u2014 Claude Sonnet 4.5 and Haiku 4.5 unlimited.",
       "last_reviewed": "2026-05-04",
       "pricing": {
         "source_type": "provider-docs",
@@ -1282,17 +1261,23 @@
     },
     "qoder": {
       "recommended_model": "qoder/kimi-k2",
-      "aliases": ["qoder", "qoder/kimi-k2", "qd"],
+      "aliases": [
+        "qoder",
+        "qoder/kimi-k2",
+        "qd"
+      ],
       "track": "free",
       "offer_track": "free",
       "provider_type": "aggregator",
-      "auth_modes": ["oauth"],
+      "auth_modes": [
+        "oauth"
+      ],
       "volatility": "high",
       "evidence_level": "official",
       "official_source_url": "https://qoder.ai/",
       "signup_url": "https://qoder.ai/",
       "watch_sources": [],
-      "notes": "Qoder free via Google OAuth — kimi-k2-thinking, qwen3-coder-plus, deepseek-r1 unlimited.",
+      "notes": "Qoder free via Google OAuth \u2014 kimi-k2-thinking, qwen3-coder-plus, deepseek-r1 unlimited.",
       "last_reviewed": "2026-05-04",
       "pricing": {
         "source_type": "provider-docs",
@@ -1301,6 +1286,32 @@
         "freshness_status": "fresh",
         "input_cost_per_1m": 0.0,
         "output_cost_per_1m": 0.0
+      }
+    },
+    "cohere": {
+      "recommended_model": "command-a-03-2025",
+      "aliases": [
+        "cohere",
+        "command-a",
+        "command-r"
+      ],
+      "track": "stable",
+      "offer_track": "direct",
+      "provider_type": "direct",
+      "auth_modes": [
+        "api_key"
+      ],
+      "volatility": "low",
+      "evidence_level": "official",
+      "official_source_url": "https://docs.cohere.com/",
+      "signup_url": "https://dashboard.cohere.com/",
+      "watch_sources": [],
+      "notes": "Cohere Command A/R \u2014 enterprise-grade LLM with tool use",
+      "last_reviewed": "2026-05-04",
+      "pricing": {
+        "input_cost_per_1m": 0.5,
+        "output_cost_per_1m": 1.5,
+        "currency": "USD"
       }
     }
   }
