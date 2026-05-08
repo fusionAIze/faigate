@@ -1,5 +1,18 @@
 # fusionAIze Gate Changelog
 
+## v2.6.1 - 2026-05-04
+
+### Added
+
+- **Cohere provider** — Command A/R via OpenAI-compat endpoint (`${COHERE_API_KEY}`)
+- **Mistral provider** — Mistral Large via OpenAI-compat endpoint (`${MISTRAL_API_KEY}`)
+- Catalog entries for Cohere (catalog.v1.json + provider_catalog.py)
+
+### Fixed
+
+- Removed duplicate `cohere` block in commented section (active block now lives with other API-key providers)
+- `last_reviewed` date refreshed on Cohere and Mistral catalog entries
+
 ## v2.6.0 - 2026-05-04
 
 ### Added

@@ -539,6 +539,22 @@ _CATALOG: dict[str, dict[str, Any]] = {
         ),
         "last_reviewed": "2026-05-04",
     },
+    # ── Cohere ────────────────────────────────────────────────────────────────
+    "cohere": {
+        "recommended_model": "command-a-03-2025",
+        "aliases": ["cohere", "command-a", "command-r"],
+        "track": "stable",
+        "offer_track": "direct",
+        "provider_type": "direct",
+        "auth_modes": ["api_key"],
+        "volatility": "low",
+        "evidence_level": "official",
+        "official_source_url": "https://docs.cohere.com/",
+        "signup_url": "https://dashboard.cohere.com/",
+        "watch_sources": [],
+        "notes": "Cohere Command A/R — enterprise-grade LLM with tool use",
+        "last_reviewed": "2026-05-04",
+    },
     "openai-gpt4o": {
         "recommended_model": "gpt-4o",
         "aliases": ["gpt-4o"],

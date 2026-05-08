@@ -1199,6 +1199,30 @@ providers:
       profile: free-generative
       requires_api_key: false
 
+  # ── Additional API-key providers ──────────────────────────────────────────
+
+  # Cohere – Command A/R series, OpenAI-compat compatibility endpoint
+  cohere:
+    api_key: ${COHERE_API_KEY}
+    backend: openai-compat
+    base_url: ${COHERE_BASE_URL:-https://api.cohere.com/compatibility/v1}
+    model: command-a-03-2025
+    tier: default
+    timeout:
+      connect_s: 10
+      read_s: 60
+
+  # Mistral AI – Mistral Large, Codestral, etc.
+  mistral:
+    api_key: ${MISTRAL_API_KEY}
+    backend: openai-compat
+    base_url: ${MISTRAL_BASE_URL:-https://api.mistral.ai/v1}
+    model: mistral-large-latest
+    tier: default
+    timeout:
+      connect_s: 10
+      read_s: 90
+
   # ── Local runtimes (uncomment and configure) ──────────────────────────────
   # ollama:
   #   api_key: ""
