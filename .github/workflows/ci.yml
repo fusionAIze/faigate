@@ -94,7 +94,7 @@ jobs:
       - run: bandit -c pyproject.toml -r faigate -f html -o bandit-report.html || true
       - run: bandit -c pyproject.toml -r faigate -f json -o bandit-report.json || true
       - name: Upload Bandit report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: bandit-security-report
@@ -114,7 +114,7 @@ jobs:
       - name: Run performance benchmarks
         run: pytest tests/benchmarks/ --benchmark-only --benchmark-json=benchmark-results.json
       - name: Upload benchmark results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: benchmark-results
           path: benchmark-results.json
