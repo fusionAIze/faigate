@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "faigate"
-version = "2.6.1"
+version = "0.7.1"
 description = "Local OpenAI-compatible routing gateway for OpenClaw and other AI-native clients."
 readme = "README.md"
 license = "Apache-2.0"
@@ -89,7 +89,7 @@ line-length = 120
 # Must match ``requires-python`` above: ruff/UP rules otherwise rewrite
 # e.g. ``datetime.timezone.utc`` → ``datetime.UTC`` (added in 3.11) and
 # break CI on the 3.10 job.
-target-version = "py310"
+target-version = "0.7.1"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W", "UP"]
