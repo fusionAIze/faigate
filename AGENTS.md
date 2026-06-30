@@ -173,3 +173,11 @@ Concrete examples that don't belong in faigate-public surfaces:
 When such context is genuinely relevant to a change, keep it in the PR
 conversation or in `docs/process/` — never in user-visible commit
 messages, release titles, or `CHANGELOG.md` entries.
+
+## Where to work — Forgejo-first
+
+- **Canonical origin:** `git.langevc.com/fusionaize/faigate` (Forgejo). **Do not push to GitHub** — it is a read-only mirror.
+- **Local clone:** `~/Documents/repositories/forgejo/fusionaize/faigate`.
+- **Remotes:** `origin` = Forgejo (canonical), `github` = GitHub mirror (read-only).
+- **Pull requests:** open on Forgejo (`git.langevc.com/fusionaize/faigate/pulls`).
+- **CI:** GitHub Actions workflows are guarded with `if: ${{ github.server_url == 'https://github.com' }}` so Forgejo skips them and the GitHub mirror runs them. `.forgejo/workflows/mirror.yml` (Forgejo-only) force-pushes every branch + tag back to GitHub.

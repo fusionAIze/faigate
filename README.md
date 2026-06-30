@@ -458,3 +458,9 @@ fusionAIze Gate ships with repo-safety checks for `.ssh/`, `*.db*`, `*.sqlite*`,
 Apache-2.0. See [LICENSE](./LICENSE).
 
 ⭐ If fusionAIze Gate saves you time or money, feel free to star the repo. ❤️
+
+## Repository & Contributing
+
+Canonical repository: **self-hosted Forgejo** — `git.langevc.com/fusionaize/faigate`
+(`git clone git@git.langevc.com:fusionaize/faigate.git`). Develop against the Forgejo
+clone and open pull requests there. The GitHub copy is a read-only mirror.

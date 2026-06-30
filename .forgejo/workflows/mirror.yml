@@ -1,0 +1,19 @@
+name: Mirror to GitHub
+on:
+  push:
+    branches: ["**"]
+    tags: ["**"]
+  workflow_dispatch:
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mirror all branches + tags to GitHub
+        env:
+          GH_MIRROR_TOKEN: ${{ secrets.GH_MIRROR_TOKEN }}
+          FORGEJO_TOKEN: ${{ github.token }}
+        run: |
+          git clone --mirror "http://x-access-token:${FORGEJO_TOKEN}@forgejo:3000/${{ github.repository }}.git" m.git
+          cd m.git
+          git push --force "https://x-access-token:${GH_MIRROR_TOKEN}@github.com/${{ github.repository }}.git" \
+            '+refs/heads/*:refs/heads/*' '+refs/tags/*:refs/tags/*'

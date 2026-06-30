@@ -8,6 +8,7 @@ on:
 
 jobs:
   test:
+    if: ${{ github.server_url == 'https://github.com' }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -38,6 +39,7 @@ jobs:
           fail_ci_if_error: false
 
   package:
+    if: ${{ github.server_url == 'https://github.com' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -51,6 +53,7 @@ jobs:
           python -m twine check dist/*
 
   lint:
+    if: ${{ github.server_url == 'https://github.com' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -84,6 +87,7 @@ jobs:
           PY
 
   security:
+    if: ${{ github.server_url == 'https://github.com' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -104,7 +108,7 @@ jobs:
 
   benchmarks:
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && (github.server_url == 'https://github.com') }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -120,6 +124,7 @@ jobs:
           path: benchmark-results.json
 
   docs:
+    if: ${{ github.server_url == 'https://github.com' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -139,6 +144,7 @@ jobs:
           fi
 
   changelog:
+    if: ${{ github.server_url == 'https://github.com' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -163,6 +169,7 @@ jobs:
           fi
 
   forbid-artifacts:
+    if: ${{ github.server_url == 'https://github.com' }}
     name: Forbid artifacts
     runs-on: ubuntu-latest
     steps:
@@ -189,7 +196,7 @@ jobs:
     name: CI Gate
     runs-on: ubuntu-latest
     needs: [test, lint, package, forbid-artifacts]
-    if: always()
+    if: ${{ (always()) && (github.server_url == 'https://github.com') }}
     steps:
       - name: All required checks passed
         run: |

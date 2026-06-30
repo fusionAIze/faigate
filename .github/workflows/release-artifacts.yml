@@ -7,6 +7,7 @@ on:
 
 jobs:
   validate-release:
+    if: ${{ github.server_url == 'https://github.com' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -40,6 +41,7 @@ jobs:
           test "$TAG_VERSION" = "$PACKAGE_VERSION"
 
   python-dist:
+    if: ${{ github.server_url == 'https://github.com' }}
     needs: validate-release
     runs-on: ubuntu-latest
     steps:
@@ -62,6 +64,7 @@ jobs:
           path: dist/*
 
   ghcr:
+    if: ${{ github.server_url == 'https://github.com' }}
     needs: validate-release
     runs-on: ubuntu-latest
     permissions:
@@ -91,7 +94,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
 
   pypi:
-    if: ${{ vars.PYPI_PUBLISH == 'true' }}
+    if: ${{ (vars.PYPI_PUBLISH == 'true') && (github.server_url == 'https://github.com') }}
     needs:
       - validate-release
       - python-dist
