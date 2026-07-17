@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Forgejo-native dev-CI (test + lint). Full suite runs on GitHub via the guarded
+# .github workflows (hybrid). Fully-qualified action URLs (DEFAULT_ACTIONS_URL is
+# code.forgejo.org).
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: https://github.com/actions/checkout@v4
+      - uses: https://github.com/actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install
+        run: pip install -e ".[dev]"
+      - name: Lint
+        run: ruff check .
+      - name: Test
+        run: pytest tests/ -v
