@@ -52,3 +52,7 @@ xcuserdata/
 DerivedData/
 handover/
 .skillweave/
+
+# SkillWeave runtime is local; only the helper is tracked.
+.skillweave/*
+!.skillweave/agents.md
