@@ -395,6 +395,8 @@ The useful comparison is not “router vs router”, but how much routing and op
 
 fusionAIze Gate is a local-first gateway. That means you can keep traffic, fallback policy, rollout controls, and provider selection logic close to the clients that actually depend on them.
 
+The local endpoint is `http://127.0.0.1:8090`. There is a reserved public hostname, `faigate.langevc.com`, that is intentionally not served today: it is parked for a planned on-demand service and is not part of this product's local-first surface. If you see that name resolve to a `525`, it is expected inactivity, not a broken gateway — the health of the product is measured at the local endpoint, not the public name. The public endpoint belongs to `fusionaize-ops`, not this repository.
+
 ## Deployment
 
 fusionAIze Gate can stay small in development and still scale into a more repeatable operator setup:

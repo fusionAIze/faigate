@@ -198,6 +198,47 @@ which -a faigate
 
 If the Brew binary works but plain `faigate` does not, leave the service running and fix your shell path or deactivate the virtualenv before testing the Homebrew install again.
 
+### `faigate --version` fails with `ModuleNotFoundError: No module named 'faigate'`
+
+This is a different, sharper failure: a stray editable install has overwritten
+the Homebrew shim itself, not just shadowed it on `PATH`.
+
+Diagnosis (all signals together):
+
+```bash
+# 1. The bin shim is a pip console-script, not the bash shim
+head -1 /opt/homebrew/bin/faigate
+#   #!/opt/homebrew/opt/python@3.14/bin/python3.14   <-- wrong: formula uses python@3.12
+
+# 2. pip reports an editable install whose project location no longer exists
+python3.14 -m pip show faigate
+#   Editable project location: /Users/<you>/.../faigate   <-- deleted checkout
+
+ls /opt/homebrew/lib/python3.14/site-packages/__editable__.faigate-*.pth
+```
+
+The cause is a `pip install -e` run against a non-`python@3.12` interpreter.
+It writes an editable `.pth` pointing at a source checkout and overwrites
+`/opt/homebrew/bin/faigate` with its own console-script. When the checkout is
+removed, the CLI breaks while the service keeps running (the LaunchAgent still
+calls `/opt/homebrew/opt/faigate/bin/faigate`, the formula's own bash shim).
+
+Fix without restarting the service:
+
+```bash
+brew link --overwrite faigate
+/opt/homebrew/bin/faigate --version   # -> faigate <version>
+```
+
+Optionally remove the stale editable install to stop it re-clobbering the shim:
+
+```bash
+python3.14 -m pip uninstall -y faigate
+```
+
+Leave the LaunchAgent alone: it points at `opt/faigate/bin/faigate`, which the
+edit never touched.
+
 If Homebrew still warns about `pydantic_core`, update the tap and reinstall:
 
 ```bash
