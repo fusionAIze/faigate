@@ -27,6 +27,10 @@
       "watch_sources": [],
       "notes": "Anthropic Claude Opus 4.7 direct API pricing verified from the official Opus page on 2026-04-26.",
       "last_reviewed": "2026-04-26",
+      "context_window": 200000,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "pricing": {
         "source_type": "provider-docs",
         "source_url": "https://www.anthropic.com/claude/opus",
@@ -58,6 +62,10 @@
       "watch_sources": [],
       "notes": "Anthropic Claude Haiku 4.5 pricing verified from the official Haiku page on 2026-04-26.",
       "last_reviewed": "2026-04-26",
+      "context_window": 200000,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "pricing": {
         "source_type": "provider-docs",
         "source_url": "https://www.anthropic.com/claude/haiku",
@@ -87,6 +95,10 @@
       "watch_sources": [],
       "notes": "Anthropic Claude Sonnet 4.6 - balanced quality and speed for coding and reasoning.",
       "last_reviewed": "2026-04-01",
+      "context_window": 200000,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "pricing": {
         "source_type": "provider-docs",
         "source_url": "https://www.anthropic.com/pricing#api",
@@ -118,6 +130,10 @@
       "watch_sources": [],
       "notes": "Anthropic Claude Opus 4.7 direct API pricing verified from the official Opus page on 2026-04-26.",
       "last_reviewed": "2026-04-26",
+      "context_window": 200000,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "pricing": {
         "source_type": "provider-docs",
         "source_url": "https://www.anthropic.com/claude/opus",
@@ -149,6 +165,10 @@
       "watch_sources": [],
       "notes": "OpenAI GPT models including GPT-4o, GPT-4.1 series, and image generation.",
       "last_reviewed": "2026-04-01",
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "pricing": {
         "source_type": "provider-docs",
         "source_url": "https://openai.com/api/pricing/",
@@ -177,6 +197,10 @@
       "watch_sources": [],
       "notes": "OpenAI GPT-4o - balanced multimodal model for general use.",
       "last_reviewed": "2026-04-01",
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "pricing": {
         "source_type": "provider-docs",
         "source_url": "https://openai.com/api/pricing/",
@@ -205,6 +229,10 @@
       "watch_sources": [],
       "notes": "OpenAI image generation and editing models.",
       "last_reviewed": "2026-04-01",
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "pricing": {
         "source_type": "provider-docs",
         "source_url": "https://openai.com/api/pricing/",
@@ -233,6 +261,10 @@
       "watch_sources": [],
       "notes": "Google Gemini models including Pro, Flash, and Flash Lite variants.",
       "last_reviewed": "2026-04-01",
+      "context_window": 1048576,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "pricing": {
         "source_type": "provider-docs",
         "source_url": "https://api-docs.deepseek.com/pricing",
@@ -262,6 +294,10 @@
       "watch_sources": [],
       "notes": "Google Gemini Flash - fast, cost-effective model for general tasks.",
       "last_reviewed": "2026-04-01",
+      "context_window": 1048576,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "pricing": {
         "source_type": "provider-docs",
         "source_url": "https://ai.google.dev/gemini-api/docs/pricing",
@@ -291,6 +327,10 @@
       "watch_sources": [],
       "notes": "Google Gemini Flash Lite - ultra-low cost model for lightweight tasks.",
       "last_reviewed": "2026-04-01",
+      "context_window": 1048576,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "pricing": {
         "source_type": "provider-docs",
         "source_url": "https://ai.google.dev/gemini-api/docs/pricing",
@@ -320,6 +360,10 @@
       "watch_sources": [],
       "notes": "Google Gemini Pro High - quality model for complex reasoning and coding.",
       "last_reviewed": "2026-04-01",
+      "context_window": 1048576,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "pricing": {
         "source_type": "provider-docs",
         "source_url": "https://ai.google.dev/gemini-api/docs/pricing",
@@ -349,6 +393,10 @@
       "watch_sources": [],
       "notes": "Google Gemini Pro Low - balanced quality and cost for general tasks.",
       "last_reviewed": "2026-04-01",
+      "context_window": 1048576,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "pricing": {
         "source_type": "provider-docs",
         "source_url": "https://ai.google.dev/gemini-api/docs/pricing",
@@ -382,6 +430,10 @@
       "watch_sources": [],
       "notes": "DeepSeek V4 Flash pricing verified from official DeepSeek API pricing on 2026-04-26; OpenAI-format base URL remains https://api.deepseek.com.",
       "last_reviewed": "2026-04-26",
+      "context_window": 1048576,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "pricing": {
         "source_type": "provider-docs",
         "source_url": "https://api-docs.deepseek.com/quick_start/pricing",
@@ -414,6 +466,10 @@
       "watch_sources": [],
       "notes": "DeepSeek V4 Pro pricing verified from official DeepSeek API pricing on 2026-04-26; supports thinking and non-thinking modes.",
       "last_reviewed": "2026-04-26",
+      "context_window": 1048576,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "pricing": {
         "source_type": "provider-docs",
         "source_url": "https://api-docs.deepseek.com/quick_start/pricing",
@@ -444,6 +500,10 @@
       ],
       "notes": "BLACKBOX free tier with Grok Code Fast - volatile pricing and model availability.",
       "last_reviewed": "2026-04-01",
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "pricing": {
         "source_type": "provider-docs",
         "source_url": "https://api-docs.deepseek.com/pricing",
@@ -477,6 +537,10 @@
       ],
       "notes": "Kilo free tier with GLM-5 expired 2026-04-26. Aliases retained for back-compat; do not auto-select.",
       "last_reviewed": "2026-04-26",
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "pricing": {
         "source_type": "provider-docs",
         "source_url": "https://kilo.ai/pricing",
@@ -508,6 +572,10 @@
       "watch_sources": [],
       "notes": "OpenRouter Auto Router pricing audited 2026-04-26: openrouter/auto is billed at the routed model rate; OpenRouter states posted model pricing is not marked up and failed/fallback attempts are not billed.",
       "last_reviewed": "2026-04-26",
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "pricing": {
         "source_type": "provider-docs",
         "source_url": "https://openrouter.ai/openrouter/auto",
@@ -540,6 +608,10 @@
       "watch_sources": [],
       "notes": "OpenAI Codex GPT-5.5 pricing verified from the official GPT-5.5 release page on 2026-04-26. Low/medium/high are reasoning-effort profiles with the same base text-token API price; reasoning tokens are billed as output tokens.",
       "last_reviewed": "2026-04-26",
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "pricing": {
         "source_type": "provider-docs",
         "source_url": "https://openai.com/index/introducing-gpt-5-5/",
@@ -567,6 +639,10 @@
       "watch_sources": [],
       "notes": "OpenCode Zen - Anthropic-compatible gateway.",
       "last_reviewed": "2026-04-01",
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "pricing": {
         "source_type": "provider-docs",
         "source_url": "https://opencode.ai/pricing",
@@ -593,6 +669,10 @@
       "watch_sources": [],
       "notes": "Google Vertex AI - uses gcloud ADC; interactive setup required.",
       "last_reviewed": "2026-04-01",
+      "context_window": 1048576,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "pricing": {
         "source_type": "provider-docs",
         "source_url": "https://cloud.google.com/vertex-ai/pricing",
@@ -618,6 +698,10 @@
       "watch_sources": [],
       "notes": "Z-AI GLM models.",
       "last_reviewed": "2026-04-01",
+      "context_window": 131072,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "pricing": {
         "source_type": "provider-docs",
         "source_url": "https://z.ai/pricing",
@@ -645,6 +729,10 @@
       "watch_sources": [],
       "notes": "Groq ultra-fast LPU inference — 300-500 tok/s. Free tier: 30 RPM, 14,400 RPD, 6K TPM.",
       "last_reviewed": "2026-05-04",
+      "context_window": 131072,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "pricing": {
         "source_type": "provider-docs",
         "source_url": "https://console.groq.com/docs/rate-limits",
@@ -673,6 +761,10 @@
       "watch_sources": [],
       "notes": "Mistral AI – Mistral Large, Codestral, etc.",
       "last_reviewed": "2026-04-01",
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "pricing": {
         "source_type": "provider-docs",
         "source_url": "https://mistral.ai/pricing",
@@ -702,6 +794,10 @@
       "watch_sources": [],
       "notes": "Moonshot AI – long-context Chinese/English models.",
       "last_reviewed": "2026-04-01",
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "pricing": {
         "source_type": "provider-docs",
         "source_url": "https://platform.moonshot.cn/pricing",
@@ -729,6 +825,10 @@
       "watch_sources": [],
       "notes": "Ollama – local LLM runner, no API key required.",
       "last_reviewed": "2026-04-01",
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "pricing": {
         "source_type": "free-local",
         "source_url": "",
@@ -755,6 +855,10 @@
       "watch_sources": [],
       "notes": "Hugging Face Inference Endpoints – hosted open-weight models.",
       "last_reviewed": "2026-04-01",
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "pricing": {
         "source_type": "provider-docs",
         "source_url": "https://huggingface.co/pricing",
@@ -780,6 +884,10 @@
       "watch_sources": [],
       "notes": "LM Studio – local LLM GUI with OpenAI-compatible server.",
       "last_reviewed": "2026-04-01",
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "pricing": {
         "source_type": "free-local",
         "source_url": "",
@@ -805,6 +913,10 @@
       "watch_sources": [],
       "notes": "vLLM – high-throughput local inference engine.",
       "last_reviewed": "2026-04-01",
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "pricing": {
         "source_type": "free-local",
         "source_url": "",
@@ -831,6 +943,10 @@
       "watch_sources": [],
       "notes": "LiteLLM – unified API for 100+ LLM providers.",
       "last_reviewed": "2026-04-01",
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "pricing": {
         "source_type": "provider-docs",
         "source_url": "https://litellm.ai/pricing",
@@ -856,6 +972,10 @@
       "watch_sources": [],
       "notes": "BytePlus ARK – international access to Volcano Engine models",
       "last_reviewed": "2026-04-01",
+      "context_window": 245760,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "pricing": {
         "source_type": "unknown",
         "source_url": "",
@@ -881,6 +1001,10 @@
       "watch_sources": [],
       "notes": "BytePlus ARK – coding models (ark-code-latest, doubao-seed-code, kimi-k2.5, kimi-k2-thinking, glm-4.7)",
       "last_reviewed": "2026-04-01",
+      "context_window": 245760,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "pricing": {
         "source_type": "unknown",
         "source_url": "",
@@ -907,6 +1031,10 @@
       "watch_sources": [],
       "notes": "Cerebras wafer-scale inference ~2600 tok/s. Free tier: 30 RPM, 1M TPD.",
       "last_reviewed": "2026-05-04",
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "pricing": {
         "source_type": "provider-docs",
         "source_url": "https://cloud.cerebras.ai/",
@@ -934,6 +1062,10 @@
       "watch_sources": [],
       "notes": "GitHub Copilot – requires GH_TOKEN / COPILOT_GITHUB_TOKEN",
       "last_reviewed": "2026-04-01",
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "pricing": {
         "source_type": "unknown",
         "source_url": "",
@@ -959,6 +1091,10 @@
       "watch_sources": [],
       "notes": "Kimi Coding – Anthropic-compat endpoint via Moonshot",
       "last_reviewed": "2026-04-01",
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "pricing": {
         "source_type": "unknown",
         "source_url": "",
@@ -984,6 +1120,10 @@
       "watch_sources": [],
       "notes": "MiniMax – Anthropic-compat custom endpoint",
       "last_reviewed": "2026-04-01",
+      "context_window": 245760,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "pricing": {
         "source_type": "unknown",
         "source_url": "",
@@ -1009,6 +1149,10 @@
       "watch_sources": [],
       "notes": "Qwen OAuth (free tier) – device-code flow; requires: openclaw plugins enable qwen-portal-auth",
       "last_reviewed": "2026-04-01",
+      "context_window": 131072,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "pricing": {
         "source_type": "unknown",
         "source_url": "",
@@ -1034,6 +1178,10 @@
       "watch_sources": [],
       "notes": "Synthetic – Anthropic-compat; exposes HuggingFace models (MiniMax, etc.)",
       "last_reviewed": "2026-04-01",
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "pricing": {
         "source_type": "unknown",
         "source_url": "",
@@ -1059,6 +1207,10 @@
       "watch_sources": [],
       "notes": "Vercel AI Gateway – multi-model proxy",
       "last_reviewed": "2026-04-01",
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "pricing": {
         "source_type": "unknown",
         "source_url": "",
@@ -1084,6 +1236,10 @@
       "watch_sources": [],
       "notes": "Volcano Engine – Doubao, Kimi K2.5, GLM 4.7, DeepSeek V3.2 (CN)",
       "last_reviewed": "2026-04-01",
+      "context_window": 245760,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "pricing": {
         "source_type": "unknown",
         "source_url": "",
@@ -1109,6 +1265,10 @@
       "watch_sources": [],
       "notes": "Volcano Engine – coding models (ark-code-latest, doubao-seed-code, kimi-k2.5, kimi-k2-thinking, glm-4.7)",
       "last_reviewed": "2026-04-01",
+      "context_window": 245760,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "pricing": {
         "source_type": "unknown",
         "source_url": "",
@@ -1134,6 +1294,10 @@
       "watch_sources": [],
       "notes": "xAI / Grok models",
       "last_reviewed": "2026-04-01",
+      "context_window": 131072,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "pricing": {
         "source_type": "registry-default",
         "source_url": "",
@@ -1163,6 +1327,10 @@
       "watch_sources": [],
       "notes": "Pollinations free text+image+video+audio — no API key required. Supports GPT-5, Claude, Llama 4.",
       "last_reviewed": "2026-05-04",
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "pricing": {
         "source_type": "provider-docs",
         "source_url": "https://pollinations.ai/",
@@ -1192,6 +1360,10 @@
       "watch_sources": [],
       "notes": "LongCat AI free tier: Flash-Lite, 50M tokens/day free.",
       "last_reviewed": "2026-05-04",
+      "context_window": 131072,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "pricing": {
         "source_type": "provider-docs",
         "source_url": "https://longcat.ai/",
@@ -1221,6 +1393,10 @@
       "watch_sources": [],
       "notes": "NVIDIA NIM free: 129 models, 40 RPM. Includes DeepSeek-R1, Llama 405B, Qwen3 Coder 480B.",
       "last_reviewed": "2026-05-04",
+      "context_window": 131072,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "pricing": {
         "source_type": "provider-docs",
         "source_url": "https://build.nvidia.com/",
@@ -1250,6 +1426,10 @@
       "watch_sources": [],
       "notes": "Kiro free tier via AWS Builder ID OAuth — Claude Sonnet 4.5 and Haiku 4.5 unlimited.",
       "last_reviewed": "2026-05-04",
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "pricing": {
         "source_type": "provider-docs",
         "source_url": "https://kiro.dev/",
@@ -1279,6 +1459,10 @@
       "watch_sources": [],
       "notes": "Qoder free via Google OAuth — kimi-k2-thinking, qwen3-coder-plus, deepseek-r1 unlimited.",
       "last_reviewed": "2026-05-04",
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "pricing": {
         "source_type": "provider-docs",
         "source_url": "https://qoder.ai/",
@@ -1308,6 +1492,10 @@
       "watch_sources": [],
       "notes": "Cohere Command A/R — enterprise-grade LLM with tool use",
       "last_reviewed": "2026-05-04",
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "pricing": {
         "input_cost_per_1m": 0.5,
         "output_cost_per_1m": 1.5,

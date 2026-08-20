@@ -10,6 +10,7 @@ from faigate.provider_catalog import (
     build_provider_refresh_guidance,
     get_offerings_catalog,
     get_packages_catalog,
+    get_provider_catalog,
     get_provider_catalog_entry,
     materialize_provider_metadata_snapshot,
 )
@@ -574,3 +575,66 @@ def test_offerings_and_packages_catalog_loading(tmp_path, monkeypatch):
     packages2 = get_packages_catalog()
     assert offerings2 is offerings  # same cached object
     assert packages2 is packages
+
+
+def test_provider_catalog_declares_context_window_everywhere():
+    """Every catalog entry must declare a positive, non-null context_window."""
+    catalog = get_provider_catalog()
+
+    assert catalog, "catalog must not be empty"
+
+    for name, entry in catalog.items():
+        ctx = entry.get("context_window")
+        assert isinstance(ctx, int) and ctx > 0, (
+            f"provider {name!r} must declare a positive integer context_window, got {ctx!r}"
+        )
+
+
+def test_provider_catalog_declares_in_band_input_cap():
+    """Every catalog entry must declare limits.max_input_tokens within the (240000, 275000] band."""
+    catalog = get_provider_catalog()
+
+    for name, entry in catalog.items():
+        limits = entry.get("limits")
+        assert isinstance(limits, dict), (
+            f"provider {name!r} must declare limits as a dict, got {limits!r}"
+        )
+        cap = limits.get("max_input_tokens")
+        assert isinstance(cap, int) and 240000 < cap <= 275000, (
+            f"provider {name!r} max_input_tokens must be in (240000, 275000], got {cap!r}"
+        )
+
+
+def test_provider_catalog_context_window_survives_external_merge(tmp_path, monkeypatch):
+    """External catalog overlays must preserve the embedded context_window/limits.
+
+    A nested dict field (limits) merged from an external overlay must not drop
+    the embedded value, because _merge_catalog_entry recurses into dict values.
+    """
+    metadata_dir = tmp_path / "metadata"
+    metadata_dir.mkdir()
+    (metadata_dir / "providers").mkdir()
+    external = (
+        metadata_dir
+        / "providers"
+        / "catalog.v1.json"
+    )
+    external.write_text(
+        '{"schema_version":"fusionaize-provider-catalog/v1.1",'
+        '"providers":{"deepseek-chat":{"recommended_model":"deepseek/chat-overlay"}}}'
+    )
+
+    monkeypatch.setenv("FAIGATE_PROVIDER_METADATA_DIR", str(metadata_dir))
+    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_FILE", raising=False)
+
+    import faigate.provider_catalog as pc
+
+    pc._EXTERNAL_CATALOG_CACHE = None
+    pc._EXTERNAL_CATALOG_MTIME = 0.0
+
+    entry = pc.get_provider_catalog_entry("deepseek-chat")
+
+    # Overlay replaced the model but the embedded context window/limits remain.
+    assert entry["recommended_model"] == "deepseek/chat-overlay"
+    assert entry["context_window"] > 0
+    assert 240000 < entry["limits"]["max_input_tokens"] <= 275000
