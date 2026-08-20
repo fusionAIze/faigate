@@ -1,0 +1,233 @@
+[
+  {
+    "requested": "auto",
+    "answered_model": "gemini-2.5-flash-lite",
+    "_faigate_model": "gemini-2.5-flash-lite",
+    "provider": "gemini-flash-lite",
+    "status": 200
+  },
+  {
+    "requested": "auto",
+    "answered_model": "gemini-2.5-flash-lite",
+    "_faigate_model": "gemini-2.5-flash-lite",
+    "provider": "gemini-flash-lite",
+    "status": 200
+  },
+  {
+    "requested": "coding-auto",
+    "answered_model": "gemini-2.5-flash-lite",
+    "_faigate_model": "gemini-2.5-flash-lite",
+    "provider": "gemini-flash-lite",
+    "status": 200
+  },
+  {
+    "requested": "coding-fast",
+    "answered_model": "gemini-2.5-flash-lite",
+    "_faigate_model": "gemini-2.5-flash-lite",
+    "provider": "gemini-flash-lite",
+    "status": 200
+  },
+  {
+    "requested": "coding-premium",
+    "answered_model": "gemini-2.5-flash-lite",
+    "_faigate_model": "gemini-2.5-flash-lite",
+    "provider": "gemini-flash-lite",
+    "status": 200
+  },
+  {
+    "requested": "eco",
+    "answered_model": "gemini-2.5-flash-lite",
+    "_faigate_model": "gemini-2.5-flash-lite",
+    "provider": "gemini-flash-lite",
+    "status": 200
+  },
+  {
+    "requested": "free",
+    "answered_model": "gemini-2.5-flash-lite",
+    "_faigate_model": "gemini-2.5-flash-lite",
+    "provider": "gemini-flash-lite",
+    "status": 200
+  },
+  {
+    "requested": "premium",
+    "answered_model": "gemini-2.5-flash-lite",
+    "_faigate_model": "gemini-2.5-flash-lite",
+    "provider": "gemini-flash-lite",
+    "status": 200
+  },
+  {
+    "requested": "anthropic-haiku",
+    "answered_model": "deepseek-v4-flash",
+    "_faigate_model": "deepseek-v4-flash",
+    "provider": "deepseek-v4-flash",
+    "status": 200
+  },
+  {
+    "requested": "anthropic-sonnet",
+    "answered_model": "deepseek-v4-flash",
+    "_faigate_model": "deepseek-v4-flash",
+    "provider": "deepseek-v4-flash",
+    "status": 200
+  },
+  {
+    "requested": "anthropic-claude",
+    "answered_model": "deepseek-v4-flash",
+    "_faigate_model": "deepseek-v4-flash",
+    "provider": "deepseek-v4-flash",
+    "status": 200
+  },
+  {
+    "requested": "blackbox-free",
+    "answered_model": "deepseek-v4-flash",
+    "_faigate_model": "deepseek-v4-flash",
+    "provider": "deepseek-v4-flash",
+    "status": 200
+  },
+  {
+    "requested": "deepseek-v4-flash",
+    "answered_model": "deepseek-v4-flash",
+    "_faigate_model": "deepseek-v4-flash",
+    "provider": "deepseek-v4-flash",
+    "status": 200
+  },
+  {
+    "requested": "deepseek-v4-pro",
+    "answered_model": "deepseek-v4-pro",
+    "_faigate_model": "deepseek-v4-pro",
+    "provider": "deepseek-v4-pro",
+    "status": 200
+  },
+  {
+    "requested": "gemini-flash",
+    "answered_model": "gemini-2.5-flash",
+    "_faigate_model": "gemini-2.5-flash",
+    "provider": "gemini-flash",
+    "status": 200
+  },
+  {
+    "requested": "gemini-flash-lite",
+    "answered_model": "gemini-2.5-flash-lite",
+    "_faigate_model": "gemini-2.5-flash-lite",
+    "provider": "gemini-flash-lite",
+    "status": 200
+  },
+  {
+    "requested": "gemini-pro",
+    "answered_model": "deepseek-v4-flash",
+    "_faigate_model": "deepseek-v4-flash",
+    "provider": "deepseek-v4-flash",
+    "status": 200
+  },
+  {
+    "requested": "kilocode",
+    "answered_model": "deepseek-v4-flash",
+    "_faigate_model": "deepseek-v4-flash",
+    "provider": "deepseek-v4-flash",
+    "status": 200
+  },
+  {
+    "requested": "kilo-sonnet",
+    "answered_model": "anthropic/claude-sonnet-4.6",
+    "_faigate_model": "anthropic/claude-sonnet-4.6",
+    "provider": "kilo-sonnet",
+    "status": 200
+  },
+  {
+    "requested": "kilo-opus",
+    "answered_model": "anthropic/claude-opus-4.6",
+    "_faigate_model": "anthropic/claude-opus-4.6",
+    "provider": "kilo-opus",
+    "status": 200
+  },
+  {
+    "requested": "openai-gpt4o",
+    "answered_model": "deepseek-v4-flash",
+    "_faigate_model": "deepseek-v4-flash",
+    "provider": "deepseek-v4-flash",
+    "status": 200
+  },
+  {
+    "requested": "openai-images",
+    "answered_model": "deepseek-v4-flash",
+    "_faigate_model": "deepseek-v4-flash",
+    "provider": "deepseek-v4-flash",
+    "status": 200
+  },
+  {
+    "requested": "openrouter-fallback",
+    "answered_model": "google/gemini-3-flash-preview",
+    "_faigate_model": "openrouter/auto",
+    "provider": "openrouter-fallback",
+    "status": 200
+  },
+  {
+    "requested": "openai-codex",
+    "answered_model": "deepseek-v4-flash",
+    "_faigate_model": "deepseek-v4-flash",
+    "provider": "deepseek-v4-flash",
+    "status": 200
+  },
+  {
+    "requested": "openai-codex-mini",
+    "answered_model": "deepseek-v4-flash",
+    "_faigate_model": "deepseek-v4-flash",
+    "provider": "deepseek-v4-flash",
+    "status": 200
+  },
+  {
+    "requested": "openai-codex-spark",
+    "answered_model": "deepseek-v4-flash",
+    "_faigate_model": "deepseek-v4-flash",
+    "provider": "deepseek-v4-flash",
+    "status": 200
+  },
+  {
+    "requested": "openai-codex-high",
+    "answered_model": "deepseek-v4-flash",
+    "_faigate_model": "deepseek-v4-flash",
+    "provider": "deepseek-v4-flash",
+    "status": 200
+  },
+  {
+    "requested": "openai-codex-xhigh",
+    "answered_model": "deepseek-v4-flash",
+    "_faigate_model": "deepseek-v4-flash",
+    "provider": "deepseek-v4-flash",
+    "status": 200
+  },
+  {
+    "requested": "openai-codex-low",
+    "answered_model": "deepseek-v4-flash",
+    "_faigate_model": "deepseek-v4-flash",
+    "provider": "deepseek-v4-flash",
+    "status": 200
+  },
+  {
+    "requested": "openai-codex-5.4-xhigh",
+    "answered_model": "deepseek-v4-flash",
+    "_faigate_model": "deepseek-v4-flash",
+    "provider": "deepseek-v4-flash",
+    "status": 200
+  },
+  {
+    "requested": "openai-codex-5.4-high",
+    "answered_model": "deepseek-v4-flash",
+    "_faigate_model": "deepseek-v4-flash",
+    "provider": "deepseek-v4-flash",
+    "status": 200
+  },
+  {
+    "requested": "openai-codex-5.4-medium",
+    "answered_model": "deepseek-v4-flash",
+    "_faigate_model": "deepseek-v4-flash",
+    "provider": "deepseek-v4-flash",
+    "status": 200
+  },
+  {
+    "requested": "openai-codex-5.4-low",
+    "answered_model": "deepseek-v4-flash",
+    "_faigate_model": "deepseek-v4-flash",
+    "provider": "deepseek-v4-flash",
+    "status": 200
+  }
+]
