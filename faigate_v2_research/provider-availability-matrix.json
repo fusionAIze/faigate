@@ -1,0 +1,265 @@
+[
+  {
+    "id": "anthropic",
+    "name": "Anthropic",
+    "doc": "https://platform.claude.com/docs/en/about-claude/models/overview",
+    "models": [
+      {
+        "id": "claude-opus-5",
+        "name": "Claude Opus 5",
+        "family": "opus",
+        "reasoning": true,
+        "tool_call": true,
+        "structured_output": true,
+        "modalities": ["text", "image"],
+        "limit": null,
+        "cost": null,
+        "knowledge": null,
+        "release_date": null,
+        "last_updated": "2026-08-21",
+        "verified": {"status": "confirmed", "at": "2026-08-21", "method": "doc_parse"}
+      },
+      {
+        "id": "claude-fable-5",
+        "name": "Claude Fable 5",
+        "family": "fable",
+        "reasoning": true,
+        "tool_call": true,
+        "structured_output": true,
+        "modalities": ["text", "image"],
+        "limit": null,
+        "cost": null,
+        "knowledge": null,
+        "release_date": "2026-06-09",
+        "last_updated": "2026-08-21",
+        "verified": {"status": "confirmed", "at": "2026-08-21", "method": "doc_parse"}
+      },
+      {
+        "id": "claude-mythos-5",
+        "name": "Claude Mythos 5",
+        "family": "mythos",
+        "reasoning": true,
+        "tool_call": true,
+        "structured_output": true,
+        "modalities": ["text", "image"],
+        "limit": null,
+        "cost": null,
+        "knowledge": null,
+        "release_date": "2026-06-09",
+        "last_updated": "2026-08-21",
+        "verified": {"status": "confirmed", "at": "2026-08-21", "method": "doc_parse"}
+      },
+      {
+        "id": "claude-mythos-preview",
+        "name": "Claude Mythos Preview",
+        "family": "mythos",
+        "reasoning": true,
+        "tool_call": true,
+        "structured_output": true,
+        "modalities": ["text", "image"],
+        "limit": null,
+        "cost": null,
+        "knowledge": null,
+        "release_date": null,
+        "last_updated": "2026-08-21",
+        "verified": {"status": "confirmed", "at": "2026-08-21", "method": "doc_parse"}
+      }
+    ]
+  },
+  {
+    "id": "openai",
+    "name": "OpenAI",
+    "doc": "https://platform.openai.com/docs/models",
+    "models": [
+      {
+        "id": "gpt-4o",
+        "name": "GPT-4o",
+        "family": "gpt-4o",
+        "reasoning": false,
+        "tool_call": true,
+        "structured_output": true,
+        "modalities": ["text", "image"],
+        "limit": null,
+        "cost": null,
+        "knowledge": null,
+        "release_date": null,
+        "last_updated": "2026-08-21",
+        "verified": {"status": "confirmed", "at": "2026-08-21", "method": "doc_parse"}
+      }
+    ]
+  },
+  {
+    "id": "google",
+    "name": "Google",
+    "doc": "https://ai.google.dev/gemini-api/docs/models",
+    "models": [],
+    "verified": {
+      "status": "unverified",
+      "note": "https://ai.google.dev/gemini-api/docs/models timed out repeatedly (5+ attempts across 3 URL variants) from the execution environment. Marked unverified per evidence model; do not fabricate model rows. Re-fetch from a network able to reach ai.google.dev, then backfill models[].",
+      "at": "2026-08-21",
+      "method": "none"
+    }
+  },
+  {
+    "id": "deepseek",
+    "name": "DeepSeek",
+    "doc": "https://api-docs.deepseek.com/",
+    "models": [
+      {
+        "id": "deepseek-chat",
+        "name": "DeepSeek Chat",
+        "family": "chat",
+        "reasoning": false,
+        "tool_call": true,
+        "structured_output": true,
+        "modalities": ["text"],
+        "limit": 1048576,
+        "cost": null,
+        "knowledge": null,
+        "release_date": null,
+        "last_updated": "2026-08-21",
+        "verified": {"status": "confirmed", "at": "2026-08-21", "method": "doc_parse"}
+      },
+      {
+        "id": "deepseek-reasoner",
+        "name": "DeepSeek Reasoner",
+        "family": "reasoner",
+        "reasoning": true,
+        "tool_call": true,
+        "structured_output": true,
+        "modalities": ["text"],
+        "limit": 1048576,
+        "cost": null,
+        "knowledge": null,
+        "release_date": null,
+        "last_updated": "2026-08-21",
+        "verified": {"status": "confirmed", "at": "2026-08-21", "method": "doc_parse"}
+      }
+    ]
+  },
+  {
+    "id": "xai",
+    "name": "X.AI",
+    "doc": "https://docs.x.ai/docs/models",
+    "models": [
+      {
+        "id": "grok-4.6",
+        "name": "Grok 4.6",
+        "family": "grok",
+        "reasoning": true,
+        "tool_call": true,
+        "structured_output": true,
+        "modalities": ["text"],
+        "limit": 500000,
+        "cost": {"input": 2.0, "cached_input": 0.5, "output": 6.0},
+        "knowledge": "2026-02-01",
+        "release_date": null,
+        "last_updated": "2026-08-21",
+        "verified": {"status": "confirmed", "at": "2026-08-21", "method": "doc_parse"}
+      }
+    ]
+  },
+  {
+    "id": "mistral",
+    "name": "Mistral",
+    "doc": "https://docs.mistral.ai/getting-started/models/models_overview/",
+    "models": [
+      {
+        "id": "mistral-large-latest",
+        "name": "Mistral Large 3",
+        "family": "mistral-large",
+        "reasoning": true,
+        "tool_call": true,
+        "structured_output": true,
+        "modalities": ["text", "image"],
+        "limit": null,
+        "cost": null,
+        "knowledge": null,
+        "release_date": "2025-12",
+        "last_updated": "2026-08-21",
+        "verified": {"status": "confirmed", "at": "2026-08-21", "method": "doc_parse"}
+      }
+    ]
+  },
+  {
+    "id": "groq",
+    "name": "Groq",
+    "doc": "https://console.groq.com/docs/quickstart",
+    "models": [
+      {
+        "id": "llama-3.3-70b",
+        "name": "LLaMA 3.3 70B",
+        "family": "llama",
+        "reasoning": false,
+        "tool_call": true,
+        "structured_output": true,
+        "modalities": ["text"],
+        "limit": null,
+        "cost": null,
+        "knowledge": null,
+        "release_date": null,
+        "last_updated": "2026-08-21",
+        "verified": {"status": "confirmed", "at": "2026-08-21", "method": "doc_parse"}
+      }
+    ]
+  },
+  {
+    "id": "cerebras",
+    "name": "Cerebras",
+    "doc": "https://inference-docs.cerebras.ai/models/overview",
+    "models": [
+      {
+        "id": "gpt-oss-120b",
+        "name": "OpenAI GPT OSS 120B",
+        "family": "gpt-oss",
+        "reasoning": true,
+        "tool_call": true,
+        "structured_output": true,
+        "modalities": ["text"],
+        "limit": 131072,
+        "cost": null,
+        "knowledge": null,
+        "release_date": null,
+        "last_updated": "2026-08-21",
+        "verified": {"status": "confirmed", "at": "2026-08-21", "method": "doc_parse"}
+      },
+      {
+        "id": "gemma-4-31b",
+        "name": "Gemma 4 31B",
+        "family": "gemma",
+        "reasoning": false,
+        "tool_call": true,
+        "structured_output": true,
+        "modalities": ["text"],
+        "limit": 131072,
+        "cost": null,
+        "knowledge": null,
+        "release_date": null,
+        "last_updated": "2026-08-21",
+        "verified": {"status": "confirmed", "at": "2026-08-21", "method": "doc_parse"}
+      }
+    ]
+  },
+  {
+    "id": "cohere",
+    "name": "Cohere",
+    "doc": "https://docs.cohere.com/docs/models",
+    "models": [
+      {
+        "id": "command-a-plus-05-2026",
+        "name": "Command A+",
+        "family": "command-a",
+        "reasoning": true,
+        "tool_call": true,
+        "structured_output": true,
+        "modalities": ["text", "image"],
+        "limit": 128000,
+        "cost": null,
+        "knowledge": null,
+        "release_date": "2026-05",
+        "last_updated": "2026-08-21",
+        "verified": {"status": "confirmed", "at": "2026-08-21", "method": "doc_parse"}
+      }
+    ]
+  }
+]
