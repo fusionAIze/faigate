@@ -925,3 +925,211 @@ class TestImageGeneration:
         assert captured["files"][1][1][0] == "mask.png"
         assert result["_faigate"]["provider"] == "image-cloud"
         assert result["_faigate"]["modality"] == "image_editing"
+
+
+class TestAnsweringModelIdentity:
+    """TASK-005: the response envelope must carry the true answering model.
+
+    SW-CN-001 reads the answering model from the response envelope; SW-CN-002
+    counts distinct answering models. Both require that the model identity a
+    client sees reflects what the upstream actually answered with, not the
+    requested alias. These tests pin that contract at the providers layer.
+    """
+
+    @pytest.mark.asyncio
+    async def test__faigate_model_echoes_upstream_answerer_not_alias(self):
+        """A substituted alias must not leak into `_faigate.model`."""
+
+        backend = ProviderBackend(
+            "deepseek-substituted",
+            {
+                "backend": "openai-compat",
+                "base_url": "https://api.example.com/v1",
+                "api_key": "secret",
+                "model": "anthropic-sonnet",  # requested alias (gets substituted upstream)
+            },
+        )
+
+        class _FakeResp:
+            status_code = 200
+
+            def json(self):
+                return {
+                    "id": "chatcmpl-test",
+                    "model": "deepseek-v4-flash",  # true answering model upstream
+                    "choices": [{"message": {"role": "assistant", "content": "ok"}}],
+                    "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+                }
+
+        async def _fake_post(url, json=None, headers=None, **_kw):
+            return _FakeResp()
+
+        backend._client.post = _fake_post  # type: ignore[attr-defined]
+
+        result = await backend.complete([{"role": "user", "content": "hello"}])
+
+        assert result["model"] == "deepseek-v4-flash"
+        assert result["_faigate"]["model"] == "deepseek-v4-flash"
+        assert result["_faigate"]["provider"] == "deepseek-substituted"
+
+    @pytest.mark.asyncio
+    async def test__faigate_model_falls_back_to_requested_when_upstream_omits(self):
+        """When upstream omits `model`, fall back to the requested model."""
+
+        backend = ProviderBackend(
+            "plain",
+            {
+                "backend": "openai-compat",
+                "base_url": "https://api.example.com/v1",
+                "api_key": "secret",
+                "model": "deepseek-v4-pro",
+            },
+        )
+
+        class _FakeResp:
+            status_code = 200
+
+            def json(self):
+                return {
+                    "id": "chatcmpl-test",
+                    "choices": [{"message": {"role": "assistant", "content": "ok"}}],
+                    "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+                }
+
+        async def _fake_post(url, json=None, headers=None, **_kw):
+            return _FakeResp()
+
+        backend._client.post = _fake_post  # type: ignore[attr-defined]
+
+        result = await backend.complete([{"role": "user", "content": "hello"}])
+
+        assert result["_faigate"]["model"] == "deepseek-v4-pro"
+
+    @pytest.mark.asyncio
+    async def test_codex_nonstream_fallback_uses_effective_model(self):
+        """Codex envelope falls back to the substituted model, not the raw alias."""
+
+        backend = ProviderBackend(
+            "openai-codex-5.4-medium",
+            {
+                "backend": "openai-compat",
+                "base_url": "https://chatgpt.com/backend-api/codex/responses",
+                "api_key": "secret",
+                "model": "gpt-5.4",
+                "transport": {"profile": "oauth-codex", "chat_path": ""},
+            },
+        )
+
+        class _FakeResp:
+            status_code = 200
+            text = (
+                "event: response.output_text.delta\n"
+                'data: {"type":"response.output_text.delta","delta":"ok"}\n\n'
+                "event: response.completed\n"
+                'data: {"type":"response.completed","response":{"id":"resp_test",'
+                '"created_at":1775616020,"usage":{"input_tokens":19,"output_tokens":5,"total_tokens":24}}}\n\n'
+            )
+
+        async def _fake_post(url, json=None, headers=None, **_kw):
+            return _FakeResp()
+
+        backend._client.post = _fake_post  # type: ignore[attr-defined]
+
+        result = await backend.complete([{"role": "user", "content": "Reply ok."}])
+
+        # Pro-tier pin sets `gpt-5.4` -> `gpt-5-codex`; the envelope must not leak `gpt-5.4`.
+        assert result["model"] == "gpt-5-codex"
+        assert result["_faigate"]["model"] == "gpt-5-codex"
+
+
+class TestCatalogWindowAndLimitsEnrichment:
+    """TASK-005 AC3: the backend object must surface catalog context_window/limits.
+
+    The curated catalog declaratively owns the native context window (e.g.
+    1048576 for deepseek) and the uniform input cap (262144). ProviderBackend
+    must backfill these from the catalog when config does not declare them, so
+    ``/v1/models`` reports non-null values, while keeping operator-declared
+    values authoritative.
+    """
+
+    def test_backfills_native_context_window_from_catalog(self):
+        backend = ProviderBackend(
+            "deepseek-chat",
+            {"base_url": "https://api.example.com/v1", "model": "deepseek-v4-pro"},
+        )
+        assert backend.context_window == 1048576
+
+    def test_backfills_input_cap_from_catalog(self):
+        backend = ProviderBackend(
+            "deepseek-chat",
+            {"base_url": "https://api.example.com/v1", "model": "deepseek-v4-pro"},
+        )
+        assert backend.limits["max_input_tokens"] == 262144
+
+    def test_operator_declared_values_win_over_catalog(self):
+        backend = ProviderBackend(
+            "deepseek-chat",
+            {
+                "base_url": "https://api.example.com/v1",
+                "model": "deepseek-v4-pro",
+                "context_window": 999,
+                "limits": {"max_input_tokens": 11111},
+            },
+        )
+        assert backend.context_window == 999
+        assert backend.limits["max_input_tokens"] == 11111
+
+    def test_unknown_provider_leaves_nulls_untouched(self):
+        backend = ProviderBackend(
+            "not-a-curated-provider",
+            {"base_url": "https://api.example.com/v1", "model": "m"},
+        )
+        assert backend.context_window is None
+        assert backend.limits == {}
+
+
+class TestPayloadTooLargeThreshold:
+    """TASK-005 AC2: the 413 payload-too-large response carries the token cap.
+
+    The threshold must be sourced from provider ``limits.max_input_tokens``
+    (the curated 262144 band), surfaced in the body ``limit`` field and the
+    ``x-faigate-request-limit`` header, never a hardcoded literal.
+    """
+
+    def test_413_exposes_limit_from_provider_cap(self, monkeypatch):
+        import faigate.main as main
+
+        class _FakeProvider:
+            limits = {"max_input_tokens": 262144}
+
+        monkeypatch.setattr(main, "_providers", {"deepseek-chat": _FakeProvider()})
+
+        resp = main._payload_too_large_response("too large")
+
+        assert resp.status_code == 413
+        body = resp.body  # JSONResponse exposes decoded body
+        payload = __import__("json").loads(body)
+        assert payload["type"] == "payload_too_large"
+        assert payload["limit"] == 262144
+        assert resp.headers.get("x-faigate-request-limit") == "262144"
+
+    def test_max_input_token_cap_aggregates_provider_limits(self, monkeypatch):
+        import faigate.main as main
+
+        class _A:
+            limits = {"max_input_tokens": 262144}
+
+        class _B:
+            limits = {"max_output_tokens": 8192}
+
+        monkeypatch.setattr(main, "_providers", {"a": _A(), "b": _B()})
+        assert main._max_input_token_cap() == 262144
+
+    def test_max_input_token_cap_returns_none_when_no_provider_declares_it(self, monkeypatch):
+        import faigate.main as main
+
+        class _NoLimits:
+            limits = {}
+
+        monkeypatch.setattr(main, "_providers", {"x": _NoLimits()})
+        assert main._max_input_token_cap() is None

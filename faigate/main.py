@@ -153,9 +153,19 @@ class _ChatExecutionFailure:
     body: dict[str, Any]
 
 
-def _client_error_response(message: str, *, error_type: str, status_code: int) -> JSONResponse:
+def _client_error_response(
+    message: str,
+    *,
+    error_type: str,
+    status_code: int,
+    headers: dict[str, str] | None = None,
+) -> JSONResponse:
     """Return a client-facing JSON error without exposing internal exception details."""
-    return JSONResponse({"error": message, "type": error_type}, status_code=status_code)
+    return JSONResponse(
+        {"error": message, "type": error_type},
+        status_code=status_code,
+        headers=headers,
+    )
 
 
 def _openai_sse_data(payload: dict[str, Any]) -> bytes:
@@ -314,11 +324,51 @@ def _invalid_request_response(message: str, *, exc: Exception | None = None) -> 
     return _client_error_response(message, error_type="invalid_request_error", status_code=400)
 
 
-def _payload_too_large_response(message: str, *, exc: Exception | None = None) -> JSONResponse:
-    """Return a sanitized payload-too-large response."""
+def _max_input_token_cap() -> int | None:
+    """Resolve the gateway's advertised input-token cap from provider limits.
+
+    The curated catalog gives every provider the same measured input cap
+    (262144) under `limits.max_input_tokens`. The backend object surfaces it
+    via `ProviderBackend.limits`. This reads the cap from the live providers
+    instead of hardcoding a number, so the 413 response stays truthful if the
+    catalog band ever shifts.
+    """
+    caps: list[int] = []
+    for provider in _providers.values():
+        limits = getattr(provider, "limits", {}) or {}
+        cap = limits.get("max_input_tokens")
+        if cap is not None:
+            caps.append(int(cap))
+    if not caps:
+        return None
+    return max(caps)
+
+
+def _payload_too_large_response(
+    message: str,
+    *,
+    exc: Exception | None = None,
+    limit: int | None = None,
+) -> JSONResponse:
+    """Return a sanitized payload-too-large response.
+
+    Exposes the concrete token threshold (from provider ``limits.max_input_tokens``)
+    in both the body and the ``x-faigate-request-limit`` header so clients can
+    react without inspecting internal byte limits.
+    """
     if exc is not None:
         logger.info("Payload rejected as too large: %s", exc)
-    return _client_error_response(message, error_type="payload_too_large", status_code=413)
+
+    resolved_limit = limit if limit is not None else _max_input_token_cap()
+    body: dict[str, Any] = {
+        "error": message,
+        "type": "payload_too_large",
+    }
+    headers: dict[str, str] = {}
+    if resolved_limit is not None:
+        body["limit"] = resolved_limit
+        headers["x-faigate-request-limit"] = str(resolved_limit)
+    return JSONResponse(body, status_code=413, headers=headers)
 
 
 def _sanitize_header_value(value: Any, *, max_chars: int | None = None) -> str:
