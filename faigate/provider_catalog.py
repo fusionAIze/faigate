@@ -411,7 +411,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://platform.deepseek.com/",
         "watch_sources": [],
         "notes": get_active_model_label("deepseek/chat"),
-        "last_reviewed": "2026-05-04",
+        "last_reviewed": "2026-08-20",
     },
     "deepseek-reasoner": {
         "recommended_model": get_active_model_id("deepseek/reasoner"),
@@ -426,7 +426,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://platform.deepseek.com/",
         "watch_sources": [],
         "notes": get_active_model_label("deepseek/reasoner"),
-        "last_reviewed": "2026-05-04",
+        "last_reviewed": "2026-08-20",
     },
     "gemini-flash-lite": {
         "recommended_model": get_active_model_id("google/gemini-flash-lite"),
@@ -441,7 +441,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://aistudio.google.com/",
         "watch_sources": [],
         "notes": get_active_model_label("google/gemini-flash-lite"),
-        "last_reviewed": "2026-05-04",
+        "last_reviewed": "2026-08-20",
     },
     "gemini-flash": {
         "recommended_model": get_active_model_id("google/gemini-flash"),
@@ -456,7 +456,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://aistudio.google.com/",
         "watch_sources": [],
         "notes": get_active_model_label("google/gemini-flash"),
-        "last_reviewed": "2026-05-04",
+        "last_reviewed": "2026-08-20",
     },
     "openrouter-fallback": {
         "recommended_model": "openrouter/auto",
@@ -471,7 +471,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://openrouter.ai/",
         "watch_sources": [],
         "notes": "Marketplace fallback path with official provider routing and BYOK support",  # noqa: E501
-        "last_reviewed": "2026-03-19",
+        "last_reviewed": "2026-08-20",
     },
     "kilocode": {
         "recommended_model": "z-ai/glm-5:free",
@@ -486,7 +486,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://kilo.ai/",
         "watch_sources": [_COMMUNITY_WATCHLIST],
         "notes": "Current curated Kilo free-tier model; free and budget tracks can move quickly",  # noqa: E501
-        "last_reviewed": "2026-03-19",
+        "last_reviewed": "2026-08-20",
     },
     "kilo-sonnet": {
         "recommended_model": "anthropic/claude-sonnet-4.6",
@@ -504,7 +504,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
             "Kilo paid Sonnet lane; useful as the workhorse path when you want "
             "Kilo credits to absorb balanced coding traffic"
         ),
-        "last_reviewed": "2026-05-04",
+        "last_reviewed": "2026-08-20",
     },
     "kilo-opus": {
         "recommended_model": "anthropic/claude-opus-4.6",
@@ -519,7 +519,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://kilo.ai/",
         "watch_sources": [],
         "notes": ("Kilo paid Opus lane; useful when expiring Kilo credits should absorb premium reasoning traffic"),
-        "last_reviewed": "2026-05-04",
+        "last_reviewed": "2026-08-20",
     },
     "blackbox-free": {
         "recommended_model": "blackboxai/x-ai/grok-code-fast-1",
@@ -537,7 +537,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
             "Legacy provider id for the current low-cost BLACKBOX Grok Code Fast route; "  # noqa: E501
             "verify often because pricing and model availability can rotate"
         ),
-        "last_reviewed": "2026-05-04",
+        "last_reviewed": "2026-08-20",
     },
     # ── Cohere ────────────────────────────────────────────────────────────────
     "cohere": {
@@ -553,7 +553,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://dashboard.cohere.com/",
         "watch_sources": [],
         "notes": "Cohere Command A/R — enterprise-grade LLM with tool use",
-        "last_reviewed": "2026-05-04",
+        "last_reviewed": "2026-08-20",
     },
     "openai-gpt4o": {
         "recommended_model": "gpt-4o",
@@ -568,7 +568,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://platform.openai.com/",
         "watch_sources": [],
         "notes": "Balanced OpenAI multimodal path",
-        "last_reviewed": "2026-03-19",
+        "last_reviewed": "2026-08-20",
     },
     "openai-images": {
         "recommended_model": "gpt-image-1",
@@ -583,7 +583,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://platform.openai.com/",
         "watch_sources": [],
         "notes": "OpenAI image generation and editing",
-        "last_reviewed": "2026-03-19",
+        "last_reviewed": "2026-08-20",
     },
     "anthropic-claude": {
         "recommended_model": "claude-opus-4-6",
@@ -598,7 +598,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://console.anthropic.com/",
         "watch_sources": [],
         "notes": "Quality-first Anthropic default",
-        "last_reviewed": "2026-03-19",
+        "last_reviewed": "2026-08-20",
     },
     "anthropic-haiku": {
         "recommended_model": get_active_model_id("anthropic/haiku-4.5"),
@@ -613,7 +613,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://console.anthropic.com/",
         "watch_sources": [],
         "notes": "Fast and cheap Anthropic model",
-        "last_reviewed": "2026-04-01",
+        "last_reviewed": "2026-08-20",
     },
     "anthropic-sonnet": {
         "recommended_model": get_active_model_id("anthropic/sonnet-4.6"),
@@ -628,7 +628,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://console.anthropic.com/",
         "watch_sources": [],
         "notes": "Balanced Anthropic model",
-        "last_reviewed": "2026-04-01",
+        "last_reviewed": "2026-08-20",
     },
     "claude-code": {
         "recommended_model": "claude-code",
@@ -643,7 +643,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://console.anthropic.com/",
         "watch_sources": [],
         "notes": "Claude Code – special coding model via Anthropic OAuth",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
     },
     "google-antigravity": {
         "recommended_model": "gemini-2.5-pro",
@@ -666,7 +666,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
             "the Google Generative Language API (generativelanguage.googleapis.com/v1beta/openai) "
             "directly with the OAuth token. Auth: faigate-auth google-antigravity  or sign in to Antigravity IDE."
         ),
-        "last_reviewed": "2026-04-04",
+        "last_reviewed": "2026-08-20",
     },
     "google-gemini-cli": {
         "recommended_model": "gc/gemini-2.5-pro",
@@ -681,7 +681,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://cloud.google.com/vertex-ai",
         "watch_sources": [],
         "notes": "Google Gemini via Vertex AI – uses gcloud ADC; requires: gcloud auth login",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
     },
     "gemini-pro-high": {
         "recommended_model": get_active_model_id("google/gemini-pro-high"),
@@ -696,7 +696,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://aistudio.google.com/",
         "watch_sources": [],
         "notes": "High-quality Gemini Pro lane",
-        "last_reviewed": "2026-04-01",
+        "last_reviewed": "2026-08-20",
     },
     "gemini-pro-low": {
         "recommended_model": get_active_model_id("google/gemini-pro-low"),
@@ -711,7 +711,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://aistudio.google.com/",
         "watch_sources": [],
         "notes": "Balanced Gemini Pro lane",
-        "last_reviewed": "2026-04-01",
+        "last_reviewed": "2026-08-20",
     },
     "clawrouter": {
         "recommended_model": "auto",
@@ -726,7 +726,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://blockrun.ai/",
         "watch_sources": [],
         "notes": "BlockRun ClawRouter uses wallet/x402 routing modes rather than a classic API key",  # noqa: E501
-        "last_reviewed": "2026-03-19",
+        "last_reviewed": "2026-08-20",
     },
     # ── xAI / Grok ───────────────────────────────────────────────────────────
     "xai": {
@@ -742,7 +742,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://platform.x.ai/",
         "watch_sources": [],
         "notes": "xAI / Grok models",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
     },
     # ── Z.AI / GLM ───────────────────────────────────────────────────────────
     "zai": {
@@ -758,7 +758,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://platform.z.ai/",
         "watch_sources": [],
         "notes": "Z.AI / GLM models",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
     },
     # ── Mistral ──────────────────────────────────────────────────────────────
     "mistral": {
@@ -774,7 +774,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://console.mistral.ai/",
         "watch_sources": [],
         "notes": "Mistral AI – Mistral Large, Codestral, etc.",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
     },
     # ── Groq ─────────────────────────────────────────────────────────────────
     "groq": {
@@ -790,7 +790,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://console.groq.com/keys",
         "watch_sources": [],
         "notes": "Groq ultra-fast LPU — free tier: 30 RPM, 14,400 RPD",
-        "last_reviewed": "2026-05-04",
+        "last_reviewed": "2026-08-20",
     },
     # ── Hugging Face Inference ───────────────────────────────────────────────
     "huggingface": {
@@ -806,7 +806,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://huggingface.co/",
         "watch_sources": [],
         "notes": "HuggingFace Inference – OpenAI-compat router",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
     },
     # ── Moonshot AI / Kimi ───────────────────────────────────────────────────
     "moonshot": {
@@ -822,7 +822,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://platform.moonshot.cn/",
         "watch_sources": [],
         "notes": "Moonshot AI / Kimi – OpenAI-compatible endpoint",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
     },
     # ── MiniMax ──────────────────────────────────────────────────────────────
     "minimax": {
@@ -838,7 +838,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://platform.minimaxi.com/",
         "watch_sources": [],
         "notes": "MiniMax – Anthropic-compatible custom endpoint",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
     },
     # ── Volcano Engine / Doubao ──────────────────────────────────────────────
     "volcengine": {
@@ -854,7 +854,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://console.volcengine.com/",
         "watch_sources": [],
         "notes": "Volcano Engine – Doubao, Kimi K2.5, GLM 4.7, DeepSeek V3.2 (CN)",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
     },
     # ── BytePlus (international Volcano Engine) ──────────────────────────────
     "byteplus": {
@@ -870,7 +870,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://console.byteplus.com/",
         "watch_sources": [],
         "notes": "BytePlus ARK – international access to Volcano Engine models",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
     },
     # ── Qwen (Alibaba) ──────────────────────────────────────────────────────
     "qwen": {
@@ -886,7 +886,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://dashscope.aliyun.com/",
         "watch_sources": [],
         "notes": "Qwen models via Alibaba Cloud",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
     },
     "qwen-portal": {
         "recommended_model": "coder-model",
@@ -904,7 +904,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
             "Qwen OAuth free tier – token from ~/.qwen/oauth_creds.json; run: qwen auth login. "
             "Model: coder-model (Qwen 3 Coder). Endpoint dynamic via resource_url."
         ),
-        "last_reviewed": "2026-04-04",
+        "last_reviewed": "2026-08-20",
     },
     # ── KiloCode lanes (individual model-level access) ───────────────────────
     "kilo-auto-frontier": {
@@ -920,7 +920,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://kilo.ai/",
         "watch_sources": [],
         "notes": "Kilo Auto Frontier lane – premium routing through Kilo gateway",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
     },
     "kilo-auto-balanced": {
         "recommended_model": "kilo-auto/balanced",
@@ -935,7 +935,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://kilo.ai/",
         "watch_sources": [],
         "notes": "Kilo Auto Balanced lane – balanced routing through Kilo gateway",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
     },
     "kilo-auto-free": {
         "recommended_model": "kilo-auto/free",
@@ -950,7 +950,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://kilo.ai/",
         "watch_sources": [_COMMUNITY_WATCHLIST],
         "notes": "Kilo Auto Free lane – free-tier routing through Kilo gateway",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
     },
     # ── Free Providers (OmniRoute-inspired zero-cost stack) ────────────────────
     "pollinations": {
@@ -966,7 +966,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://enter.pollinations.ai",
         "watch_sources": [_COMMUNITY_WATCHLIST],
         "notes": "Pollinations free text+image+video+audio — no API key required",
-        "last_reviewed": "2026-05-04",
+        "last_reviewed": "2026-08-20",
     },
     "longcat": {
         "recommended_model": "longcat/flash-lite",
@@ -981,7 +981,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://longcat.ai/",
         "watch_sources": [_COMMUNITY_WATCHLIST],
         "notes": "LongCat AI free tier: Flash-Lite, 50M tokens/day",
-        "last_reviewed": "2026-05-04",
+        "last_reviewed": "2026-08-20",
     },
     "nvidia-nim": {
         "recommended_model": "nvidia/nemotron",
@@ -996,7 +996,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://build.nvidia.com/explore/discover",
         "watch_sources": [],
         "notes": "NVIDIA NIM free: 129 models, 40 RPM. DeepSeek-R1, Llama 405B, Qwen3 Coder 480B",
-        "last_reviewed": "2026-05-04",
+        "last_reviewed": "2026-08-20",
     },
     "kiro": {
         "recommended_model": "kiro/claude-sonnet",
@@ -1011,7 +1011,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://kiro.dev/",
         "watch_sources": [_COMMUNITY_WATCHLIST],
         "notes": "Kiro free via AWS Builder ID OAuth — Claude Sonnet 4.5 unlimited",
-        "last_reviewed": "2026-05-04",
+        "last_reviewed": "2026-08-20",
     },
     "qoder": {
         "recommended_model": "qoder/kimi-k2",
@@ -1026,7 +1026,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://qoder.ai/",
         "watch_sources": [_COMMUNITY_WATCHLIST],
         "notes": "Qoder free via Google OAuth — kimi-k2-thinking unlimited",
-        "last_reviewed": "2026-05-04",
+        "last_reviewed": "2026-08-20",
     },
     # ── OpenAI Codex (OAuth via ChatGPT) ─────────────────────────────────────
     "openai-codex": {
@@ -1042,7 +1042,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://platform.openai.com/",
         "watch_sources": [],
         "notes": "OpenAI Codex (OAuth via ChatGPT) – requires interactive login",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
     },
     # ── OpenCode Zen ────────────────────────────────────────────────────────
     "opencode": {
@@ -1058,7 +1058,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://opencode.ai/",
         "watch_sources": [],
         "notes": "OpenCode Zen – Anthropic-compatible gateway",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
     },
     # ── Cerebras ────────────────────────────────────────────────────────────
     "cerebras": {
@@ -1074,7 +1074,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://cloud.cerebras.ai/",
         "watch_sources": [],
         "notes": "Cerebras wafer-scale ~2600 tok/s — free tier: 1M TPD",
-        "last_reviewed": "2026-05-04",
+        "last_reviewed": "2026-08-20",
     },
     # ── GitHub Copilot ──────────────────────────────────────────────────────
     "github-copilot": {
@@ -1090,7 +1090,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://github.com/",
         "watch_sources": [],
         "notes": "GitHub Copilot – requires GH_TOKEN / COPILOT_GITHUB_TOKEN",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
     },
     # ── Synthetic ───────────────────────────────────────────────────────────
     "synthetic": {
@@ -1106,7 +1106,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://synthetic.new/",
         "watch_sources": [],
         "notes": "Synthetic – Anthropic-compat; exposes HuggingFace models (MiniMax, etc.)",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
     },
     # ── Kimi Coding ─────────────────────────────────────────────────────────
     "kimi-coding": {
@@ -1122,7 +1122,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://platform.moonshot.cn/",
         "watch_sources": [],
         "notes": "Kimi Coding – Anthropic-compat endpoint via Moonshot",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
     },
     # ── Vercel AI Gateway ──────────────────────────────────────────────────
     "vercel-ai-gateway": {
@@ -1138,7 +1138,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://vercel.com/",
         "watch_sources": [],
         "notes": "Vercel AI Gateway – multi-model proxy",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
     },
     # ── Local runtimes ──────────────────────────────────────────────────────
     "ollama": {
@@ -1154,7 +1154,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://ollama.com/",
         "watch_sources": [],
         "notes": "Ollama – local LLM runtime, OpenAI-compat at :11434",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
     },
     "vllm": {
         "recommended_model": "vllm/your-model-id",
@@ -1169,7 +1169,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://vllm.ai/",
         "watch_sources": [],
         "notes": "vLLM – local/self-hosted OpenAI-compat server at :8000",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
     },
     "lmstudio": {
         "recommended_model": "lmstudio/minimax-m2.1-gs32",
@@ -1184,7 +1184,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://lmstudio.ai/",
         "watch_sources": [],
         "notes": "LM Studio – local OpenAI-compat server at :1234",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
     },
     "litellm": {
         "recommended_model": "litellm/your-model-id",
@@ -1199,7 +1199,7 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://litellm.ai/",
         "watch_sources": [],
         "notes": "LiteLLM proxy – OpenAI-compat gateway to 100+ providers at :4000",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
     },
 }
 

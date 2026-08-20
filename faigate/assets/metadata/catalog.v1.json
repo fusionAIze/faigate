@@ -1,10 +1,10 @@
 {
   "schema_version": "fusionaize-provider-catalog/v1.1",
-  "generated_at": "2026-04-26T00:00:00Z",
+  "generated_at": "2026-08-20T00:00:00Z",
   "source_repo": "fusionaize-metadata-public",
   "providers": {
     "anthropic": {
-      "recommended_model": "claude-opus-4-7",
+      "recommended_model": "claude-opus-4-6",
       "aliases": [
         "claude-opus-4-7",
         "claude-opus-4-6",
@@ -98,7 +98,7 @@
       }
     },
     "anthropic-claude": {
-      "recommended_model": "claude-opus-4-7",
+      "recommended_model": "claude-opus-4-6",
       "aliases": [
         "claude-opus-4-7",
         "claude-opus-4-6",
@@ -643,7 +643,7 @@
       "official_source_url": "https://console.groq.com/",
       "signup_url": "https://console.groq.com/keys",
       "watch_sources": [],
-      "notes": "Groq ultra-fast LPU inference \u2014 300-500 tok/s. Free tier: 30 RPM, 14,400 RPD, 6K TPM.",
+      "notes": "Groq ultra-fast LPU inference — 300-500 tok/s. Free tier: 30 RPM, 14,400 RPD, 6K TPM.",
       "last_reviewed": "2026-05-04",
       "pricing": {
         "source_type": "provider-docs",
@@ -671,7 +671,7 @@
       "official_source_url": "https://docs.mistral.ai/",
       "signup_url": "https://console.mistral.ai/",
       "watch_sources": [],
-      "notes": "Mistral AI \u2013 Mistral Large, Codestral, etc.",
+      "notes": "Mistral AI – Mistral Large, Codestral, etc.",
       "last_reviewed": "2026-04-01",
       "pricing": {
         "source_type": "provider-docs",
@@ -700,7 +700,7 @@
       "official_source_url": "https://platform.moonshot.cn/docs/api/",
       "signup_url": "https://platform.moonshot.cn/",
       "watch_sources": [],
-      "notes": "Moonshot AI \u2013 long-context Chinese/English models.",
+      "notes": "Moonshot AI – long-context Chinese/English models.",
       "last_reviewed": "2026-04-01",
       "pricing": {
         "source_type": "provider-docs",
@@ -727,7 +727,7 @@
       "official_source_url": "https://github.com/ollama/ollama",
       "signup_url": "https://ollama.com/",
       "watch_sources": [],
-      "notes": "Ollama \u2013 local LLM runner, no API key required.",
+      "notes": "Ollama – local LLM runner, no API key required.",
       "last_reviewed": "2026-04-01",
       "pricing": {
         "source_type": "free-local",
@@ -753,7 +753,7 @@
       "official_source_url": "https://huggingface.co/docs/inference-endpoints",
       "signup_url": "https://huggingface.co/",
       "watch_sources": [],
-      "notes": "Hugging Face Inference Endpoints \u2013 hosted open-weight models.",
+      "notes": "Hugging Face Inference Endpoints – hosted open-weight models.",
       "last_reviewed": "2026-04-01",
       "pricing": {
         "source_type": "provider-docs",
@@ -778,7 +778,7 @@
       "official_source_url": "https://lmstudio.ai/",
       "signup_url": "https://lmstudio.ai/",
       "watch_sources": [],
-      "notes": "LM Studio \u2013 local LLM GUI with OpenAI-compatible server.",
+      "notes": "LM Studio – local LLM GUI with OpenAI-compatible server.",
       "last_reviewed": "2026-04-01",
       "pricing": {
         "source_type": "free-local",
@@ -803,7 +803,7 @@
       "official_source_url": "https://github.com/vllm-project/vllm",
       "signup_url": "https://vllm.ai/",
       "watch_sources": [],
-      "notes": "vLLM \u2013 high-throughput local inference engine.",
+      "notes": "vLLM – high-throughput local inference engine.",
       "last_reviewed": "2026-04-01",
       "pricing": {
         "source_type": "free-local",
@@ -829,7 +829,7 @@
       "official_source_url": "https://docs.litellm.ai/",
       "signup_url": "https://litellm.ai/",
       "watch_sources": [],
-      "notes": "LiteLLM \u2013 unified API for 100+ LLM providers.",
+      "notes": "LiteLLM – unified API for 100+ LLM providers.",
       "last_reviewed": "2026-04-01",
       "pricing": {
         "source_type": "provider-docs",
@@ -854,7 +854,7 @@
       "official_source_url": "https://www.byteplus.com/en/docs/product/ark",
       "signup_url": "https://www.byteplus.com/",
       "watch_sources": [],
-      "notes": "BytePlus ARK \u2013 international access to Volcano Engine models",
+      "notes": "BytePlus ARK – international access to Volcano Engine models",
       "last_reviewed": "2026-04-01",
       "pricing": {
         "source_type": "unknown",
@@ -879,7 +879,7 @@
       "official_source_url": "https://www.byteplus.com/en/docs/product/ark",
       "signup_url": "https://www.byteplus.com/",
       "watch_sources": [],
-      "notes": "BytePlus ARK \u2013 coding models (ark-code-latest, doubao-seed-code, kimi-k2.5, kimi-k2-thinking, glm-4.7)",
+      "notes": "BytePlus ARK – coding models (ark-code-latest, doubao-seed-code, kimi-k2.5, kimi-k2-thinking, glm-4.7)",
       "last_reviewed": "2026-04-01",
       "pricing": {
         "source_type": "unknown",
@@ -932,7 +932,7 @@
       "official_source_url": "https://docs.github.com/en/copilot",
       "signup_url": "https://github.com/features/copilot",
       "watch_sources": [],
-      "notes": "GitHub Copilot \u2013 requires GH_TOKEN / COPILOT_GITHUB_TOKEN",
+      "notes": "GitHub Copilot – requires GH_TOKEN / COPILOT_GITHUB_TOKEN",
       "last_reviewed": "2026-04-01",
       "pricing": {
         "source_type": "unknown",
@@ -957,7 +957,7 @@
       "official_source_url": "https://platform.moonshot.cn/docs/api/",
       "signup_url": "https://platform.moonshot.cn/",
       "watch_sources": [],
-      "notes": "Kimi Coding \u2013 Anthropic-compat endpoint via Moonshot",
+      "notes": "Kimi Coding – Anthropic-compat endpoint via Moonshot",
       "last_reviewed": "2026-04-01",
       "pricing": {
         "source_type": "unknown",
@@ -982,7 +982,7 @@
       "official_source_url": "https://api.minimax.chat/",
       "signup_url": "https://www.minimaxi.com/",
       "watch_sources": [],
-      "notes": "MiniMax \u2013 Anthropic-compat custom endpoint",
+      "notes": "MiniMax – Anthropic-compat custom endpoint",
       "last_reviewed": "2026-04-01",
       "pricing": {
         "source_type": "unknown",
@@ -1007,7 +1007,7 @@
       "official_source_url": "https://help.aliyun.com/zh/model-studio/getting-started/what-is-model-studio",
       "signup_url": "https://modelscope.cn/",
       "watch_sources": [],
-      "notes": "Qwen OAuth (free tier) \u2013 device-code flow; requires: openclaw plugins enable qwen-portal-auth",
+      "notes": "Qwen OAuth (free tier) – device-code flow; requires: openclaw plugins enable qwen-portal-auth",
       "last_reviewed": "2026-04-01",
       "pricing": {
         "source_type": "unknown",
@@ -1032,7 +1032,7 @@
       "official_source_url": "https://synthetic.com/docs",
       "signup_url": "https://synthetic.com/",
       "watch_sources": [],
-      "notes": "Synthetic \u2013 Anthropic-compat; exposes HuggingFace models (MiniMax, etc.)",
+      "notes": "Synthetic – Anthropic-compat; exposes HuggingFace models (MiniMax, etc.)",
       "last_reviewed": "2026-04-01",
       "pricing": {
         "source_type": "unknown",
@@ -1057,7 +1057,7 @@
       "official_source_url": "https://vercel.com/docs/ai/ai-gateway",
       "signup_url": "https://vercel.com/",
       "watch_sources": [],
-      "notes": "Vercel AI Gateway \u2013 multi-model proxy",
+      "notes": "Vercel AI Gateway – multi-model proxy",
       "last_reviewed": "2026-04-01",
       "pricing": {
         "source_type": "unknown",
@@ -1082,7 +1082,7 @@
       "official_source_url": "https://www.volcengine.com/docs/82379",
       "signup_url": "https://www.volcengine.com/",
       "watch_sources": [],
-      "notes": "Volcano Engine \u2013 Doubao, Kimi K2.5, GLM 4.7, DeepSeek V3.2 (CN)",
+      "notes": "Volcano Engine – Doubao, Kimi K2.5, GLM 4.7, DeepSeek V3.2 (CN)",
       "last_reviewed": "2026-04-01",
       "pricing": {
         "source_type": "unknown",
@@ -1107,7 +1107,7 @@
       "official_source_url": "https://www.volcengine.com/docs/82379",
       "signup_url": "https://www.volcengine.com/",
       "watch_sources": [],
-      "notes": "Volcano Engine \u2013 coding models (ark-code-latest, doubao-seed-code, kimi-k2.5, kimi-k2-thinking, glm-4.7)",
+      "notes": "Volcano Engine – coding models (ark-code-latest, doubao-seed-code, kimi-k2.5, kimi-k2-thinking, glm-4.7)",
       "last_reviewed": "2026-04-01",
       "pricing": {
         "source_type": "unknown",
@@ -1161,7 +1161,7 @@
       "official_source_url": "https://pollinations.ai/",
       "signup_url": "https://enter.pollinations.ai",
       "watch_sources": [],
-      "notes": "Pollinations free text+image+video+audio \u2014 no API key required. Supports GPT-5, Claude, Llama 4.",
+      "notes": "Pollinations free text+image+video+audio — no API key required. Supports GPT-5, Claude, Llama 4.",
       "last_reviewed": "2026-05-04",
       "pricing": {
         "source_type": "provider-docs",
@@ -1248,7 +1248,7 @@
       "official_source_url": "https://kiro.dev/",
       "signup_url": "https://kiro.dev/",
       "watch_sources": [],
-      "notes": "Kiro free tier via AWS Builder ID OAuth \u2014 Claude Sonnet 4.5 and Haiku 4.5 unlimited.",
+      "notes": "Kiro free tier via AWS Builder ID OAuth — Claude Sonnet 4.5 and Haiku 4.5 unlimited.",
       "last_reviewed": "2026-05-04",
       "pricing": {
         "source_type": "provider-docs",
@@ -1277,7 +1277,7 @@
       "official_source_url": "https://qoder.ai/",
       "signup_url": "https://qoder.ai/",
       "watch_sources": [],
-      "notes": "Qoder free via Google OAuth \u2014 kimi-k2-thinking, qwen3-coder-plus, deepseek-r1 unlimited.",
+      "notes": "Qoder free via Google OAuth — kimi-k2-thinking, qwen3-coder-plus, deepseek-r1 unlimited.",
       "last_reviewed": "2026-05-04",
       "pricing": {
         "source_type": "provider-docs",
@@ -1306,7 +1306,7 @@
       "official_source_url": "https://docs.cohere.com/",
       "signup_url": "https://dashboard.cohere.com/",
       "watch_sources": [],
-      "notes": "Cohere Command A/R \u2014 enterprise-grade LLM with tool use",
+      "notes": "Cohere Command A/R — enterprise-grade LLM with tool use",
       "last_reviewed": "2026-05-04",
       "pricing": {
         "input_cost_per_1m": 0.5,

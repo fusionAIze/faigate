@@ -324,7 +324,7 @@ def test_provider_catalog_report_can_track_provider_from_external_snapshot(tmp_p
       "signup_url": "https://console.anthropic.com/",
       "watch_sources": [],
       "notes": "External snapshot entry",
-       "last_reviewed": "2026-05-04"
+       "last_reviewed": "2026-08-20"
     }
   }
 }
