@@ -42,19 +42,21 @@ Verified `PRESENT` means the ID appears as a `recommended_model` or `alias` valu
 | 6 | gpt-5.5 | MISSING |
 | 7 | gpt-5.5-pro | MISSING |
 | 8 | o3 | MISSING |
-| 9 | claude-opus-5 | MISSING |
-| 10 | claude-sonnet-5 | MISSING |
-| 11 | claude-haiku-4-5 | PRESENT (anthropic, anthropic-haiku) |
-| 12 | claude-code | MISSING |
-| 13 | gemini-3.1-pro | PRESENT (google, gemini-pro-high/-low) |
-| 14 | gemini-3.1-flash | MISSING |
-| 15 | gemini-3-flash-lite | PRESENT (google, gemini-flash-lite) |
-| 16 | llama-4-maverick | MISSING |
-| 17 | llama-4-scout | MISSING |
-| 18 | qwen-3.6-27b | MISSING |
-| 19 | qwen3-coder | MISSING |
-| 20 | glm-5.3 | MISSING |
-| 21 | kimi-k2.6 | MISSING |
+| 9 | o3-mini | MISSING |
+| 10 | o4-mini | PRESENT (openai-codex/o4-mini in lane_registry) |
+| 11 | claude-opus-5 | MISSING |
+| 12 | claude-sonnet-5 | MISSING |
+| 13 | claude-haiku-4-5 | PRESENT (anthropic, anthropic-haiku) |
+| 14 | claude-code | MISSING |
+| 15 | gemini-3.1-pro | PRESENT (google, gemini-pro-high/-low) |
+| 16 | gemini-3.1-flash | MISSING |
+| 17 | gemini-3-flash-lite | PRESENT (google, gemini-flash-lite) |
+| 18 | llama-4-maverick | MISSING |
+| 19 | llama-4-scout | MISSING |
+| 20 | qwen-3.6-27b | MISSING |
+| 21 | qwen3-coder | MISSING |
+| 22 | glm-5.3 | MISSING |
+| 23 | kimi-k2.6 | MISSING |
 
 ## 3. Divergent entries (recommended_model stale) — update map
 
