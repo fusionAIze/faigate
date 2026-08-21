@@ -1306,6 +1306,65 @@ _CATALOG: dict[str, dict[str, Any]] = {
 }
 
 
+# ── Model-keyed input-token caps ─────────────────────────────────────
+#
+# The provider catalog above is keyed by *provider*, and every entry advertises
+# the same flat 262144 max_input_tokens. That number is a floor, not a per-model
+# truth: the actual input-token ceiling is a property of the concrete model a
+# request resolves to, not of the provider that serves it. This map records the
+# authoritative max_input_tokens for the 23 binding model IDs used by the
+# canonical lanes, so routing can reject oversized inputs at the real boundary
+# instead of pretending every provider accepts 262144.
+#
+# Provenance: values are grounded in the LiteLLM and OmniRoute provider registry
+# reports (2026-08-21). Where the two disagree, OmniRoute is authoritative
+# because it carries per-model contextLength directly; LiteLLM corroborates.
+# `claude-code` is a Shim with no real model of its own, so its cap is the
+# documented 262144 it mirrors rather than a native context window.
+
+
+_MODEL_INPUT_CAPS: dict[str, int] = {
+    "deepseek-v4-pro": 1000000,
+    "deepseek-v4-flash": 1000000,
+    "gpt-5.6-sol": 922000,
+    "gpt-5.6-terra": 922000,
+    "gpt-5.6-luna": 922000,
+    "gpt-5.5": 1050000,
+    "gpt-5.5-pro": 1050000,
+    "o3": 200000,
+    "o3-mini": 200000,
+    "o4-mini": 200000,
+    "claude-opus-5": 1000000,
+    "claude-sonnet-5": 1000000,
+    "claude-haiku-4-5": 200000,
+    "claude-code": 262144,  # Shim; documented mirror, not a native context window
+    "gemini-3.1-pro": 1048576,
+    "gemini-3.1-flash": 1048576,
+    "gemini-3-flash-lite": 1048576,
+    "llama-4-maverick": 131072,
+    "llama-4-scout": 131072,
+    "qwen-3.6-27b": 262144,
+    "qwen3-coder": 262144,
+    "glm-5.3": 1000000,
+    "kimi-k2.6": 262144,
+}
+
+
+def get_model_max_input_tokens(model_id: str) -> int | None:
+    """Return the authoritative max_input_tokens for a concrete model ID.
+
+    Normalises the common ``provider/model`` form to the trailing model id, then
+    falls back to the raw id, so both ``openrouter/gpt-5.6-sol`` and
+    ``gpt-5.6-sol`` resolve. Returns ``None`` when the model is not one of the
+    23 binding IDs with a recorded cap.
+    """
+    if not model_id:
+        return None
+    candidate = str(model_id).strip()
+    tail = candidate.rsplit("/", 1)[-1]
+    return _MODEL_INPUT_CAPS.get(tail) or _MODEL_INPUT_CAPS.get(candidate)
+
+
 def _normalize_catalog_entry(entry: Any) -> dict[str, Any]:
     if not isinstance(entry, dict):
         return {}

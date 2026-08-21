@@ -8,6 +8,7 @@ from faigate.provider_catalog import (
     build_provider_discovery_view,
     build_provider_metadata_snapshot,
     build_provider_refresh_guidance,
+    get_model_max_input_tokens,
     get_offerings_catalog,
     get_packages_catalog,
     get_provider_catalog,
@@ -664,6 +665,58 @@ def test_provider_catalog_declares_in_band_input_cap():
         assert isinstance(cap, int) and 240000 < cap <= 275000, (
             f"provider {name!r} max_input_tokens must be in (240000, 275000], got {cap!r}"
         )
+
+
+def test_model_input_caps_cover_binding_models():
+    """The 23 binding model IDs each resolve to a real (non-floor) input cap."""
+    import faigate.provider_catalog as pc
+
+    real_caps = {
+        "deepseek-v4-pro": 1000000,
+        "deepseek-v4-flash": 1000000,
+        "gpt-5.6-sol": 922000,
+        "gpt-5.6-terra": 922000,
+        "gpt-5.6-luna": 922000,
+        "gpt-5.5": 1050000,
+        "gpt-5.5-pro": 1050000,
+        "o3": 200000,
+        "o3-mini": 200000,
+        "o4-mini": 200000,
+        "claude-opus-5": 1000000,
+        "claude-sonnet-5": 1000000,
+        "claude-haiku-4-5": 200000,
+        "claude-code": 262144,  # Shim; documented mirror, not a native window
+        "gemini-3.1-pro": 1048576,
+        "gemini-3.1-flash": 1048576,
+        "gemini-3-flash-lite": 1048576,
+        "llama-4-maverick": 131072,
+        "llama-4-scout": 131072,
+        "qwen-3.6-27b": 262144,
+        "qwen3-coder": 262144,
+        "glm-5.3": 1000000,
+        "kimi-k2.6": 262144,
+    }
+
+    expected = set(real_caps)
+    declared = set(pc._MODEL_INPUT_CAPS)
+    assert declared == expected, (
+        f"model cap map must match the 23 binding IDs exactly; "
+        f"missing={sorted(expected - declared)}, extra={sorted(declared - expected)}"
+    )
+
+    for model_id, expected_cap in real_caps.items():
+        assert get_model_max_input_tokens(model_id) == expected_cap
+        prefixed = f"openrouter/{model_id}"
+        assert get_model_max_input_tokens(prefixed) == expected_cap, (
+            f"get_model_max_input_tokens({prefixed!r}) must resolve the trailing model id"
+        )
+
+
+def test_model_input_caps_unknown_model_returns_none():
+    """An unknown model id returns None rather than a fabricated cap."""
+    assert get_model_max_input_tokens("provider/not-a-binding-model") is None
+    assert get_model_max_input_tokens("") is None
+    assert get_model_max_input_tokens(None) is None
 
 
 def test_provider_catalog_context_window_survives_external_merge(tmp_path, monkeypatch):

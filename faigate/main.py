@@ -328,11 +328,16 @@ def _invalid_request_response(message: str, *, exc: Exception | None = None) -> 
 def _max_input_token_cap() -> int | None:
     """Resolve the gateway's advertised input-token cap from provider limits.
 
-    The curated catalog gives every provider the same measured input cap
-    (262144) under `limits.max_input_tokens`. The backend object surfaces it
-    via `ProviderBackend.limits`. This reads the cap from the live providers
-    instead of hardcoding a number, so the 413 response stays truthful if the
-    catalog band ever shifts.
+    The curated catalog gives every provider the same floor input cap (262144)
+    under `limits.max_input_tokens`, and `ProviderBackend.limits` surfaces it.
+    That floor is a provider-wide placeholder, not a per-model truth: the real
+    ceiling for any given request is `get_model_max_input_tokens()` in
+    `provider_catalog`, applied during routing once the request model is known.
+
+    This helper backs the 413 "advertised" threshold only, and reads the cap
+    from the live providers instead of hardcoding a number so the response
+    stays truthful if the provider band ever shifts. The per-model caps remain
+    the authoritative limit for routing rejection.
     """
     caps: list[int] = []
     for provider in _providers.values():

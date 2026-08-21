@@ -11,7 +11,11 @@ from typing import Any
 
 from .config import Config
 from .lane_registry import get_canonical_model_catalog, get_canonical_model_routes
-from .provider_catalog import _get_packages_for_provider, _get_pricing_for_provider_and_model
+from .provider_catalog import (
+    _get_packages_for_provider,
+    _get_pricing_for_provider_and_model,
+    get_model_max_input_tokens,
+)
 
 logger = logging.getLogger("faigate.router")
 _BOUNDARY_TEXT_RE = re.compile(r"[a-z0-9]")
@@ -1534,6 +1538,10 @@ class Router:
         max_output = limits.get("max_output_tokens")
         context_window = provider.get("context_window")
 
+        model_cap = get_model_max_input_tokens(ctx.model_requested)
+        if model_cap is not None:
+            max_input = model_cap
+
         if max_input and ctx.total_tokens > max_input:
             return False
         if max_output and ctx.requested_output_tokens and ctx.requested_output_tokens > max_output:
@@ -1600,6 +1608,9 @@ class Router:
         context_window = int(provider.get("context_window") or 0)
         max_input = int(limits.get("max_input_tokens") or 0)
         max_output = int(limits.get("max_output_tokens") or 0)
+        model_cap = get_model_max_input_tokens(ctx.model_requested)
+        if model_cap is not None:
+            max_input = model_cap
         headroom = 0
         if context_window:
             headroom = max(0, context_window - ctx.total_requested_tokens)
