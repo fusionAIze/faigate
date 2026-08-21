@@ -82,6 +82,8 @@ The catalog now carries a little more structure than just one recommended model:
 
 - `provider_type` such as `direct`, `aggregator`, or `wallet-router`
 - `auth_modes` such as `api_key`, `byok`, or `wallet_x402`
+
+Identity and authentication are scoped in [`docs/open-core-boundary.md`](open-core-boundary.md): `api_key` is faigate's own default identity (opinion router); the OAuth relay (customer-owned identity) is optional and separated from the routing core.
 - `offer_track` such as `direct`, `free`, `byok`, or `marketplace`
 - `evidence_level` to distinguish fully official guidance from mixed/community-supported entries
 - `official_source_url` plus optional watchlist sources for faster re-review
