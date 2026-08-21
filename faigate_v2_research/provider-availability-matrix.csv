@@ -1,0 +1,15 @@
+provider_id,provider_name,doc_url,model_id,model_name,family,reasoning,tool_call,structured_output,modalities,context_limit,cost_input,cost_output,knowledge,release_date,status,verified_at,method,note
+anthropic,Anthropic,https://platform.claude.com/docs/en/about-claude/models/overview,claude-opus-5,Claude Opus 5,opus,true,true,true,text;image,,,,,,confirmed,2026-08-21,doc_parse,
+anthropic,Anthropic,https://platform.claude.com/docs/en/about-claude/models/overview,claude-fable-5,Claude Fable 5,fable,true,true,true,text;image,,,,,2026-06-09,confirmed,2026-08-21,doc_parse,
+anthropic,Anthropic,https://platform.claude.com/docs/en/about-claude/models/overview,claude-mythos-5,Claude Mythos 5,mythos,true,true,true,text;image,,,,,2026-06-09,confirmed,2026-08-21,doc_parse,
+anthropic,Anthropic,https://platform.claude.com/docs/en/about-claude/models/overview,claude-mythos-preview,Claude Mythos Preview,mythos,true,true,true,text;image,,,,,,confirmed,2026-08-21,doc_parse,
+openai,OpenAI,https://platform.openai.com/docs/models,gpt-4o,GPT-4o,gpt-4o,false,true,true,text;image,,,,,,confirmed,2026-08-21,doc_parse,
+google,Google,https://ai.google.dev/gemini-api/docs/models,,,,,,,,,,,,,unverified,2026-08-21,none,"ai.google.dev timed out repeatedly; re-fetch and backfill rows"
+deepseek,DeepSeek,https://api-docs.deepseek.com/,deepseek-chat,DeepSeek Chat,chat,false,true,true,text,1048576,,,,,confirmed,2026-08-21,doc_parse,
+deepseek,DeepSeek,https://api-docs.deepseek.com/,deepseek-reasoner,DeepSeek Reasoner,reasoner,true,true,true,text,1048576,,,,,confirmed,2026-08-21,doc_parse,
+xai,X.AI,https://docs.x.ai/docs/models,grok-4.6,Grok 4.6,grok,true,true,true,text,500000,2.0,6.0,2026-02-01,,confirmed,2026-08-21,doc_parse,
+mistral,Mistral,https://docs.mistral.ai/getting-started/models/models_overview/,mistral-large-latest,Mistral Large 3,mistral-large,true,true,true,text;image,,,,,2025-12,confirmed,2026-08-21,doc_parse,
+groq,Groq,https://console.groq.com/docs/quickstart,llama-3.3-70b,LLaMA 3.3 70B,llama,false,true,true,text,,,,,,confirmed,2026-08-21,doc_parse,
+cerebras,Cerebras,https://inference-docs.cerebras.ai/models/overview,gpt-oss-120b,OpenAI GPT OSS 120B,gpt-oss,true,true,true,text,131072,,,,,confirmed,2026-08-21,doc_parse,
+cerebras,Cerebras,https://inference-docs.cerebras.ai/models/overview,gemma-4-31b,Gemma 4 31B,gemma,false,true,true,text,131072,,,,,confirmed,2026-08-21,doc_parse,
+cohere,Cohere,https://docs.cohere.com/docs/models,command-a-plus-05-2026,Command A+,command-a,true,true,true,text;image,128000,,,,2026-05,confirmed,2026-08-21,doc_parse,

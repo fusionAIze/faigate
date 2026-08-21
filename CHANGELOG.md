@@ -1,5 +1,16 @@
 # fusionAIze Gate Changelog
 
+## v2.7.0 - 2026-08-21
+
+### Added
+
+- **Per-model max_input_tokens registry** — the provider catalog previously advertised the same flat 262144 input-token floor for every provider. The gateway now records the authoritative input ceiling for its 23 binding model IDs (`_MODEL_INPUT_CAPS` + `get_model_max_input_tokens()` in `faigate/provider_catalog.py`), grounded in the LiteLLM and OmniRoute provider registry reports. Routing (`faigate/router.py`) resolves the request model's real cap from `ctx.model_requested`, so an oversized input is rejected at the true model boundary instead of at the uniform floor.
+
+### Changed
+
+- **Routing fit and ranking** now use the model-specific input cap (`get_model_max_input_tokens`) in both the dimension-fit filter and the dimension-scoring path, overriding the provider-wide floor when the request model is known.
+- **`_max_input_token_cap` docstring** corrected: the provider-wide 262144 value is documented as a floor, not a measured per-model truth. The 413 "advertised" threshold behavior is unchanged.
+
 ## v2.6.1 - 2026-05-04
 
 ### Added

@@ -322,6 +322,7 @@ explainability so operators understand and trust routing decisions.
    - Token store and generic OAuth backend ✓
    - Antigravity provider in registry, catalog, and lane registry (ag/ model family) ✓
    - claude_code_oauth() reading token from local claude CLI settings ✓
+   - Provenance verified (FJ-56-169): see `faigate_v2_research/TASK-006-oauth-provenance.md` ✓
 
 2. **Local worker completion** ✓ _(implemented)_
    - Grid integration: reads `~/.faigrid/config.json` + legacy state file ✓

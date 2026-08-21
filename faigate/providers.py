@@ -163,6 +163,7 @@ class ProviderBackend:
         self.capabilities = dict(cfg.get("capabilities", {}))
         self.context_window = cfg.get("context_window")
         self.limits = dict(cfg.get("limits", {}))
+        self._enrich_window_and_limits_from_catalog()
         self.cache = dict(cfg.get("cache", {}))
         self.image = dict(cfg.get("image", {}))
         self.lane = dict(cfg.get("lane", {}))
@@ -185,6 +186,40 @@ class ProviderBackend:
             timeout=httpx.Timeout(120.0, connect=10.0),
             limits=httpx.Limits(max_connections=20),
         )
+
+    def _enrich_window_and_limits_from_catalog(self) -> None:
+        """Backfill native context_window and max_input_tokens cap from the curated catalog.
+
+        The catalog declaratively owns each provider's native context window
+        (e.g. 1048576 for deepseek) and its uniform input cap (262144). Config
+        normalisation leaves these fields absent when the operator does not
+        declare them, so `/v1/models` and the 413 payload-too-large path would
+        otherwise report nulls. This wires the catalog values into the backend
+        object without touching provider_catalog.py or catalog.v1.json.
+
+        Operator-declared values win; the catalog only fills gaps.
+        """
+        try:
+            from .provider_catalog import get_provider_catalog_entry
+
+            entry = get_provider_catalog_entry(self.name)
+        except Exception as exc:  # pragma: no cover - defensive import guard
+            logger.debug(
+                "catalog window/limits enrich skipped for %s: %s", self.name, exc
+            )
+            return
+
+        if not entry:
+            return
+
+        native_ctx = entry.get("context_window")
+        if native_ctx is not None and not self.context_window:
+            self.context_window = int(native_ctx)
+
+        cat_limits = entry.get("limits") or {}
+        cap = cat_limits.get("max_input_tokens")
+        if cap is not None and "max_input_tokens" not in self.limits:
+            self.limits = {**self.limits, "max_input_tokens": int(cap)}
 
     async def close(self) -> None:
         await self._client.aclose()
@@ -448,11 +483,12 @@ class ProviderBackend:
         content = "".join(text_parts).strip()
 
         finish_reason = "tool_calls" if tool_calls else "stop"
+        effective_model = self._codex_effective_model(requested_model)
         return {
             "id": response_meta.get("id") or f"chatcmpl-{int(time.time() * 1000)}",
             "object": "chat.completion",
             "created": int(response_meta.get("created_at") or time.time()),
-            "model": response_meta.get("model") or requested_model,
+            "model": response_meta.get("model") or effective_model,
             "choices": [
                 {
                     "index": 0,
@@ -471,7 +507,7 @@ class ProviderBackend:
             },
             "_faigate": {
                 "provider": self.name,
-                "model": response_meta.get("model") or requested_model,
+                "model": response_meta.get("model") or effective_model,
                 "latency_ms": round(latency_ms, 1),
                 "cache_hit_tokens": 0,
                 "cache_miss_tokens": 0,
@@ -500,7 +536,7 @@ class ProviderBackend:
 
             completion_id = f"chatcmpl-{int(time.time() * 1000)}"
             created = int(time.time())
-            model_name = requested_model
+            model_name = self._codex_effective_model(requested_model)
             emitted_role = False
             data_lines: list[str] = []
             saw_content = False
@@ -1222,10 +1258,13 @@ class ProviderBackend:
             cache_hit = usage.get("prompt_cache_hit_tokens", 0)
             cache_miss = usage.get("prompt_cache_miss_tokens", 0)
 
-            # Tag the response with routing metadata
+            # Tag the response with routing metadata. The answering-model identity
+            # must reflect the true upstream answerer, not the requested alias: prefer
+            # the model echoed by the provider, falling back to the requested model only
+            # when the upstream omits it (SW-CN-001 / SW-CN-002).
             data["_faigate"] = {
                 "provider": self.name,
-                "model": model,
+                "model": data.get("model") or model,
                 "latency_ms": round(latency, 1),
                 "cache_hit_tokens": cache_hit,
                 "cache_miss_tokens": cache_miss,

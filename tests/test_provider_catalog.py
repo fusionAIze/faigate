@@ -8,8 +8,10 @@ from faigate.provider_catalog import (
     build_provider_discovery_view,
     build_provider_metadata_snapshot,
     build_provider_refresh_guidance,
+    get_model_max_input_tokens,
     get_offerings_catalog,
     get_packages_catalog,
+    get_provider_catalog,
     get_provider_catalog_entry,
     materialize_provider_metadata_snapshot,
 )
@@ -324,7 +326,7 @@ def test_provider_catalog_report_can_track_provider_from_external_snapshot(tmp_p
       "signup_url": "https://console.anthropic.com/",
       "watch_sources": [],
       "notes": "External snapshot entry",
-       "last_reviewed": "2026-05-04"
+       "last_reviewed": "2026-08-20"
     }
   }
 }
@@ -574,3 +576,179 @@ def test_offerings_and_packages_catalog_loading(tmp_path, monkeypatch):
     packages2 = get_packages_catalog()
     assert offerings2 is offerings  # same cached object
     assert packages2 is packages
+
+
+def test_provider_catalog_expresses_oauth_for_managed_direct_providers():
+    """TASK-008: at least one managed direct provider expresses oauth as an auth mode."""
+    catalog = get_provider_catalog()
+
+    oauth_providers = [
+        (name, entry.get("auth_modes", []))
+        for name, entry in catalog.items()
+        if "oauth" in entry.get("auth_modes", [])
+    ]
+    assert oauth_providers, "catalog must declare at least one provider with an oauth auth mode"
+
+    # The bundled snapshot carries the reconciled entries literally.
+    assert any("oauth" in modes for _, modes in oauth_providers)
+
+    # github-copilot is a managed direct provider that must express oauth alongside api_key.
+    copilot = catalog.get("github-copilot")
+    assert copilot is not None, "github-copilot must be present"
+    assert "oauth" in copilot["auth_modes"], f"github-copilot auth_modes={copilot['auth_modes']!r}"
+
+
+def test_provider_catalog_api_key_providers_unchanged_for_oauth_reconciliation():
+    """TASK-008 acceptance: existing api_key providers retain api_key without regression."""
+    import json
+    from pathlib import Path
+
+    import faigate.provider_catalog as pc
+
+    snapshot = json.loads(
+        (Path(pc.__file__).parent / "assets" / "metadata" / "catalog.v1.json").read_text(encoding="utf-8")
+    )
+    providers = snapshot["providers"]
+
+    api_key_names = {n for n, e in providers.items() if "api_key" in e.get("auth_modes", [])}
+    assert api_key_names, "snapshot must still declare api_key providers"
+
+    # The two reconciled oauth providers must not have lost their api_key where applicable.
+    assert "api_key" in providers["github-copilot"]["auth_modes"], (
+        "github-copilot (oauth+api_key) must retain api_key"
+    )
+
+    # A known pure-api_key direct provider stays intact.
+    assert providers["anthropic"]["auth_modes"] == ["api_key"]
+
+
+def test_provider_catalog_schema_version_bump_recorded():
+    """TASK-008 acceptance: the additive oauth change is recorded as a version bump."""
+    import json
+    from pathlib import Path
+
+    import faigate.provider_catalog as pc
+
+    snapshot = json.loads(
+        (Path(pc.__file__).parent / "assets" / "metadata" / "catalog.v1.json").read_text(encoding="utf-8")
+    )
+    version = snapshot["schema_version"]
+    assert version.startswith("fusionaize-provider-catalog/")
+    assert version != "fusionaize-provider-catalog/v1.1", (
+        "schema_version must be bumped past v1.1 to record the additive oauth change"
+    )
+
+
+def test_provider_catalog_declares_context_window_everywhere():
+    """Every catalog entry must declare a positive, non-null context_window."""
+    catalog = get_provider_catalog()
+
+    assert catalog, "catalog must not be empty"
+
+    for name, entry in catalog.items():
+        ctx = entry.get("context_window")
+        assert isinstance(ctx, int) and ctx > 0, (
+            f"provider {name!r} must declare a positive integer context_window, got {ctx!r}"
+        )
+
+
+def test_provider_catalog_declares_in_band_input_cap():
+    """Every catalog entry must declare limits.max_input_tokens within the (240000, 275000] band."""
+    catalog = get_provider_catalog()
+
+    for name, entry in catalog.items():
+        limits = entry.get("limits")
+        assert isinstance(limits, dict), (
+            f"provider {name!r} must declare limits as a dict, got {limits!r}"
+        )
+        cap = limits.get("max_input_tokens")
+        assert isinstance(cap, int) and 240000 < cap <= 275000, (
+            f"provider {name!r} max_input_tokens must be in (240000, 275000], got {cap!r}"
+        )
+
+
+def test_model_input_caps_cover_binding_models():
+    """The 23 binding model IDs each resolve to a real (non-floor) input cap."""
+    import faigate.provider_catalog as pc
+
+    real_caps = {
+        "deepseek-v4-pro": 1000000,
+        "deepseek-v4-flash": 1000000,
+        "gpt-5.6-sol": 922000,
+        "gpt-5.6-terra": 922000,
+        "gpt-5.6-luna": 922000,
+        "gpt-5.5": 1050000,
+        "gpt-5.5-pro": 1050000,
+        "o3": 200000,
+        "o3-mini": 200000,
+        "o4-mini": 200000,
+        "claude-opus-5": 1000000,
+        "claude-sonnet-5": 1000000,
+        "claude-haiku-4-5": 200000,
+        "claude-code": 262144,  # Shim; documented mirror, not a native window
+        "gemini-3.1-pro": 1048576,
+        "gemini-3.1-flash": 1048576,
+        "gemini-3-flash-lite": 1048576,
+        "llama-4-maverick": 131072,
+        "llama-4-scout": 131072,
+        "qwen-3.6-27b": 262144,
+        "qwen3-coder": 262144,
+        "glm-5.3": 1000000,
+        "kimi-k2.6": 262144,
+    }
+
+    expected = set(real_caps)
+    declared = set(pc._MODEL_INPUT_CAPS)
+    assert declared == expected, (
+        f"model cap map must match the 23 binding IDs exactly; "
+        f"missing={sorted(expected - declared)}, extra={sorted(declared - expected)}"
+    )
+
+    for model_id, expected_cap in real_caps.items():
+        assert get_model_max_input_tokens(model_id) == expected_cap
+        prefixed = f"openrouter/{model_id}"
+        assert get_model_max_input_tokens(prefixed) == expected_cap, (
+            f"get_model_max_input_tokens({prefixed!r}) must resolve the trailing model id"
+        )
+
+
+def test_model_input_caps_unknown_model_returns_none():
+    """An unknown model id returns None rather than a fabricated cap."""
+    assert get_model_max_input_tokens("provider/not-a-binding-model") is None
+    assert get_model_max_input_tokens("") is None
+    assert get_model_max_input_tokens(None) is None
+
+
+def test_provider_catalog_context_window_survives_external_merge(tmp_path, monkeypatch):
+    """External catalog overlays must preserve the embedded context_window/limits.
+
+    A nested dict field (limits) merged from an external overlay must not drop
+    the embedded value, because _merge_catalog_entry recurses into dict values.
+    """
+    metadata_dir = tmp_path / "metadata"
+    metadata_dir.mkdir()
+    (metadata_dir / "providers").mkdir()
+    external = (
+        metadata_dir
+        / "providers"
+        / "catalog.v1.json"
+    )
+    external.write_text(
+        '{"schema_version":"fusionaize-provider-catalog/v1.1",'
+        '"providers":{"deepseek-chat":{"recommended_model":"deepseek/chat-overlay"}}}'
+    )
+
+    monkeypatch.setenv("FAIGATE_PROVIDER_METADATA_DIR", str(metadata_dir))
+    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_FILE", raising=False)
+
+    import faigate.provider_catalog as pc
+
+    pc._EXTERNAL_CATALOG_CACHE = None
+    pc._EXTERNAL_CATALOG_MTIME = 0.0
+
+    entry = pc.get_provider_catalog_entry("deepseek-chat")
+
+    # Overlay replaced the model but the embedded context window/limits remain.
+    assert entry["recommended_model"] == "deepseek/chat-overlay"
+    assert entry["context_window"] > 0
+    assert 240000 < entry["limits"]["max_input_tokens"] <= 275000

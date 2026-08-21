@@ -1,0 +1,113 @@
+{
+  "five_seats": [
+    {
+      "requested": "kilo-opus",
+      "model": "anthropic/claude-opus-4.6",
+      "_faigate_model": "anthropic/claude-opus-4.6",
+      "provider": "kilo-opus",
+      "status": 200
+    },
+    {
+      "requested": "kilo-sonnet",
+      "model": "anthropic/claude-sonnet-4.6",
+      "_faigate_model": "anthropic/claude-sonnet-4.6",
+      "provider": "kilo-sonnet",
+      "status": 200
+    },
+    {
+      "requested": "deepseek-v4-pro",
+      "model": "deepseek-v4-pro",
+      "_faigate_model": "deepseek-v4-pro",
+      "provider": "deepseek-v4-pro",
+      "status": 200
+    },
+    {
+      "requested": "gemini-flash",
+      "model": "gemini-2.5-flash",
+      "_faigate_model": "gemini-2.5-flash",
+      "provider": "gemini-flash",
+      "status": 200
+    },
+    {
+      "requested": "openrouter-fallback",
+      "model": "google/gemini-3-flash-preview",
+      "_faigate_model": "openrouter/auto",
+      "provider": "openrouter-fallback",
+      "status": 200
+    }
+  ],
+  "distinct_models": [
+    "anthropic/claude-opus-4.6",
+    "anthropic/claude-sonnet-4.6",
+    "deepseek-v4-pro",
+    "gemini-2.5-flash",
+    "google/gemini-3-flash-preview"
+  ],
+  "limits": {
+    "catalog_source": "provider_catalog",
+    "max_cap": 262144,
+    "per_provider_caps": {
+      "deepseek-chat": 262144,
+      "deepseek-reasoner": 262144,
+      "gemini-flash-lite": 262144,
+      "gemini-flash": 262144,
+      "openrouter-fallback": 262144,
+      "kilocode": 262144,
+      "kilo-sonnet": 262144,
+      "kilo-opus": 262144,
+      "blackbox-free": 262144,
+      "cohere": 262144,
+      "openai-gpt4o": 262144,
+      "openai-images": 262144,
+      "anthropic-claude": 262144,
+      "anthropic-haiku": 262144,
+      "anthropic-sonnet": 262144,
+      "claude-code": 262144,
+      "google-antigravity": 262144,
+      "google-gemini-cli": 262144,
+      "gemini-pro-high": 262144,
+      "gemini-pro-low": 262144,
+      "clawrouter": 262144,
+      "xai": 262144,
+      "zai": 262144,
+      "mistral": 262144,
+      "groq": 262144,
+      "huggingface": 262144,
+      "moonshot": 262144,
+      "minimax": 262144,
+      "volcengine": 262144,
+      "byteplus": 262144,
+      "qwen": 262144,
+      "qwen-portal": 262144,
+      "kilo-auto-frontier": 262144,
+      "kilo-auto-balanced": 262144,
+      "kilo-auto-free": 262144,
+      "pollinations": 262144,
+      "longcat": 262144,
+      "nvidia-nim": 262144,
+      "kiro": 262144,
+      "qoder": 262144,
+      "openai-codex": 262144,
+      "opencode": 262144,
+      "cerebras": 262144,
+      "github-copilot": 262144,
+      "synthetic": 262144,
+      "kimi-coding": 262144,
+      "vercel-ai-gateway": 262144,
+      "ollama": 262144,
+      "vllm": 262144,
+      "lmstudio": 262144,
+      "litellm": 262144
+    },
+    "service_413_cap": null
+  },
+  "premise_check": "pass",
+  "mode": "live",
+  "checked_seats": [
+    "kilo-opus",
+    "kilo-sonnet",
+    "deepseek-v4-pro",
+    "gemini-flash",
+    "openrouter-fallback"
+  ]
+}

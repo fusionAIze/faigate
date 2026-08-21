@@ -59,6 +59,7 @@ from .lane_registry import (
     get_route_add_recommendations,
 )
 from .metrics import MetricsStore, calc_cost
+from .oauth_readiness import oauth_readiness_block
 from .provider_availability import (
     record_availability_from_config,
     refresh_local_model_availability,
@@ -153,9 +154,19 @@ class _ChatExecutionFailure:
     body: dict[str, Any]
 
 
-def _client_error_response(message: str, *, error_type: str, status_code: int) -> JSONResponse:
+def _client_error_response(
+    message: str,
+    *,
+    error_type: str,
+    status_code: int,
+    headers: dict[str, str] | None = None,
+) -> JSONResponse:
     """Return a client-facing JSON error without exposing internal exception details."""
-    return JSONResponse({"error": message, "type": error_type}, status_code=status_code)
+    return JSONResponse(
+        {"error": message, "type": error_type},
+        status_code=status_code,
+        headers=headers,
+    )
 
 
 def _openai_sse_data(payload: dict[str, Any]) -> bytes:
@@ -314,11 +325,56 @@ def _invalid_request_response(message: str, *, exc: Exception | None = None) -> 
     return _client_error_response(message, error_type="invalid_request_error", status_code=400)
 
 
-def _payload_too_large_response(message: str, *, exc: Exception | None = None) -> JSONResponse:
-    """Return a sanitized payload-too-large response."""
+def _max_input_token_cap() -> int | None:
+    """Resolve the gateway's advertised input-token cap from provider limits.
+
+    The curated catalog gives every provider the same floor input cap (262144)
+    under `limits.max_input_tokens`, and `ProviderBackend.limits` surfaces it.
+    That floor is a provider-wide placeholder, not a per-model truth: the real
+    ceiling for any given request is `get_model_max_input_tokens()` in
+    `provider_catalog`, applied during routing once the request model is known.
+
+    This helper backs the 413 "advertised" threshold only, and reads the cap
+    from the live providers instead of hardcoding a number so the response
+    stays truthful if the provider band ever shifts. The per-model caps remain
+    the authoritative limit for routing rejection.
+    """
+    caps: list[int] = []
+    for provider in _providers.values():
+        limits = getattr(provider, "limits", {}) or {}
+        cap = limits.get("max_input_tokens")
+        if cap is not None:
+            caps.append(int(cap))
+    if not caps:
+        return None
+    return max(caps)
+
+
+def _payload_too_large_response(
+    message: str,
+    *,
+    exc: Exception | None = None,
+    limit: int | None = None,
+) -> JSONResponse:
+    """Return a sanitized payload-too-large response.
+
+    Exposes the concrete token threshold (from provider ``limits.max_input_tokens``)
+    in both the body and the ``x-faigate-request-limit`` header so clients can
+    react without inspecting internal byte limits.
+    """
     if exc is not None:
         logger.info("Payload rejected as too large: %s", exc)
-    return _client_error_response(message, error_type="payload_too_large", status_code=413)
+
+    resolved_limit = limit if limit is not None else _max_input_token_cap()
+    body: dict[str, Any] = {
+        "error": message,
+        "type": "payload_too_large",
+    }
+    headers: dict[str, str] = {}
+    if resolved_limit is not None:
+        body["limit"] = resolved_limit
+        headers["x-faigate-request-limit"] = str(resolved_limit)
+    return JSONResponse(body, status_code=413, headers=headers)
 
 
 def _sanitize_header_value(value: Any, *, max_chars: int | None = None) -> str:
@@ -895,6 +951,16 @@ def _provider_request_readiness(provider: Any) -> dict[str, Any]:
     state["runtime_recovered_recently"] = runtime_recovered_recently
     state["runtime_recovery_remaining_s"] = runtime_recovery_remaining
     state["runtime_last_recovered_issue_type"] = runtime_last_recovered_issue
+
+    # OAuth token health is additive to (and independent of) the api-key check
+    # above.  An OAuthBackend exposes a TokenStore; map its persisted token
+    # state into a named readiness sub-block so a green readout reflects real
+    # token health, not merely the presence of an injected api_key string.
+    token_store = getattr(provider, "token_store", None)
+    if token_store is not None:
+        state["oauth"] = oauth_readiness_block(
+            token_store.get(getattr(provider, "name", "")),
+        )
 
     if runtime_window_state == "cooldown" and runtime_issue_type in {
         "auth-invalid",

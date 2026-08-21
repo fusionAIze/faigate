@@ -411,7 +411,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://platform.deepseek.com/",
         "watch_sources": [],
         "notes": get_active_model_label("deepseek/chat"),
-        "last_reviewed": "2026-05-04",
+        "last_reviewed": "2026-08-20",
+        "context_window": 1048576,
+        "limits": {"max_input_tokens": 262144},
     },
     "deepseek-reasoner": {
         "recommended_model": get_active_model_id("deepseek/reasoner"),
@@ -426,7 +428,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://platform.deepseek.com/",
         "watch_sources": [],
         "notes": get_active_model_label("deepseek/reasoner"),
-        "last_reviewed": "2026-05-04",
+        "last_reviewed": "2026-08-20",
+        "context_window": 1048576,
+        "limits": {"max_input_tokens": 262144},
     },
     "gemini-flash-lite": {
         "recommended_model": get_active_model_id("google/gemini-flash-lite"),
@@ -441,7 +445,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://aistudio.google.com/",
         "watch_sources": [],
         "notes": get_active_model_label("google/gemini-flash-lite"),
-        "last_reviewed": "2026-05-04",
+        "last_reviewed": "2026-08-20",
+        "context_window": 1048576,
+        "limits": {"max_input_tokens": 262144},
     },
     "gemini-flash": {
         "recommended_model": get_active_model_id("google/gemini-flash"),
@@ -456,7 +462,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://aistudio.google.com/",
         "watch_sources": [],
         "notes": get_active_model_label("google/gemini-flash"),
-        "last_reviewed": "2026-05-04",
+        "last_reviewed": "2026-08-20",
+        "context_window": 1048576,
+        "limits": {"max_input_tokens": 262144},
     },
     "openrouter-fallback": {
         "recommended_model": "openrouter/auto",
@@ -471,7 +479,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://openrouter.ai/",
         "watch_sources": [],
         "notes": "Marketplace fallback path with official provider routing and BYOK support",  # noqa: E501
-        "last_reviewed": "2026-03-19",
+        "last_reviewed": "2026-08-20",
+        "context_window": 128000,
+        "limits": {"max_input_tokens": 262144},
     },
     "kilocode": {
         "recommended_model": "z-ai/glm-5:free",
@@ -486,7 +496,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://kilo.ai/",
         "watch_sources": [_COMMUNITY_WATCHLIST],
         "notes": "Current curated Kilo free-tier model; free and budget tracks can move quickly",  # noqa: E501
-        "last_reviewed": "2026-03-19",
+        "last_reviewed": "2026-08-20",
+        "context_window": 128000,
+        "limits": {"max_input_tokens": 262144},
     },
     "kilo-sonnet": {
         "recommended_model": "anthropic/claude-sonnet-4.6",
@@ -504,7 +516,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
             "Kilo paid Sonnet lane; useful as the workhorse path when you want "
             "Kilo credits to absorb balanced coding traffic"
         ),
-        "last_reviewed": "2026-05-04",
+        "last_reviewed": "2026-08-20",
+        "context_window": 200000,
+        "limits": {"max_input_tokens": 262144},
     },
     "kilo-opus": {
         "recommended_model": "anthropic/claude-opus-4.6",
@@ -519,7 +533,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://kilo.ai/",
         "watch_sources": [],
         "notes": ("Kilo paid Opus lane; useful when expiring Kilo credits should absorb premium reasoning traffic"),
-        "last_reviewed": "2026-05-04",
+        "last_reviewed": "2026-08-20",
+        "context_window": 200000,
+        "limits": {"max_input_tokens": 262144},
     },
     "blackbox-free": {
         "recommended_model": "blackboxai/x-ai/grok-code-fast-1",
@@ -537,7 +553,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
             "Legacy provider id for the current low-cost BLACKBOX Grok Code Fast route; "  # noqa: E501
             "verify often because pricing and model availability can rotate"
         ),
-        "last_reviewed": "2026-05-04",
+        "last_reviewed": "2026-08-20",
+        "context_window": 128000,
+        "limits": {"max_input_tokens": 262144},
     },
     # ── Cohere ────────────────────────────────────────────────────────────────
     "cohere": {
@@ -553,7 +571,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://dashboard.cohere.com/",
         "watch_sources": [],
         "notes": "Cohere Command A/R — enterprise-grade LLM with tool use",
-        "last_reviewed": "2026-05-04",
+        "last_reviewed": "2026-08-20",
+        "context_window": 128000,
+        "limits": {"max_input_tokens": 262144},
     },
     "openai-gpt4o": {
         "recommended_model": "gpt-4o",
@@ -568,7 +588,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://platform.openai.com/",
         "watch_sources": [],
         "notes": "Balanced OpenAI multimodal path",
-        "last_reviewed": "2026-03-19",
+        "last_reviewed": "2026-08-20",
+        "context_window": 128000,
+        "limits": {"max_input_tokens": 262144},
     },
     "openai-images": {
         "recommended_model": "gpt-image-1",
@@ -583,7 +605,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://platform.openai.com/",
         "watch_sources": [],
         "notes": "OpenAI image generation and editing",
-        "last_reviewed": "2026-03-19",
+        "last_reviewed": "2026-08-20",
+        "context_window": 128000,
+        "limits": {"max_input_tokens": 262144},
     },
     "anthropic-claude": {
         "recommended_model": "claude-opus-4-6",
@@ -598,7 +622,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://console.anthropic.com/",
         "watch_sources": [],
         "notes": "Quality-first Anthropic default",
-        "last_reviewed": "2026-03-19",
+        "last_reviewed": "2026-08-20",
+        "context_window": 200000,
+        "limits": {"max_input_tokens": 262144},
     },
     "anthropic-haiku": {
         "recommended_model": get_active_model_id("anthropic/haiku-4.5"),
@@ -613,7 +639,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://console.anthropic.com/",
         "watch_sources": [],
         "notes": "Fast and cheap Anthropic model",
-        "last_reviewed": "2026-04-01",
+        "last_reviewed": "2026-08-20",
+        "context_window": 200000,
+        "limits": {"max_input_tokens": 262144},
     },
     "anthropic-sonnet": {
         "recommended_model": get_active_model_id("anthropic/sonnet-4.6"),
@@ -628,7 +656,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://console.anthropic.com/",
         "watch_sources": [],
         "notes": "Balanced Anthropic model",
-        "last_reviewed": "2026-04-01",
+        "last_reviewed": "2026-08-20",
+        "context_window": 200000,
+        "limits": {"max_input_tokens": 262144},
     },
     "claude-code": {
         "recommended_model": "claude-code",
@@ -643,7 +673,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://console.anthropic.com/",
         "watch_sources": [],
         "notes": "Claude Code – special coding model via Anthropic OAuth",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
+        "context_window": 128000,
+        "limits": {"max_input_tokens": 262144},
     },
     "google-antigravity": {
         "recommended_model": "gemini-2.5-pro",
@@ -666,7 +698,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
             "the Google Generative Language API (generativelanguage.googleapis.com/v1beta/openai) "
             "directly with the OAuth token. Auth: faigate-auth google-antigravity  or sign in to Antigravity IDE."
         ),
-        "last_reviewed": "2026-04-04",
+        "last_reviewed": "2026-08-20",
+        "context_window": 128000,
+        "limits": {"max_input_tokens": 262144},
     },
     "google-gemini-cli": {
         "recommended_model": "gc/gemini-2.5-pro",
@@ -681,7 +715,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://cloud.google.com/vertex-ai",
         "watch_sources": [],
         "notes": "Google Gemini via Vertex AI – uses gcloud ADC; requires: gcloud auth login",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
+        "context_window": 128000,
+        "limits": {"max_input_tokens": 262144},
     },
     "gemini-pro-high": {
         "recommended_model": get_active_model_id("google/gemini-pro-high"),
@@ -696,7 +732,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://aistudio.google.com/",
         "watch_sources": [],
         "notes": "High-quality Gemini Pro lane",
-        "last_reviewed": "2026-04-01",
+        "last_reviewed": "2026-08-20",
+        "context_window": 1048576,
+        "limits": {"max_input_tokens": 262144},
     },
     "gemini-pro-low": {
         "recommended_model": get_active_model_id("google/gemini-pro-low"),
@@ -711,7 +749,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://aistudio.google.com/",
         "watch_sources": [],
         "notes": "Balanced Gemini Pro lane",
-        "last_reviewed": "2026-04-01",
+        "last_reviewed": "2026-08-20",
+        "context_window": 1048576,
+        "limits": {"max_input_tokens": 262144},
     },
     "clawrouter": {
         "recommended_model": "auto",
@@ -726,7 +766,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://blockrun.ai/",
         "watch_sources": [],
         "notes": "BlockRun ClawRouter uses wallet/x402 routing modes rather than a classic API key",  # noqa: E501
-        "last_reviewed": "2026-03-19",
+        "last_reviewed": "2026-08-20",
+        "context_window": 128000,
+        "limits": {"max_input_tokens": 262144},
     },
     # ── xAI / Grok ───────────────────────────────────────────────────────────
     "xai": {
@@ -742,7 +784,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://platform.x.ai/",
         "watch_sources": [],
         "notes": "xAI / Grok models",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
+        "context_window": 131072,
+        "limits": {"max_input_tokens": 262144},
     },
     # ── Z.AI / GLM ───────────────────────────────────────────────────────────
     "zai": {
@@ -758,7 +802,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://platform.z.ai/",
         "watch_sources": [],
         "notes": "Z.AI / GLM models",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
+        "context_window": 131072,
+        "limits": {"max_input_tokens": 262144},
     },
     # ── Mistral ──────────────────────────────────────────────────────────────
     "mistral": {
@@ -774,7 +820,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://console.mistral.ai/",
         "watch_sources": [],
         "notes": "Mistral AI – Mistral Large, Codestral, etc.",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
+        "context_window": 128000,
+        "limits": {"max_input_tokens": 262144},
     },
     # ── Groq ─────────────────────────────────────────────────────────────────
     "groq": {
@@ -790,7 +838,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://console.groq.com/keys",
         "watch_sources": [],
         "notes": "Groq ultra-fast LPU — free tier: 30 RPM, 14,400 RPD",
-        "last_reviewed": "2026-05-04",
+        "last_reviewed": "2026-08-20",
+        "context_window": 131072,
+        "limits": {"max_input_tokens": 262144},
     },
     # ── Hugging Face Inference ───────────────────────────────────────────────
     "huggingface": {
@@ -806,7 +856,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://huggingface.co/",
         "watch_sources": [],
         "notes": "HuggingFace Inference – OpenAI-compat router",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
+        "context_window": 128000,
+        "limits": {"max_input_tokens": 262144},
     },
     # ── Moonshot AI / Kimi ───────────────────────────────────────────────────
     "moonshot": {
@@ -822,7 +874,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://platform.moonshot.cn/",
         "watch_sources": [],
         "notes": "Moonshot AI / Kimi – OpenAI-compatible endpoint",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
+        "context_window": 128000,
+        "limits": {"max_input_tokens": 262144},
     },
     # ── MiniMax ──────────────────────────────────────────────────────────────
     "minimax": {
@@ -838,7 +892,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://platform.minimaxi.com/",
         "watch_sources": [],
         "notes": "MiniMax – Anthropic-compatible custom endpoint",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
+        "context_window": 245760,
+        "limits": {"max_input_tokens": 262144},
     },
     # ── Volcano Engine / Doubao ──────────────────────────────────────────────
     "volcengine": {
@@ -854,7 +910,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://console.volcengine.com/",
         "watch_sources": [],
         "notes": "Volcano Engine – Doubao, Kimi K2.5, GLM 4.7, DeepSeek V3.2 (CN)",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
+        "context_window": 245760,
+        "limits": {"max_input_tokens": 262144},
     },
     # ── BytePlus (international Volcano Engine) ──────────────────────────────
     "byteplus": {
@@ -870,7 +928,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://console.byteplus.com/",
         "watch_sources": [],
         "notes": "BytePlus ARK – international access to Volcano Engine models",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
+        "context_window": 245760,
+        "limits": {"max_input_tokens": 262144},
     },
     # ── Qwen (Alibaba) ──────────────────────────────────────────────────────
     "qwen": {
@@ -886,7 +946,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://dashscope.aliyun.com/",
         "watch_sources": [],
         "notes": "Qwen models via Alibaba Cloud",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
+        "context_window": 131072,
+        "limits": {"max_input_tokens": 262144},
     },
     "qwen-portal": {
         "recommended_model": "coder-model",
@@ -904,7 +966,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
             "Qwen OAuth free tier – token from ~/.qwen/oauth_creds.json; run: qwen auth login. "
             "Model: coder-model (Qwen 3 Coder). Endpoint dynamic via resource_url."
         ),
-        "last_reviewed": "2026-04-04",
+        "last_reviewed": "2026-08-20",
+        "context_window": 131072,
+        "limits": {"max_input_tokens": 262144},
     },
     # ── KiloCode lanes (individual model-level access) ───────────────────────
     "kilo-auto-frontier": {
@@ -920,7 +984,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://kilo.ai/",
         "watch_sources": [],
         "notes": "Kilo Auto Frontier lane – premium routing through Kilo gateway",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
+        "context_window": 128000,
+        "limits": {"max_input_tokens": 262144},
     },
     "kilo-auto-balanced": {
         "recommended_model": "kilo-auto/balanced",
@@ -935,7 +1001,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://kilo.ai/",
         "watch_sources": [],
         "notes": "Kilo Auto Balanced lane – balanced routing through Kilo gateway",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
+        "context_window": 128000,
+        "limits": {"max_input_tokens": 262144},
     },
     "kilo-auto-free": {
         "recommended_model": "kilo-auto/free",
@@ -950,7 +1018,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://kilo.ai/",
         "watch_sources": [_COMMUNITY_WATCHLIST],
         "notes": "Kilo Auto Free lane – free-tier routing through Kilo gateway",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
+        "context_window": 128000,
+        "limits": {"max_input_tokens": 262144},
     },
     # ── Free Providers (OmniRoute-inspired zero-cost stack) ────────────────────
     "pollinations": {
@@ -966,7 +1036,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://enter.pollinations.ai",
         "watch_sources": [_COMMUNITY_WATCHLIST],
         "notes": "Pollinations free text+image+video+audio — no API key required",
-        "last_reviewed": "2026-05-04",
+        "last_reviewed": "2026-08-20",
+        "context_window": 128000,
+        "limits": {"max_input_tokens": 262144},
     },
     "longcat": {
         "recommended_model": "longcat/flash-lite",
@@ -981,7 +1053,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://longcat.ai/",
         "watch_sources": [_COMMUNITY_WATCHLIST],
         "notes": "LongCat AI free tier: Flash-Lite, 50M tokens/day",
-        "last_reviewed": "2026-05-04",
+        "last_reviewed": "2026-08-20",
+        "context_window": 131072,
+        "limits": {"max_input_tokens": 262144},
     },
     "nvidia-nim": {
         "recommended_model": "nvidia/nemotron",
@@ -996,7 +1070,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://build.nvidia.com/explore/discover",
         "watch_sources": [],
         "notes": "NVIDIA NIM free: 129 models, 40 RPM. DeepSeek-R1, Llama 405B, Qwen3 Coder 480B",
-        "last_reviewed": "2026-05-04",
+        "last_reviewed": "2026-08-20",
+        "context_window": 131072,
+        "limits": {"max_input_tokens": 262144},
     },
     "kiro": {
         "recommended_model": "kiro/claude-sonnet",
@@ -1011,7 +1087,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://kiro.dev/",
         "watch_sources": [_COMMUNITY_WATCHLIST],
         "notes": "Kiro free via AWS Builder ID OAuth — Claude Sonnet 4.5 unlimited",
-        "last_reviewed": "2026-05-04",
+        "last_reviewed": "2026-08-20",
+        "context_window": 128000,
+        "limits": {"max_input_tokens": 262144},
     },
     "qoder": {
         "recommended_model": "qoder/kimi-k2",
@@ -1026,7 +1104,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://qoder.ai/",
         "watch_sources": [_COMMUNITY_WATCHLIST],
         "notes": "Qoder free via Google OAuth — kimi-k2-thinking unlimited",
-        "last_reviewed": "2026-05-04",
+        "last_reviewed": "2026-08-20",
+        "context_window": 128000,
+        "limits": {"max_input_tokens": 262144},
     },
     # ── OpenAI Codex (OAuth via ChatGPT) ─────────────────────────────────────
     "openai-codex": {
@@ -1042,7 +1122,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://platform.openai.com/",
         "watch_sources": [],
         "notes": "OpenAI Codex (OAuth via ChatGPT) – requires interactive login",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
+        "context_window": 128000,
+        "limits": {"max_input_tokens": 262144},
     },
     # ── OpenCode Zen ────────────────────────────────────────────────────────
     "opencode": {
@@ -1058,7 +1140,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://opencode.ai/",
         "watch_sources": [],
         "notes": "OpenCode Zen – Anthropic-compatible gateway",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
+        "context_window": 128000,
+        "limits": {"max_input_tokens": 262144},
     },
     # ── Cerebras ────────────────────────────────────────────────────────────
     "cerebras": {
@@ -1074,7 +1158,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://cloud.cerebras.ai/",
         "watch_sources": [],
         "notes": "Cerebras wafer-scale ~2600 tok/s — free tier: 1M TPD",
-        "last_reviewed": "2026-05-04",
+        "last_reviewed": "2026-08-20",
+        "context_window": 128000,
+        "limits": {"max_input_tokens": 262144},
     },
     # ── GitHub Copilot ──────────────────────────────────────────────────────
     "github-copilot": {
@@ -1090,7 +1176,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://github.com/",
         "watch_sources": [],
         "notes": "GitHub Copilot – requires GH_TOKEN / COPILOT_GITHUB_TOKEN",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
+        "context_window": 128000,
+        "limits": {"max_input_tokens": 262144},
     },
     # ── Synthetic ───────────────────────────────────────────────────────────
     "synthetic": {
@@ -1106,7 +1194,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://synthetic.new/",
         "watch_sources": [],
         "notes": "Synthetic – Anthropic-compat; exposes HuggingFace models (MiniMax, etc.)",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
+        "context_window": 128000,
+        "limits": {"max_input_tokens": 262144},
     },
     # ── Kimi Coding ─────────────────────────────────────────────────────────
     "kimi-coding": {
@@ -1122,7 +1212,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://platform.moonshot.cn/",
         "watch_sources": [],
         "notes": "Kimi Coding – Anthropic-compat endpoint via Moonshot",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
+        "context_window": 128000,
+        "limits": {"max_input_tokens": 262144},
     },
     # ── Vercel AI Gateway ──────────────────────────────────────────────────
     "vercel-ai-gateway": {
@@ -1138,7 +1230,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://vercel.com/",
         "watch_sources": [],
         "notes": "Vercel AI Gateway – multi-model proxy",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
+        "context_window": 128000,
+        "limits": {"max_input_tokens": 262144},
     },
     # ── Local runtimes ──────────────────────────────────────────────────────
     "ollama": {
@@ -1154,7 +1248,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://ollama.com/",
         "watch_sources": [],
         "notes": "Ollama – local LLM runtime, OpenAI-compat at :11434",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
+        "context_window": 128000,
+        "limits": {"max_input_tokens": 262144},
     },
     "vllm": {
         "recommended_model": "vllm/your-model-id",
@@ -1169,7 +1265,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://vllm.ai/",
         "watch_sources": [],
         "notes": "vLLM – local/self-hosted OpenAI-compat server at :8000",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
+        "context_window": 128000,
+        "limits": {"max_input_tokens": 262144},
     },
     "lmstudio": {
         "recommended_model": "lmstudio/minimax-m2.1-gs32",
@@ -1184,7 +1282,9 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://lmstudio.ai/",
         "watch_sources": [],
         "notes": "LM Studio – local OpenAI-compat server at :1234",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
+        "context_window": 128000,
+        "limits": {"max_input_tokens": 262144},
     },
     "litellm": {
         "recommended_model": "litellm/your-model-id",
@@ -1199,9 +1299,70 @@ _CATALOG: dict[str, dict[str, Any]] = {
         "signup_url": "https://litellm.ai/",
         "watch_sources": [],
         "notes": "LiteLLM proxy – OpenAI-compat gateway to 100+ providers at :4000",
-        "last_reviewed": "2026-04-03",
+        "last_reviewed": "2026-08-20",
+        "context_window": 128000,
+        "limits": {"max_input_tokens": 262144},
     },
 }
+
+
+# ── Model-keyed input-token caps ─────────────────────────────────────
+#
+# The provider catalog above is keyed by *provider*, and every entry advertises
+# the same flat 262144 max_input_tokens. That number is a floor, not a per-model
+# truth: the actual input-token ceiling is a property of the concrete model a
+# request resolves to, not of the provider that serves it. This map records the
+# authoritative max_input_tokens for the 23 binding model IDs used by the
+# canonical lanes, so routing can reject oversized inputs at the real boundary
+# instead of pretending every provider accepts 262144.
+#
+# Provenance: values are grounded in the LiteLLM and OmniRoute provider registry
+# reports (2026-08-21). Where the two disagree, OmniRoute is authoritative
+# because it carries per-model contextLength directly; LiteLLM corroborates.
+# `claude-code` is a Shim with no real model of its own, so its cap is the
+# documented 262144 it mirrors rather than a native context window.
+
+
+_MODEL_INPUT_CAPS: dict[str, int] = {
+    "deepseek-v4-pro": 1000000,
+    "deepseek-v4-flash": 1000000,
+    "gpt-5.6-sol": 922000,
+    "gpt-5.6-terra": 922000,
+    "gpt-5.6-luna": 922000,
+    "gpt-5.5": 1050000,
+    "gpt-5.5-pro": 1050000,
+    "o3": 200000,
+    "o3-mini": 200000,
+    "o4-mini": 200000,
+    "claude-opus-5": 1000000,
+    "claude-sonnet-5": 1000000,
+    "claude-haiku-4-5": 200000,
+    "claude-code": 262144,  # Shim; documented mirror, not a native context window
+    "gemini-3.1-pro": 1048576,
+    "gemini-3.1-flash": 1048576,
+    "gemini-3-flash-lite": 1048576,
+    "llama-4-maverick": 131072,
+    "llama-4-scout": 131072,
+    "qwen-3.6-27b": 262144,
+    "qwen3-coder": 262144,
+    "glm-5.3": 1000000,
+    "kimi-k2.6": 262144,
+}
+
+
+def get_model_max_input_tokens(model_id: str) -> int | None:
+    """Return the authoritative max_input_tokens for a concrete model ID.
+
+    Normalises the common ``provider/model`` form to the trailing model id, then
+    falls back to the raw id, so both ``openrouter/gpt-5.6-sol`` and
+    ``gpt-5.6-sol`` resolve. Returns ``None`` when the model is not one of the
+    23 binding IDs with a recorded cap.
+    """
+    if not model_id:
+        return None
+    candidate = str(model_id).strip()
+    tail = candidate.rsplit("/", 1)[-1]
+    return _MODEL_INPUT_CAPS.get(tail) or _MODEL_INPUT_CAPS.get(candidate)
 
 
 def _normalize_catalog_entry(entry: Any) -> dict[str, Any]:
