@@ -19,9 +19,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BENCH_PATH = REPO_ROOT / "faigate_v2_research" / "five-seat-benchmark.py"
-RESULT_PATH = (
-    REPO_ROOT / "faigate_v2_research" / "five-seat-benchmark-result.json"
-)
+RESULT_PATH = REPO_ROOT / "faigate_v2_research" / "five-seat-benchmark-result.json"
 
 
 def _load_benchmark_module():

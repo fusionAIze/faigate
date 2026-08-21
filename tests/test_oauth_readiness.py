@@ -50,24 +50,17 @@ def test_expired_token_with_refresh_token_but_no_failure_is_oauth_token_expired(
 
 def test_expired_token_with_failed_refresh_is_oauth_token_refresh_failed():
     token = _token(expires_at=_NOW - 1)
-    assert (
-        oauth_token_state(token, refresh_failed=True, now=_NOW)
-        == OAUTH_TOKEN_REFRESH_FAILED
-    )
+    assert oauth_token_state(token, refresh_failed=True, now=_NOW) == OAUTH_TOKEN_REFRESH_FAILED
 
 
 def test_expired_token_without_refresh_token_is_refresh_failed():
     token = _token(expires_at=_NOW - 1, refresh_token=None)
-    assert (
-        oauth_token_state(token, now=_NOW) == OAUTH_TOKEN_REFRESH_FAILED
-    )
+    assert oauth_token_state(token, now=_NOW) == OAUTH_TOKEN_REFRESH_FAILED
 
 
 def test_ready_is_false_for_expiry_and_refresh_failure_and_missing():
     expired = oauth_token_ready(_token(expires_at=_NOW - 1), now=_NOW)
-    failed = oauth_token_ready(
-        _token(expires_at=_NOW - 1), refresh_failed=True, now=_NOW
-    )
+    failed = oauth_token_ready(_token(expires_at=_NOW - 1), refresh_failed=True, now=_NOW)
     missing = oauth_token_ready(None, now=_NOW)
     assert expired is False
     assert failed is False
