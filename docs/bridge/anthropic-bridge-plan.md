@@ -137,8 +137,8 @@ Suggested v1 shape:
     "surface": "anthropic",
     "client": "claude-code",
     "model_requested": "claude-sonnet-4-5",
-    "messages": [...],          # OpenAI-like normalized messages
-    "system": "...",            # folded into messages if needed before provider call
+    "messages": [...],  # OpenAI-like normalized messages
+    "system": "...",  # folded into messages if needed before provider call
     "tools": [...],
     "tool_choice": ...,
     "max_tokens": 4096,
@@ -233,8 +233,7 @@ async def _execute_chat_request(
     body: dict[str, Any],
     headers: dict[str, str],
     surface: str,
-) -> Response:
-    ...
+) -> Response: ...
 ```
 
 This helper should:
