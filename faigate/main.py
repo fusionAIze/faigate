@@ -59,6 +59,7 @@ from .lane_registry import (
     get_route_add_recommendations,
 )
 from .metrics import MetricsStore, calc_cost
+from .oauth_readiness import oauth_readiness_block
 from .provider_availability import (
     record_availability_from_config,
     refresh_local_model_availability,
@@ -945,6 +946,16 @@ def _provider_request_readiness(provider: Any) -> dict[str, Any]:
     state["runtime_recovered_recently"] = runtime_recovered_recently
     state["runtime_recovery_remaining_s"] = runtime_recovery_remaining
     state["runtime_last_recovered_issue_type"] = runtime_last_recovered_issue
+
+    # OAuth token health is additive to (and independent of) the api-key check
+    # above.  An OAuthBackend exposes a TokenStore; map its persisted token
+    # state into a named readiness sub-block so a green readout reflects real
+    # token health, not merely the presence of an injected api_key string.
+    token_store = getattr(provider, "token_store", None)
+    if token_store is not None:
+        state["oauth"] = oauth_readiness_block(
+            token_store.get(getattr(provider, "name", "")),
+        )
 
     if runtime_window_state == "cooldown" and runtime_issue_type in {
         "auth-invalid",
