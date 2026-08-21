@@ -204,9 +204,7 @@ class ProviderBackend:
 
             entry = get_provider_catalog_entry(self.name)
         except Exception as exc:  # pragma: no cover - defensive import guard
-            logger.debug(
-                "catalog window/limits enrich skipped for %s: %s", self.name, exc
-            )
+            logger.debug("catalog window/limits enrich skipped for %s: %s", self.name, exc)
             return
 
         if not entry:

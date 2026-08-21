@@ -583,9 +583,7 @@ def test_provider_catalog_expresses_oauth_for_managed_direct_providers():
     catalog = get_provider_catalog()
 
     oauth_providers = [
-        (name, entry.get("auth_modes", []))
-        for name, entry in catalog.items()
-        if "oauth" in entry.get("auth_modes", [])
+        (name, entry.get("auth_modes", [])) for name, entry in catalog.items() if "oauth" in entry.get("auth_modes", [])
     ]
     assert oauth_providers, "catalog must declare at least one provider with an oauth auth mode"
 
@@ -614,9 +612,7 @@ def test_provider_catalog_api_key_providers_unchanged_for_oauth_reconciliation()
     assert api_key_names, "snapshot must still declare api_key providers"
 
     # The two reconciled oauth providers must not have lost their api_key where applicable.
-    assert "api_key" in providers["github-copilot"]["auth_modes"], (
-        "github-copilot (oauth+api_key) must retain api_key"
-    )
+    assert "api_key" in providers["github-copilot"]["auth_modes"], "github-copilot (oauth+api_key) must retain api_key"
 
     # A known pure-api_key direct provider stays intact.
     assert providers["anthropic"]["auth_modes"] == ["api_key"]
@@ -658,9 +654,7 @@ def test_provider_catalog_declares_in_band_input_cap():
 
     for name, entry in catalog.items():
         limits = entry.get("limits")
-        assert isinstance(limits, dict), (
-            f"provider {name!r} must declare limits as a dict, got {limits!r}"
-        )
+        assert isinstance(limits, dict), f"provider {name!r} must declare limits as a dict, got {limits!r}"
         cap = limits.get("max_input_tokens")
         assert isinstance(cap, int) and 240000 < cap <= 275000, (
             f"provider {name!r} max_input_tokens must be in (240000, 275000], got {cap!r}"
@@ -728,11 +722,7 @@ def test_provider_catalog_context_window_survives_external_merge(tmp_path, monke
     metadata_dir = tmp_path / "metadata"
     metadata_dir.mkdir()
     (metadata_dir / "providers").mkdir()
-    external = (
-        metadata_dir
-        / "providers"
-        / "catalog.v1.json"
-    )
+    external = metadata_dir / "providers" / "catalog.v1.json"
     external.write_text(
         '{"schema_version":"fusionaize-provider-catalog/v1.1",'
         '"providers":{"deepseek-chat":{"recommended_model":"deepseek/chat-overlay"}}}'

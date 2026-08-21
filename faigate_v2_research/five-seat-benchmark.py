@@ -90,15 +90,13 @@ class LimitsReading:
     max_cap: int | None = None
 
     def provider_caps(self) -> dict[str, int | None]:
-        return {
-            name: (entry.get("max_input_tokens") if entry else None)
-            for name, entry in self.per_provider.items()
-        }
+        return {name: (entry.get("max_input_tokens") if entry else None) for name, entry in self.per_provider.items()}
 
 
 # --------------------------------------------------------------------------- #
 # Limits / 413 reading — PROGRAMMATIC, never hardcoded.
 # --------------------------------------------------------------------------- #
+
 
 def read_limits_from_catalog() -> LimitsReading:
     """Read per-provider limits + the 413 cap from the in-process catalog.
@@ -200,15 +198,14 @@ def read_limits_from_service(url: str) -> LimitsReading | None:
 # Substitution premise check (§3.6 baseline re-run).
 # --------------------------------------------------------------------------- #
 
+
 def assert_answerers_distinct_and_real(probes: list[SeatProbe]) -> None:
     """Assure the five seats resolve to five distinct, non-empty answerers."""
     models = [p.model for p in probes]
     if any(not m for m in models):
         raise AssertionError(f"one or more seats returned no model field: {probes}")
     if len(set(models)) != len(models):
-        raise AssertionError(
-            f"five seats did NOT resolve to five distinct models: {models}"
-        )
+        raise AssertionError(f"five seats did NOT resolve to five distinct models: {models}")
 
 
 def premise_check(probes: list[SeatProbe]) -> None:
@@ -231,27 +228,17 @@ def premise_check(probes: list[SeatProbe]) -> None:
             # envelope while echoing google/gemini-3-flash-preview upstream.
             # That drift is *allowed* and documented; everything else must match.
             if p.requested != "openrouter-fallback":
-                raise AssertionError(
-                    f"envelope drift for {p.requested}: model={p.model} "
-                    f"faignode={p.faigate_model}"
-                )
+                raise AssertionError(f"envelope drift for {p.requested}: model={p.model} faignode={p.faigate_model}")
 
         # (b) pinned-table match (answerer only, not the alias envelope).
         if p.requested in expected:
             pinned_answered = expected[p.requested].get("answered_model")
             if pinned_answered and p.model and p.model != pinned_answered:
-                raise AssertionError(
-                    f"substitution drift for {p.requested}: expected "
-                    f"{pinned_answered}, got {p.model}"
-                )
+                raise AssertionError(f"substitution drift for {p.requested}: expected {pinned_answered}, got {p.model}")
 
 
 def _load_pinned_table() -> list[dict[str, Any]]:
-    table_path = (
-        REPO_ROOT
-        / "faigate_v2_research"
-        / "substitution-table-live-2.6.0.json"
-    )
+    table_path = REPO_ROOT / "faigate_v2_research" / "substitution-table-live-2.6.0.json"
     if not table_path.exists():
         return []
     return json.loads(table_path.read_text(encoding="utf-8"))
@@ -261,9 +248,8 @@ def _load_pinned_table() -> list[dict[str, Any]]:
 # Live mode.
 # --------------------------------------------------------------------------- #
 
-async def _probe_seat(
-    client: httpx.AsyncClient, url: str, seat: str
-) -> SeatProbe:
+
+async def _probe_seat(client: httpx.AsyncClient, url: str, seat: str) -> SeatProbe:
     probe = SeatProbe(requested=seat)
     try:
         resp = await client.post(
@@ -333,6 +319,7 @@ def run_live(url: str) -> dict[str, Any]:
 # Recorded mode.
 # --------------------------------------------------------------------------- #
 
+
 def run_recorded(path: Path) -> dict[str, Any]:
     """Replay a recorded result and re-assert the acceptance criteria."""
     if not path.exists():
@@ -366,14 +353,14 @@ def _recorded_premise_check(probes: list[SeatProbe]) -> None:
             pinned = expected[p.requested].get("answered_model")
             if pinned and p.model and p.model != pinned:
                 raise AssertionError(
-                    f"recorded substitution drift for {p.requested}: "
-                    f"pinned {pinned}, recorded {p.model}"
+                    f"recorded substitution drift for {p.requested}: pinned {pinned}, recorded {p.model}"
                 )
 
 
 # --------------------------------------------------------------------------- #
 # Main.
 # --------------------------------------------------------------------------- #
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -421,8 +408,7 @@ def main() -> int:
         print(f"413 cap (max_input_tokens): {lim.get('max_cap')}")
         caps = lim.get("per_provider_caps") or {}
         n_caps = sum(1 for v in caps.values() if v is not None)
-        print(f"per-provider caps declared: {n_caps} providers "
-              f"(uniform={_uniformity(caps)})")
+        print(f"per-provider caps declared: {n_caps} providers (uniform={_uniformity(caps)})")
         if lim.get("service_413_cap") is not None:
             print(f"service-advertised 413 cap: {lim['service_413_cap']}")
     print(f"premise check (substitution table): {result.get('premise_check')}")
