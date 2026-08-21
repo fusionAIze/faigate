@@ -1,5 +1,5 @@
 {
-  "schema_version": "fusionaize-provider-catalog/v1.1",
+  "schema_version": "fusionaize-provider-catalog/v1.2",
   "generated_at": "2026-08-20T00:00:00Z",
   "source_repo": "fusionaize-metadata-public",
   "providers": {
@@ -1049,15 +1049,16 @@
       "aliases": [
         "gpt-4o"
       ],
-      "track": "stable",
-      "offer_track": "direct",
-      "provider_type": "direct",
-      "auth_modes": [
-        "none"
-      ],
-      "volatility": "low",
-      "evidence_level": "official",
-      "official_source_url": "https://docs.github.com/en/copilot",
+  "track": "stable",
+  "offer_track": "oauth",
+  "provider_type": "oauth",
+  "auth_modes": [
+    "oauth",
+    "api_key"
+  ],
+  "volatility": "low",
+  "evidence_level": "official",
+  "official_source_url": "https://docs.github.com/en/copilot",
       "signup_url": "https://github.com/features/copilot",
       "watch_sources": [],
       "notes": "GitHub Copilot – requires GH_TOKEN / COPILOT_GITHUB_TOKEN",
@@ -1136,15 +1137,15 @@
       "aliases": [
         "qwen-portal/coder-model"
       ],
-      "track": "stable",
-      "offer_track": "direct",
-      "provider_type": "direct",
-      "auth_modes": [
-        "none"
-      ],
-      "volatility": "low",
-      "evidence_level": "official",
-      "official_source_url": "https://help.aliyun.com/zh/model-studio/getting-started/what-is-model-studio",
+  "track": "stable",
+  "offer_track": "oauth",
+  "provider_type": "oauth",
+  "auth_modes": [
+    "oauth"
+  ],
+  "volatility": "low",
+  "evidence_level": "official",
+  "official_source_url": "https://help.aliyun.com/zh/model-studio/getting-started/what-is-model-studio",
       "signup_url": "https://modelscope.cn/",
       "watch_sources": [],
       "notes": "Qwen OAuth (free tier) – device-code flow; requires: openclaw plugins enable qwen-portal-auth",
