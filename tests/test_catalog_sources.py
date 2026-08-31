@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Any
+from unittest import mock
+
+import pytest
 
 from faigate.catalog_sources.base import (
     EntryPricing,
@@ -271,6 +276,173 @@ def test_omniroute_uncapped_free_tier_has_no_cap() -> None:
 
     assert entry.free_tier is not None
     assert entry.free_tier.tokens_per_month is None
+
+
+def test_omniroute_free_tier_is_model_scoped_not_provider_scoped() -> None:
+    from faigate.catalog_sources.omniroute import OmniRouteAdapter
+
+    # A provider-level budget must not leak onto unrelated models of the same
+    # provider. Only models with their own (provider, modelId) budget are free.
+    payload = _omniroute_payload(
+        providers={
+            "demo": _omniroute_provider(
+                [
+                    _omniroute_model(id="free-model"),
+                    _omniroute_model(id="paid-model"),
+                ]
+            )
+        },
+        free_model_budgets=[
+            {
+                "provider": "demo",
+                "modelId": "free-model",
+                "monthlyTokens": 30_000_000,
+                "creditTokens": 0,
+                "freeType": "recurring-daily",
+            }
+        ],
+    )
+    entries = OmniRouteAdapter().normalize(payload)
+    by_id = {e.model_id: e for e in entries}
+
+    assert by_id["free-model"].free_tier is not None
+    assert by_id["free-model"].free_tier.tokens_per_month == 30_000_000
+    assert by_id["paid-model"].free_tier is None
+
+
+def test_omniroute_free_tier_ignores_budget_without_model_id() -> None:
+    from faigate.catalog_sources.omniroute import OmniRouteAdapter
+
+    # A budget lacking a modelId is dropped, not attributed to every model.
+    payload = _omniroute_payload(
+        providers={"demo": _omniroute_provider([_omniroute_model(id="some-model")])},
+        free_model_budgets=[
+            {
+                "provider": "demo",
+                "modelId": None,
+                "monthlyTokens": 10_000_000,
+                "creditTokens": 0,
+                "freeType": "recurring-daily",
+            }
+        ],
+    )
+    entry = OmniRouteAdapter().normalize(payload)[0]
+
+    assert entry.free_tier is None
+
+
+def test_omniroute_ollama_cloud_pins_8_free_4_not() -> None:
+    from faigate.catalog_sources.omniroute import OmniRouteAdapter
+
+    # Real upstream case: ollama-cloud carries 12 models but only 8 have a
+    # free-model budget. The other 4 must not be marked free by provider fallback.
+    model_ids = [
+        "glm-5.2",
+        "gpt-oss:120b",
+        "gpt-oss:20b",
+        "minimax-m3",
+        "qwen3-coder:30b",
+        "deepseek-r1:7b",
+        "llama3.3:70b",
+        "hermes3:405b",
+        "paid-model-1",
+        "paid-model-2",
+        "paid-model-3",
+        "paid-model-4",
+    ]
+    free_ids = set(model_ids[:8])
+    budgets = [
+        {
+            "provider": "ollama-cloud",
+            "modelId": mid,
+            "monthlyTokens": 20_000_000 if mid != "gpt-oss:120b" else 0,
+            "creditTokens": 0,
+            "freeType": "recurring-daily",
+        }
+        for mid in free_ids
+    ]
+    payload = _omniroute_payload(
+        providers={"ollama-cloud": _omniroute_provider([_omniroute_model(id=mid) for mid in model_ids])},
+        free_model_budgets=budgets,
+    )
+    entries = OmniRouteAdapter().normalize(payload)
+
+    free_tiered = {e.model_id for e in entries if e.free_tier is not None}
+    assert free_tiered == free_ids
+    assert len(free_tiered) == 8
+    assert len(entries) - len(free_tiered) == 4
+
+
+def test_omniroute_resolve_node_major_reads_pin_files() -> None:
+    from faigate.catalog_sources.omniroute import _resolve_node_major
+
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        assert _resolve_node_major(root) == "24"
+
+        (root / ".nvmrc").write_text("24\n", encoding="utf-8")
+        assert _resolve_node_major(root) == "24"
+
+        (root / ".node-version").write_text("22.22.2\n", encoding="utf-8")
+        assert _resolve_node_major(root) == "22"
+
+
+def test_omniroute_check_node_major_fails_loudly_on_mismatch() -> None:
+    from faigate.catalog_sources.omniroute import _check_node_major
+
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / ".node-version").write_text("24\n", encoding="utf-8")
+
+        with mock.patch(
+            "faigate.catalog_sources.omniroute.subprocess.run",
+            return_value=mock.Mock(stdout="v26.8.1\n", stderr="", returncode=0),
+        ):
+            with pytest.raises(RuntimeError, match="pins Node major 24"):
+                _check_node_major(root)
+
+
+def test_omniroute_check_node_major_accepts_matching_runtime() -> None:
+    from faigate.catalog_sources.omniroute import _check_node_major
+
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / ".node-version").write_text("24\n", encoding="utf-8")
+
+        with mock.patch(
+            "faigate.catalog_sources.omniroute.subprocess.run",
+            return_value=mock.Mock(stdout="v24.9.0\n", stderr="", returncode=0),
+        ):
+            _check_node_major(root)
+
+
+def test_omniroute_tsx_command_pins_version_and_ignore_scripts() -> None:
+    from faigate.catalog_sources.omniroute import _install_tsx, _tsx_binary_dir
+
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+
+        def _fake_install(argv, **kwargs):
+            assert argv[0] == "npm"
+            assert argv[1] == "install"
+            assert "--ignore-scripts" in argv
+            assert "--no-audit" in argv
+            assert "--no-fund" in argv
+            assert any(arg.startswith("tsx@") for arg in argv)
+            assert "tsx@4.23.13" in argv
+            bin_dir = root / ".faigate-tsx-runtime" / "node_modules" / ".bin"
+            bin_dir.mkdir(parents=True, exist_ok=True)
+            (bin_dir / "tsx").write_text("#!/bin/sh\n", encoding="utf-8")
+            return mock.Mock(returncode=0, stdout="", stderr="")
+
+        with mock.patch(
+            "faigate.catalog_sources.omniroute.subprocess.run",
+            side_effect=_fake_install,
+        ):
+            tsx_bin = _install_tsx(root)
+
+        assert tsx_bin.is_file()
+        assert tsx_bin == _tsx_binary_dir(root) / "node_modules" / ".bin" / "tsx"
 
 
 def test_omniroute_normalize_returns_empty_for_non_dict() -> None:
