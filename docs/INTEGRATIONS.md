@@ -154,6 +154,21 @@ If you want a small Node-facing helper instead of shell aliases, the separate np
 
 The current opencode docs recommend `@ai-sdk/openai-compatible` for custom OpenAI-compatible providers and a custom `provider.<id>.options.baseURL` value for the gateway endpoint. This fusionAIze Gate starter follows that pattern and keeps the provider-local model ids aligned with `GET /v1/models`.
 
+Vision: fusionAIze Gate advertises a model's input modalities in `GET /v1/models` under `modalities` (for example `["text", "image"]` for a vision model). When a vision model is exposed, mark it in the opencode starter with the matching `modalities` block so opencode offers image attachments:
+
+```json
+"deepseek-v4-flash-vision-exp": {
+  "name": "fusionAIze Gate DeepSeek Vision",
+  "limit": { "context": 128000, "output": 8000 },
+  "modalities": {
+    "input": ["text", "image"],
+    "output": ["text"]
+  }
+}
+```
+
+Keep those `modalities.input` values aligned with the `modalities` tokens from `GET /v1/models` (text-only models stay `["text"]`).
+
 ## AI-native app clients
 
 For future app-specific clients, keep the same OpenAI-compatible base URL and add one stable app header before creating multiple custom profiles.

@@ -2799,6 +2799,22 @@ async def provider_mix_analytics():
     }
 
 
+def _provider_modalities(capabilities: dict[str, Any]) -> list[str]:
+    """Derive interchange modality tokens from a provider's capabilities.
+
+    Modalities are free strings in the ``text``, ``image``, ``audio``,
+    ``video`` vocabulary shared with the catalog source adapters. A Vision
+    provider (``vision`` capability) advertises the ``image`` input modality
+    so that OpenAI-compatible clients such as opencode can offer image input.
+    """
+    modalities = {"text"}
+    if capabilities.get("vision"):
+        modalities.add("image")
+    if capabilities.get("image_generation") or capabilities.get("image_editing"):
+        modalities.add("image")
+    return sorted(modalities)
+
+
 @app.get("/v1/models")
 async def list_models():
     """OpenAI-compatible model listing."""
@@ -2848,6 +2864,7 @@ async def list_models():
                 "description": f"{p.model} ({p.tier})",
                 "contract": p.contract,
                 "capabilities": p.capabilities,
+                "modalities": _provider_modalities(p.capabilities or {}),
                 "context_window": p.context_window,
                 "limits": p.limits,
                 "cache": p.cache,
