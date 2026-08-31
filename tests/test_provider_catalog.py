@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from faigate.config import load_config
 from faigate.provider_catalog import (
     build_provider_catalog_report,
@@ -493,6 +495,41 @@ def test_materialize_provider_metadata_snapshot_writes_effective_catalog(tmp_pat
     assert written["providers"]["deepseek-chat"]["notes"] == "Gate note"
     assert output_path.exists() is True
     assert "Gate note" in output_path.read_text(encoding="utf-8")
+
+
+def test_materialize_refuses_to_overwrite_source_catalog(tmp_path: Path):
+    repo_dir = tmp_path / "fusionaize-metadata"
+    (repo_dir / "providers").mkdir(parents=True)
+    source_catalog = repo_dir / "providers" / "catalog.v1.json"
+    source_catalog.write_text(
+        """
+{
+  "schema_version": "fusionaize-provider-catalog/v1",
+  "providers": {
+    "deepseek-chat": {
+      "notes": "Base note"
+    }
+  }
+}
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError):
+        materialize_provider_metadata_snapshot(repo_dir, source_catalog)
+
+    assert source_catalog.read_text(encoding="utf-8") == (
+        """
+{
+  "schema_version": "fusionaize-provider-catalog/v1",
+  "providers": {
+    "deepseek-chat": {
+      "notes": "Base note"
+    }
+  }
+}
+"""
+    )
 
 
 def test_provider_catalog_report_includes_recommendations(tmp_path):

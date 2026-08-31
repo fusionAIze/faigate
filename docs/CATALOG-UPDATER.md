@@ -4,29 +4,57 @@ faigate keeps its provider catalog (pricing, model aliases, capabilities,
 freshness flags) in a separate metadata repo so we can ship updated pricing
 and new models without cutting a faigate release.
 
-This document describes how the catalog syncs at runtime, the env vars and
-auth that control it, the CLI commands that drive it, and how to debug it
-when it misbehaves.
+This document describes how the catalog is generated from multiple sources,
+how it syncs at runtime, the env vars and auth that control delivery, the CLI
+commands that drive it, and how to debug it when it misbehaves.
+
+## Catalog sources and precedence
+
+The provider catalog is not hand-written. It is scraped from two foreign
+sources and merged with an operator overlay by a fixed precedence rule:
+
+| Source | Kind | What it contributes |
+|--------|------|---------------------|
+| overlay | operator-curated (private) | corrections that always beat foreign data |
+| LiteLLM | foreign registry (`model_prices_and_context_window.json`) | prices, context windows, modalities, tier status for 300+ models |
+| OmniRoute | foreign TypeScript configs (`open-sse/config/*.ts`) | provider/model catalog, free-tier budgets |
+
+Precedence is fixed and highest first:
+
+```
+overlay  >  litellm  >  omniroute
+```
+
+When sources disagree about a model field, the higher-precedence source wins
+and every conflict is recorded — field, both values, and the winning source —
+so the choice stays auditable. A curated free price of `0.0` is a present
+value, not "no data": it wins over a foreign non-zero price and logs a
+conflict. The scrape runs as a weekly CI pipeline that opens a pull request
+against the public repo; it never pushes to `main` directly.
 
 ## What lives where
 
 | Repo | Visibility | Holds |
 |------|------------|-------|
 | [fusionaize-metadata-public](https://github.com/fusionAIze/fusionaize-metadata-public) | public | `providers/`, `models/`, `offerings/`, schemas |
-| [fusionaize-metadata](https://github.com/fusionAIze/fusionaize-metadata) | private | `products/gate/overlays.v1.json`, `packages/` |
+| `fusionaize-metadata` (private) | private | `products/gate/overlays.v1.json`, `packages/` |
 | `faigate/assets/metadata/catalog.v1.json` | bundled in wheel | snapshot used as last-resort fallback |
 
 ## Resolution chain
 
-When a faigate process needs the provider catalog, the resolver walks four
-sources in order and uses the first one that returns valid data:
+When a faigate process needs the provider catalog, the resolver walks three
+tiers in order and uses the first one that returns valid data:
 
 ```
-1. FAIGATE_PROVIDER_METADATA_FILE / FAIGATE_PROVIDER_METADATA_DIR (local)
-2. Private remote   (only if FAIGATE_METADATA_TOKEN is set)
-3. Public  remote   (anonymous)
-4. Bundled snapshot (shipped in the wheel)
+1. Private remote   (only if FAIGATE_METADATA_TOKEN is set)
+2. Public  remote   (anonymous)
+3. Bundled snapshot (shipped in the wheel)
 ```
+
+A local checkout may short-circuit the chain entirely: if
+`FAIGATE_PROVIDER_METADATA_FILE` or a populated `FAIGATE_PROVIDER_METADATA_DIR`
+yields a catalog on disk, that file is loaded directly and the remote tiers
+are never consulted. Otherwise the resolver falls through the three tiers.
 
 Each remote tier caches its result at `~/.cache/faigate/metadata/{tier}/`
 with a sibling `.etag` file; subsequent calls within the refresh interval
@@ -127,16 +155,24 @@ successful refresh.
 
 ## Sync alerts
 
-Metadata sync state is written next to each cache tier and surfaced through
-the existing catalog alert pipeline:
+Sync state is written next to the two remote tiers — `private` and
+`public` — and surfaced through the existing catalog alert pipeline. The
+`bundled` tier has no sync state: it exposes only `bundled_present` and
+`bundled_providers_count` in `status()`, and never appears in the
+`status()["tiers"]` dict that feeds `build_catalog_alerts`.
 
 - `sync-stale` — last successful sync is older than 7 days, or no sync has
   ever succeeded.
 - `sync-invalid` — remote JSON parsed but failed catalog validation.
-- `sync-auth` — private metadata request returned 401/403.
+- `sync-auth` — the `private` tier returned 401/403.
 
-The alerts appear in `/api/provider-catalog`, dashboard summaries, and any
-surface already consuming `build_catalog_alerts`.
+`faigate-models status` reports each remote tier's cache age, ETag, and
+provider count (and bundled presence/count) so a dead delivery path is
+visible instead of silently falling back. The last sync result is not part of
+the default output; it is available only via `faigate-models status --json`,
+and only when a sync-state file exists for that tier. The alerts appear in
+`/api/provider-catalog`, dashboard summaries, and any surface already
+consuming `build_catalog_alerts`.
 
 ## Troubleshooting
 
@@ -149,19 +185,12 @@ in this state, but offline boots have no fallback.
 
 ### Private tier always falls through to public
 
-Verify the token, scope, and target URL:
-
-```bash
-curl -sS -o /dev/null -w "%{http_code}\n" \
-  -H "Authorization: Bearer $FAIGATE_METADATA_TOKEN" \
-  https://raw.githubusercontent.com/fusionAIze/fusionaize-metadata/master/providers/catalog.v1.json
-# expect: 200
-```
-
-A 401/403 means token is wrong or doesn't have access. A 404 means the
-resource path moved (after the public/private split, the private repo no
-longer holds `providers/catalog.v1.json` — the URL above will 404 by
-design; that is correct).
+The private tier serves overlays and packages, not the provider catalog, so
+falling through to the public tier for catalog data is expected for most
+operators. When you expect the private tier to win, verify the token and
+scope: a 401/403 means the token is wrong or lacks access to the private
+repo, and a 404 means the private URL no longer points at live content.
+Check which tier `faigate-models status` reports as the active source.
 
 ### Cache won't update
 

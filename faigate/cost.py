@@ -16,6 +16,7 @@ def estimate_provider_cost(
     model_id: str,
     input_tokens: int = 0,
     output_tokens: int = 0,
+    image_count: int = 0,
 ) -> dict[str, Any]:
     """Estimate cost for a specific provider and model.
 
@@ -24,6 +25,8 @@ def estimate_provider_cost(
         model_id: Canonical model ID (e.g., 'deepseek/chat')
         input_tokens: Number of input tokens
         output_tokens: Number of output tokens
+        image_count: Number of images in the request. Images are billed at
+            ``image_tokens_max`` tokens each when the model declares that cap.
 
     Returns:
         Dictionary with cost breakdown:
@@ -32,6 +35,7 @@ def estimate_provider_cost(
             'model': model_id,
             'input_tokens': input_tokens,
             'output_tokens': output_tokens,
+            'image_tokens': int,
             'input_cost_per_1m': float,
             'output_cost_per_1m': float,
             'input_cost': float,
@@ -52,6 +56,7 @@ def estimate_provider_cost(
             "model": model_id,
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
+            "image_tokens": 0,
             "input_cost_per_1m": 0.0,
             "output_cost_per_1m": 0.0,
             "input_cost": 0.0,
@@ -66,8 +71,15 @@ def estimate_provider_cost(
     input_cost_per_1m = pricing.get("input", 0.0)
     output_cost_per_1m = pricing.get("output", 0.0)
 
+    # Images are billed as regular input tokens capped at image_tokens_max each.
+    image_tokens_max = pricing.get("image_tokens_max")
+    image_tokens = 0
+    if image_count and image_tokens_max:
+        image_tokens = image_count * int(image_tokens_max)
+
     # Calculate costs
-    input_cost = (input_tokens * input_cost_per_1m) / 1_000_000
+    billed_input_tokens = input_tokens + image_tokens
+    input_cost = (billed_input_tokens * input_cost_per_1m) / 1_000_000
     output_cost = (output_tokens * output_cost_per_1m) / 1_000_000
     total_cost = input_cost + output_cost
 
@@ -86,6 +98,7 @@ def estimate_provider_cost(
         "model": model_id,
         "input_tokens": input_tokens,
         "output_tokens": output_tokens,
+        "image_tokens": image_tokens,
         "input_cost_per_1m": input_cost_per_1m,
         "output_cost_per_1m": output_cost_per_1m,
         "input_cost": input_cost,

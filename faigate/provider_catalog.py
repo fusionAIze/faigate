@@ -1444,7 +1444,14 @@ def materialize_provider_metadata_snapshot(
     product: str = _DEFAULT_METADATA_PRODUCT,
 ) -> dict[str, Any]:
     snapshot = build_provider_metadata_snapshot(metadata_dir, product=product)
-    destination = Path(output_path).expanduser()
+    root = Path(metadata_dir).expanduser()
+    source_catalog = (root / _METADATA_CATALOG_RELATIVE_PATH).resolve()
+    destination = Path(output_path).expanduser().resolve()
+    if destination == source_catalog:
+        raise ValueError(
+            "materializer refuses to overwrite the source catalog "
+            f"{source_catalog}; choose a dedicated output path instead"
+        )
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(
         json.dumps(snapshot, indent=2, sort_keys=True) + "\n",
