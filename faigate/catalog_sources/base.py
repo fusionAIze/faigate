@@ -74,6 +74,8 @@ class NormalizedEntry:
     pricing: EntryPricing = field(default_factory=EntryPricing)
     modalities: list[Modality] = field(default_factory=list)
     capabilities: list[str] = field(default_factory=list)
+    tier_status: str | None = None
+    deprecation_date: str | None = None
     source_url: str | None = None
 
 

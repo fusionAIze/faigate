@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
 from faigate.catalog_sources.base import (
     EntryPricing,
     NormalizedEntry,
@@ -123,3 +125,106 @@ def test_fetch_and_normalize_are_independent_steps() -> None:
 
     assert raw is not None
     assert adapter.normalize(raw) == adapter.normalize(raw)
+
+
+# --- LiteLLM adapter ----------------------------------------------------------
+
+
+def _litellm_model(**overrides: Any) -> dict[str, Any]:
+    """Build a LiteLLM-shaped model record with sensible chat defaults."""
+    record: dict[str, Any] = {
+        "litellm_provider": "openai",
+        "mode": "chat",
+        "max_input_tokens": 128000,
+        "max_output_tokens": 16384,
+        "input_cost_per_token": 2.5e-06,
+        "output_cost_per_token": 1.0e-05,
+        "cache_read_input_token_cost": 1.25e-06,
+        "supports_vision": False,
+        "supports_image_input": False,
+        "supports_pdf_input": False,
+        "supports_audio_input": False,
+        "supports_video_input": False,
+        "supports_reasoning": False,
+        "supports_function_calling": True,
+    }
+    record.update(overrides)
+    return record
+
+
+_LITELLM_PAYLOAD = {
+    "gpt-4o": _litellm_model(
+        supports_vision=True,
+        supports_image_input=True,
+        supports_function_calling=True,
+    ),
+    "gpt-3.5-turbo": _litellm_model(
+        input_cost_per_token=5.0e-07,
+        output_cost_per_token=1.5e-06,
+        deprecation_date="2026-10-23",
+    ),
+    "text-embedding-3-small": _litellm_model(mode="embedding"),
+}
+
+
+def test_litellm_norm_skips_non_chat_modes() -> None:
+    from faigate.catalog_sources.litellm import LiteLLMAdapter
+
+    entries = LiteLLMAdapter().normalize(_LITELLM_PAYLOAD)
+    model_ids = {e.model_id for e in entries}
+    assert model_ids == {"gpt-4o", "gpt-3.5-turbo"}
+    assert "text-embedding-3-small" not in model_ids
+
+
+def test_litellm_norm_converts_per_token_price_to_per_1m() -> None:
+    from faigate.catalog_sources.litellm import LiteLLMAdapter
+
+    entry = LiteLLMAdapter().normalize({"gpt-4o": _litellm_model()})[0]
+    assert entry.pricing.input == pytest.approx(2.5)
+    assert entry.pricing.output == pytest.approx(10.0)
+    assert entry.pricing.cache_read == pytest.approx(1.25)
+    assert entry.context_window == 128000
+    assert entry.max_output_tokens == 16384
+
+
+def test_litellm_norm_maps_supports_vision_to_image_modality() -> None:
+    from faigate.catalog_sources.litellm import LiteLLMAdapter
+
+    entry = LiteLLMAdapter().normalize({"gpt-4o": _litellm_model(supports_vision=True)})[0]
+    assert "image" in entry.modalities
+
+    plain = LiteLLMAdapter().normalize({"gpt-3.5-turbo": _litellm_model()})[0]
+    assert "image" not in plain.modalities
+
+
+def test_litellm_norm_carries_deprecation_date_onto_tier_status() -> None:
+    from faigate.catalog_sources.litellm import LiteLLMAdapter
+
+    entries = LiteLLMAdapter().normalize(_LITELLM_PAYLOAD)
+    by_id = {e.model_id: e for e in entries}
+
+    deprecated = by_id["gpt-3.5-turbo"]
+    assert deprecated.tier_status == "deprecated"
+    assert deprecated.deprecation_date == "2026-10-23"
+
+    active = by_id["gpt-4o"]
+    assert active.tier_status == "active"
+    assert active.deprecation_date is None
+
+
+def test_litellm_norm_produces_at_least_250_priced_context_entries() -> None:
+    from faigate.catalog_sources.litellm import LiteLLMAdapter
+
+    payload = {
+        f"model-{i}": _litellm_model(
+            max_input_tokens=64000 + i,
+            input_cost_per_token=(1.0 + i) * 1.0e-06,
+            output_cost_per_token=(2.0 + i) * 1.0e-06,
+        )
+        for i in range(251)
+    }
+    entries = LiteLLMAdapter().normalize(payload)
+
+    assert len(entries) == 251
+    priced_with_context = [e for e in entries if (e.pricing.input > 0 or e.pricing.output > 0) and e.context_window]
+    assert len(priced_with_context) >= 250
