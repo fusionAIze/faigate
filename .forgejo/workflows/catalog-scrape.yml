@@ -1,0 +1,270 @@
+# catalog-scrape.yml — scraping pipeline for the merged model catalog.
+#
+# Fetches the foreign model sources (LiteLLM's registry, OmniRoute's TS configs),
+# normalizes them through the catalog source adapters, merges them with the
+# operator-curated overlay by fixed precedence, and opens a PR carrying the new
+# merged catalog plus a description that states how many models changed and
+# every conflict the merge recorded.
+#
+# Three hard invariants, each enforced by the pipeline itself:
+#   1. NO direct push to main. The only write goes to a `scrape/<date>` branch,
+#      which is then turned into a pull request against the default branch.
+#   2. The PR description always states the changed-model count and the full
+#      conflict list (field, both values, winning source).
+#   3. A failing foreign source fails the run loudly and leaves the checked-in
+#      merged catalog untouched: fetch -> normalize -> merge -> write all happen
+#      inside ONE python process, and the output file is written only after
+#      every source has succeeded. There is no partial write and no refactor
+#      step after a failure.
+#
+# Canonical artifact: `faigate/assets/metadata/scrape/catalog-merged.json` is
+# the merged model-price registry the adapters produce. The first PR establishes
+# it; later PRs diff against it to compute "changed models".
+
+name: Catalog scrape
+
+on:
+  schedule:
+    # Weekly, early Monday UTC.
+    - cron: "17 3 * * 1"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  LITELLM_REGISTRY_URL: "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json"
+  OMNIROUTE_REPO_URL: "https://github.com/diegosouzapw/OmniRoute.git"
+  MERGED_CATALOG_PATH: "faigate/assets/metadata/scrape/catalog-merged.json"
+  SCRAPE_BRANCH: "scrape/catalog"
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout faigate
+        uses: https://github.com/actions/checkout@v4
+
+      - name: Set up Python
+        uses: https://github.com/actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node (OmniRoute pins Node 24)
+        uses: https://github.com/actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install faigate with catalog source dependencies
+        run: |
+          pip install -e ".[dev]"
+
+      - name: Clone OmniRoute source
+        run: |
+          git clone --depth 1 "$OMNIROUTE_REPO_URL" "$RUNNER_TEMP/omniroute"
+
+      - name: Scrape, normalize, merge, and write catalog
+        shell: bash
+        env:
+          LITELLM_REGISTRY_URL: ${{ env.LITELLM_REGISTRY_URL }}
+          OMNIROUTE_CHECKOUT: ${{ runner.temp }}/omniroute
+          MERGED_CATALOG_PATH: ${{ env.MERGED_CATALOG_PATH }}
+        run: |
+          set -euo pipefail
+          # The scrape is atomic: fetch -> normalize -> merge -> compute stats ->
+          # write the merged catalog + summary. If any foreign source fails,
+          # the python process exits non-zero BEFORE the catalog file is written,
+          # so the checked-in catalog stays byte-for-byte unchanged.
+          python - "$OMNIROUTE_CHECKOUT" "$MERGED_CATALOG_PATH" "$RUNNER_TEMP/scrape-summary.json" <<'PY'
+          import json
+          import os
+          import sys
+          from pathlib import Path
+
+          import httpx
+
+          from faigate.catalog_sources.base import EntryPricing, NormalizedEntry
+          from faigate.catalog_sources.litellm import LiteLLMAdapter
+          from faigate.catalog_sources.merge import SourceInput, merge_catalogs
+          from faigate.catalog_sources.omniroute import OmniRouteAdapter
+
+          omniroute_checkout, merged_catalog_path, summary_path = sys.argv[1:4]
+          litellm_registry_url = os.environ["LITELLM_REGISTRY_URL"]
+
+          # --- Foreign source: LiteLLM registry. Hard-fails loudly on any error. ---
+          litellm_resp = httpx.get(
+              litellm_registry_url,
+              follow_redirects=True,
+              timeout=60.0,
+          )
+          litellm_resp.raise_for_status()
+          litellm_raw = litellm_resp.json()
+          if not isinstance(litellm_raw, dict):
+              raise RuntimeError("LiteLLM registry did not decode to a JSON object")
+          litellm_entries = LiteLLMAdapter().normalize(litellm_raw)
+
+          # --- Foreign source: OmniRoute TS configs via locked tsx evaluation. ---
+          adapter = OmniRouteAdapter(checkout_dir=omniroute_checkout)
+          omniroute_raw = adapter.fetch()
+          omniroute_entries = adapter.normalize(omniroute_raw)
+
+          # --- Overlay: the operator-curated baseline, if a merged catalog is
+          # already checked in. On first run there is none, so everything is new. ---
+          overlay_path = Path(merged_catalog_path)
+          overlay_entries = []
+          if overlay_path.exists():
+              raw = json.loads(overlay_path.read_text(encoding="utf-8"))
+              for item in raw.get("entries", []):
+                  pricing_raw = item.get("pricing") or {}
+                  overlay_entries.append(
+                      NormalizedEntry(
+                          provider_id=item["provider_id"],
+                          model_id=item["model_id"],
+                          display_name=item.get("display_name"),
+                          context_window=item.get("context_window"),
+                          max_input_tokens=item.get("max_input_tokens"),
+                          max_output_tokens=item.get("max_output_tokens"),
+                          pricing=EntryPricing.from_mapping(pricing_raw),
+                          modalities=list(item.get("modalities") or []),
+                          capabilities=list(item.get("capabilities") or []),
+                          source_url=item.get("source_url"),
+                      )
+                  )
+
+          result = merge_catalogs(
+              [
+                  SourceInput("overlay", overlay_entries),
+                  SourceInput("litellm", litellm_entries),
+                  SourceInput("omniroute", omniroute_entries),
+              ]
+          )
+
+          def serialize(entry):
+              return {
+                  "provider_id": entry.provider_id,
+                  "model_id": entry.model_id,
+                  "display_name": entry.display_name,
+                  "context_window": entry.context_window,
+                  "max_input_tokens": entry.max_input_tokens,
+                  "max_output_tokens": entry.max_output_tokens,
+                  "pricing": {
+                      "input": entry.pricing.input,
+                      "output": entry.pricing.output,
+                      "cache_read": entry.pricing.cache_read,
+                  },
+                  "modalities": list(entry.modalities),
+                  "capabilities": list(entry.capabilities),
+                  "source_url": entry.source_url,
+              }
+
+          new_entries = [serialize(e) for e in result.entries]
+          old_by_key = {
+              (e.provider_id, e.model_id): e for e in overlay_entries
+          }
+          new_by_key = {
+              (e["provider_id"], e["model_id"]): e for e in new_entries
+          }
+
+          changed = [
+              key
+              for key, entry in new_by_key.items()
+              if key not in old_by_key or serialize(old_by_key[key]) != entry
+          ]
+
+          conflicts = [
+              {
+                  "provider_id": c.provider_id,
+                  "model_id": c.model_id,
+                  "field": c.field,
+                  "winner_source": c.winner_source,
+                  "loser_source": c.loser_source,
+                  "winner_value": c.winner_value,
+                  "loser_value": c.loser_value,
+              }
+              for c in result.conflicts
+          ]
+
+          summary = {
+              "changed_models": sorted(f"{p}/{m}" for p, m in changed),
+              "changed_count": len(changed),
+              "conflicts": conflicts,
+              "total_models": len(new_entries),
+          }
+
+          # Both outputs are written LAST, and only after every source succeeded.
+          overlay_path.parent.mkdir(parents=True, exist_ok=True)
+          overlay_path.write_text(
+              json.dumps({"entries": new_entries}, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          Path(summary_path).write_text(
+              json.dumps(summary, indent=2, sort_keys=True, default=str) + "\n",
+              encoding="utf-8",
+          )
+          print(f"changed_models={len(changed)} total_models={len(new_entries)} conflicts={len(conflicts)}")
+          PY
+
+      - name: Show session summary
+        run: |
+          cat "$RUNNER_TEMP/scrape-summary.json"
+
+      - name: Commit merged catalog to scrape branch
+        id: commit
+        run: |
+          set -euo pipefail
+          branch="$SCRAPE_BRANCH"
+          git checkout -b "$branch"
+          git add "$MERGED_CATALOG_PATH"
+          if git diff --cached --quiet; then
+            echo "no changes to the merged catalog; nothing to commit"
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git config user.name "faigate-catalog-bot"
+          git config user.email "catalog-bot@fusionaize.local"
+          git commit -m "chore(catalog): refresh merged model catalog from foreign sources"
+          git push origin "$branch"
+          echo "has_changes=true" >> "$GITHUB_OUTPUT"
+
+      - name: Open pull request with changed-model count and conflicts
+        if: ${{ steps.commit.outputs.has_changes == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          python3 - "$RUNNER_TEMP/scrape-summary.json" "$RUNNER_TEMP/pr-body.md" <<'PY'
+          import json
+          import sys
+
+          summary, out_path = json.load(open(sys.argv[1])), sys.argv[2]
+          lines = []
+          lines.append("## Changed models")
+          lines.append("")
+          lines.append(f"{summary['changed_count']} model(s) changed.")
+          lines.append("")
+          for key in summary["changed_models"]:
+              lines.append(f"- {key}")
+          lines.append("")
+          lines.append("## Conflicts")
+          lines.append("")
+          if not summary["conflicts"]:
+              lines.append("No conflicts recorded.")
+          else:
+              lines.append(f"{len(summary['conflicts'])} conflict(s):")
+              lines.append("")
+              for c in summary["conflicts"]:
+                  lines.append(
+                      f"- `{c['provider_id']}/{c['model_id']}` field **{c['field']}**: "
+                      f"winner={c['winner_source']} ({c['winner_value']}) vs "
+                      f"loser={c['loser_source']} ({c['loser_value']})"
+                  )
+          open(out_path, "w", encoding="utf-8").write("\n".join(lines) + "\n")
+          PY
+
+          gh pr create \
+            --base "${{ github.event.repository.default_branch }}" \
+            --head "$SCRAPE_BRANCH" \
+            --title "catalog: refresh merged model catalog from foreign sources" \
+            --body-file "$RUNNER_TEMP/pr-body.md"
