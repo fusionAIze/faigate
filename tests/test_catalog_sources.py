@@ -123,3 +123,158 @@ def test_fetch_and_normalize_are_independent_steps() -> None:
 
     assert raw is not None
     assert adapter.normalize(raw) == adapter.normalize(raw)
+
+
+# --- OmniRoute adapter --------------------------------------------------------
+
+
+def _omniroute_model(**overrides: Any) -> dict[str, Any]:
+    record: dict[str, Any] = {
+        "id": "model-a",
+        "name": "Model A",
+        "toolCalling": True,
+        "supportsReasoning": True,
+        "supportsVision": False,
+        "supportsAudio": False,
+        "supportsVideo": False,
+        "supportsXHighEffort": None,
+        "supportedThinkingEfforts": None,
+        "maxOutputTokens": 4096,
+        "contextLength": 131072,
+        "maxInputTokens": None,
+    }
+    record.update(overrides)
+    return record
+
+
+def _omniroute_provider(models: list[dict[str, Any]]) -> dict[str, Any]:
+    return {"id": "deepseek", "alias": "ds", "models": models}
+
+
+def _omniroute_payload(
+    providers: dict[str, Any] | None = None,
+    free_model_budgets: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    return {
+        "providers": providers or {"deepseek": _omniroute_provider([_omniroute_model()])},
+        "free_model_budgets": free_model_budgets if free_model_budgets is not None else [],
+    }
+
+
+def _big_omniroute_payload(count: int = 120) -> dict[str, Any]:
+    """Synthesize a provider catalog with ``count`` providers and one model each."""
+    providers: dict[str, Any] = {}
+    for i in range(count):
+        provider_id = f"provider-{i}"
+        providers[provider_id] = _omniroute_provider([_omniroute_model(id=f"model-{i}", name=f"Model {i}")])
+    return _omniroute_payload(providers=providers)
+
+
+def test_omniroute_repo_url_is_hardwired() -> None:
+    from faigate.catalog_sources.omniroute import OMNIROUTE_REPO_URL
+
+    assert OMNIROUTE_REPO_URL == "https://github.com/diegosouzapw/OmniRoute.git"
+
+
+def test_omniroute_repo_url_rejects_fork() -> None:
+    from faigate.catalog_sources.omniroute import OMNIROUTE_REPO_URL
+
+    # A fork (or lookalike) must not silently become the source. Any string
+    # that is not the canonical diegosouzapw URL is a fork mix-up.
+    assert OMNIROUTE_REPO_URL != "https://github.com/someone-else/OmniRoute.git"
+    assert OMNIROUTE_REPO_URL != "https://github.com/diegosouzapw/omni-Route.git"
+    assert "diegosouzapw/OmniRoute" in OMNIROUTE_REPO_URL
+
+
+def test_omniroute_normalizes_at_least_100_providers() -> None:
+    from faigate.catalog_sources.omniroute import OmniRouteAdapter
+
+    entries = OmniRouteAdapter().normalize(_big_omniroute_payload(count=120))
+    provider_ids = {e.provider_id for e in entries}
+    assert len(provider_ids) >= 100
+    assert len(provider_ids) == 120
+
+
+def test_omniroute_maps_registry_flags_to_modalities_and_capabilities() -> None:
+    from faigate.catalog_sources.omniroute import OmniRouteAdapter
+
+    payload = _omniroute_payload(
+        providers={
+            "deepseek": _omniroute_provider(
+                [
+                    _omniroute_model(
+                        id="deepseek-v4-pro",
+                        name="DeepSeek V4 Pro",
+                        supportsVision=True,
+                        supportsAudio=True,
+                        supportsReasoning=True,
+                        toolCalling=True,
+                        supportedThinkingEfforts=["none", "low", "high", "max"],
+                        contextLength=1_000_000,
+                        maxOutputTokens=384_000,
+                    )
+                ]
+            )
+        }
+    )
+    entry = OmniRouteAdapter().normalize(payload)[0]
+
+    assert entry.provider_id == "deepseek"
+    assert entry.model_id == "deepseek-v4-pro"
+    assert entry.display_name == "DeepSeek V4 Pro"
+    assert entry.context_window == 1_000_000
+    assert entry.max_output_tokens == 384_000
+    assert "image" in entry.modalities
+    assert "audio" in entry.modalities
+    assert "toolCalling" in entry.capabilities
+    assert "supportsReasoning" in entry.capabilities
+    assert "thinking_efforts" in entry.capabilities
+
+
+def test_omniroute_free_tier_lands_in_free_tier_field() -> None:
+    from faigate.catalog_sources.omniroute import OmniRouteAdapter
+
+    payload = _omniroute_payload(
+        providers={"cerebras": _omniroute_provider([_omniroute_model(id="zai-glm-4.7", name="GLM 4.7")])},
+        free_model_budgets=[
+            {
+                "provider": "cerebras",
+                "modelId": "zai-glm-4.7",
+                "monthlyTokens": 30_000_000,
+                "creditTokens": 0,
+                "freeType": "recurring-daily",
+            }
+        ],
+    )
+    entry = OmniRouteAdapter().normalize(payload)[0]
+
+    assert entry.free_tier is not None
+    assert entry.free_tier.tokens_per_month == 30_000_000
+
+
+def test_omniroute_uncapped_free_tier_has_no_cap() -> None:
+    from faigate.catalog_sources.omniroute import OmniRouteAdapter
+
+    payload = _omniroute_payload(
+        providers={"blackbox": _omniroute_provider([_omniroute_model(id="gpt-4o")])},
+        free_model_budgets=[
+            {
+                "provider": "blackbox",
+                "modelId": "gpt-4o",
+                "monthlyTokens": 0,
+                "creditTokens": 0,
+                "freeType": "keyless",
+            }
+        ],
+    )
+    entry = OmniRouteAdapter().normalize(payload)[0]
+
+    assert entry.free_tier is not None
+    assert entry.free_tier.tokens_per_month is None
+
+
+def test_omniroute_normalize_returns_empty_for_non_dict() -> None:
+    from faigate.catalog_sources.omniroute import OmniRouteAdapter
+
+    assert OmniRouteAdapter().normalize("not a dict") == []
+    assert OmniRouteAdapter().normalize(None) == []

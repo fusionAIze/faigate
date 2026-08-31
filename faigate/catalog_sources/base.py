@@ -56,6 +56,23 @@ class EntryPricing:
 
 
 @dataclass
+class FreeTier:
+    """Free-tier and quota facts about one provider or model.
+
+    Carries the upstream's documented recurring token budget and rate limits
+    so a routing gateway can decide whether a candidate may be used without
+    payment. Fields are optional: a source that only knows the monthly token
+    budget contributes that one number without fabricating the rest.
+    """
+
+    tokens_per_day: int | None = None
+    tokens_per_month: int | None = None
+    requests_per_minute: int | None = None
+    requests_per_day: int | None = None
+    expires_at: str | None = None
+
+
+@dataclass
 class NormalizedEntry:
     """One normalized model entry produced by a source adapter.
 
@@ -74,6 +91,7 @@ class NormalizedEntry:
     pricing: EntryPricing = field(default_factory=EntryPricing)
     modalities: list[Modality] = field(default_factory=list)
     capabilities: list[str] = field(default_factory=list)
+    free_tier: FreeTier | None = None
     source_url: str | None = None
 
 
