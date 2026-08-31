@@ -15,9 +15,10 @@ Precedence (highest first):
 
 The merge keys entries by ``(provider_id, model_id)``. Within one key, each
 field is settled field-by-field from highest to lowest precedence; the first
-source that supplies a meaningful (non-null) value for a field owns it, and
-any later source with a *different* meaningful value produces a conflict
-record that names the winner.
+source that supplies a *present* value for a field owns it, and any later
+source with a *different* present value produces a conflict record that names
+the winner. Present is not the same as non-zero: a curated free model whose
+price is ``0.0`` is a value, and must not be read as "no data".
 """
 
 from __future__ import annotations
@@ -25,7 +26,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from faigate.catalog_sources.base import EntryPricing, NormalizedEntry
+from faigate.catalog_sources.base import FreeTier, NormalizedEntry
 
 #: Fixed source precedence, highest first. Lower index wins.
 #: Overlays are curated corrections and must beat any foreign source; LiteLLM
@@ -83,10 +84,15 @@ class SourceInput:
             raise ValueError(f"unknown source {self.name!r}; expected one of {known}")
 
 
+#: Non-scalar ``NormalizedEntry`` fields are compared as multisets: the order a
+#: source lists ``["text", "image"]`` versus ``["image", "text"]`` is not a
+#: disagreement. ``source_url`` is a scalar provenance field like any other, so
+#: it participates in conflict detection rather than being resolved silently.
+_UNORDERED_FIELDS = ("modalities", "capabilities")
+
 #: Fields treated as a single mergeable atom. Each is compared as a whole so a
 #: pricing disagreement is one conflict naming the whole ``pricing`` object,
-#: not three conflicts over its sub-fields. ``source_url`` is provenance, not
-#: model data, and never participates in conflict detection.
+#: not three conflicts over its sub-fields.
 _MERGE_FIELDS = (
     "display_name",
     "context_window",
@@ -98,21 +104,58 @@ _MERGE_FIELDS = (
     "tier_status",
     "deprecation_date",
     "free_tier",
+    "source_url",
+)
+
+#: Scalar fields whose absence is ``None`` plus the two unordered list fields
+#: whose absence is ``[]``. ``pricing`` and ``free_tier`` are handled by
+#: :func:`_is_meaningful` with their own presence rules.
+_EMPTY_LIST_FIELDS = ("modalities", "capabilities")
+
+#: Fields on :class:`~faigate.catalog_sources.base.FreeTier` that carry real
+#: data. An all-``None`` ``FreeTier`` is an empty struct, not "free with no
+#: numbers", and must not suppress a populated tier from a lower source.
+_FREE_TIER_FIELDS = (
+    "tokens_per_day",
+    "tokens_per_month",
+    "requests_per_minute",
+    "requests_per_day",
+    "expires_at",
 )
 
 
 def _empty(field: str) -> Any:
     """The sentinel 'empty' value a field carries when a source has nothing."""
-    if field == "pricing":
-        return EntryPricing()
-    if field in ("modalities", "capabilities"):
+    if field in _EMPTY_LIST_FIELDS:
         return []
     return None
 
 
+def _free_tier_has_data(value: FreeTier) -> bool:
+    """Whether a ``FreeTier`` carries at least one real fact."""
+    return any(getattr(value, name) is not None for name in _FREE_TIER_FIELDS)
+
+
 def _is_meaningful(field: str, value: Any) -> bool:
-    """Whether a value contributes meaningfully, i.e. is not the empty sentinel."""
+    """Whether a value is *present*, i.e. not the empty sentinel.
+
+    Presence is not the same as non-zero. A curated free price of
+    ``EntryPricing(0.0, 0.0, 0.0)`` is present and must win over a lower
+    source's real (non-zero) price, logging a conflict that names both. By
+    contrast, an all-``None`` :class:`FreeTier` carries no fact and counts as
+    absent.
+    """
+    if field == "free_tier":
+        return isinstance(value, FreeTier) and _free_tier_has_data(value)
     return value != _empty(field)
+
+
+def _values_equal(field: str, left: Any, right: Any) -> bool:
+    """Compare two present values for equality, order-insensitively where the
+    field is unordered (``modalities``, ``capabilities``)."""
+    if field in _UNORDERED_FIELDS:
+        return set(left) == set(right)
+    return left == right
 
 
 def _value(field: str, entry: NormalizedEntry) -> Any:
@@ -144,7 +187,7 @@ def _merge_field(
             winner_source = source_name
             winner_value = value
             continue
-        if value != winner_value:
+        if not _values_equal(field, value, winner_value):
             result.conflicts.append(
                 Conflict(
                     provider_id=provider_id,
@@ -177,9 +220,10 @@ def _build_entry(key: tuple[str, str], resolved: dict[str, Any]) -> NormalizedEn
         tier_status=resolved["tier_status"],
         deprecation_date=resolved["deprecation_date"],
         free_tier=resolved["free_tier"],
-        # Provenance: the highest-precedence source that named a URL wins, so
-        # an overlay URL is kept over a foreign registry URL.
-        source_url=resolved.get("source_url"),
+        # Provenance is a merge field like the rest: the highest-precedence
+        # source that named a URL wins, and a later different URL is logged as
+        # a conflict, never resolved silently.
+        source_url=resolved["source_url"],
     )
 
 
@@ -208,14 +252,6 @@ def merge_catalogs(sources: list[SourceInput]) -> MergeResult:
         resolved: dict[str, Any] = {}
         for field_name in _MERGE_FIELDS:
             resolved[field_name] = _merge_field(result, key, field_name, entries)
-
-        # source_url is provenance; highest-precedence non-null value wins.
-        source_url: Any = None
-        for source_name, entry in entries:
-            if entry.source_url is not None:
-                source_url = entry.source_url
-                break
-        resolved["source_url"] = source_url
 
         result.entries.append(_build_entry(key, resolved))
 

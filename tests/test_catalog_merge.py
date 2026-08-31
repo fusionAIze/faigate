@@ -22,7 +22,7 @@ def _entry(
     return NormalizedEntry(
         provider_id=provider_id,
         model_id=model_id,
-        pricing=pricing or EntryPricing(),
+        pricing=pricing,
         context_window=context_window,
         modalities=modalities or [],
         **kwargs,
@@ -112,7 +112,7 @@ def test_non_conflicting_fields_are_filled_from_lower_precedence() -> None:
     # Overlay supplies only a price; LiteLLM fills the context window; both
     # survive because they target different fields.
     overlay = _entry(pricing=EntryPricing(input=3.0), context_window=None)
-    litellm = _entry(pricing=EntryPricing(), context_window=128000)
+    litellm = _entry(pricing=None, context_window=128000)
 
     result = merge_catalogs([SourceInput("overlay", [overlay]), SourceInput("litellm", [litellm])])
 
@@ -165,3 +165,78 @@ def test_entry_only_in_lower_precedence_is_preserved() -> None:
 
     assert len(result.entries) == 1
     assert result.entries[0].model_id == "deepseek-v4-pro"
+
+
+def test_curated_free_price_of_zero_beats_foreign_price() -> None:
+    # A curated free model at 0/0/0 is a *value*, not "no price". It must win
+    # over LiteLLM's real price, and the disagreement must be logged naming
+    # both values -- never read as "overlay had nothing".
+    overlay = _entry(pricing=EntryPricing(input=0.0, output=0.0, cache_read=0.0))
+    litellm = _entry(pricing=EntryPricing(input=5.0, output=25.0))
+
+    result = merge_catalogs([SourceInput("overlay", [overlay]), SourceInput("litellm", [litellm])])
+
+    merged = result.entries[0]
+    assert merged.pricing is not None
+    assert merged.pricing.input == 0.0
+    assert merged.pricing.output == 0.0
+
+    pricing_conflicts = [c for c in result.conflicts if c.field == "pricing"]
+    assert pricing_conflicts, "a curated zero against a real price must log a conflict"
+    conflict = pricing_conflicts[0]
+    assert conflict.winner_source == "overlay"
+    assert conflict.loser_source == "litellm"
+    assert conflict.winner_value == EntryPricing(input=0.0, output=0.0, cache_read=0.0)
+    assert conflict.loser_value == EntryPricing(input=5.0, output=25.0)
+
+
+def test_unordered_lists_do_not_log_phantom_conflict() -> None:
+    overlay = _entry(modalities=["text", "image"])
+    litellm = _entry(modalities=["image", "text"])
+
+    result = merge_catalogs([SourceInput("overlay", [overlay]), SourceInput("litellm", [litellm])])
+
+    modality_conflicts = [c for c in result.conflicts if c.field == "modalities"]
+    assert modality_conflicts == []
+    assert set(result.entries[0].modalities) == {"text", "image"}
+
+
+def test_source_url_disagreement_is_logged_not_resolved_silently() -> None:
+    overlay = _entry(source_url="https://docs.acme.com/models/gpt-4o")
+    litellm = _entry(source_url="https://litellm.ai/models/gpt-4o")
+
+    result = merge_catalogs([SourceInput("overlay", [overlay]), SourceInput("litellm", [litellm])])
+
+    assert result.entries[0].source_url == "https://docs.acme.com/models/gpt-4o"
+    source_url_conflicts = [c for c in result.conflicts if c.field == "source_url"]
+    assert len(source_url_conflicts) == 1
+    assert source_url_conflicts[0].winner_source == "overlay"
+    assert source_url_conflicts[0].loser_source == "litellm"
+
+
+def test_absent_pricing_allows_lower_source_to_fill() -> None:
+    # ``None`` (absent) pricing must fall through to the lower source; only a
+    # *present* (including zero) price should own the field.
+    overlay = _entry(pricing=None)
+    litellm = _entry(pricing=EntryPricing(input=5.0))
+
+    result = merge_catalogs([SourceInput("overlay", [overlay]), SourceInput("litellm", [litellm])])
+
+    assert result.entries[0].pricing == EntryPricing(input=5.0)
+    assert [c for c in result.conflicts if c.field == "pricing"] == []
+
+
+def test_all_none_free_tier_does_not_suppress_populated_tier() -> None:
+    from faigate.catalog_sources.base import FreeTier
+
+    empty_overlay = _entry(free_tier=FreeTier())
+    real_litellm = _entry(free_tier=FreeTier(tokens_per_month=10_000_000))
+
+    result = merge_catalogs(
+        [SourceInput("overlay", [empty_overlay]), SourceInput("litellm", [real_litellm])]
+    )
+
+    merged = result.entries[0]
+    assert merged.free_tier is not None
+    assert merged.free_tier.tokens_per_month == 10_000_000
+    assert [c for c in result.conflicts if c.field == "free_tier"] == []

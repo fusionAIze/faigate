@@ -88,7 +88,9 @@ class NormalizedEntry:
     context_window: int | None = None
     max_input_tokens: int | None = None
     max_output_tokens: int | None = None
-    pricing: EntryPricing = field(default_factory=EntryPricing)
+    #: ``None`` means the source has no pricing data; a present ``EntryPricing``
+    #: (even ``0.0``/``0.0``/``0.0`` for a curated free model) is real data.
+    pricing: EntryPricing | None = None
     modalities: list[Modality] = field(default_factory=list)
     capabilities: list[str] = field(default_factory=list)
     tier_status: str | None = None
