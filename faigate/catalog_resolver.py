@@ -232,27 +232,48 @@ class CatalogResolver:
                 notes=notes,
             )
 
+        reason = result.error or result.status.value
         notes.append(f"{tier}: {result.status.value} (no cache)")
+        logger.warning(
+            "catalog resolve: %s remote %s — %s (no cached fallback)",
+            tier,
+            result.status.value,
+            reason,
+        )
         return None
 
     def status(self) -> dict[str, Any]:
-        """Surface cache state for `faigate models status` and dashboards."""
+        """Surface cache state for `faigate models status` and dashboards.
+
+        Every tier reports ``state`` (``cached``/``unavailable``) and
+        ``cause`` (why the tier is unavailable, e.g. the last sync error)
+        so dead paths are visible instead of silently falling back to the
+        bundled snapshot.
+        """
         out: dict[str, Any] = {"tiers": {}}
         for tier in ("private", "public"):
             cached = self._cache.load(tier)
-            if cached is None:
-                out["tiers"][tier] = {"present": False}
-                continue
-            out["tiers"][tier] = {
-                "present": True,
-                "etag": cached.etag,
-                "written_at": cached.written_at,
-                "age_seconds": time.time() - cached.written_at,
-                "providers_count": len(cached.payload.get("providers", {})),
-            }
             state = self._cache.load_state(tier)
+
+            entry: dict[str, Any] = {
+                "present": cached is not None,
+                "state": "cached" if cached is not None else "unavailable",
+                "cause": "",
+            }
+            if cached is not None:
+                entry.update(
+                    {
+                        "etag": cached.etag,
+                        "written_at": cached.written_at,
+                        "age_seconds": time.time() - cached.written_at,
+                        "providers_count": len(cached.payload.get("providers", {})),
+                    }
+                )
             if state is not None:
-                out["tiers"][tier]["sync"] = {
+                entry["cause"] = state.last_error or (
+                    state.last_status if cached is None else ""
+                )
+                entry["sync"] = {
                     "last_attempt_at": state.last_attempt_at,
                     "last_success_at": state.last_success_at,
                     "last_status": state.last_status,
@@ -261,6 +282,7 @@ class CatalogResolver:
                     "failure_count": state.failure_count,
                     "seconds_since_success": (time.time() - state.last_success_at if state.last_success_at else None),
                 }
+            out["tiers"][tier] = entry
         bundled = _load_bundled_snapshot()
         out["bundled_present"] = bundled is not None
         if bundled is not None:

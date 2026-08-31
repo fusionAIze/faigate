@@ -366,6 +366,93 @@ def test_resolver_status_reports_cache_state(tmp_path: Path):
     assert status["tiers"]["public"]["sync"]["last_status"] == "fresh"
 
 
+def test_resolver_404_on_both_remotes_logs_one_warning_per_tier(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(
+        "faigate.catalog_resolver._load_bundled_snapshot",
+        lambda: _valid_payload(),
+    )
+    resolver, _ = _make_resolver(
+        tmp_path,
+        plan=[(404, {}, b""), (404, {}, b"")],
+        token="ghp_test",
+    )
+    with caplog.at_level(logging.WARNING, logger="faigate.catalog_resolver"):
+        resolved = resolver.resolve()
+
+    assert resolved.source == "bundled"
+    warnings = [
+        rec.getMessage()
+        for rec in caplog.records
+        if rec.name == "faigate.catalog_resolver" and rec.levelno >= logging.WARNING
+    ]
+    assert len(warnings) == 2
+    by_tier: dict[str, str] = {}
+    for msg in warnings:
+        for tier in ("private", "public"):
+            if tier in msg:
+                by_tier[tier] = msg
+    assert set(by_tier) == {"private", "public"}
+    for msg in by_tier.values():
+        assert "not_found" in msg
+        assert "404" in msg
+
+
+def test_resolver_status_reports_state_and_cause_per_tier(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(
+        "faigate.catalog_resolver._load_bundled_snapshot",
+        lambda: _valid_payload(),
+    )
+    resolver, _ = _make_resolver(
+        tmp_path,
+        plan=[(404, {}, b""), (404, {}, b"")],
+        token="ghp_test",
+    )
+    resolved = resolver.resolve()
+    assert resolved.source == "bundled"
+
+    status = resolver.status()
+    for tier in ("private", "public"):
+        entry = status["tiers"][tier]
+        assert entry["present"] is False
+        assert entry["state"] == "unavailable"
+        assert entry["cause"] == "http 404"
+
+
+def test_update_check_nonzero_when_only_bundled_served(monkeypatch: pytest.MonkeyPatch):
+    import argparse
+
+    from faigate import models_cli
+
+    class _FakeCache:
+        def load(self, tier: str):  # noqa: ARG002
+            return None
+
+    class _FakeResolver:
+        def __init__(self, *, config: Any = None) -> None:
+            self._cache = _FakeCache()
+
+        def status(self) -> dict[str, Any]:
+            return {
+                "tiers": {
+                    "private": {"present": False, "state": "unavailable", "cause": ""},
+                    "public": {"present": False, "state": "unavailable", "cause": ""},
+                },
+                "bundled_present": True,
+                "bundled_providers_count": 1,
+            }
+
+    monkeypatch.setattr(models_cli, "CatalogResolver", _FakeResolver)
+    rc = models_cli.cmd_update(argparse.Namespace(check=True, diff=False))
+    assert rc != 0
+
+
 def test_build_catalog_alerts_includes_metadata_sync_invalid():
     alerts = build_catalog_alerts(
         {
