@@ -46,6 +46,7 @@ from faigate.main import (
     _attempt_metric_fields,
     _extract_image_edit_request_fields,
     _normalize_image_request_body,
+    _provider_modalities,
     _refresh_local_worker_probes,
     _resolve_image_route_preview,
     _resolve_route_preview,
@@ -207,6 +208,14 @@ providers:
       max_side_px: 2048
       supported_sizes: ["1024x1024", "2048x2048"]
       policy_tags: ["quality", "batch"]
+  vision-cloud:
+    backend: openai-compat
+    base_url: "https://api.example.com/v1"
+    api_key: "secret"
+    model: "vision-model"
+    tier: default
+    capabilities:
+      vision: true
 client_profiles:
   enabled: true
   default: generic
@@ -329,6 +338,15 @@ metrics:
                     "policy_tags": ["quality", "batch"],
                 },
             ),
+            "vision-cloud": _ProviderStub(
+                name="vision-cloud",
+                model="vision-model",
+                contract="generic",
+                tier="default",
+                capabilities={
+                    "vision": True,
+                },
+            ),
         },
         raising=False,
     )
@@ -448,6 +466,23 @@ async def test_list_models_includes_modes_and_shortcuts(preview_config):
     assert "premium" in model_ids
     assert "local" in model_ids
     assert "img" in model_ids
+
+
+def test_provider_modalities_marks_vision_as_image():
+    assert _provider_modalities({}) == ["text"]
+    assert _provider_modalities({"vision": True}) == ["image", "text"]
+    assert _provider_modalities({"image_generation": True}) == ["image", "text"]
+    assert _provider_modalities({"image_editing": True}) == ["image", "text"]
+
+
+@pytest.mark.asyncio
+async def test_list_models_marks_vision_provider_with_image_modality(preview_config):
+    payload = await list_models()
+    by_id = {row["id"]: row for row in payload["data"]}
+
+    assert by_id["vision-cloud"]["modalities"] == ["image", "text"]
+    assert by_id["cloud-default"]["modalities"] == ["text"]
+    assert by_id["image-large"]["modalities"] == ["image", "text"]
 
 
 @pytest.mark.asyncio
@@ -750,9 +785,9 @@ class TestProviderCoverage:
     async def test_health_reports_capability_coverage(self, preview_config):
         response = await health()
 
-        assert response["summary"]["providers_total"] == 4
-        assert response["summary"]["providers_healthy"] == 4
-        assert response["summary"]["providers_request_ready"] == 4
+        assert response["summary"]["providers_total"] == 5
+        assert response["summary"]["providers_healthy"] == 5
+        assert response["summary"]["providers_request_ready"] == 5
         assert response["providers"]["cloud-default"]["request_readiness"]["status"] == "ready"
         assert response["coverage"]["image_generation"]["total"] == 2
         assert response["coverage"]["image_generation"]["healthy"] == 2
