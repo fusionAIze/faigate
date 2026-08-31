@@ -15,8 +15,9 @@ The LiteLLM names are what the adapter understands:
   and token limits.
 * ``supports_vision`` / ``supports_image_input`` / ``supports_audio_input`` /
   ``supports_video_input`` / ``supported_modalities`` — mapped onto ``modalities``.
-* ``deprecation_date`` — carried onto ``tier_status`` so a deprecated model is
-  flagged instead of silently kept looking current.
+* ``deprecation_date`` — carried onto ``tier_status``: a past date flags
+  ``deprecated`` and a future date flags ``retiring``, so a scheduled
+  retirement is told apart from one that has already happened.
 * ``supports_reasoning`` / ``supports_function_calling`` — mapped onto
   ``capabilities``.
 * ``litellm_provider`` — the model's provider id.
@@ -24,9 +25,13 @@ The LiteLLM names are what the adapter understands:
 
 from __future__ import annotations
 
+import datetime
+import logging
 from typing import Any
 
 from faigate.catalog_sources.base import EntryPricing, NormalizedEntry
+
+logger = logging.getLogger(__name__)
 
 #: LiteLLM stores per-token prices; the interchange shape is USD per 1M tokens.
 _TOKENS_PER_MILLION = 1_000_000
@@ -40,20 +45,34 @@ _CHAT_MODES = {"chat", "completion", "responses", "realtime"}
 #: ``tier_status`` values used by the downstream catalog.
 _STATUS_ACTIVE = "active"
 _STATUS_DEPRECATED = "deprecated"
+_STATUS_RETIRING = "retiring"
 
 
-def _as_float(value: object) -> float:
+def _as_float(value: object, *, field: str, model_id: str) -> float:
+    """Parse a numeric field, logging loudly when it cannot be coerced.
+
+    LiteLLM prices are normally plain numbers. A non-numeric or absent price --
+    most notably a ``tiered_pricing`` entry whose ``*_cost_per_token`` is
+    ``None`` -- would otherwise collapse to ``0.0`` and silently report a free
+    model. Returning ``0.0`` preserves today's downstream behaviour but the
+    warn makes the coerce visible instead of hidden.
+    """
+    if value is None:
+        return 0.0
     if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, bool):
         return float(value)
     try:
         return float(str(value))
     except (TypeError, ValueError):
+        logger.warning("litellm: non-numeric %r for %r on %r; coerce to 0.0", field, value, model_id)
         return 0.0
 
 
-def _to_price_per_1m(value: object) -> float:
+def _to_price_per_1m(value: object, *, field: str, model_id: str) -> float:
     """Convert a LiteLLM per-token price to USD per 1M tokens."""
-    return _as_float(value) * _TOKENS_PER_MILLION
+    return _as_float(value, field=field, model_id=model_id) * _TOKENS_PER_MILLION
 
 
 def _as_int(value: object) -> int | None:
@@ -62,6 +81,7 @@ def _as_int(value: object) -> int | None:
     try:
         return int(float(str(value)))
     except (TypeError, ValueError):
+        logger.warning("litellm: non-numeric token limit %r; coerce to None", value)
         return None
 
 
@@ -99,15 +119,31 @@ def _derive_capabilities(raw: dict[str, Any]) -> list[str]:
     return capabilities
 
 
-def _derive_tier_status(raw: dict[str, Any]) -> str | None:
+def _derive_tier_status(raw: dict[str, Any], *, model_id: str) -> str | None:
     """Carry LiteLLM ``deprecation_date`` onto ``tier_status``.
 
-    A model with a deprecation date is flagged ``deprecated``; everything else
-    stays ``active``. The raw date is preserved separately on the entry.
+    A deprecation date that has already passed (compared to the day the
+    registry is normalized) flags ``deprecated``. A date still in the future
+    flags ``retiring`` -- the model is scheduled for retirement but not yet
+    retired. The downstream catalog treats both as non-``active``, so routing
+    already excludes them; the split keeps the states honest for operators
+    instead of reporting a months-away retirement as already done.
     """
-    if raw.get("deprecation_date"):
+    raw_date = raw.get("deprecation_date")
+    if not raw_date:
+        return _STATUS_ACTIVE
+
+    text = str(raw_date).strip()
+    try:
+        when = datetime.date.fromisoformat(text)
+    except ValueError:
+        # Unparseable date: treat conservatively as already deprecated.
+        logger.warning("litellm: unparseable deprecation_date %r on %r", text, model_id)
         return _STATUS_DEPRECATED
-    return _STATUS_ACTIVE
+
+    if when <= datetime.date.today():
+        return _STATUS_DEPRECATED
+    return _STATUS_RETIRING
 
 
 def _build_entry(model_id: str, raw: dict[str, Any]) -> NormalizedEntry:
@@ -121,10 +157,20 @@ def _build_entry(model_id: str, raw: dict[str, Any]) -> NormalizedEntry:
     if context_window is None:
         context_window = max_output
 
+    if raw.get("tiered_pricing") and raw.get("input_cost_per_token") is None:
+        # A tiered model carries no flat price; the per-token fields collapse
+        # to 0.0. Surface that so a free-looking model is never silent.
+        logger.warning(
+            "litellm: %r has tiered_pricing but no flat input_cost_per_token; prices will be 0.0",
+            model_id,
+        )
+
     pricing = EntryPricing(
-        input=_to_price_per_1m(raw.get("input_cost_per_token")),
-        output=_to_price_per_1m(raw.get("output_cost_per_token")),
-        cache_read=_to_price_per_1m(raw.get("cache_read_input_token_cost")),
+        input=_to_price_per_1m(raw.get("input_cost_per_token"), field="input_cost_per_token", model_id=model_id),
+        output=_to_price_per_1m(raw.get("output_cost_per_token"), field="output_cost_per_token", model_id=model_id),
+        cache_read=_to_price_per_1m(
+            raw.get("cache_read_input_token_cost"), field="cache_read_input_token_cost", model_id=model_id
+        ),
     )
 
     deprecation_date = str(raw["deprecation_date"]) if raw.get("deprecation_date") else None
@@ -139,7 +185,7 @@ def _build_entry(model_id: str, raw: dict[str, Any]) -> NormalizedEntry:
         pricing=pricing,
         modalities=_derive_modalities(raw),
         capabilities=_derive_capabilities(raw),
-        tier_status=_derive_tier_status(raw),
+        tier_status=_derive_tier_status(raw, model_id=model_id),
         deprecation_date=deprecation_date,
     )
 

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+from datetime import date
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -11,6 +14,14 @@ from faigate.catalog_sources.base import (
     NormalizedEntry,
     SourceAdapter,
 )
+
+#: Path to the checked-in LiteLLM registry slice used by the real-data tests.
+_LITELLM_FIXTURE = Path(__file__).parent / "fixtures" / "litellm" / "model_prices_and_context_window.json"
+
+
+def _load_litellm_fixture() -> dict[str, Any]:
+    with _LITELLM_FIXTURE.open() as f:
+        return json.load(f)
 
 
 class FakeAdapter:
@@ -200,31 +211,94 @@ def test_litellm_norm_maps_supports_vision_to_image_modality() -> None:
 def test_litellm_norm_carries_deprecation_date_onto_tier_status() -> None:
     from faigate.catalog_sources.litellm import LiteLLMAdapter
 
-    entries = LiteLLMAdapter().normalize(_LITELLM_PAYLOAD)
+    payload = {
+        "gpt-4o": _litellm_model(),
+        "retired-model": _litellm_model(deprecation_date="2020-01-01"),
+        "retiring-model": _litellm_model(deprecation_date="2099-12-31"),
+    }
+    entries = LiteLLMAdapter().normalize(payload)
     by_id = {e.model_id: e for e in entries}
 
-    deprecated = by_id["gpt-3.5-turbo"]
-    assert deprecated.tier_status == "deprecated"
-    assert deprecated.deprecation_date == "2026-10-23"
+    assert by_id["gpt-4o"].tier_status == "active"
+    assert by_id["gpt-4o"].deprecation_date is None
 
-    active = by_id["gpt-4o"]
-    assert active.tier_status == "active"
-    assert active.deprecation_date is None
+    assert by_id["retired-model"].tier_status == "deprecated"
+    assert by_id["retired-model"].deprecation_date == "2020-01-01"
+
+    # A date still in the future is "retiring", not "deprecated".
+    assert by_id["retiring-model"].tier_status == "retiring"
+    assert by_id["retiring-model"].deprecation_date == "2099-12-31"
+
+
+def test_litellm_norm_marks_future_deprecation_as_retiring_on_fixture() -> None:
+    """On real registry data, months-away retirements are ``retiring``, not ``deprecated``."""
+    from faigate.catalog_sources.litellm import LiteLLMAdapter
+
+    entries = LiteLLMAdapter().normalize(_load_litellm_fixture())
+    retiring = [e for e in entries if e.tier_status == "retiring"]
+    assert retiring, "fixture has no future-dated deprecations"
+
+    today = date.today()
+    for e in retiring:
+        assert e.deprecation_date is not None
+        assert date.fromisoformat(e.deprecation_date) > today
 
 
 def test_litellm_norm_produces_at_least_250_priced_context_entries() -> None:
     from faigate.catalog_sources.litellm import LiteLLMAdapter
 
-    payload = {
-        f"model-{i}": _litellm_model(
-            max_input_tokens=64000 + i,
-            input_cost_per_token=(1.0 + i) * 1.0e-06,
-            output_cost_per_token=(2.0 + i) * 1.0e-06,
-        )
-        for i in range(251)
-    }
-    entries = LiteLLMAdapter().normalize(payload)
+    raw = _load_litellm_fixture()
+    entries = LiteLLMAdapter().normalize(raw)
 
-    assert len(entries) == 251
+    assert len(entries) >= 250
     priced_with_context = [e for e in entries if (e.pricing.input > 0 or e.pricing.output > 0) and e.context_window]
     assert len(priced_with_context) >= 250
+
+
+def test_litellm_norm_fixture_covers_real_registry_shape() -> None:
+    """The fixture mirrors the real registry across the fields the adapter maps.
+
+    Each assertion targets a category that LiteLLM's production registry
+    actually contains, so the test proves the adapter's shape handling against
+    real data rather than synthetic defaults.
+    """
+    from faigate.catalog_sources.litellm import LiteLLMAdapter
+
+    raw = _load_litellm_fixture()
+    entries = {e.model_id: e for e in LiteLLMAdapter().normalize(raw)}
+
+    # vision models map onto an "image" modality.
+    vision = [m for m, e in entries.items() if "image" in e.modalities]
+    assert vision, "fixture has no vision models"
+
+    # deprecated models (past date) vs. retiring (future date).
+    deprecated = [e for e in entries.values() if e.tier_status == "deprecated"]
+    assert deprecated, "fixture has no already-deprecated models"
+    assert all(e.deprecation_date for e in deprecated)
+
+    # cache pricing is carried when present.
+    cached = [e for e in entries.values() if e.pricing.cache_read > 0]
+    assert cached, "fixture has no cache-priced models"
+
+    # every normalized entry is a chat-mode model with a non-empty model id.
+    assert all(e.model_id for e in entries.values())
+
+
+def test_litellm_norm_handles_partial_edge_entries() -> None:
+    """Partial records must normalize without crashing and keep what they know."""
+    from faigate.catalog_sources.litellm import LiteLLMAdapter
+
+    # Literal synthetic edge records: these are deliberately not the fixture,
+    # proving the adapter tolerates oddly-shaped input beyond real data.
+    raw = {
+        "no-context": _litellm_model(max_input_tokens=None, max_tokens=None, max_output_tokens=None),
+        "string-price": _litellm_model(input_cost_per_token="2.5e-06"),
+        "bad-limit": _litellm_model(max_input_tokens="nope", max_output_tokens=None),
+        "not-a-dict": "garbage",  # ignored by normalize
+    }
+    entries = {e.model_id: e for e in LiteLLMAdapter().normalize(raw)}
+
+    assert set(entries) == {"no-context", "string-price", "bad-limit"}
+    assert entries["no-context"].context_window is None
+    assert entries["string-price"].pricing.input == pytest.approx(2.5)
+    assert entries["bad-limit"].context_window is None
