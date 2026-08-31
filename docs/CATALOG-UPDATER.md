@@ -155,18 +155,24 @@ successful refresh.
 
 ## Sync alerts
 
-Sync state is written next to each of the three tiers — `private`, `public`,
-and `bundled` — and surfaced through the existing catalog alert pipeline:
+Sync state is written next to the two remote tiers — `private` and
+`public` — and surfaced through the existing catalog alert pipeline. The
+`bundled` tier has no sync state: it exposes only `bundled_present` and
+`bundled_providers_count` in `status()`, and never appears in the
+`status()["tiers"]` dict that feeds `build_catalog_alerts`.
 
 - `sync-stale` — last successful sync is older than 7 days, or no sync has
   ever succeeded.
 - `sync-invalid` — remote JSON parsed but failed catalog validation.
 - `sync-auth` — the `private` tier returned 401/403.
 
-`faigate-models status` reports each tier's cache age, ETag, provider count,
-and last sync result so a dead delivery path is visible instead of silently
-falling back. The alerts appear in `/api/provider-catalog`, dashboard
-summaries, and any surface already consuming `build_catalog_alerts`.
+`faigate-models status` reports each remote tier's cache age, ETag, and
+provider count (and bundled presence/count) so a dead delivery path is
+visible instead of silently falling back. The last sync result is not part of
+the default output; it is available only via `faigate-models status --json`,
+and only when a sync-state file exists for that tier. The alerts appear in
+`/api/provider-catalog`, dashboard summaries, and any surface already
+consuming `build_catalog_alerts`.
 
 ## Troubleshooting
 
