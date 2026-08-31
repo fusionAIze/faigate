@@ -232,9 +232,7 @@ def test_all_none_free_tier_does_not_suppress_populated_tier() -> None:
     empty_overlay = _entry(free_tier=FreeTier())
     real_litellm = _entry(free_tier=FreeTier(tokens_per_month=10_000_000))
 
-    result = merge_catalogs(
-        [SourceInput("overlay", [empty_overlay]), SourceInput("litellm", [real_litellm])]
-    )
+    result = merge_catalogs([SourceInput("overlay", [empty_overlay]), SourceInput("litellm", [real_litellm])])
 
     merged = result.entries[0]
     assert merged.free_tier is not None

@@ -270,9 +270,7 @@ class CatalogResolver:
                     }
                 )
             if state is not None:
-                entry["cause"] = state.last_error or (
-                    state.last_status if cached is None else ""
-                )
+                entry["cause"] = state.last_error or (state.last_status if cached is None else "")
                 entry["sync"] = {
                     "last_attempt_at": state.last_attempt_at,
                     "last_success_at": state.last_success_at,
