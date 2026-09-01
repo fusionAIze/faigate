@@ -1,9 +1,20 @@
 """The 413 must name the limit that actually rejected the request.
 
 Byte-based rejections previously reported the provider token cap
-(``limits.max_input_tokens``), so a caller who shrank the request to that many
-tokens still failed: 262144 tokens do not fit in 1 MiB. The response now carries
-the limit that fired, plus its unit.
+(``limits.max_input_tokens``) instead of the byte limit that fired.
+
+Measured against the running gateway (faigate 2.7.0, 2026-09-01), isolating the
+two checks by sending few tokens in many bytes:
+
+    body 1_000_000 B -> HTTP 200, prompt_tokens = 125071
+    body 1_100_000 B -> HTTP 413, limit = 262144
+
+The rejected request carried roughly 137k tokens — far below the advertised
+262144 cap — so the wall it hit was security.max_json_body_bytes (1048576), not
+the token cap. A caller who shrank to the advertised number would be shrinking
+against a limit that never fired.
+
+The response now carries the limit that actually fired, plus its unit.
 """
 
 from __future__ import annotations
