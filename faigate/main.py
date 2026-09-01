@@ -126,7 +126,15 @@ def _provider_requires_static_api_key(name: str, cfg: dict[str, Any]) -> bool:
 
 
 class PayloadTooLargeError(ValueError):
-    """Raised when one request or upload exceeds configured size limits."""
+    """Raised when one request or upload exceeds configured size limits.
+
+    ``byte_limit`` carries the limit that actually rejected the request, so the
+    caller is told the wall it hit rather than an unrelated token cap.
+    """
+
+    def __init__(self, message: str, *, byte_limit: int | None = None) -> None:
+        super().__init__(message)
+        self.byte_limit = byte_limit
 
 
 @dataclass
@@ -365,7 +373,14 @@ def _payload_too_large_response(
     if exc is not None:
         logger.info("Payload rejected as too large: %s", exc)
 
-    resolved_limit = limit if limit is not None else _max_input_token_cap()
+    byte_limit = getattr(exc, "byte_limit", None) if exc is not None else None
+    if limit is not None:
+        resolved_limit, unit = limit, "tokens"
+    elif byte_limit is not None:
+        resolved_limit, unit = byte_limit, "bytes"
+    else:
+        resolved_limit, unit = _max_input_token_cap(), "tokens"
+
     body: dict[str, Any] = {
         "error": message,
         "type": "payload_too_large",
@@ -373,7 +388,9 @@ def _payload_too_large_response(
     headers: dict[str, str] = {}
     if resolved_limit is not None:
         body["limit"] = resolved_limit
+        body["limit_unit"] = unit
         headers["x-faigate-request-limit"] = str(resolved_limit)
+        headers["x-faigate-request-limit-unit"] = unit
     return JSONResponse(body, status_code=413, headers=headers)
 
 
@@ -2136,7 +2153,10 @@ async def _read_json_body(request: Request, *, operation: str) -> dict[str, Any]
     raw = await request.body()
     max_bytes = int((_config.security or {}).get("max_json_body_bytes", 1_048_576))
     if len(raw) > max_bytes:
-        raise PayloadTooLargeError(f"{operation} body exceeded security.max_json_body_bytes ({len(raw)} > {max_bytes})")
+        raise PayloadTooLargeError(
+            f"{operation} body exceeded security.max_json_body_bytes ({len(raw)} > {max_bytes})",
+            byte_limit=max_bytes,
+        )
     try:
         parsed = json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
