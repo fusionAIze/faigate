@@ -47,7 +47,7 @@ dev = [
     "pytest-cov>=5.0",
     "pytest-benchmark>=4.0.0",
     "httpx",  # for TestClient
-    "ruff==0.16.4",
+    "ruff==0.16.5",
     "twine>=6.1",
     "pre-commit>=3.0",
     "bandit[toml]>=1.8.0",
