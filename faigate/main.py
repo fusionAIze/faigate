@@ -61,6 +61,7 @@ from .lane_registry import (
     get_route_add_recommendations,
 )
 from .metrics import MetricsStore, calc_cost
+from .model_identity import ModelIdentity, ModelIdentityResolver, derive_short_name
 from .oauth_readiness import oauth_readiness_block
 from .provider_availability import (
     record_availability_from_config,
@@ -2949,6 +2950,60 @@ def _static_rule_model_requested_triggers(static_rules: dict[str, Any]) -> list[
     return triggers
 
 
+def _catalog_model_identities() -> list[ModelIdentity]:
+    """Build model identities from the split provider registry.
+
+    Each ``registry.ALL`` entry carries ``vendor`` / ``model`` (plus optional
+    ``hop`` / ``variant``), so the derived short name and the canonical long
+    form come straight out of the identity fields — no curation needed. The
+    resolver built from this list is the one place that turns a requested
+    token (long form, derived short name, or kuerzel alias) into the canonical
+    long form faigate returns, logs, and bills.
+    """
+    from . import registry
+
+    identities: list[ModelIdentity] = []
+    for name in registry.known_names():
+        identity = registry.provider_identity(name)
+        if identity is None:
+            continue
+        vendor, model, _long_form = identity
+        identities.append(
+            ModelIdentity.from_fields(
+                vendor=vendor,
+                model=model,
+                hop=registry.ALL[name].get("hop") or [],
+                variant=registry.ALL[name].get("variant"),
+            )
+        )
+    return identities
+
+
+def _model_identity_resolver() -> ModelIdentityResolver:
+    """Return a resolver over the registry-derived model identities."""
+    return ModelIdentityResolver(_catalog_model_identities())
+
+
+def _attach_derived_identity(entry: dict[str, Any], provider_name: str) -> None:
+    """Attach a derived ``short_name`` / ``long_form`` to a provider list entry.
+
+    The long form is the canonical trail from the split registry identity
+    (``[hop/]vendor/model[:variant]``); the short name is the derived
+    ``vendor/model`` form. Both are pure derivations of the identity fields —
+    never a kuerzel alias, and never the entry's ``id``, which stays the
+    routing key. Providers whose name is not a registry identity keep no
+    identity metadata rather than guessing one.
+    """
+    from . import registry
+
+    identity = registry.provider_identity(provider_name)
+    if identity is None:
+        return
+    vendor, model, long_form = identity
+    entry["short_name"] = derive_short_name(vendor, model)
+    entry["long_form"] = long_form
+
+
 def _routable_model_entries(
     config: Config | None = None,
     providers: dict[str, Any] | None = None,
@@ -2984,20 +3039,19 @@ def _routable_model_entries(
         entries[key] = entry
 
     for name, provider in provider_map.items():
-        claim(
-            name,
-            {
-                "object": "model",
-                "owned_by": provider.backend_type,
-                "description": f"{provider.model} ({provider.tier})",
-                "contract": provider.contract,
-                "capabilities": provider.capabilities,
-                "modalities": _provider_modalities(provider.capabilities or {}),
-                "context_window": provider.context_window,
-                "limits": provider.limits,
-                "cache": provider.cache,
-            },
-        )
+        entry = {
+            "object": "model",
+            "owned_by": provider.backend_type,
+            "description": f"{provider.model} ({provider.tier})",
+            "contract": provider.contract,
+            "capabilities": provider.capabilities,
+            "modalities": _provider_modalities(provider.capabilities or {}),
+            "context_window": provider.context_window,
+            "limits": provider.limits,
+            "cache": provider.cache,
+        }
+        _attach_derived_identity(entry, name)
+        claim(name, entry)
 
     modes_cfg = cfg.routing_modes
     if modes_cfg.get("enabled"):
