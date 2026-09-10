@@ -898,14 +898,22 @@ def _resolve_requested_model(
     return normalized, None, None, None, {}
 
 
-def _is_known_model_identity(model_id: str, config: Config) -> bool:
+def _is_known_model_identity(
+    model_id: str,
+    config: Config,
+    *,
+    routable_by_name: bool = False,
+) -> bool:
     """Return whether a requested model id resolves to a routable identity.
 
-    A model id is known when it names a configured provider (canonical slug), a
-    model shortcut, a routing mode, or the virtual "auto" selector. Curated
-    catalog entries are intentionally not accepted here: only ids that can
-    actually become a routing target may pass. A curated but unconfigured entry
-    therefore stays a ``model_not_found``.
+    The routing engine is the single source of truth for what is routable, so the
+    caller passes ``routable_by_name`` when routing already proved the id names a
+    static ``model_requested`` rule. When that is false the check still recognises
+    ids that resolve to a configured provider (canonical slug), a model shortcut,
+    a routing mode, or the virtual "auto" selector. Curated catalog entries are
+    intentionally not accepted here: only ids that can actually become a routing
+    target may pass. A curated but unconfigured entry therefore stays a
+    ``model_not_found``.
 
     The check fails open. If identity resolution cannot be completed — for
     example because an internal knowledge source is unavailable — the id is
@@ -914,6 +922,8 @@ def _is_known_model_identity(model_id: str, config: Config) -> bool:
     """
 
     try:
+        if routable_by_name:
+            return True
         normalized = _normalize_model_id(model_id)
         if normalized == "auto":
             return True
@@ -5060,15 +5070,16 @@ async def chat_completions(request: Request):
     except ValueError as exc:
         return _invalid_request_response("Invalid chat completion request", exc=exc)
 
+    headers = _collect_routing_headers(request)
     requested_model_id = str(body.get("model", "auto") or "auto")
-    if not _is_known_model_identity(requested_model_id, _config):
+    routable_by_name = _router.static_rule_matches_model_requested(requested_model_id)
+    if not _is_known_model_identity(requested_model_id, _config, routable_by_name=routable_by_name):
         return _client_error_response(
             f"Model '{requested_model_id}' not found",
             error_type="model_not_found",
             status_code=404,
         )
 
-    headers = _collect_routing_headers(request)
     try:
         execution = await _execute_chat_completion_body(body, headers)
     except HookExecutionError as exc:

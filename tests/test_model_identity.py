@@ -232,3 +232,200 @@ def test_identity_check_fails_open_on_internal_error(api_client, monkeypatch):
     monkeypatch.setattr(main_module, "_find_model_shortcut", lambda *_args, **_kwargs: None)
 
     assert main_module._is_known_model_identity("fabricated-id", main_module._config) is True
+
+
+REAL_CONFIG_PATH = Path("/opt/homebrew/etc/faigate/config.yaml")
+
+
+def _real_config_provider_names(cfg) -> list[str]:
+    return sorted(cfg.providers.keys())
+
+
+def _real_config_model_requested_triggers(cfg) -> list[str]:
+    triggers: list[str] = []
+
+    def _collect(node) -> None:
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key == "model_requested":
+                    patterns = value if isinstance(value, list) else [value]
+                    triggers.extend(str(pattern) for pattern in patterns)
+                else:
+                    _collect(value)
+        elif isinstance(node, list):
+            for item in node:
+                _collect(item)
+
+    for rule in cfg.static_rules.get("rules", []):
+        _collect(rule.get("match", {}))
+    return triggers
+
+
+@pytest.mark.skipif(not REAL_CONFIG_PATH.is_file(), reason="real faigate config not present")
+def test_real_config_model_requested_and_providers_are_accepted(monkeypatch):
+    """Every id the real config can route to must pass the identity gate.
+
+    This runs against the real operator configuration, not a synthetic stub, so
+    it catches the class of bug where the gate's own list drifts from what the
+    routing layer actually resolves.
+    """
+
+    cfg = load_config(REAL_CONFIG_PATH)
+    monkeypatch.setattr(main_module, "_config", cfg, raising=False)
+    monkeypatch.setattr(
+        main_module,
+        "_providers",
+        {name: _ProviderStub() for name in cfg.providers},
+        raising=False,
+    )
+
+    router = Router(cfg)
+    monkeypatch.setattr(main_module, "_router", router, raising=False)
+
+    for provider_name in _real_config_provider_names(cfg):
+        routable = router.static_rule_matches_model_requested(provider_name)
+        assert main_module._is_known_model_identity(provider_name, cfg, routable_by_name=routable) is True, (
+            f"configured provider '{provider_name}' was rejected"
+        )
+
+    for trigger in _real_config_model_requested_triggers(cfg):
+        routable = router.static_rule_matches_model_requested(trigger)
+        assert main_module._is_known_model_identity(trigger, cfg, routable_by_name=routable) is True, (
+            f"model_requested trigger '{trigger}' was rejected"
+        )
+
+    assert main_module._is_known_model_identity("totally-invented-xyz", cfg) is False
+
+
+def test_structural_config_model_requested_and_providers_are_accepted(tmp_path, monkeypatch):
+    """A config fixture carrying the real structure must accept all its ids.
+
+    Mirrors the real configuration shape: routing rules with ``model_requested``
+    triggers plus several provider blocks. A stub provider cannot exercise this.
+    """
+
+    cfg = load_config(
+        _write_config(
+            tmp_path,
+            """
+server:
+  host: "127.0.0.1"
+  port: 8090
+providers:
+  deepseek-v4-pro:
+    backend: openai-compat
+    base_url: "https://api.example.com/v1"
+    api_key: "secret"
+    model: "deepseek-v4-pro"
+  deepseek-v4-flash:
+    backend: openai-compat
+    base_url: "https://api.example.com/v1"
+    api_key: "secret"
+    model: "deepseek-v4-flash"
+  gemini-flash-lite:
+    backend: openai-compat
+    base_url: "https://api.example.com/v1"
+    api_key: "secret"
+    model: "gemini-flash-lite"
+fallback_chain:
+  - deepseek-v4-flash
+static_rules:
+  enabled: true
+  rules:
+    - name: heartbeat
+      route_to: gemini-flash-lite
+      match:
+        any:
+          - model_requested:
+              - heartbeat
+              - cheap
+              - flash-lite
+    - name: explicit-reasoner
+      route_to: deepseek-v4-pro
+      match:
+        model_requested:
+          - reasoner
+          - r1
+          - think
+          - deepseek-v4-pro
+    - name: explicit-chat
+      route_to: deepseek-v4-flash
+      match:
+        model_requested:
+          - chat
+          - ds
+          - default
+          - deepseek-v4-flash
+metrics:
+  enabled: false
+""",
+        )
+    )
+    monkeypatch.setattr(main_module, "_config", cfg, raising=False)
+    monkeypatch.setattr(
+        main_module,
+        "_providers",
+        {name: _ProviderStub() for name in cfg.providers},
+        raising=False,
+    )
+    router = Router(cfg)
+    monkeypatch.setattr(main_module, "_router", router, raising=False)
+
+    expected = [
+        "deepseek-v4-pro",
+        "deepseek-v4-flash",
+        "gemini-flash-lite",
+        "heartbeat",
+        "cheap",
+        "flash-lite",
+        "reasoner",
+        "r1",
+        "think",
+        "chat",
+        "ds",
+        "default",
+    ]
+    for model_id in expected:
+        routable = router.static_rule_matches_model_requested(model_id)
+        assert main_module._is_known_model_identity(model_id, cfg, routable_by_name=routable) is True, (
+            f"routable id '{model_id}' was rejected"
+        )
+
+    assert main_module._is_known_model_identity("totally-invented-xyz", cfg) is False
+
+
+def test_static_model_requested_match_is_routable_by_name(tmp_path, monkeypatch):
+    """A ``model_requested`` static rule proves the id is routable by name."""
+
+    cfg = load_config(
+        _write_config(
+            tmp_path,
+            """
+server:
+  host: "127.0.0.1"
+  port: 8090
+providers:
+  gemini-flash-lite:
+    backend: openai-compat
+    base_url: "https://api.example.com/v1"
+    api_key: "secret"
+    model: "gemini-flash-lite"
+fallback_chain:
+  - gemini-flash-lite
+static_rules:
+  enabled: true
+  rules:
+    - name: heartbeat
+      route_to: gemini-flash-lite
+      match:
+        model_requested:
+          - heartbeat
+          - cheap
+metrics:
+  enabled: false
+""",
+        )
+    )
+    router = Router(cfg)
+    assert router.static_rule_matches_model_requested("heartbeat") is True
+    assert router.static_rule_matches_model_requested("totally-invented-xyz") is False
