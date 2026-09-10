@@ -1350,19 +1350,64 @@ _MODEL_INPUT_CAPS: dict[str, int] = {
 }
 
 
+def _catalog_capacity_index() -> dict[str, int]:
+    """Build a model-id → max_input_tokens index from the live catalog.
+
+    Reads the same source the provider catalog resolves through (env override,
+    metadata dir, or bundled snapshot) and indexes every entry that carries
+    ``capacity.max_input_tokens``. The canonical model id is the entry's
+    ``model`` field when present (also accepted under its ``provider/model``
+    form), otherwise the entry's own key. A provider catalog whose entry lacks
+    ``capacity`` contributes nothing, so an absent or thin catalog degrades to
+    the bundled ``_MODEL_INPUT_CAPS`` fallback instead of inventing a value.
+    """
+    index: dict[str, int] = {}
+    try:
+        catalog = _get_catalog_source()
+    except Exception:  # pragma: no cover - defensive: catalog must never break routing
+        return index
+    for name, entry in catalog.items():
+        capacity = entry.get("capacity")
+        if not isinstance(capacity, dict):
+            continue
+        cap = capacity.get("max_input_tokens")
+        if not isinstance(cap, int) or isinstance(cap, bool) or cap <= 0:
+            continue
+        keys = {str(name)}
+        model = str(entry.get("model") or "").strip()
+        if model:
+            keys.add(model)
+            vendor = str(entry.get("vendor") or "").strip()
+            if vendor:
+                keys.add(f"{vendor}/{model}")
+        for key in keys:
+            index[key] = cap
+    return index
+
+
 def get_model_max_input_tokens(model_id: str) -> int | None:
     """Return the authoritative max_input_tokens for a concrete model ID.
 
+    Catalog-first: the live catalog's per-entry ``capacity.max_input_tokens``
+    wins so a fact can be updated without a code change. When the catalog has
+    no entry for the model, the hardcoded ``_MODEL_INPUT_CAPS`` map remains the
+    offline fallback, so the 23 binding IDs keep answering without a catalog.
+
     Normalises the common ``provider/model`` form to the trailing model id, then
     falls back to the raw id, so both ``openrouter/gpt-5.6-sol`` and
-    ``gpt-5.6-sol`` resolve. Returns ``None`` when the model is not one of the
-    23 binding IDs with a recorded cap.
+    ``gpt-5.6-sol`` resolve. Returns ``None`` when neither source records a cap.
     """
     if not model_id:
         return None
     candidate = str(model_id).strip()
     tail = candidate.rsplit("/", 1)[-1]
-    return _MODEL_INPUT_CAPS.get(tail) or _MODEL_INPUT_CAPS.get(candidate)
+    catalog_index = _catalog_capacity_index()
+    return (
+        catalog_index.get(tail)
+        or catalog_index.get(candidate)
+        or _MODEL_INPUT_CAPS.get(tail)
+        or _MODEL_INPUT_CAPS.get(candidate)
+    )
 
 
 def _normalize_catalog_entry(entry: Any) -> dict[str, Any]:
