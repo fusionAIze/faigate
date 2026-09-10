@@ -9,13 +9,9 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import httpx  # noqa: F401,E402
 import pytest
-
-sys.modules.pop("httpx", None)
-import httpx  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
-
-sys.modules["httpx"] = httpx
 
 sys.modules.pop("faigate.providers", None)
 sys.modules.pop("faigate.updates", None)

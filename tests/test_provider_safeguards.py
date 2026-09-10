@@ -21,41 +21,11 @@ Two regressions from the 2026-04-26 incident:
 
 from __future__ import annotations
 
-import sys
-import types
-
+# Use the genuine httpx: provider clients are constructed but never make a
+# request in these tests, so no network client is needed. A global stub here
+# would leak into every module collected afterwards.
+import httpx  # noqa: F401  (genuine package; see tests/conftest.py)
 import pytest
-
-# Provide a minimal httpx stub before importing provider code so the test
-# stays isolated from a real network client.
-_httpx = types.ModuleType("httpx")
-
-
-class _Timeout:
-    def __init__(self, *a, **kw):
-        pass
-
-
-class _Limits:
-    def __init__(self, *a, **kw):
-        pass
-
-
-class _AsyncClient:
-    def __init__(self, *a, **kw):
-        self._closed = False
-
-    async def aclose(self):
-        self._closed = True
-
-
-_httpx.Timeout = _Timeout
-_httpx.Limits = _Limits
-_httpx.AsyncClient = _AsyncClient
-_httpx.TimeoutException = type("TimeoutException", (Exception,), {})
-_httpx.ConnectError = type("ConnectError", (Exception,), {})
-_httpx.HTTPError = type("HTTPError", (Exception,), {})
-sys.modules.setdefault("httpx", _httpx)
 
 import faigate.providers as providers_module  # noqa: E402
 from faigate.providers import ProviderBackend  # noqa: E402
