@@ -39,6 +39,15 @@ class SyncError(Exception):
     """Raised on unrecoverable sync failures (network, parse, schema)."""
 
 
+class BundledBaselineError(SyncError):
+    """Raised when the bundled integrity baseline cannot be loaded.
+
+    This is deliberately a hard error: if the guard cannot read its
+    baseline it must fail closed, never silently accept an unverified
+    (possibly truncated) catalog.
+    """
+
+
 @dataclass
 class FetchResult:
     status: SyncStatus
@@ -94,17 +103,25 @@ def _validate_payload_shape(payload: dict[str, Any]) -> None:
         raise SyncError("payload missing 'providers' object")
 
 
-def _load_bundled_baseline() -> dict[str, Any] | None:
-    """Load the bundled catalog snapshot used as the integrity baseline."""
+def _load_bundled_baseline() -> dict[str, Any]:
+    """Load the bundled catalog snapshot used as the integrity baseline.
+
+    Only genuinely expected "asset missing or unreadable as JSON" conditions
+    are translated into :class:`BundledBaselineError`. Unexpected failures
+    (I/O errors, permission errors, programming mistakes) propagate unchanged
+    so a broken baseline can never be mistaken for an absent one and silently
+    disable the shrink guard.
+    """
     try:
         catalog_resource = resources.files("faigate.assets.metadata").joinpath("catalog.v1.json")
         with catalog_resource.open("r", encoding="utf-8") as f:
             return json.load(f)
-    except (FileNotFoundError, ModuleNotFoundError, AttributeError):
-        return None
-    except Exception as exc:  # pragma: no cover - defensive
-        logger.warning("bundled baseline load failed: %s", exc)
-        return None
+    except (FileNotFoundError, ModuleNotFoundError) as exc:
+        logger.error("bundled catalog baseline unavailable: %s", exc)
+        raise BundledBaselineError(f"bundled catalog baseline unavailable: {exc}") from exc
+    except json.JSONDecodeError as exc:
+        logger.error("bundled catalog baseline is not valid JSON: %s", exc)
+        raise BundledBaselineError(f"bundled catalog baseline is not valid JSON: {exc}") from exc
 
 
 def _count_catalog_entries(payload: dict[str, Any]) -> int:
@@ -133,6 +150,9 @@ def _validate_integrity(
     baseline_count = _count_catalog_entries(baseline)
     if baseline_count == 0:
         return
+    # ceil rounds the retained floor up on purpose: for an odd baseline this
+    # makes the effective threshold stricter than max_shrink_ratio suggests
+    # (a 47-entry baseline needs 24 entries, i.e. ~51%, not 50%).
     min_retained = math.ceil(baseline_count * (1.0 - max_shrink_ratio))
     if count < min_retained:
         raise SyncError(f"catalog entry count {count} below {min_retained} (bundled baseline has {baseline_count})")
