@@ -834,6 +834,19 @@ def _find_model_shortcut(config: Config, shortcut_name: str) -> tuple[str, dict[
     return None
 
 
+def _normalize_model_id(model_id: Any) -> str:
+    """Normalize a requested model id for identity and routing resolution.
+
+    The id is lowercased and trimmed. Some clients namespace model ids with the
+    gateway name (for example "faigate/openai-codex-5.4-medium"); the "faigate/"
+    namespace is stripped before providers, shortcuts, or routing modes resolve.
+    """
+    normalized = str(model_id or "auto").strip().lower() or "auto"
+    if normalized.startswith("faigate/"):
+        normalized = normalized.split("/", 1)[1] or "auto"
+    return normalized
+
+
 def _resolve_requested_model(
     config: Config,
     model_requested: str,
@@ -849,13 +862,7 @@ def _resolve_requested_model(
       resolved_shortcut_name,
       merged_mode_hints
     """
-    normalized = str(model_requested or "auto").strip().lower() or "auto"
-
-    # Some clients namespace model IDs with the gateway name (for example
-    # "faigate/openai-codex-5.4-medium"). Strip the faigate namespace before
-    # resolving providers, shortcuts, or routing modes.
-    if normalized.startswith("faigate/"):
-        normalized = normalized.split("/", 1)[1] or "auto"
+    normalized = _normalize_model_id(model_requested)
 
     if normalized != "auto" and normalized in _providers:
         return normalized, normalized, None, None, {}
@@ -889,6 +896,47 @@ def _resolve_requested_model(
         return "auto", None, mode_name, None, dict(mode_spec.get("select", {}))
 
     return normalized, None, None, None, {}
+
+
+def _is_known_model_identity(
+    model_id: str,
+    config: Config,
+    *,
+    routable_by_name: bool = False,
+) -> bool:
+    """Return whether a requested model id resolves to a routable identity.
+
+    The routing engine is the single source of truth for what is routable, so the
+    caller passes ``routable_by_name`` when routing already proved the id names a
+    static ``model_requested`` rule. When that is false the check still recognises
+    ids that resolve to a configured provider (canonical slug), a model shortcut,
+    a routing mode, or the virtual "auto" selector. Curated catalog entries are
+    intentionally not accepted here: only ids that can actually become a routing
+    target may pass. A curated but unconfigured entry therefore stays a
+    ``model_not_found``.
+
+    The check fails open. If identity resolution cannot be completed — for
+    example because an internal knowledge source is unavailable — the id is
+    treated as known and a warning is logged, so an internal error never turns a
+    potentially valid id into a 404.
+    """
+
+    try:
+        if routable_by_name:
+            return True
+        normalized = _normalize_model_id(model_id)
+        if normalized == "auto":
+            return True
+        if normalized in _providers:
+            return True
+        if _find_model_shortcut(config, normalized):
+            return True
+        if _find_routing_mode(config, normalized):
+            return True
+        return False
+    except Exception as exc:  # pragma: no cover - defensive fail-open guard
+        logger.warning("Model identity check failed open for %r: %s", model_id, exc)
+        return True
 
 
 def _build_attempt_order(
@@ -5023,6 +5071,15 @@ async def chat_completions(request: Request):
         return _invalid_request_response("Invalid chat completion request", exc=exc)
 
     headers = _collect_routing_headers(request)
+    requested_model_id = str(body.get("model", "auto") or "auto")
+    routable_by_name = _router.static_rule_matches_model_requested(requested_model_id)
+    if not _is_known_model_identity(requested_model_id, _config, routable_by_name=routable_by_name):
+        return _client_error_response(
+            f"Model '{requested_model_id}' not found",
+            error_type="model_not_found",
+            status_code=404,
+        )
+
     try:
         execution = await _execute_chat_completion_body(body, headers)
     except HookExecutionError as exc:
