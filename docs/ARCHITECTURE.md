@@ -133,6 +133,44 @@ The main operational endpoints are:
 
 The operational surface now also applies conservative response headers by default. The no-build dashboard ships with a restrictive CSP and frame denial, while JSON and multipart request paths use bounded payload limits so obvious oversize failures are rejected before provider calls.
 
+## Model knowledge: the four-band split
+
+Model knowledge used to live in two places that contradicted each other: a
+catalog that updates without a release, and hardcoded tables that need one.
+The architecture now splits every model fact into one of four bands, each with
+one home and one authority:
+
+- **Facts** (capabilities, prices, modalities, aliases, lifecycle) → public catalog.
+- **Assessment** (`quality_tier`, `reasoning_strength`, `cluster`, `degrade_to`) → private overlay.
+- **Wiring** (transport, auth, probe strategy) → private overlay, last and under a stricter gate.
+- **Policy** (scoring, fallback order) → stays code.
+
+Facts are public and third-party verifiable; assessment is the operator's own
+judgement and carries the IP line; wiring is operationally verifiable but
+riskier in data than in code; policy is a program and loses testability in data.
+
+Three mechanisms hold the cut together (details in
+[CATALOG-UPDATER.md](./CATALOG-UPDATER.md)):
+
+1. **Evidence gate.** Every fact carries an `evidence.level`
+   (`belegt` / `plausibel` / `unbestaetigt`) that decides whether the runtime
+   may enforce it, advise on it, or neither. `belegt` carries hard decisions,
+   `plausibel` is best-effort and flagged as an estimate, `unbestaetigt` is
+   invisible to routing, capacity, and error output
+   (`faigate/catalog_views.py:86`).
+
+2. **Canonical identity path.** `[hop/]vendor/model[:variant]`, with `auto/`
+   reserved for intents. Built from split fields, never maintained as a string
+   (`faigate/model_identity.py:29`).
+
+3. **Integrity guard + explicit unknown.** A shrunk catalog is rejected against
+   the bundled baseline (`faigate/metadata_catalog_sync.py:133`), and an unknown
+   model id returns `model_not_found`, never a silent substitute 200
+   (`faigate/main.py:5386`).
+
+This is the gateway's model-identity plane; routing *policy* — scoring and
+fallback order — deliberately remains in code and is not part of the catalog.
+
 ## Design target
 
 The longer-term design target is to outperform simpler router designs by making routing multi-dimensional instead of mostly keyword- or model-name-driven.
