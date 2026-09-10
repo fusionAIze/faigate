@@ -42,6 +42,10 @@ class ProviderDef(TypedDict, total=False):
     auth_optional: bool  # True = no key required (local servers)
     tier: str  # "default" | "reasoning" | "cheap" | "mid" | "fallback" | "local"
     example_model: str  # Suggested default model id
+    vendor: str  # Model manufacturer (part of the canonical ID path)
+    model: str  # Model identifier (part of the canonical ID path)
+    variant: str  # Optional :variant suffix (e.g. reasoning-effort tier)
+    hop: list  # Ordered intermediaries prefixed before vendor/model (resellers)
     pricing: dict  # {"input": float, "output": float, "cache_read": float}
     notes: str  # One-liner description
 
@@ -59,6 +63,8 @@ BUILTIN: dict[str, ProviderDef] = {
         api_key_env="OPENAI_API_KEY",
         tier="default",
         example_model="gpt-4o",
+        vendor="openai",
+        model="gpt-4o",
         pricing={"input": 2.50, "output": 10.00, "cache_read": 1.25},
         notes="OpenAI – GPT-4o, GPT-4.1 series",
     ),
@@ -70,6 +76,8 @@ BUILTIN: dict[str, ProviderDef] = {
         api_key_env="ANTHROPIC_API_KEY",
         tier="default",
         example_model="claude-opus-4-6",
+        vendor="anthropic",
+        model="claude-opus-4-6",
         pricing={"input": 15.00, "output": 75.00, "cache_read": 1.50},
         notes="Anthropic – Claude Opus/Sonnet/Haiku",
     ),
@@ -83,6 +91,8 @@ BUILTIN: dict[str, ProviderDef] = {
         auth_optional=True,
         tier="default",
         example_model="openai-codex/gpt-5.4",
+        vendor="openai",
+        model="gpt-5.4",
         pricing={"input": 0.0, "output": 0.0},
         notes=(
             "OpenAI Codex (ChatGPT OAuth) – token from ~/.codex/auth.json. "
@@ -98,6 +108,9 @@ BUILTIN: dict[str, ProviderDef] = {
         api_key_env="OPENCODE_API_KEY",
         tier="default",
         example_model="opencode/claude-opus-4-6",
+        vendor="anthropic",
+        model="claude-opus-4-6",
+        hop=["opencode"],
         pricing={"input": 0.0, "output": 0.0},
         notes="OpenCode Zen – Anthropic-compatible gateway",
     ),
@@ -110,6 +123,8 @@ BUILTIN: dict[str, ProviderDef] = {
         api_key_env_alt="GOOGLE_API_KEY",
         tier="mid",
         example_model="gemini-2.5-flash",
+        vendor="google",
+        model="gemini-2.5-flash",
         pricing={"input": 0.15, "output": 0.60, "cache_read": 0.04},
         notes="Google Gemini via API key – Flash / Pro / Flash-Lite",
     ),
@@ -121,6 +136,8 @@ BUILTIN: dict[str, ProviderDef] = {
         api_key_env="ZAI_API_KEY",
         tier="default",
         example_model="glm-4.7",
+        vendor="z-ai",
+        model="glm-4.7",
         pricing={"input": 0.0, "output": 0.0},
         notes="Z.AI / GLM models (aliases: z.ai/*, z-ai/*)",
     ),
@@ -132,6 +149,9 @@ BUILTIN: dict[str, ProviderDef] = {
         api_key_env="AI_GATEWAY_API_KEY",
         tier="fallback",
         example_model="vercel-ai-gateway/anthropic/claude-opus-4.6",
+        vendor="anthropic",
+        model="claude-opus-4.6",
+        hop=["vercel-ai-gateway"],
         pricing={"input": 0.0, "output": 0.0},
         notes="Vercel AI Gateway – multi-model proxy",
     ),
@@ -143,6 +163,9 @@ BUILTIN: dict[str, ProviderDef] = {
         api_key_env="KILOCODE_API_KEY",
         tier="fallback",
         example_model="kilocode/anthropic/claude-opus-4.6",
+        vendor="anthropic",
+        model="claude-opus-4.6",
+        hop=["kilocode"],
         pricing={"input": 0.0, "output": 0.0},
         notes="Kilo Gateway – expanded catalog incl. GLM-5, MiniMax, Kimi K2.5",
     ),
@@ -154,6 +177,9 @@ BUILTIN: dict[str, ProviderDef] = {
         api_key_env="OPENROUTER_API_KEY",
         tier="fallback",
         example_model="openrouter/anthropic/claude-opus-4.6",
+        vendor="anthropic",
+        model="claude-opus-4.6",
+        hop=["openrouter"],
         pricing={"input": 0.27, "output": 1.10},
         notes="OpenRouter – unified API to many providers",
     ),
@@ -165,6 +191,8 @@ BUILTIN: dict[str, ProviderDef] = {
         api_key_env="XAI_API_KEY",
         tier="default",
         example_model="grok-3",
+        vendor="x-ai",
+        model="grok-3",
         pricing={"input": 3.00, "output": 15.00},
         notes="xAI / Grok models",
     ),
@@ -176,6 +204,8 @@ BUILTIN: dict[str, ProviderDef] = {
         api_key_env="MISTRAL_API_KEY",
         tier="default",
         example_model="mistral/mistral-large-latest",
+        vendor="mistral",
+        model="mistral-large-latest",
         pricing={"input": 2.00, "output": 6.00},
         notes="Mistral AI – Mistral Large, Codestral, etc.",
     ),
@@ -187,6 +217,8 @@ BUILTIN: dict[str, ProviderDef] = {
         api_key_env="GROQ_API_KEY",
         tier="cheap",
         example_model="llama-3.3-70b-versatile",
+        vendor="meta",
+        model="llama-3.3-70b-versatile",
         pricing={"input": 0.05, "output": 0.10},
         notes="Groq – ultra-fast inference (LPU), Llama / DeepSeek",
     ),
@@ -198,6 +230,8 @@ BUILTIN: dict[str, ProviderDef] = {
         api_key_env="CEREBRAS_API_KEY",
         tier="cheap",
         example_model="llama3.3-70b",
+        vendor="meta",
+        model="llama3.3-70b",
         pricing={"input": 0.10, "output": 0.10},
         notes="Cerebras – fast inference, zai-glm-4.7 / zai-glm-4.6 compatible",
     ),
@@ -212,6 +246,9 @@ BUILTIN: dict[str, ProviderDef] = {
         auth_optional=True,
         tier="default",
         example_model="gpt-4o",
+        vendor="openai",
+        model="gpt-4o",
+        hop=["github-copilot"],
         pricing={"input": 0.0, "output": 0.0},
         notes="GitHub Copilot – requires GH_TOKEN / COPILOT_GITHUB_TOKEN",
     ),
@@ -224,6 +261,9 @@ BUILTIN: dict[str, ProviderDef] = {
         api_key_env_alt="HF_TOKEN",
         tier="default",
         example_model="huggingface/deepseek-ai/DeepSeek-R1",
+        vendor="deepseek-ai",
+        model="DeepSeek-R1",
+        hop=["huggingface"],
         pricing={"input": 0.0, "output": 0.0},
         notes="HuggingFace Inference – OpenAI-compat router",
     ),
@@ -235,6 +275,8 @@ BUILTIN: dict[str, ProviderDef] = {
         api_key_env="DEEPSEEK_API_KEY",
         tier="default",
         example_model="deepseek-reasoner",
+        vendor="deepseek",
+        model="deepseek-reasoner",
         pricing={"input": 0.55, "output": 2.19},
         notes="DeepSeek – deepseek-chat (V3) and deepseek-reasoner (R1)",
     ),
@@ -246,6 +288,9 @@ BUILTIN: dict[str, ProviderDef] = {
         api_key_env="TOGETHER_API_KEY",
         tier="cheap",
         example_model="together/meta-llama/Llama-3.3-70B-Instruct-Turbo",
+        vendor="meta-llama",
+        model="Llama-3.3-70B-Instruct-Turbo",
+        hop=["together"],
         pricing={"input": 0.18, "output": 0.18},
         notes="Together AI – serverless inference, Llama / Mixtral / DeepSeek / Qwen",
     ),
@@ -257,6 +302,9 @@ BUILTIN: dict[str, ProviderDef] = {
         api_key_env="FIREWORKS_API_KEY",
         tier="cheap",
         example_model="fireworks/accounts/fireworks/models/deepseek-r1",
+        vendor="deepseek",
+        model="deepseek-r1",
+        hop=["fireworks"],
         pricing={"input": 0.22, "output": 0.88},
         notes="Fireworks AI – fast serverless inference, DeepSeek / Llama / Qwen",
     ),
@@ -268,6 +316,8 @@ BUILTIN: dict[str, ProviderDef] = {
         api_key_env="COHERE_API_KEY",
         tier="default",
         example_model="command-a-03-2025",
+        vendor="cohere",
+        model="command-a-03-2025",
         pricing={"input": 2.50, "output": 10.00},
         notes="Cohere – Command A/R series, OpenAI-compat at /compatibility/v1",
     ),
@@ -279,6 +329,9 @@ BUILTIN: dict[str, ProviderDef] = {
         api_key_env="NEBIUS_API_KEY",
         tier="cheap",
         example_model="nebius/deepseek-ai/DeepSeek-R1",
+        vendor="deepseek-ai",
+        model="DeepSeek-R1",
+        hop=["nebius"],
         pricing={"input": 0.80, "output": 3.20},
         notes="Nebius AI Studio – DeepSeek / Llama / Qwen on European infra",
     ),
@@ -290,6 +343,9 @@ BUILTIN: dict[str, ProviderDef] = {
         api_key_env="SILICONFLOW_API_KEY",
         tier="cheap",
         example_model="siliconflow/deepseek-ai/DeepSeek-R1",
+        vendor="deepseek-ai",
+        model="DeepSeek-R1",
+        hop=["siliconflow"],
         pricing={"input": 0.14, "output": 0.55},
         notes="SiliconFlow – low-cost inference (CN), DeepSeek / Qwen / GLM",
     ),
@@ -301,6 +357,9 @@ BUILTIN: dict[str, ProviderDef] = {
         api_key_env="HYPERBOLIC_API_KEY",
         tier="cheap",
         example_model="hyperbolic/deepseek-ai/DeepSeek-R1",
+        vendor="deepseek-ai",
+        model="DeepSeek-R1",
+        hop=["hyperbolic"],
         pricing={"input": 0.20, "output": 0.80},
         notes="Hyperbolic – GPU cloud inference, DeepSeek / Llama / Qwen",
     ),
@@ -312,6 +371,8 @@ BUILTIN: dict[str, ProviderDef] = {
         api_key_env="PERPLEXITY_API_KEY",
         tier="default",
         example_model="sonar-pro",
+        vendor="perplexity",
+        model="sonar-pro",
         pricing={"input": 3.00, "output": 15.00},
         notes="Perplexity – online/search-augmented models (sonar, sonar-pro, sonar-reasoning)",
     ),
@@ -323,6 +384,9 @@ BUILTIN: dict[str, ProviderDef] = {
         api_key_env="NVIDIA_API_KEY",
         tier="default",
         example_model="nvidia-nim/deepseek-ai/deepseek-r1",
+        vendor="deepseek-ai",
+        model="deepseek-r1",
+        hop=["nvidia-nim"],
         pricing={"input": 0.0, "output": 0.0},
         notes="NVIDIA NIM – optimized inference on NVIDIA infra, DeepSeek / Llama / Mistral",
     ),
@@ -342,6 +406,8 @@ CUSTOM: dict[str, ProviderDef] = {
         api_key_env="MOONSHOT_API_KEY",
         tier="default",
         example_model="moonshot/kimi-k2.5",
+        vendor="moonshot",
+        model="kimi-k2.5",
         pricing={"input": 0.0, "output": 0.0},
         notes=(
             "Moonshot AI / Kimi – OpenAI-compat; models: kimi-k2.5, kimi-k2-0905-preview,"
@@ -357,6 +423,8 @@ CUSTOM: dict[str, ProviderDef] = {
         api_key_env="KIMI_API_KEY",
         tier="default",
         example_model="kimi-coding/k2p5",
+        vendor="moonshot",
+        model="k2p5",
         pricing={"input": 0.0, "output": 0.0},
         notes="Kimi Coding – Anthropic-compat endpoint via Moonshot",
     ),
@@ -368,6 +436,8 @@ CUSTOM: dict[str, ProviderDef] = {
         api_key_env="VOLCANO_ENGINE_API_KEY",
         tier="default",
         example_model="volcengine/doubao-seed-1-8-251228",
+        vendor="volcengine",
+        model="doubao-seed-1-8-251228",
         pricing={"input": 0.0, "output": 0.0},
         notes="Volcano Engine – Doubao, Kimi K2.5, GLM 4.7, DeepSeek V3.2 (CN)",
     ),
@@ -379,6 +449,8 @@ CUSTOM: dict[str, ProviderDef] = {
         api_key_env="VOLCANO_ENGINE_API_KEY",
         tier="default",
         example_model="volcengine-plan/ark-code-latest",
+        vendor="volcengine",
+        model="ark-code-latest",
         pricing={"input": 0.0, "output": 0.0},
         notes=(
             "Volcano Engine – coding models (ark-code-latest, doubao-seed-code, kimi-k2.5, kimi-k2-thinking, glm-4.7)"
@@ -392,6 +464,9 @@ CUSTOM: dict[str, ProviderDef] = {
         api_key_env="BYTEPLUS_API_KEY",
         tier="default",
         example_model="byteplus/seed-1-8-251228",
+        vendor="volcengine",
+        model="seed-1-8-251228",
+        hop=["byteplus"],
         pricing={"input": 0.0, "output": 0.0},
         notes="BytePlus ARK – international access to Volcano Engine models",
     ),
@@ -403,6 +478,9 @@ CUSTOM: dict[str, ProviderDef] = {
         api_key_env="BYTEPLUS_API_KEY",
         tier="default",
         example_model="byteplus-plan/ark-code-latest",
+        vendor="volcengine",
+        model="ark-code-latest",
+        hop=["byteplus"],
         pricing={"input": 0.0, "output": 0.0},
         notes=(
             "BytePlus ARK – coding models (ark-code-latest, doubao-seed-code, kimi-k2.5, kimi-k2-thinking, glm-4.7)"
@@ -416,6 +494,9 @@ CUSTOM: dict[str, ProviderDef] = {
         api_key_env="SYNTHETIC_API_KEY",
         tier="default",
         example_model="synthetic/hf:MiniMaxAI/MiniMax-M2.1",
+        vendor="minimax",
+        model="MiniMax-M2.1",
+        hop=["synthetic"],
         pricing={"input": 0.0, "output": 0.0},
         notes="Synthetic – Anthropic-compat; exposes HuggingFace models (MiniMax, etc.)",
     ),
@@ -427,6 +508,8 @@ CUSTOM: dict[str, ProviderDef] = {
         api_key_env="MINIMAX_API_KEY",
         tier="default",
         example_model="minimax/MiniMax-M2.1",
+        vendor="minimax",
+        model="MiniMax-M2.1",
         pricing={"input": 0.0, "output": 0.0},
         notes="MiniMax – Anthropic-compat custom endpoint",
     ),
@@ -438,6 +521,8 @@ CUSTOM: dict[str, ProviderDef] = {
         api_key_env="QWEN_API_KEY",
         tier="default",
         example_model="qwen/qwen3.6-plus",
+        vendor="qwen",
+        model="qwen3.6-plus",
         pricing={"input": 0.0, "output": 0.0},
         notes="Qwen models via Alibaba Cloud – OpenAI-compatible endpoint",
     ),
@@ -458,6 +543,9 @@ LOCAL: dict[str, ProviderDef] = {
         auth_optional=True,
         tier="local",
         example_model="ollama/llama3.3",
+        vendor="meta",
+        model="llama3.3",
+        hop=["ollama"],
         pricing={"input": 0.0, "output": 0.0},
         notes="Ollama – local LLM runtime, OpenAI-compat at :11434",
     ),
@@ -470,6 +558,9 @@ LOCAL: dict[str, ProviderDef] = {
         auth_optional=True,
         tier="local",
         example_model="vllm/your-model-id",
+        vendor="local",
+        model="your-model-id",
+        hop=["vllm"],
         pricing={"input": 0.0, "output": 0.0},
         notes="vLLM – local/self-hosted OpenAI-compat server at :8000",
     ),
@@ -482,6 +573,9 @@ LOCAL: dict[str, ProviderDef] = {
         auth_optional=True,
         tier="local",
         example_model="lmstudio/minimax-m2.1-gs32",
+        vendor="local",
+        model="minimax-m2.1-gs32",
+        hop=["lmstudio"],
         pricing={"input": 0.0, "output": 0.0},
         notes="LM Studio – local OpenAI-compat server at :1234",
     ),
@@ -494,6 +588,9 @@ LOCAL: dict[str, ProviderDef] = {
         auth_optional=True,
         tier="local",
         example_model="litellm/your-model-id",
+        vendor="local",
+        model="your-model-id",
+        hop=["litellm"],
         pricing={"input": 0.0, "output": 0.0},
         notes="LiteLLM proxy – OpenAI-compat gateway to 100+ providers at :4000",
     ),
@@ -516,6 +613,9 @@ OAUTH: dict[str, ProviderDef] = {
         auth_optional=True,
         tier="mid",
         example_model="gc/gemini-2.5-pro",
+        vendor="google",
+        model="gemini-2.5-pro",
+        hop=["google-gemini-cli"],
         pricing={"input": 0.0, "output": 0.0},
         notes="Google Gemini via Vertex AI – uses gcloud ADC; requires: gcloud auth login",
     ),
@@ -528,6 +628,8 @@ OAUTH: dict[str, ProviderDef] = {
         auth_optional=True,
         tier="default",
         example_model="coder-model",
+        vendor="qwen",
+        model="coder-model",
         pricing={"input": 0.0, "output": 0.0},
         notes="Qwen OAuth (free tier) – reads token from ~/.qwen/oauth_creds.json; run: qwen auth login",
     ),
@@ -540,6 +642,8 @@ OAUTH: dict[str, ProviderDef] = {
         auth_optional=True,
         tier="default",
         example_model="claude-code",
+        vendor="anthropic",
+        model="claude-code",
         pricing={"input": 0.0, "output": 0.0},
         notes="Claude Code – special coding model via Anthropic OAuth",
     ),
@@ -557,6 +661,8 @@ OAUTH: dict[str, ProviderDef] = {
         auth_optional=True,
         tier="default",
         example_model="gemini-2.5-pro",
+        vendor="google",
+        model="gemini-2.5-pro",
         pricing={"input": 0.0, "output": 0.0},
         notes=(
             "Google Antigravity – Google OAuth (client_id: 1071006060591-...apps.googleusercontent.com); "
@@ -583,6 +689,48 @@ def get(name: str) -> ProviderDef | None:
 def known_names() -> list[str]:
     """Return all known provider names, sorted."""
     return sorted(ALL.keys())
+
+
+def canonical_path(name: str) -> str | None:
+    """Return the canonical ID path for a provider, or None if unknown.
+
+    The path is generated from the split ``hop`` / ``vendor`` / ``model`` /
+    ``variant`` fields, never parsed out of the fused ``example_model`` string:
+
+        [hop/]...vendor/model[:variant]
+
+    ``hop`` carries ordered intermediaries (resellers/gateways/hosts) and is
+    empty for direct providers. ``variant`` is omitted when absent. The result
+    must never repeat a segment; an intermediary that is also the model's own
+    manufacturer would otherwise make the trail ambiguous.
+    """
+    entry = ALL.get(name)
+    if entry is None:
+        return None
+    return provider_identity(name)[2]
+
+
+def provider_identity(name: str) -> tuple[str, str, str] | None:
+    """Resolve a provider name into ``(vendor, model, canonical_path)``.
+
+    The canonical path is derived from the split identity fields, so a caller
+    gets the same provider the fused ``example_model`` used to describe, but as
+    separate, machine-addressable fields instead of one string.
+    """
+    entry = ALL.get(name)
+    if entry is None:
+        return None
+    vendor = str(entry.get("vendor") or "")
+    model = str(entry.get("model") or "")
+    if not vendor or not model:
+        return name, name, name
+    hops = [str(seg) for seg in (entry.get("hop") or []) if str(seg)]
+    segments = [*hops, vendor, model]
+    path = "/".join(segments)
+    variant = str(entry.get("variant") or "").strip()
+    if variant:
+        path = f"{path}:{variant}"
+    return vendor, model, path
 
 
 def api_key_env(name: str) -> str | None:
