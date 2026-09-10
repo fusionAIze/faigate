@@ -184,10 +184,16 @@ def test_gate_and_models_share_one_source() -> None:
     entry in the listing, and an unknown identity is neither.
     """
     import faigate.main as main
+    from faigate.config import Config
 
+    # Build an empty config instead of ``main.load_config()``: the latter reads
+    # ``FAIGATE_CONFIG_FILE``, which ``test_main_uses_explicit_config_arg`` leaks
+    # into ``os.environ`` for the rest of the session (main.main() mutates it and
+    # nothing restores it). An empty config exercises the same shared-entry logic
+    # and keeps this test independent of any other module's side effects.
     provider_map: dict[str, Any] = {}
     entries = main._routable_model_entries(
-        config=main.load_config(),
+        config=Config({}),
         providers=provider_map,
     )
     # "auto" is always routable.
