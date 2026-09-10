@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -748,6 +749,82 @@ def test_model_input_caps_unknown_model_returns_none():
     assert get_model_max_input_tokens("provider/not-a-binding-model") is None
     assert get_model_max_input_tokens("") is None
     assert get_model_max_input_tokens(None) is None
+
+
+def _write_metadata_catalog(tmp_path: Path, providers: dict) -> Path:
+    metadata_dir = tmp_path / "metadata"
+    (metadata_dir / "providers").mkdir(parents=True)
+    (metadata_dir / "providers" / "catalog.v1.json").write_text(
+        json.dumps({"schema_version": "fusionaize-provider-catalog/v1.3", "providers": providers}),
+        encoding="utf-8",
+    )
+    return metadata_dir
+
+
+def test_model_input_cap_reads_from_catalog_first(tmp_path, monkeypatch):
+    """A cap that exists only in the external catalog is delivered."""
+    import faigate.provider_catalog as pc
+
+    metadata_dir = _write_metadata_catalog(
+        tmp_path,
+        {
+            "catalog-only-provider": {
+                "vendor": "acme",
+                "model": "catalog-only-model",
+                "capacity": {
+                    "max_input_tokens": 777000,
+                    "evidence": {"level": "belegt", "source_url": "https://example.test/cap"},
+                },
+            }
+        },
+    )
+    monkeypatch.setenv("FAIGATE_PROVIDER_METADATA_DIR", str(metadata_dir))
+    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_FILE", raising=False)
+    monkeypatch.setattr(pc, "_EXTERNAL_CATALOG_CACHE", None)
+    monkeypatch.setattr(pc, "_EXTERNAL_CATALOG_MTIME", 0.0)
+
+    assert get_model_max_input_tokens("acme/catalog-only-model") == 777000
+    assert get_model_max_input_tokens("catalog-only-model") == 777000
+
+
+def test_model_input_cap_falls_back_to_bundled_dict_without_catalog(tmp_path, monkeypatch):
+    """With no catalog on disk the hardcoded dict still answers unchanged."""
+    import faigate.provider_catalog as pc
+
+    empty_dir = tmp_path / "empty-metadata"
+    empty_dir.mkdir()
+    monkeypatch.setenv("FAIGATE_PROVIDER_METADATA_DIR", str(empty_dir))
+    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_FILE", raising=False)
+    monkeypatch.setattr(pc, "_EXTERNAL_CATALOG_CACHE", None)
+    monkeypatch.setattr(pc, "_EXTERNAL_CATALOG_MTIME", 0.0)
+
+    assert get_model_max_input_tokens("gpt-5.6-sol") == 922000
+    assert get_model_max_input_tokens("openrouter/gpt-5.6-sol") == 922000
+
+
+def test_model_input_cap_catalog_overrides_dict(tmp_path, monkeypatch):
+    """A catalog entry for a mapped model overrides the bundled fallback value."""
+    import faigate.provider_catalog as pc
+
+    metadata_dir = _write_metadata_catalog(
+        tmp_path,
+        {
+            "override-provider": {
+                "vendor": "openai",
+                "model": "gpt-5.6-sol",
+                "capacity": {
+                    "max_input_tokens": 111111,
+                    "evidence": {"level": "belegt", "source_url": "https://example.test/cap"},
+                },
+            }
+        },
+    )
+    monkeypatch.setenv("FAIGATE_PROVIDER_METADATA_DIR", str(metadata_dir))
+    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_FILE", raising=False)
+    monkeypatch.setattr(pc, "_EXTERNAL_CATALOG_CACHE", None)
+    monkeypatch.setattr(pc, "_EXTERNAL_CATALOG_MTIME", 0.0)
+
+    assert get_model_max_input_tokens("gpt-5.6-sol") == 111111
 
 
 def test_provider_catalog_context_window_survives_external_merge(tmp_path, monkeypatch):
