@@ -129,7 +129,14 @@ def _provider_requires_static_api_key(name: str, cfg: dict[str, Any]) -> bool:
 
 
 class PayloadTooLargeError(ValueError):
-    """Raised when one request or upload exceeds configured size limits."""
+    """Raised when one request or upload exceeds configured size limits.
+
+    Carries an optional ``model_id`` sniffed from the raw body so the 413 can
+    report the requested model's cap even though the body was rejected before
+    it could be parsed.
+    """
+
+    model_id: str | None = None
 
 
 @dataclass
@@ -394,6 +401,10 @@ def _payload_too_large_response(
     * no cap at all is passed through, or reported as the operator byte limit,
       depending on ``FAIGATE_UNVERIFIED_CAP_MODE`` — an invented token number is
       never produced.
+
+    Whenever a ``limit`` is advertised, a ``unit`` field names whether the number
+    is ``tokens`` (a per-model input cap) or ``bytes`` (the operator body limit),
+    so a client never mistakes one for the other.
     """
     if exc is not None:
         logger.info("Payload rejected as too large: %s", exc)
@@ -407,16 +418,20 @@ def _payload_too_large_response(
     if limit is not None:
         resolved_limit = limit
         estimated = False
+        unit = "tokens"
     else:
         resolved_limit, estimated = _resolve_advertised_input_limit(model_id)
+        unit = "tokens"
         if resolved_limit is None and _unverified_cap_mode() == "byte_limit":
             config = globals().get("_config")
             security = getattr(config, "security", {}) or {}
             resolved_limit = int(security.get("max_json_body_bytes", 1_048_576))
             estimated = False
+            unit = "bytes"
 
     if resolved_limit is not None:
         body["limit"] = resolved_limit
+        body["unit"] = unit
         if estimated:
             body["estimated"] = True
         headers["x-faigate-request-limit"] = f"{'~' if estimated else ''}{resolved_limit}"
@@ -2237,12 +2252,38 @@ def _collect_image_request_fields(body: dict[str, Any]) -> dict[str, Any]:
     return fields
 
 
+_MODEL_FIELD_RE = re.compile(r'"model"\s*:\s*"((?:[^"\\]|\\.)*)"')
+
+
+def _sniff_requested_model(raw: bytes) -> str | None:
+    """Best-effort extraction of the requested ``model`` from a raw JSON body.
+
+    Used only on the oversized-body path, where the payload is too large to
+    parse but may still be valid JSON. The OpenAI-compatible convention places
+    ``model`` near the top, so a tolerant regex match over the decoded prefix is
+    enough to recover the id without paying for a full parse of an oversized
+    document. Returns ``None`` when no id can be recovered — callers then stay
+    on the passthrough / byte-limit path instead of guessing.
+    """
+    try:
+        decoded = raw[:262144].decode("utf-8", errors="ignore")
+    except Exception:  # pragma: no cover - defensive
+        return None
+    match = _MODEL_FIELD_RE.search(decoded)
+    if not match:
+        return None
+    model = str(match.group(1)).strip()
+    return model or None
+
+
 async def _read_json_body(request: Request, *, operation: str) -> dict[str, Any]:
     """Read and size-check one JSON request body."""
     raw = await request.body()
     max_bytes = int((_config.security or {}).get("max_json_body_bytes", 1_048_576))
     if len(raw) > max_bytes:
-        raise PayloadTooLargeError(f"{operation} body exceeded security.max_json_body_bytes ({len(raw)} > {max_bytes})")
+        exc = PayloadTooLargeError(f"{operation} body exceeded security.max_json_body_bytes ({len(raw)} > {max_bytes})")
+        exc.model_id = _sniff_requested_model(raw)
+        raise exc
     try:
         parsed = json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -3671,7 +3712,11 @@ async def preview_route(request: Request):
     try:
         body = await _read_json_body(request, operation="Route preview")
     except PayloadTooLargeError as exc:
-        return _payload_too_large_response("Route preview request is too large", exc=exc)
+        return _payload_too_large_response(
+            "Route preview request is too large",
+            exc=exc,
+            model_id=getattr(exc, "model_id", None),
+        )
     except ValueError as exc:
         return _invalid_request_response("Invalid route preview request", exc=exc)
 
@@ -5328,7 +5373,11 @@ async def chat_completions(request: Request):
     try:
         body = await _read_json_body(request, operation="Chat completions")
     except PayloadTooLargeError as exc:
-        return _payload_too_large_response("Chat completion request is too large", exc=exc)
+        return _payload_too_large_response(
+            "Chat completion request is too large",
+            exc=exc,
+            model_id=getattr(exc, "model_id", None),
+        )
     except ValueError as exc:
         return _invalid_request_response("Invalid chat completion request", exc=exc)
 
