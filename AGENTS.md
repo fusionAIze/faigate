@@ -153,6 +153,10 @@ Do not document features that do not exist.
 - prefer minor bumps for meaningful features or operational behavior changes
 - prefer patch bumps for fixes, polish, and small compatibility updates
 - reserve major bumps for explicit breaking changes and documented migrations
+- **Release name convention: `fusionAIze Gate vX.Y.Z`** — identical on Forgejo
+  and GitHub. No bare `vX.Y.Z`, no `faigate vX.Y.Z` prefix. The release object
+  is created on Forgejo by the ops-engine (`tag_push`); `prerelease.yml` is a
+  transitional GitHub-only path tracked for decommission in `FAI-211`.
 
 ## Content boundary
 
