@@ -22,9 +22,16 @@ from typing import Any
 
 import pytest
 
+from faigate import metadata_catalog_sync
 from faigate.catalog_cache import CatalogCache
 from faigate.catalog_resolver import CatalogResolver, ResolverConfig
 from faigate.metadata_catalog_sync import MetadataCatalogSync
+
+
+@pytest.fixture(autouse=True)
+def _no_shrink_baseline(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the resolver-fallback contract independent of the shrink guard."""
+    monkeypatch.setattr(metadata_catalog_sync, "_load_bundled_baseline", lambda: None, raising=False)
 
 
 class FakeFetcher:
@@ -48,9 +55,10 @@ class FakeFetcher:
 
 
 def _payload() -> dict[str, Any]:
+    providers = {f"provider-{i}": {"recommended_model": f"model-{i}"} for i in range(10)}
     return {
         "schema_version": "fusionaize-provider-catalog/v1.1",
-        "providers": {"anthropic": {"recommended_model": "claude-opus-4-7"}},
+        "providers": providers,
     }
 
 
