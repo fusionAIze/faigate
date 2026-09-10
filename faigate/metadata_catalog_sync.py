@@ -10,8 +10,10 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 from dataclasses import dataclass
 from enum import Enum
+from importlib import resources
 from typing import Any, Protocol
 
 import httpx
@@ -19,6 +21,9 @@ import httpx
 logger = logging.getLogger("faigate.metadata_catalog_sync")
 
 DEFAULT_TIMEOUT_SECONDS = 10.0
+
+DEFAULT_MIN_ENTRIES = 10
+DEFAULT_MAX_SHRINK_RATIO = 0.5
 
 
 class SyncStatus(str, Enum):
@@ -89,6 +94,50 @@ def _validate_payload_shape(payload: dict[str, Any]) -> None:
         raise SyncError("payload missing 'providers' object")
 
 
+def _load_bundled_baseline() -> dict[str, Any] | None:
+    """Load the bundled catalog snapshot used as the integrity baseline."""
+    try:
+        catalog_resource = resources.files("faigate.assets.metadata").joinpath("catalog.v1.json")
+        with catalog_resource.open("r", encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, ModuleNotFoundError, AttributeError):
+        return None
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("bundled baseline load failed: %s", exc)
+        return None
+
+
+def _count_catalog_entries(payload: dict[str, Any]) -> int:
+    """Return the number of provider entries, ignoring top-level meta keys."""
+    providers = payload.get("providers")
+    return len(providers) if isinstance(providers, dict) else 0
+
+
+def _validate_integrity(
+    payload: dict[str, Any],
+    *,
+    baseline: dict[str, Any] | None,
+    min_entries: int,
+    max_shrink_ratio: float,
+) -> None:
+    """Reject a catalog that is too small or shrank too far from the baseline.
+
+    ``baseline`` must be the bundled snapshot, never the last-fetched copy, so
+    an already-accepted truncated sync cannot ratchet the next threshold down.
+    """
+    count = _count_catalog_entries(payload)
+    if count < min_entries:
+        raise SyncError(f"catalog entry count {count} below minimum {min_entries}")
+    if baseline is None:
+        return
+    baseline_count = _count_catalog_entries(baseline)
+    if baseline_count == 0:
+        return
+    min_retained = math.ceil(baseline_count * (1.0 - max_shrink_ratio))
+    if count < min_retained:
+        raise SyncError(f"catalog entry count {count} below {min_retained} (bundled baseline has {baseline_count})")
+
+
 class MetadataCatalogSync:
     """Pull a curated catalog over HTTPS with ETag conditional-GET."""
 
@@ -102,6 +151,8 @@ class MetadataCatalogSync:
         etag: str | None = None,
         token: str | None = None,
         timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+        min_entries: int = DEFAULT_MIN_ENTRIES,
+        max_shrink_ratio: float = DEFAULT_MAX_SHRINK_RATIO,
     ) -> FetchResult:
         """Fetch the catalog. Returns FetchResult; never raises for HTTP errors."""
         headers: dict[str, str] = {"Accept": "application/json"}
@@ -203,6 +254,22 @@ class MetadataCatalogSync:
 
         try:
             _validate_payload_shape(payload)
+        except SyncError as exc:
+            return FetchResult(
+                status=SyncStatus.INVALID,
+                payload=None,
+                etag=None,
+                http_status=status,
+                error=str(exc),
+            )
+
+        try:
+            _validate_integrity(
+                payload,
+                baseline=_load_bundled_baseline(),
+                min_entries=min_entries,
+                max_shrink_ratio=max_shrink_ratio,
+            )
         except SyncError as exc:
             return FetchResult(
                 status=SyncStatus.INVALID,
