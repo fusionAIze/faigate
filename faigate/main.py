@@ -891,6 +891,45 @@ def _resolve_requested_model(
     return normalized, None, None, None, {}
 
 
+def _is_known_model_identity(model_id: str, config: Config) -> bool:
+    """Return whether a requested model id resolves to a known identity.
+
+    A model id is "known" when it names a configured provider (canonical slug),
+    a model shortcut, a routing mode, or a curated catalog entry — either by its
+    canonical slug, an explicit alias, or its recommended model. Anything else is
+    a typo'd or fabricated id and must fail identity resolution instead of being
+    silently routed to the fallback chain.
+    """
+
+    normalized = str(model_id or "auto").strip().lower() or "auto"
+    if normalized.startswith("faigate/"):
+        normalized = normalized.split("/", 1)[1] or "auto"
+    if normalized == "auto":
+        return True
+    if normalized in _providers:
+        return True
+    if _find_model_shortcut(config, normalized):
+        return True
+    if _find_routing_mode(config, normalized):
+        return True
+
+    try:
+        from .provider_catalog import get_provider_catalog
+
+        catalog = get_provider_catalog()
+    except Exception:  # pragma: no cover - defensive import guard
+        catalog = {}
+    for name, entry in catalog.items():
+        if normalized == str(name).lower():
+            return True
+        if normalized == str(entry.get("recommended_model") or "").strip().lower():
+            return True
+        for alias in entry.get("aliases") or []:
+            if normalized == str(alias).strip().lower():
+                return True
+    return False
+
+
 def _build_attempt_order(
     primary_provider: str,
     *,
@@ -5021,6 +5060,14 @@ async def chat_completions(request: Request):
         return _payload_too_large_response("Chat completion request is too large", exc=exc)
     except ValueError as exc:
         return _invalid_request_response("Invalid chat completion request", exc=exc)
+
+    requested_model_id = str(body.get("model", "auto") or "auto")
+    if not _is_known_model_identity(requested_model_id, _config):
+        return _client_error_response(
+            f"Model '{requested_model_id}' not found",
+            error_type="model_not_found",
+            status_code=404,
+        )
 
     headers = _collect_routing_headers(request)
     try:
