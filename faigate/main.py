@@ -834,6 +834,19 @@ def _find_model_shortcut(config: Config, shortcut_name: str) -> tuple[str, dict[
     return None
 
 
+def _normalize_model_id(model_id: Any) -> str:
+    """Normalize a requested model id for identity and routing resolution.
+
+    The id is lowercased and trimmed. Some clients namespace model ids with the
+    gateway name (for example "faigate/openai-codex-5.4-medium"); the "faigate/"
+    namespace is stripped before providers, shortcuts, or routing modes resolve.
+    """
+    normalized = str(model_id or "auto").strip().lower() or "auto"
+    if normalized.startswith("faigate/"):
+        normalized = normalized.split("/", 1)[1] or "auto"
+    return normalized
+
+
 def _resolve_requested_model(
     config: Config,
     model_requested: str,
@@ -849,13 +862,7 @@ def _resolve_requested_model(
       resolved_shortcut_name,
       merged_mode_hints
     """
-    normalized = str(model_requested or "auto").strip().lower() or "auto"
-
-    # Some clients namespace model IDs with the gateway name (for example
-    # "faigate/openai-codex-5.4-medium"). Strip the faigate namespace before
-    # resolving providers, shortcuts, or routing modes.
-    if normalized.startswith("faigate/"):
-        normalized = normalized.split("/", 1)[1] or "auto"
+    normalized = _normalize_model_id(model_requested)
 
     if normalized != "auto" and normalized in _providers:
         return normalized, normalized, None, None, {}
@@ -892,42 +899,34 @@ def _resolve_requested_model(
 
 
 def _is_known_model_identity(model_id: str, config: Config) -> bool:
-    """Return whether a requested model id resolves to a known identity.
+    """Return whether a requested model id resolves to a routable identity.
 
-    A model id is "known" when it names a configured provider (canonical slug),
-    a model shortcut, a routing mode, or a curated catalog entry — either by its
-    canonical slug, an explicit alias, or its recommended model. Anything else is
-    a typo'd or fabricated id and must fail identity resolution instead of being
-    silently routed to the fallback chain.
+    A model id is known when it names a configured provider (canonical slug), a
+    model shortcut, a routing mode, or the virtual "auto" selector. Curated
+    catalog entries are intentionally not accepted here: only ids that can
+    actually become a routing target may pass. A curated but unconfigured entry
+    therefore stays a ``model_not_found``.
+
+    The check fails open. If identity resolution cannot be completed — for
+    example because an internal knowledge source is unavailable — the id is
+    treated as known and a warning is logged, so an internal error never turns a
+    potentially valid id into a 404.
     """
 
-    normalized = str(model_id or "auto").strip().lower() or "auto"
-    if normalized.startswith("faigate/"):
-        normalized = normalized.split("/", 1)[1] or "auto"
-    if normalized == "auto":
-        return True
-    if normalized in _providers:
-        return True
-    if _find_model_shortcut(config, normalized):
-        return True
-    if _find_routing_mode(config, normalized):
-        return True
-
     try:
-        from .provider_catalog import get_provider_catalog
-
-        catalog = get_provider_catalog()
-    except Exception:  # pragma: no cover - defensive import guard
-        catalog = {}
-    for name, entry in catalog.items():
-        if normalized == str(name).lower():
+        normalized = _normalize_model_id(model_id)
+        if normalized == "auto":
             return True
-        if normalized == str(entry.get("recommended_model") or "").strip().lower():
+        if normalized in _providers:
             return True
-        for alias in entry.get("aliases") or []:
-            if normalized == str(alias).strip().lower():
-                return True
-    return False
+        if _find_model_shortcut(config, normalized):
+            return True
+        if _find_routing_mode(config, normalized):
+            return True
+        return False
+    except Exception as exc:  # pragma: no cover - defensive fail-open guard
+        logger.warning("Model identity check failed open for %r: %s", model_id, exc)
+        return True
 
 
 def _build_attempt_order(
