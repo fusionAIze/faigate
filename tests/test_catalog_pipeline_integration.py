@@ -17,6 +17,7 @@ does not take the rest of the pipeline down with it.
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -28,10 +29,19 @@ from faigate.catalog_sources.base import EntryPricing, NormalizedEntry
 from faigate.catalog_sources.litellm import LiteLLMAdapter
 from faigate.catalog_sources.merge import SourceInput, merge_catalogs
 from faigate.catalog_sources.omniroute import OmniRouteAdapter
-from faigate.metadata_catalog_sync import MetadataCatalogSync
+from faigate.metadata_catalog_sync import (
+    DEFAULT_MAX_SHRINK_RATIO,
+    MetadataCatalogSync,
+    _load_bundled_baseline,
+)
 
 #: Checked-in LiteLLM registry slice (no network).
 _LITELLM_FIXTURE = Path(__file__).parent / "fixtures" / "litellm" / "model_prices_and_context_window.json"
+
+#: Number of synthetic OmniRoute providers in the fixture. Must stay well above
+#: the guard's retained floor (half the bundled provider count) so the chain
+#: test survives bundled-catalog growth without touching the guard.
+_OMNIROUTE_FIXTURE_PROVIDERS = 60
 
 
 class FakeFetcher:
@@ -61,27 +71,53 @@ def _litellm_entries() -> list[NormalizedEntry]:
 
 
 def _omniroute_entries() -> list[NormalizedEntry]:
+    providers: dict[str, Any] = {
+        "deepseek": {
+            "id": "deepseek",
+            "alias": "ds",
+            "models": [
+                {
+                    "id": "deepseek-v4-pro",
+                    "name": "DeepSeek V4 Pro",
+                    "toolCalling": True,
+                    "supportsReasoning": True,
+                    "supportsVision": False,
+                    "supportsAudio": False,
+                    "supportsVideo": False,
+                    "maxOutputTokens": 384000,
+                    "contextLength": 1000000,
+                    "maxInputTokens": None,
+                }
+            ],
+        }
+    }
+    # OmniRoute is a multi-provider registry. The integrity guard counts
+    # top-level providers, so the outage-isolation case (OmniRoute is the only
+    # surviving foreign source) needs a realistic provider spread; a one-model
+    # catalog would rightly be rejected as a shrink against the bundled
+    # baseline.
+    for index in range(_OMNIROUTE_FIXTURE_PROVIDERS):
+        provider_id = f"omniroute-fixture-{index}"
+        providers[provider_id] = {
+            "id": provider_id,
+            "alias": None,
+            "models": [
+                {
+                    "id": f"fixture-model-{index}",
+                    "name": f"Fixture Model {index}",
+                    "toolCalling": False,
+                    "supportsReasoning": False,
+                    "supportsVision": False,
+                    "supportsAudio": False,
+                    "supportsVideo": False,
+                    "maxOutputTokens": 8192,
+                    "contextLength": 32768,
+                    "maxInputTokens": None,
+                }
+            ],
+        }
     payload = {
-        "providers": {
-            "deepseek": {
-                "id": "deepseek",
-                "alias": "ds",
-                "models": [
-                    {
-                        "id": "deepseek-v4-pro",
-                        "name": "DeepSeek V4 Pro",
-                        "toolCalling": True,
-                        "supportsReasoning": True,
-                        "supportsVision": False,
-                        "supportsAudio": False,
-                        "supportsVideo": False,
-                        "maxOutputTokens": 384000,
-                        "contextLength": 1000000,
-                        "maxInputTokens": None,
-                    }
-                ],
-            }
-        },
+        "providers": providers,
         "free_model_budgets": [
             {
                 "provider": "deepseek",
@@ -143,10 +179,26 @@ def _resolve_catalog(
     tmp_path: Path,
     entries: list[NormalizedEntry],
 ) -> Any:
-    """Resolve the merged catalog through the resolver tiers (public)."""
+    """Resolve the merged catalog through the resolver tiers (public).
+
+    The payload uses the real catalog shape: entries grouped into a nested
+    ``providers`` mapping, because that top-level provider count is exactly what
+    the sync integrity guard measures. The guard only cares that the catalog
+    clears its floor, which is why the provider count assertion below is a
+    floor rather than an equality.
+    """
+    providers: dict[str, Any] = {}
+    for e in entries:
+        provider = providers.setdefault(e.provider_id, {"models": []})
+        provider["models"].append(
+            {
+                "model_id": e.model_id,
+                "display_name": e.display_name,
+            }
+        )
     payload = {
         "schema_version": "fusionaize-provider-catalog/v1.1",
-        "providers": {},
+        "providers": providers,
         "entries": [
             {
                 "provider_id": e.provider_id,
@@ -169,6 +221,7 @@ def _resolve_catalog(
     resolver = CatalogResolver(config=config, cache=cache, sync=sync)
     resolved = resolver.resolve()
     assert resolved.source == "public"
+    assert len(resolved.payload["providers"]) > 0
     return resolved.payload
 
 
@@ -241,6 +294,40 @@ def test_omniroute_source_failure_leaves_rest_of_chain_intact(tmp_path: Path) ->
 
     _validate_merged_shape(entries)
     _resolve_catalog(tmp_path, entries)
+
+
+def test_small_catalog_falls_back_to_bundle_instead_of_being_served(tmp_path: Path) -> None:
+    """A catalog under the shrink floor must lose to the bundled snapshot.
+
+    This is the guard's whole point, pinned at the chain level: if a truncated
+    sync could still win, the resolver would serve a degraded catalog and the
+    guard would be decorative. ``min_entries`` may accept the payload (it is
+    non-empty), so the shrink ratio against the bundled baseline is what must
+    reject it. Thresholds stay at their production defaults on purpose.
+    """
+    baseline_count = len(_load_bundled_baseline()["providers"])
+    floor = math.ceil(baseline_count * (1.0 - DEFAULT_MAX_SHRINK_RATIO))
+    providers = {f"tiny-{i}": {"models": []} for i in range(floor - 1)}
+    payload = {
+        "schema_version": "fusionaize-provider-catalog/v1.1",
+        "providers": providers,
+    }
+
+    fetcher = FakeFetcher([(200, {"etag": '"tiny1"'}, json.dumps(payload).encode("utf-8"))])
+    resolver = CatalogResolver(
+        config=ResolverConfig(
+            public_url="https://example/public.json",
+            private_url="https://example/private.json",
+            token=None,
+            refresh_interval_seconds=10.0,
+        ),
+        cache=CatalogCache(root=tmp_path),
+        sync=MetadataCatalogSync(fetcher=fetcher),
+    )
+
+    resolved = resolver.resolve()
+    assert resolved.source == "bundled"
+    assert resolved.payload["providers"] != providers
 
 
 def test_no_network_access_is_attempted() -> None:
