@@ -259,9 +259,7 @@ def test_sync_error_with_cache_serves_stale_with_notice(tmp_path: Path) -> None:
 
 def test_unknown_identity_is_model_not_found() -> None:
     """An unknown id resolves to an unambiguous ``not_found``."""
-    resolver = ModelIdentityResolver(
-        [ModelIdentity.from_fields(vendor="deepseek", model="deepseek-v4-flash")]
-    )
+    resolver = ModelIdentityResolver([ModelIdentity.from_fields(vendor="deepseek", model="deepseek-v4-flash")])
     result = resolver.resolve("no/such-model")
 
     assert result.identity is None
