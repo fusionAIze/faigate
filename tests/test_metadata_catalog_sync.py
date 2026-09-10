@@ -7,11 +7,10 @@ import importlib.resources
 import json
 import logging
 import math
-import sys
 from pathlib import Path
-from types import ModuleType
 from typing import Any
 
+import httpx
 import pytest
 
 from faigate import metadata_catalog_sync as _metadata_catalog_sync
@@ -29,18 +28,12 @@ from faigate.provider_catalog_refresh import build_catalog_alerts
 # stub at import time and never restore it. That stubbed module has no
 # real ``HTTPError`` hierarchy, so once any of them has been collected
 # this module would silently test against the wrong exception contract.
-# Import the genuine package regardless and pin it for every test here.
+# ``tests/conftest.py`` restores the genuine package before collection, so
+# the plain import above already yields the real hierarchy; it is pinned
+# onto the module under test for every test here.
 
 
-def _load_real_httpx() -> ModuleType:
-    """Import the genuine httpx even if a sibling test stub is installed."""
-    sys.modules.pop("httpx", None)
-    real = importlib.import_module("httpx")
-    sys.modules["httpx"] = real
-    return real
-
-
-REAL_HTTPX = _load_real_httpx()
+REAL_HTTPX = httpx
 
 
 @pytest.fixture(autouse=True)
