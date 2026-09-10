@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import importlib.resources
 import json
 import logging
+import math
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from faigate import metadata_catalog_sync
 from faigate.catalog_cache import CatalogCache
 from faigate.catalog_resolver import CatalogResolver, ResolverConfig
 from faigate.metadata_catalog_sync import (
@@ -18,6 +21,28 @@ from faigate.metadata_catalog_sync import (
 from faigate.provider_catalog_refresh import build_catalog_alerts
 
 # ── fakes ─────────────────────────────────────────────────────────────
+
+
+@pytest.fixture(autouse=True)
+def _no_shrink_baseline(monkeypatch: pytest.MonkeyPatch):
+    """Neutralize the bundled shrink baseline for mechanic-focused tests.
+
+    The integrity guard compares a synced catalog against the bundled
+    snapshot. The small fixture catalogs used here would be rejected as
+    "shrank too far"; tests that exercise that guard explicitly patch the
+    baseline themselves.
+
+    ``raising=False`` keeps the RED PROOF honest: against a baseline that
+    lacks ``_load_bundled_baseline`` the patch is a no-op and the new tests
+    fail with real assertion errors instead of setup errors.
+    """
+    monkeypatch.setattr(metadata_catalog_sync, "_load_bundled_baseline", lambda: None, raising=False)
+
+
+@pytest.fixture
+def real_bundled_baseline(_no_shrink_baseline, monkeypatch: pytest.MonkeyPatch):
+    """Undo the autouse neutralization so the real bundled loader runs."""
+    monkeypatch.undo()
 
 
 class FakeFetcher:
@@ -49,11 +74,14 @@ class RaisingFetcher:
 
 
 def _valid_payload() -> dict[str, Any]:
+    return _catalog_payload(provider_count=10)
+
+
+def _catalog_payload(provider_count: int) -> dict[str, Any]:
+    providers = {f"provider-{i}": {"recommended_model": f"model-{i}"} for i in range(provider_count)}
     return {
         "schema_version": "fusionaize-provider-catalog/v1.1",
-        "providers": {
-            "anthropic": {"recommended_model": "claude-opus-4-7"},
-        },
+        "providers": providers,
     }
 
 
@@ -71,7 +99,7 @@ def test_fetch_fresh_returns_payload_and_etag():
     assert result.status == SyncStatus.FRESH
     assert result.payload is not None
     assert result.etag == '"abc123"'
-    assert result.payload["providers"]["anthropic"]["recommended_model"] == "claude-opus-4-7"
+    assert result.payload["providers"]["provider-0"]["recommended_model"] == "model-0"
 
 
 def test_fetch_passes_if_none_match_when_etag_provided():
@@ -156,6 +184,186 @@ def test_fetch_does_not_log_token_value(caplog: pytest.LogCaptureFixture):
     assert result.status == SyncStatus.ERROR
     full_log = "\n".join(rec.getMessage() for rec in caplog.records)
     assert secret not in full_log, "secret token leaked into logs"
+
+
+# ── Integrity guard ───────────────────────────────────────────────────
+
+
+def _body(payload: dict[str, Any]) -> bytes:
+    return json.dumps(payload).encode("utf-8")
+
+
+def test_sync_rejects_catalog_below_minimum_entries():
+    payload = _catalog_payload(provider_count=3)
+    fetcher = FakeFetcher([(200, {}, _body(payload))])
+    result = MetadataCatalogSync(fetcher=fetcher).fetch("https://example/c.json")
+    assert result.status == SyncStatus.INVALID
+    assert result.payload is None
+    assert "3" in result.error
+    assert "10" in result.error
+
+
+def test_sync_rejects_catalog_shrinking_too_far_from_baseline(monkeypatch: pytest.MonkeyPatch):
+    baseline = _catalog_payload(provider_count=100)
+    payload = _catalog_payload(provider_count=49)  # under 50% of baseline
+    monkeypatch.setattr(metadata_catalog_sync, "_load_bundled_baseline", lambda: baseline)
+    fetcher = FakeFetcher([(200, {}, _body(payload))])
+    result = MetadataCatalogSync(fetcher=fetcher).fetch("https://example/c.json")
+    assert result.status == SyncStatus.INVALID
+    assert "49" in result.error
+    assert "50" in result.error
+
+
+def test_sync_accepts_catalog_within_shrink_threshold(monkeypatch: pytest.MonkeyPatch):
+    baseline = _catalog_payload(provider_count=100)
+    payload = _catalog_payload(provider_count=50)  # exactly 50% retained
+    monkeypatch.setattr(metadata_catalog_sync, "_load_bundled_baseline", lambda: baseline)
+    fetcher = FakeFetcher([(200, {}, _body(payload))])
+    result = MetadataCatalogSync(fetcher=fetcher).fetch("https://example/c.json")
+    assert result.status == SyncStatus.FRESH
+
+
+def test_meta_keys_do_not_count_as_entries(monkeypatch: pytest.MonkeyPatch):
+    baseline = {
+        "schema_version": "fusionaize-provider-catalog/v1.1",
+        "generated_at": "x",
+        "source_repo": "y",
+        "extra_meta": {"nested": True},
+        "providers": {},
+    }
+    payload = _catalog_payload(provider_count=15)
+    monkeypatch.setattr(metadata_catalog_sync, "_load_bundled_baseline", lambda: baseline)
+    fetcher = FakeFetcher([(200, {}, _body(payload))])
+    result = MetadataCatalogSync(fetcher=fetcher).fetch("https://example/c.json", min_entries=15)
+    assert result.status == SyncStatus.FRESH
+
+
+def test_min_entries_threshold_is_configurable(monkeypatch: pytest.MonkeyPatch):
+    # A relaxed shrink ratio must not mask a min_entries violation.
+    baseline = _catalog_payload(provider_count=100)
+    monkeypatch.setattr(metadata_catalog_sync, "_load_bundled_baseline", lambda: baseline)
+    payload = _catalog_payload(provider_count=10)
+    fetcher = FakeFetcher([(200, {}, _body(payload))])
+    result = MetadataCatalogSync(fetcher=fetcher).fetch(
+        "https://example/c.json",
+        min_entries=11,
+        max_shrink_ratio=0.99,
+    )
+    assert result.status == SyncStatus.INVALID
+    assert "below minimum 11" in result.error
+
+
+def test_max_shrink_ratio_threshold_is_configurable(monkeypatch: pytest.MonkeyPatch):
+    # A permissive min_entries must not mask a shrink violation, and widening
+    # the ratio is the only thing that flips the verdict.
+    baseline = _catalog_payload(provider_count=100)
+    monkeypatch.setattr(metadata_catalog_sync, "_load_bundled_baseline", lambda: baseline)
+    payload = _catalog_payload(provider_count=45)
+
+    rejected = MetadataCatalogSync(fetcher=FakeFetcher([(200, {}, _body(payload))])).fetch(
+        "https://example/c.json",
+        min_entries=1,
+        max_shrink_ratio=0.5,
+    )
+    assert rejected.status == SyncStatus.INVALID
+    assert "below 50" in rejected.error
+
+    accepted = MetadataCatalogSync(fetcher=FakeFetcher([(200, {}, _body(payload))])).fetch(
+        "https://example/c.json",
+        min_entries=1,
+        max_shrink_ratio=0.6,
+    )
+    assert accepted.status == SyncStatus.FRESH
+
+
+def test_shrink_threshold_rounds_up_on_odd_baseline(monkeypatch: pytest.MonkeyPatch):
+    # 47 * 0.5 = 23.5; ceil makes the floor 24 (~51%), not 23.
+    baseline = _catalog_payload(provider_count=47)
+    monkeypatch.setattr(metadata_catalog_sync, "_load_bundled_baseline", lambda: baseline)
+
+    at_floor = MetadataCatalogSync(fetcher=FakeFetcher([(200, {}, _body(_catalog_payload(24)))])).fetch(
+        "https://example/c.json"
+    )
+    assert at_floor.status == SyncStatus.FRESH
+
+    below_floor = MetadataCatalogSync(fetcher=FakeFetcher([(200, {}, _body(_catalog_payload(23)))])).fetch(
+        "https://example/c.json"
+    )
+    assert below_floor.status == SyncStatus.INVALID
+    assert "below 24" in below_floor.error
+
+
+def test_accepted_small_sync_does_not_weaken_next_comparison(monkeypatch: pytest.MonkeyPatch):
+    # The comparison baseline is the bundled snapshot, never the previously
+    # fetched copy. A 60-entry catalog is accepted (>=50% of the 100-entry
+    # bundle), but the following 35-entry sync must still be rejected against
+    # the bundle -- not against the 60 that was just accepted.
+    baseline = _catalog_payload(provider_count=100)
+    monkeypatch.setattr(metadata_catalog_sync, "_load_bundled_baseline", lambda: baseline)
+    accepted_payload = _catalog_payload(provider_count=60)
+    shrunk_payload = _catalog_payload(provider_count=35)
+    fetcher = FakeFetcher(
+        [
+            (200, {}, _body(accepted_payload)),
+            (200, {}, _body(shrunk_payload)),
+        ]
+    )
+    sync = MetadataCatalogSync(fetcher=fetcher)
+    first = sync.fetch("https://example/c.json")
+    second = sync.fetch("https://example/c.json")
+    assert first.status == SyncStatus.FRESH
+    assert first.payload is not None
+    assert second.status == SyncStatus.INVALID
+    assert "35" in second.error
+    assert "50" in second.error
+
+
+# ── Bundled baseline loading (fails closed) ───────────────────────────
+
+
+def test_sync_fails_closed_when_bundled_baseline_missing(real_bundled_baseline, monkeypatch: pytest.MonkeyPatch):
+    def _missing(_package: str):
+        raise FileNotFoundError("catalog.v1.json gone")
+
+    monkeypatch.setattr(importlib.resources, "files", _missing)
+    fetcher = FakeFetcher([(200, {}, _body(_valid_payload()))])
+    result = MetadataCatalogSync(fetcher=fetcher).fetch("https://example/c.json")
+    assert result.status == SyncStatus.INVALID
+    assert result.payload is None
+    assert "baseline" in result.error
+
+
+def test_sync_propagates_unexpected_baseline_load_errors(real_bundled_baseline, monkeypatch: pytest.MonkeyPatch):
+    def _boom(_package: str):
+        raise RuntimeError("cannot read package resources")
+
+    monkeypatch.setattr(importlib.resources, "files", _boom)
+    fetcher = FakeFetcher([(200, {}, _body(_valid_payload()))])
+    with pytest.raises(RuntimeError, match="cannot read package resources"):
+        MetadataCatalogSync(fetcher=fetcher).fetch("https://example/c.json")
+
+
+# ── Real bundled asset wiring ─────────────────────────────────────────
+
+
+def test_integrity_guard_uses_real_bundled_asset(real_bundled_baseline):
+    loader = getattr(metadata_catalog_sync, "_load_bundled_baseline", None)
+    assert loader is not None, "bundled baseline loader missing"
+    baseline = loader()
+    baseline_count = len(baseline["providers"])
+    assert baseline_count > 1
+
+    floor = math.ceil(baseline_count * 0.5)
+
+    rejected = MetadataCatalogSync(fetcher=FakeFetcher([(200, {}, _body(_catalog_payload(floor - 1)))])).fetch(
+        "https://example/c.json"
+    )
+    assert rejected.status == SyncStatus.INVALID
+
+    accepted = MetadataCatalogSync(fetcher=FakeFetcher([(200, {}, _body(_catalog_payload(floor)))])).fetch(
+        "https://example/c.json"
+    )
+    assert accepted.status == SyncStatus.FRESH
 
 
 # ── CatalogCache ──────────────────────────────────────────────────────
@@ -315,7 +523,7 @@ def test_resolver_304_uses_cache(tmp_path: Path):
     # Force refresh past TTL — but server returns 304
     second = resolver.resolve(force_refresh=True)
     assert second.source == "public-cache"
-    assert second.payload["providers"]["anthropic"]["recommended_model"] == "claude-opus-4-7"
+    assert second.payload["providers"]["provider-0"]["recommended_model"] == "model-0"
 
 
 def test_resolver_falls_back_to_bundled_when_all_remotes_fail(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -361,7 +569,7 @@ def test_resolver_status_reports_cache_state(tmp_path: Path):
     resolver.resolve()
     status = resolver.status()
     assert status["tiers"]["public"]["present"] is True
-    assert status["tiers"]["public"]["providers_count"] == 1
+    assert status["tiers"]["public"]["providers_count"] == 10
     assert status["tiers"]["private"]["present"] is False
     assert status["tiers"]["public"]["sync"]["last_status"] == "fresh"
 
