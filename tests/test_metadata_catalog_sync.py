@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
+import importlib
 import importlib.resources
 import json
 import logging
 import math
+import sys
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 import pytest
 
-from faigate import metadata_catalog_sync
+from faigate import metadata_catalog_sync as _metadata_catalog_sync
 from faigate.catalog_cache import CatalogCache
 from faigate.catalog_resolver import CatalogResolver, ResolverConfig
 from faigate.metadata_catalog_sync import (
@@ -19,6 +22,32 @@ from faigate.metadata_catalog_sync import (
     SyncStatus,
 )
 from faigate.provider_catalog_refresh import build_catalog_alerts
+
+# ── httpx isolation ───────────────────────────────────────────────────
+#
+# Several sibling test modules replace ``sys.modules["httpx"]`` with a
+# stub at import time and never restore it. That stubbed module has no
+# real ``HTTPError`` hierarchy, so once any of them has been collected
+# this module would silently test against the wrong exception contract.
+# Import the genuine package regardless and pin it for every test here.
+
+
+def _load_real_httpx() -> ModuleType:
+    """Import the genuine httpx even if a sibling test stub is installed."""
+    sys.modules.pop("httpx", None)
+    real = importlib.import_module("httpx")
+    sys.modules["httpx"] = real
+    return real
+
+
+REAL_HTTPX = _load_real_httpx()
+
+
+@pytest.fixture(autouse=True)
+def _pin_real_httpx(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ensure MetadataCatalogSync sees the genuine httpx.HTTPError type."""
+    monkeypatch.setattr(_metadata_catalog_sync, "httpx", REAL_HTTPX)
+
 
 # ── fakes ─────────────────────────────────────────────────────────────
 
@@ -36,7 +65,7 @@ def _no_shrink_baseline(monkeypatch: pytest.MonkeyPatch):
     lacks ``_load_bundled_baseline`` the patch is a no-op and the new tests
     fail with real assertion errors instead of setup errors.
     """
-    monkeypatch.setattr(metadata_catalog_sync, "_load_bundled_baseline", lambda: None, raising=False)
+    monkeypatch.setattr(_metadata_catalog_sync, "_load_bundled_baseline", lambda: None, raising=False)
 
 
 @pytest.fixture
@@ -162,20 +191,28 @@ def test_fetch_missing_providers_key_returns_invalid():
 
 
 def test_fetch_network_error_returns_error_does_not_raise():
-    import httpx
-
-    sync = MetadataCatalogSync(fetcher=RaisingFetcher(httpx.ConnectError("dns failure")))
+    sync = MetadataCatalogSync(fetcher=RaisingFetcher(REAL_HTTPX.ConnectError("dns failure")))
     result = sync.fetch("https://example/c.json")
-    # Don't assert on prefix — httpx version drift means ConnectError may
-    # land in either except branch. What matters: caller gets an error
-    # status without an exception bubbling up.
+    # A transport error is part of the HttpFetcher contract: the caller
+    # gets an error status without an exception bubbling up.
     assert result.status == SyncStatus.ERROR
     assert "dns failure" in result.error
 
 
+@pytest.mark.parametrize(
+    "exc",
+    [AttributeError("fetcher bug"), TypeError("fetcher bug")],
+    ids=["attribute-error", "type-error"],
+)
+def test_fetch_programmer_error_propagates(exc: Exception):
+    sync = MetadataCatalogSync(fetcher=RaisingFetcher(exc))
+    with pytest.raises(type(exc)):
+        sync.fetch("https://example/c.json")
+
+
 def test_fetch_does_not_log_token_value(caplog: pytest.LogCaptureFixture):
     secret = "ghp_DO_NOT_LEAK_THIS_TOKEN_ABCDEF"
-    fetcher = RaisingFetcher(__import__("httpx").ConnectError("dns"))
+    fetcher = RaisingFetcher(REAL_HTTPX.ConnectError("dns"))
     sync = MetadataCatalogSync(fetcher=fetcher)
 
     with caplog.at_level(logging.DEBUG, logger="faigate.metadata_catalog_sync"):
@@ -206,7 +243,7 @@ def test_sync_rejects_catalog_below_minimum_entries():
 def test_sync_rejects_catalog_shrinking_too_far_from_baseline(monkeypatch: pytest.MonkeyPatch):
     baseline = _catalog_payload(provider_count=100)
     payload = _catalog_payload(provider_count=49)  # under 50% of baseline
-    monkeypatch.setattr(metadata_catalog_sync, "_load_bundled_baseline", lambda: baseline)
+    monkeypatch.setattr(_metadata_catalog_sync, "_load_bundled_baseline", lambda: baseline)
     fetcher = FakeFetcher([(200, {}, _body(payload))])
     result = MetadataCatalogSync(fetcher=fetcher).fetch("https://example/c.json")
     assert result.status == SyncStatus.INVALID
@@ -217,7 +254,7 @@ def test_sync_rejects_catalog_shrinking_too_far_from_baseline(monkeypatch: pytes
 def test_sync_accepts_catalog_within_shrink_threshold(monkeypatch: pytest.MonkeyPatch):
     baseline = _catalog_payload(provider_count=100)
     payload = _catalog_payload(provider_count=50)  # exactly 50% retained
-    monkeypatch.setattr(metadata_catalog_sync, "_load_bundled_baseline", lambda: baseline)
+    monkeypatch.setattr(_metadata_catalog_sync, "_load_bundled_baseline", lambda: baseline)
     fetcher = FakeFetcher([(200, {}, _body(payload))])
     result = MetadataCatalogSync(fetcher=fetcher).fetch("https://example/c.json")
     assert result.status == SyncStatus.FRESH
@@ -232,7 +269,7 @@ def test_meta_keys_do_not_count_as_entries(monkeypatch: pytest.MonkeyPatch):
         "providers": {},
     }
     payload = _catalog_payload(provider_count=15)
-    monkeypatch.setattr(metadata_catalog_sync, "_load_bundled_baseline", lambda: baseline)
+    monkeypatch.setattr(_metadata_catalog_sync, "_load_bundled_baseline", lambda: baseline)
     fetcher = FakeFetcher([(200, {}, _body(payload))])
     result = MetadataCatalogSync(fetcher=fetcher).fetch("https://example/c.json", min_entries=15)
     assert result.status == SyncStatus.FRESH
@@ -241,7 +278,7 @@ def test_meta_keys_do_not_count_as_entries(monkeypatch: pytest.MonkeyPatch):
 def test_min_entries_threshold_is_configurable(monkeypatch: pytest.MonkeyPatch):
     # A relaxed shrink ratio must not mask a min_entries violation.
     baseline = _catalog_payload(provider_count=100)
-    monkeypatch.setattr(metadata_catalog_sync, "_load_bundled_baseline", lambda: baseline)
+    monkeypatch.setattr(_metadata_catalog_sync, "_load_bundled_baseline", lambda: baseline)
     payload = _catalog_payload(provider_count=10)
     fetcher = FakeFetcher([(200, {}, _body(payload))])
     result = MetadataCatalogSync(fetcher=fetcher).fetch(
@@ -257,7 +294,7 @@ def test_max_shrink_ratio_threshold_is_configurable(monkeypatch: pytest.MonkeyPa
     # A permissive min_entries must not mask a shrink violation, and widening
     # the ratio is the only thing that flips the verdict.
     baseline = _catalog_payload(provider_count=100)
-    monkeypatch.setattr(metadata_catalog_sync, "_load_bundled_baseline", lambda: baseline)
+    monkeypatch.setattr(_metadata_catalog_sync, "_load_bundled_baseline", lambda: baseline)
     payload = _catalog_payload(provider_count=45)
 
     rejected = MetadataCatalogSync(fetcher=FakeFetcher([(200, {}, _body(payload))])).fetch(
@@ -279,7 +316,7 @@ def test_max_shrink_ratio_threshold_is_configurable(monkeypatch: pytest.MonkeyPa
 def test_shrink_threshold_rounds_up_on_odd_baseline(monkeypatch: pytest.MonkeyPatch):
     # 47 * 0.5 = 23.5; ceil makes the floor 24 (~51%), not 23.
     baseline = _catalog_payload(provider_count=47)
-    monkeypatch.setattr(metadata_catalog_sync, "_load_bundled_baseline", lambda: baseline)
+    monkeypatch.setattr(_metadata_catalog_sync, "_load_bundled_baseline", lambda: baseline)
 
     at_floor = MetadataCatalogSync(fetcher=FakeFetcher([(200, {}, _body(_catalog_payload(24)))])).fetch(
         "https://example/c.json"
@@ -299,7 +336,7 @@ def test_accepted_small_sync_does_not_weaken_next_comparison(monkeypatch: pytest
     # bundle), but the following 35-entry sync must still be rejected against
     # the bundle -- not against the 60 that was just accepted.
     baseline = _catalog_payload(provider_count=100)
-    monkeypatch.setattr(metadata_catalog_sync, "_load_bundled_baseline", lambda: baseline)
+    monkeypatch.setattr(_metadata_catalog_sync, "_load_bundled_baseline", lambda: baseline)
     accepted_payload = _catalog_payload(provider_count=60)
     shrunk_payload = _catalog_payload(provider_count=35)
     fetcher = FakeFetcher(
@@ -347,7 +384,7 @@ def test_sync_propagates_unexpected_baseline_load_errors(real_bundled_baseline, 
 
 
 def test_integrity_guard_uses_real_bundled_asset(real_bundled_baseline):
-    loader = getattr(metadata_catalog_sync, "_load_bundled_baseline", None)
+    loader = getattr(_metadata_catalog_sync, "_load_bundled_baseline", None)
     assert loader is not None, "bundled baseline loader missing"
     baseline = loader()
     baseline_count = len(baseline["providers"])

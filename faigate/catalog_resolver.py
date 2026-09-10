@@ -218,11 +218,15 @@ class CatalogResolver:
 
         # Remote unhealthy but we have stale cache — use it
         if cached is not None:
+            age_seconds = time.time() - cached.written_at
+            reason = result.error or result.status.value
             notes.append(f"{tier}: remote returned {result.status.value}; using stale cache")
-            logger.info(
-                "catalog resolve: %s remote %s — falling back to cached",
+            logger.warning(
+                "catalog resolve: %s remote %s — using stale cache age=%.0fs reason=%s",
                 tier,
                 result.status.value,
+                age_seconds,
+                reason,
             )
             return ResolvedCatalog(
                 payload=cached.payload,
