@@ -571,6 +571,24 @@ def _score_image_fit_ratio(ratio: float) -> int:
     return 2
 
 
+def _static_match_keys(match: dict[str, Any]) -> set[str]:
+    """Return every match key reachable from a static match block.
+
+    Recurses into nested ``any`` blocks so a ``model_requested`` condition that
+    sits below a top-level ``any`` is still discovered.
+    """
+    keys: set[str] = set()
+    if not isinstance(match, dict):
+        return keys
+    for key, value in match.items():
+        if key == "any" and isinstance(value, list):
+            for sub in value:
+                keys |= _static_match_keys(sub)
+        else:
+            keys.add(key)
+    return keys
+
+
 def _collect_keyword_hits(text: str, keywords: tuple[str, ...] | set[str] | list[str]) -> list[str]:
     """Return de-duplicated keywords that match one text using boundary-aware checks."""
     hits: list[str] = []
@@ -1082,6 +1100,53 @@ class Router:
         self.config = config
 
     # ── Public entry point ─────────────────────────────────────
+
+    def static_rule_matches_model_requested(self, model_requested: str) -> bool:
+        """Return whether a static rule matches the raw requested model id.
+
+        This exposes the static layer's ``model_requested`` matching so callers
+        can tell whether an id is routable by name without rebuilding the
+        matching semantics. Only static rules count: they are the layer that
+        keys on the requested id itself.
+        """
+        cfg = self.config.static_rules
+        if not cfg.get("enabled"):
+            return False
+
+        normalized = str(model_requested or "auto").strip().lower() or "auto"
+        ctx = _RoutingContext(
+            system_prompt="",
+            last_user_message="",
+            full_text="",
+            total_tokens=0,
+            stable_prefix_tokens=0,
+            requested_output_tokens=0,
+            total_requested_tokens=0,
+            requested_image_outputs=1,
+            requested_image_side_px=0,
+            requested_image_size="",
+            requested_image_policy="",
+            required_capability="",
+            cache_preference="",
+            model_requested=normalized,
+            has_tools=False,
+            client_profile="generic",
+            profile_hints={},
+            hook_hints={},
+            applied_hooks=[],
+            headers={},
+            provider_health={},
+            provider_runtime_state={},
+            providers=self.config.providers,
+            request_insights={},
+        )
+        for rule in cfg.get("rules", []):
+            match = rule.get("match", {})
+            if "model_requested" not in _static_match_keys(match):
+                continue
+            if self._match_static(match, ctx):
+                return True
+        return False
 
     async def route(
         self,
