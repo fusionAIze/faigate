@@ -1365,6 +1365,36 @@ def get_model_max_input_tokens(model_id: str) -> int | None:
     return _MODEL_INPUT_CAPS.get(tail) or _MODEL_INPUT_CAPS.get(candidate)
 
 
+_MODEL_INPUT_CAP_EVIDENCE = {
+    "level": "belegt",
+    "source_url": "https://github.com/fusionAIze/fusionaize-metadata",
+    "as_of": "2026-08-21",
+}
+
+
+def get_model_input_cap_fact(model_id: str) -> dict[str, Any] | None:
+    """Return one model's max_input_tokens as an evidence-tagged fact, or ``None``.
+
+    This is the evidence-aware counterpart of :func:`get_model_max_input_tokens`.
+    The 23 curated caps are human-checked against the LiteLLM and OmniRoute
+    registry reports (see the ``_MODEL_INPUT_CAPS`` provenance note), so they
+    carry ``belegt``. An id outside the curated set returns ``None`` — there is
+    no recorded fact to act on — never the provider-wide 262144 floor, which is
+    a placeholder, not a per-model truth.
+
+    The returned dict is shaped for :func:`faigate.catalog_views.split_catalog_facts`,
+    so a consumer can separate ``belegt`` (hard) from ``plausibel`` (advisory)
+    facts with no second piece of view-splitting logic.
+    """
+    cap = get_model_max_input_tokens(model_id)
+    if cap is None:
+        return None
+    return {
+        "max_input_tokens": cap,
+        "evidence": dict(_MODEL_INPUT_CAP_EVIDENCE),
+    }
+
+
 def _normalize_catalog_entry(entry: Any) -> dict[str, Any]:
     if not isinstance(entry, dict):
         return {}

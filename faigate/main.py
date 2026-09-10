@@ -31,6 +31,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from starlette.datastructures import UploadFile
 
 from . import __version__
+from . import provider_catalog as provider_catalog_module
 from .adaptation import AdaptiveRouteState
 from .api.anthropic.models import AnthropicBridgeError, parse_anthropic_messages_request
 from .breakers import breaker_registry
@@ -42,6 +43,7 @@ from .bridges.anthropic import (
 )
 from .canonical import CanonicalChatRequest, CanonicalChatResponse, CanonicalResponseMessage
 from .catalog_resolver import CatalogResolver, ResolverConfig
+from .catalog_views import split_catalog_facts
 from .config import Config, load_config
 from .dashboard import _metadata_catalogs_summary, _metadata_packages_detail
 from .dashboard_web import DASHBOARD_HTML
@@ -325,29 +327,51 @@ def _invalid_request_response(message: str, *, exc: Exception | None = None) -> 
     return _client_error_response(message, error_type="invalid_request_error", status_code=400)
 
 
-def _max_input_token_cap() -> int | None:
-    """Resolve the gateway's advertised input-token cap from provider limits.
+def _resolve_advertised_input_limit(
+    model_id: str | None,
+) -> tuple[int | None, bool]:
+    """Resolve the input-token limit a 413 may advertise, by evidence level.
 
-    The curated catalog gives every provider the same floor input cap (262144)
-    under `limits.max_input_tokens`, and `ProviderBackend.limits` surfaces it.
-    That floor is a provider-wide placeholder, not a per-model truth: the real
-    ceiling for any given request is `get_model_max_input_tokens()` in
-    `provider_catalog`, applied during routing once the request model is known.
+    The provider catalog gives every provider the same flat floor cap (262144)
+    under ``limits.max_input_tokens``. That floor is a provider-wide placeholder,
+    not a per-model truth, and must never leak into an error response as if it
+    were a hard boundary. The authoritative per-model cap lives in the curated
+    model-caps map and carries an ``evidence.level``; this helper turns that
+    fact into one of three outcomes governed by the evidence scale:
 
-    This helper backs the 413 "advertised" threshold only, and reads the cap
-    from the live providers instead of hardcoding a number so the response
-    stays truthful if the provider band ever shifts. The per-model caps remain
-    the authoritative limit for routing rejection.
+    * ``belegt``     -> the cap is returned unchanged and ``estimate=False``.
+    * ``plausibel``  -> the cap is returned but flagged ``estimate=True``, so a
+      client sees it as a best-effort figure rather than a guarantee.
+    * ``unbestaetigt`` / missing -> ``(None, ...)``: no hard cap is invented.
+      The 413 then either passes the limit through to the provider or falls
+      back to the operator-configured *byte* limit, per ``FAIGATE_UNVERIFIED_CAP_MODE``.
+
+    The second tuple element is the "is estimate" flag: ``False`` for a hard
+    ``belegt`` number, ``True`` for a best-effort ``plausibel`` number.
     """
-    caps: list[int] = []
-    for provider in _providers.values():
-        limits = getattr(provider, "limits", {}) or {}
-        cap = limits.get("max_input_tokens")
-        if cap is not None:
-            caps.append(int(cap))
-    if not caps:
-        return None
-    return max(caps)
+    fact = provider_catalog_module.get_model_input_cap_fact(model_id) if model_id else None
+    if fact is None:
+        return None, False
+
+    views = split_catalog_facts({model_id: fact})
+    if model_id in views.enforceable:
+        return int(fact["max_input_tokens"]), False
+    if model_id in views.advisory:
+        return int(fact["max_input_tokens"]), True
+    return None, False
+
+
+def _unverified_cap_mode() -> str:
+    """Return how a 413 should behave when a model has no ``belegt`` input cap.
+
+    Configurable via ``FAIGATE_UNVERIFIED_CAP_MODE``:
+
+    * ``passthrough`` (default) — do not advertise any token limit; let the
+      provider enforce its own boundary.
+    * ``byte_limit`` — advertise the operator-configured JSON body byte limit
+      instead of any invented token number.
+    """
+    return str(os.environ.get("FAIGATE_UNVERIFIED_CAP_MODE", "passthrough")).strip().lower()
 
 
 def _payload_too_large_response(
@@ -355,25 +379,46 @@ def _payload_too_large_response(
     *,
     exc: Exception | None = None,
     limit: int | None = None,
+    model_id: str | None = None,
 ) -> JSONResponse:
     """Return a sanitized payload-too-large response.
 
-    Exposes the concrete token threshold (from provider ``limits.max_input_tokens``)
-    in both the body and the ``x-faigate-request-limit`` header so clients can
-    react without inspecting internal byte limits.
+    The concrete threshold exposed in the body and the ``x-faigate-request-limit``
+    header is resolved from an evidence-tagged per-model cap, never from the
+    provider-wide 262144 placeholder:
+
+    * a hard ``belegt`` cap is advertised unchanged;
+    * a ``plausibel`` cap is advertised but marked as an estimate
+      (``estimated: true`` in the body, ``~`` prefix on the header);
+    * no cap at all is passed through, or reported as the operator byte limit,
+      depending on ``FAIGATE_UNVERIFIED_CAP_MODE`` — an invented token number is
+      never produced.
     """
     if exc is not None:
         logger.info("Payload rejected as too large: %s", exc)
 
-    resolved_limit = limit if limit is not None else _max_input_token_cap()
     body: dict[str, Any] = {
         "error": message,
         "type": "payload_too_large",
     }
     headers: dict[str, str] = {}
+
+    if limit is not None:
+        resolved_limit = limit
+        estimated = False
+    else:
+        resolved_limit, estimated = _resolve_advertised_input_limit(model_id)
+        if resolved_limit is None and _unverified_cap_mode() == "byte_limit":
+            config = globals().get("_config")
+            security = getattr(config, "security", {}) or {}
+            resolved_limit = int(security.get("max_json_body_bytes", 1_048_576))
+            estimated = False
+
     if resolved_limit is not None:
         body["limit"] = resolved_limit
-        headers["x-faigate-request-limit"] = str(resolved_limit)
+        if estimated:
+            body["estimated"] = True
+        headers["x-faigate-request-limit"] = f"{'~' if estimated else ''}{resolved_limit}"
     return JSONResponse(body, status_code=413, headers=headers)
 
 

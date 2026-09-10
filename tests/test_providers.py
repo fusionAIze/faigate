@@ -1089,22 +1089,28 @@ class TestCatalogWindowAndLimitsEnrichment:
 
 
 class TestPayloadTooLargeThreshold:
-    """TASK-005 AC2: the 413 payload-too-large response carries the token cap.
+    """The 413 payload-too-large response advertises an evidence-gated token cap.
 
-    The threshold must be sourced from provider ``limits.max_input_tokens``
-    (the curated 262144 band), surfaced in the body ``limit`` field and the
-    ``x-faigate-request-limit`` header, never a hardcoded literal.
+    TASK-B2/B3 supersede the provider-wide 262144 placeholder: the threshold in
+    the body ``limit`` field and the ``x-faigate-request-limit`` header is now
+    resolved from a ``belegt`` per-model cap when one exists, and never invented
+    from the flat provider floor when it does not.
     """
 
-    def test_413_exposes_limit_from_provider_cap(self, monkeypatch):
+    def test_413_exposes_limit_from_belegt_model_cap(self, monkeypatch):
         import faigate.main as main
+        from faigate import provider_catalog
 
-        class _FakeProvider:
-            limits = {"max_input_tokens": 262144}
+        monkeypatch.setattr(
+            provider_catalog,
+            "get_model_input_cap_fact",
+            lambda model_id: {
+                "max_input_tokens": 262144,
+                "evidence": {"level": "belegt", "source_url": "https://example.test", "as_of": "2026-08-21"},
+            },
+        )
 
-        monkeypatch.setattr(main, "_providers", {"deepseek-chat": _FakeProvider()})
-
-        resp = main._payload_too_large_response("too large")
+        resp = main._payload_too_large_response("too large", model_id="deepseek-chat")
 
         assert resp.status_code == 413
         body = resp.body  # JSONResponse exposes decoded body
@@ -1113,23 +1119,13 @@ class TestPayloadTooLargeThreshold:
         assert payload["limit"] == 262144
         assert resp.headers.get("x-faigate-request-limit") == "262144"
 
-    def test_max_input_token_cap_aggregates_provider_limits(self, monkeypatch):
+    def test_413_without_belegt_cap_advertises_no_invented_limit(self):
         import faigate.main as main
 
-        class _A:
-            limits = {"max_input_tokens": 262144}
+        resp = main._payload_too_large_response("too large", model_id="provider/unknown-model")
 
-        class _B:
-            limits = {"max_output_tokens": 8192}
-
-        monkeypatch.setattr(main, "_providers", {"a": _A(), "b": _B()})
-        assert main._max_input_token_cap() == 262144
-
-    def test_max_input_token_cap_returns_none_when_no_provider_declares_it(self, monkeypatch):
-        import faigate.main as main
-
-        class _NoLimits:
-            limits = {}
-
-        monkeypatch.setattr(main, "_providers", {"x": _NoLimits()})
-        assert main._max_input_token_cap() is None
+        assert resp.status_code == 413
+        payload = __import__("json").loads(resp.body)
+        assert payload["type"] == "payload_too_large"
+        assert "limit" not in payload
+        assert "x-faigate-request-limit" not in resp.headers
