@@ -527,3 +527,138 @@ metrics:
     assert "gemini-flash-lite" in listed
     assert sorted(accepted - listed) == []
     assert sorted(listed - accepted) == []
+
+
+def test_list_and_gate_agree_across_full_candidate_universe(tmp_path, monkeypatch):
+    """The list and the gate agree on every candidate id, in both directions.
+
+    A static ``model_requested`` pattern such as ``"gemini"`` is matched by
+    substring, so a provider named ``gemini-pro`` is routable by name even when
+    its backend is not instantiated. The list must consult the same static
+    matcher the gate uses rather than re-deriving a narrower literal-trigger
+    set, or ids like ``gemini-pro`` are accepted by the gate but hidden from
+    ``/v1/models``.
+
+    The candidate universe mixes every source the router resolves — provider
+    names (instantiated and not), static triggers, routing modes, model
+    shortcuts — plus a few invented names, and asserts both directions against
+    the real configuration shape instead of a stub provider.
+    """
+    cfg = load_config(
+        _write_config(
+            tmp_path,
+            """
+server:
+  host: "127.0.0.1"
+  port: 8090
+providers:
+  deepseek-v4-flash:
+    backend: openai-compat
+    base_url: "https://api.example.com/v1"
+    api_key: "secret"
+    model: "deepseek-v4-flash"
+  deepseek-v4-pro:
+    backend: openai-compat
+    base_url: "https://api.example.com/v1"
+    api_key: "secret"
+    model: "deepseek-v4-pro"
+  deepseek-v4-flash-vision-exp:
+    backend: openai-compat
+    base_url: "https://api.example.com/v1"
+    api_key: "${DEEPSEEK_API_KEY}"
+    model: "deepseek-v4-flash-vision-exp"
+  gemini-flash:
+    backend: openai-compat
+    base_url: "https://api.example.com/v1"
+    api_key: "${GEMINI_API_KEY}"
+    model: "gemini-flash"
+  gemini-flash-lite:
+    backend: openai-compat
+    base_url: "https://api.example.com/v1"
+    api_key: "${GEMINI_API_KEY}"
+    model: "gemini-flash-lite"
+  gemini-pro:
+    backend: openai-compat
+    base_url: "https://api.example.com/v1"
+    api_key: "${GEMINI_API_KEY}"
+    model: "gemini-pro"
+routing_modes:
+  enabled: true
+  modes:
+    auto:
+      description: "Balanced (default)"
+    eco:
+      description: "Cheapest possible"
+model_shortcuts:
+  enabled: false
+  shortcuts:
+    gemini-pro:
+      target: gemini-pro
+static_rules:
+  enabled: true
+  rules:
+    - name: explicit-flash
+      route_to: gemini-flash
+      match:
+        model_requested: ["flash", "gemini", "vision"]
+    - name: explicit-reasoner
+      route_to: deepseek-v4-pro
+      match:
+        model_requested: ["reasoner", "r1", "think", "deepseek-v4-pro"]
+    - name: explicit-chat
+      route_to: deepseek-v4-flash
+      match:
+        model_requested: ["chat", "ds", "default", "deepseek-v4-flash"]
+metrics:
+  enabled: false
+""",
+        )
+    )
+    monkeypatch.setattr(main_module, "_config", cfg, raising=False)
+    # Only the two literal-key providers instantiate; the four whose keys are
+    # unresolved stay out of _providers yet remain static-routable by name.
+    monkeypatch.setattr(
+        main_module,
+        "_providers",
+        {name: _ProviderStub() for name in ("deepseek-v4-flash", "deepseek-v4-pro")},
+        raising=False,
+    )
+    monkeypatch.setattr(main_module, "_router", Router(cfg), raising=False)
+
+    listed = set(main_module._routable_model_entries().keys())
+
+    candidates: set[str] = set(cfg.providers)
+    candidates |= set(cfg.routing_modes.get("modes", {}))
+    candidates |= set(cfg.model_shortcuts.get("shortcuts", {}))
+    candidates.add("auto")
+
+    def _collect_triggers(node) -> None:
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key == "model_requested":
+                    patterns = value if isinstance(value, list) else [value]
+                    candidates.update(str(pattern) for pattern in patterns)
+                else:
+                    _collect_triggers(value)
+        elif isinstance(node, list):
+            for item in node:
+                _collect_triggers(item)
+
+    for rule in cfg.static_rules.get("rules", []):
+        _collect_triggers(rule.get("match", {}))
+    candidates.update({"totally-invented-xyz", "another-bogus-id", "not-a-real-model"})
+
+    accepted = {candidate for candidate in candidates if main_module._is_known_model_identity(candidate, cfg)}
+
+    accepted_not_listed = sorted(accepted - listed)
+    listed_not_accepted = sorted(listed - accepted)
+
+    assert accepted_not_listed == [], (
+        f"the gate accepts these ids but /v1/models does not list them: {accepted_not_listed}"
+    )
+    assert listed_not_accepted == [], f"/v1/models lists these ids but the gate rejects them: {listed_not_accepted}"
+
+    # The specific regression: the four substring-routable provider names must
+    # appear even though their backends are not instantiated.
+    for name in ("deepseek-v4-flash-vision-exp", "gemini-flash", "gemini-flash-lite", "gemini-pro"):
+        assert name in listed, f"static-routable provider name {name!r} is missing from /v1/models"

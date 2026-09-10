@@ -2972,14 +2972,32 @@ def _routable_model_entries(
 
     static_cfg = cfg.static_rules
     if static_cfg.get("enabled"):
-        for rule in static_cfg.get("rules", []) or []:
-            if not isinstance(rule, dict):
-                continue
-            route_to = str(rule.get("route_to", "") or "")
-            rule_name = str(rule.get("name", "") or "")
-            for trigger in _static_rule_model_requested_triggers({"rules": [rule]}):
+        # Static ``model_requested`` keys make an id routable by name. The gate
+        # decides that through the router's static matcher, so the list consults
+        # the same matcher rather than re-deriving a narrower literal-trigger
+        # set. Every name in a finite candidate universe — configured provider,
+        # routing mode, model shortcut, and literal trigger — is asked "does a
+        # static rule key on this id?" so the list and the gate cannot drift.
+        router = globals().get("_router")
+        if router is not None:
+            static_candidates: list[str] = list(_static_rule_model_requested_triggers(static_cfg))
+            for name in cfg.providers:
+                if name not in static_candidates:
+                    static_candidates.append(name)
+            for name in modes_cfg.get("modes", {}):
+                if name not in static_candidates:
+                    static_candidates.append(name)
+            for name in cfg.model_shortcuts.get("shortcuts", {}):
+                if name not in static_candidates:
+                    static_candidates.append(name)
+            for candidate in static_candidates:
+                rule = router.static_rule_for_model_requested(candidate)
+                if rule is None:
+                    continue
+                route_to = str(rule.get("route_to", "") or "")
+                rule_name = str(rule.get("name", "") or "")
                 claim(
-                    trigger,
+                    candidate,
                     {
                         "object": "model",
                         "owned_by": "faigate",
@@ -2988,6 +3006,25 @@ def _routable_model_entries(
                         "route_to": route_to,
                     },
                 )
+        else:
+            # No router installed (config-only callers, some tests): fall back
+            # to the literal trigger set with per-rule metadata.
+            for rule in static_cfg.get("rules", []) or []:
+                if not isinstance(rule, dict):
+                    continue
+                route_to = str(rule.get("route_to", "") or "")
+                rule_name = str(rule.get("name", "") or "")
+                for trigger in _static_rule_model_requested_triggers({"rules": [rule]}):
+                    claim(
+                        trigger,
+                        {
+                            "object": "model",
+                            "owned_by": "faigate",
+                            "description": f"Static route to {route_to}" if route_to else "Static routing alias",
+                            "static_rule": rule_name,
+                            "route_to": route_to,
+                        },
+                    )
 
     shortcuts_cfg = cfg.model_shortcuts
     if shortcuts_cfg.get("enabled"):

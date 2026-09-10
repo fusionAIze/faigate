@@ -1142,6 +1142,27 @@ class Router:
 
     # ── Public entry point ─────────────────────────────────────
 
+    def static_rule_for_model_requested(self, model_requested: str) -> dict[str, Any] | None:
+        """Return the first static rule that keys on the raw requested model id.
+
+        This is the single source for "which static rule makes this id routable".
+        The identity gate and the ``/v1/models`` listing both consult it, so they
+        agree by construction on which ids are static-routable instead of each
+        re-deriving the matching semantics.
+        """
+        cfg = self.config.static_rules
+        if not cfg.get("enabled"):
+            return None
+
+        ctx = _context_for_model_requested(self.config.providers, model_requested)
+        for rule in cfg.get("rules", []):
+            match = rule.get("match", {})
+            if "model_requested" not in _static_match_keys(match):
+                continue
+            if self._match_static(match, ctx):
+                return rule
+        return None
+
     def static_rule_matches_model_requested(self, model_requested: str) -> bool:
         """Return whether a static rule matches the raw requested model id.
 
@@ -1150,18 +1171,7 @@ class Router:
         matching semantics. Only static rules count: they are the layer that
         keys on the requested id itself.
         """
-        cfg = self.config.static_rules
-        if not cfg.get("enabled"):
-            return False
-
-        ctx = _context_for_model_requested(self.config.providers, model_requested)
-        for rule in cfg.get("rules", []):
-            match = rule.get("match", {})
-            if "model_requested" not in _static_match_keys(match):
-                continue
-            if self._match_static(match, ctx):
-                return True
-        return False
+        return self.static_rule_for_model_requested(model_requested) is not None
 
     def model_requested_is_accepted(
         self,
