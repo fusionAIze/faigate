@@ -7,6 +7,7 @@ import pytest
 import faigate.main as main_module
 from faigate.config import load_config
 from faigate.main import list_models
+from faigate.router import Router
 
 _CONFIG = """
 server:
@@ -129,6 +130,7 @@ def _install_config(monkeypatch, tmp_path: Path, *, shortcuts_enabled: bool = Fa
         },
         raising=False,
     )
+    monkeypatch.setattr(main_module, "_router", Router(cfg), raising=False)
     return cfg
 
 
@@ -214,3 +216,59 @@ async def test_routable_ids_resolve_mode_and_shortcut_aliases(models_config_with
 
     assert "cheap-mode" in routable
     assert "claude-sonnet" in routable
+
+
+def _candidate_ids(cfg) -> set[str]:
+    """Return every id the config's own declaration names as a routing candidate.
+
+    The candidates are read from the configuration shape itself — providers,
+    routing modes, model shortcuts, static ``model_requested`` triggers, and the
+    virtual ``auto`` selector — not from the list or the gate under test. That
+    keeps the agreement check independent of both sides it compares.
+    """
+    candidates: set[str] = set(cfg.providers)
+    candidates |= set(cfg.routing_modes.get("modes", {}))
+    candidates |= set(cfg.model_shortcuts.get("shortcuts", {}))
+    candidates.add("auto")
+
+    def _collect(node) -> None:
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key == "model_requested":
+                    patterns = value if isinstance(value, list) else [value]
+                    candidates.update(str(pattern) for pattern in patterns)
+                else:
+                    _collect(value)
+        elif isinstance(node, list):
+            for item in node:
+                _collect(item)
+
+    for rule in cfg.static_rules.get("rules", []):
+        _collect(rule.get("match", {}))
+    return candidates
+
+
+@pytest.mark.asyncio
+async def test_list_and_gate_agree_on_candidate_ids(models_config):
+    """Listing and gate accept exactly the same candidate ids.
+
+    The list must not advertise an id the gate rejects, and the gate must not
+    accept an id the list hides. If either side grows a private notion of
+    "routable", exactly one direction fails and this test says which id.
+    """
+    listed = set(await _model_ids())
+    router = main_module._router
+    candidates = _candidate_ids(main_module._config)
+
+    accepted = {
+        candidate for candidate in candidates if main_module._is_known_model_identity(candidate, main_module._config)
+    }
+
+    accepted_not_listed = sorted(accepted - listed)
+    listed_not_accepted = sorted(listed - accepted)
+
+    assert accepted_not_listed == [], (
+        f"the gate accepts these ids but /v1/models does not list them: {accepted_not_listed}"
+    )
+    assert listed_not_accepted == [], f"/v1/models lists these ids but the gate rejects them: {listed_not_accepted}"
+    assert router is not None

@@ -228,8 +228,7 @@ def test_identity_check_fails_open_on_internal_error(api_client, monkeypatch):
     def _broken_lookup(*_args, **_kwargs):
         raise RuntimeError("knowledge base unavailable")
 
-    monkeypatch.setattr(main_module, "_find_routing_mode", _broken_lookup)
-    monkeypatch.setattr(main_module, "_find_model_shortcut", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(main_module._router, "model_requested_is_accepted", _broken_lookup)
 
     assert main_module._is_known_model_identity("fabricated-id", main_module._config) is True
 
@@ -279,22 +278,57 @@ def test_real_config_model_requested_and_providers_are_accepted(monkeypatch):
         raising=False,
     )
 
-    router = Router(cfg)
-    monkeypatch.setattr(main_module, "_router", router, raising=False)
+    monkeypatch.setattr(main_module, "_router", Router(cfg), raising=False)
 
     for provider_name in _real_config_provider_names(cfg):
-        routable = router.static_rule_matches_model_requested(provider_name)
-        assert main_module._is_known_model_identity(provider_name, cfg, routable_by_name=routable) is True, (
+        assert main_module._is_known_model_identity(provider_name, cfg) is True, (
             f"configured provider '{provider_name}' was rejected"
         )
 
     for trigger in _real_config_model_requested_triggers(cfg):
-        routable = router.static_rule_matches_model_requested(trigger)
-        assert main_module._is_known_model_identity(trigger, cfg, routable_by_name=routable) is True, (
+        assert main_module._is_known_model_identity(trigger, cfg) is True, (
             f"model_requested trigger '{trigger}' was rejected"
         )
 
     assert main_module._is_known_model_identity("totally-invented-xyz", cfg) is False
+
+
+@pytest.mark.skipif(not REAL_CONFIG_PATH.is_file(), reason="real faigate config not present")
+def test_real_config_list_and_gate_agree(monkeypatch):
+    """Against the real config, /v1/models and the gate accept the same ids.
+
+    The list must not hide an id the gate accepts, and must not advertise one it
+    rejects. Reading the candidate universe from the raw config shape keeps this
+    check from trusting either side under test.
+    """
+
+    cfg = load_config(REAL_CONFIG_PATH)
+    monkeypatch.setattr(main_module, "_config", cfg, raising=False)
+    monkeypatch.setattr(
+        main_module,
+        "_providers",
+        {name: _ProviderStub() for name in cfg.providers},
+        raising=False,
+    )
+    monkeypatch.setattr(main_module, "_router", Router(cfg), raising=False)
+
+    listed = set(main_module._routable_model_entries().keys())
+
+    candidates = set(cfg.providers)
+    candidates |= set(cfg.routing_modes.get("modes", {}))
+    candidates |= set(cfg.model_shortcuts.get("shortcuts", {}))
+    candidates.add("auto")
+    candidates.update(_real_config_model_requested_triggers(cfg))
+
+    accepted = {candidate for candidate in candidates if main_module._is_known_model_identity(candidate, cfg)}
+
+    accepted_not_listed = sorted(accepted - listed)
+    listed_not_accepted = sorted(listed - accepted)
+
+    assert accepted_not_listed == [], (
+        f"the gate accepts these ids but /v1/models does not list them: {accepted_not_listed}"
+    )
+    assert listed_not_accepted == [], f"/v1/models lists these ids but the gate rejects them: {listed_not_accepted}"
 
 
 def test_structural_config_model_requested_and_providers_are_accepted(tmp_path, monkeypatch):
@@ -368,8 +402,7 @@ metrics:
         {name: _ProviderStub() for name in cfg.providers},
         raising=False,
     )
-    router = Router(cfg)
-    monkeypatch.setattr(main_module, "_router", router, raising=False)
+    monkeypatch.setattr(main_module, "_router", Router(cfg), raising=False)
 
     expected = [
         "deepseek-v4-pro",
@@ -386,10 +419,7 @@ metrics:
         "default",
     ]
     for model_id in expected:
-        routable = router.static_rule_matches_model_requested(model_id)
-        assert main_module._is_known_model_identity(model_id, cfg, routable_by_name=routable) is True, (
-            f"routable id '{model_id}' was rejected"
-        )
+        assert main_module._is_known_model_identity(model_id, cfg) is True, f"routable id '{model_id}' was rejected"
 
     assert main_module._is_known_model_identity("totally-invented-xyz", cfg) is False
 

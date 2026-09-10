@@ -907,13 +907,14 @@ def _is_known_model_identity(
     """Return whether a requested model id resolves to a routable identity.
 
     The routing engine is the single source of truth for what is routable, so the
-    caller passes ``routable_by_name`` when routing already proved the id names a
-    static ``model_requested`` rule. When that is false the check still recognises
-    ids that resolve to a configured provider (canonical slug), a model shortcut,
-    a routing mode, or the virtual "auto" selector. Curated catalog entries are
-    intentionally not accepted here: only ids that can actually become a routing
-    target may pass. A curated but unconfigured entry therefore stays a
-    ``model_not_found``.
+    check delegates to ``Router.model_requested_is_accepted``: the same call that
+    decides whether ``/v1/models`` advertises an id decides whether a request may
+    use it. The router is consulted first; a lightweight config-only fallback
+    keeps the check honest when no router is installed (for example in tests).
+
+    ``routable_by_name`` is retained for callers that already resolved the id
+    against a router. It is always superseded by the router query when a router
+    is installed, because the router is authoritative.
 
     The check fails open. If identity resolution cannot be completed — for
     example because an internal knowledge source is unavailable — the id is
@@ -922,6 +923,10 @@ def _is_known_model_identity(
     """
 
     try:
+        router = globals().get("_router")
+        if router is not None:
+            return bool(router.model_requested_is_accepted(model_id))
+
         if routable_by_name:
             return True
         normalized = _normalize_model_id(model_id)
@@ -5186,8 +5191,7 @@ async def chat_completions(request: Request):
 
     headers = _collect_routing_headers(request)
     requested_model_id = str(body.get("model", "auto") or "auto")
-    routable_by_name = _router.static_rule_matches_model_requested(requested_model_id)
-    if not _is_known_model_identity(requested_model_id, _config, routable_by_name=routable_by_name):
+    if not _is_known_model_identity(requested_model_id, _config):
         return _client_error_response(
             f"Model '{requested_model_id}' not found",
             error_type="model_not_found",

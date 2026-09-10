@@ -589,6 +589,47 @@ def _static_match_keys(match: dict[str, Any]) -> set[str]:
     return keys
 
 
+def _context_for_model_requested(
+    providers: dict[str, Any],
+    model_requested: str,
+) -> _RoutingContext:
+    """Build the minimal context needed to evaluate a request that names a model.
+
+    Only ``model_requested`` carries meaningful data: every other routing signal
+    is empty, so static and policy matches keyed on prompts, tools, tokens, or
+    headers evaluate against a neutral baseline. ``static_rule_matches_model_requested``
+    uses this to tell whether an id is routable by name without rebuilding the
+    matching semantics the routing layers already implement.
+    """
+    normalized = str(model_requested or "auto").strip().lower() or "auto"
+    return _RoutingContext(
+        system_prompt="",
+        last_user_message="",
+        full_text="",
+        total_tokens=0,
+        stable_prefix_tokens=0,
+        requested_output_tokens=0,
+        total_requested_tokens=0,
+        requested_image_outputs=1,
+        requested_image_side_px=0,
+        requested_image_size="",
+        requested_image_policy="",
+        required_capability="",
+        cache_preference="",
+        model_requested=normalized,
+        has_tools=False,
+        client_profile="generic",
+        profile_hints={},
+        hook_hints={},
+        applied_hooks=[],
+        headers={},
+        provider_health={},
+        provider_runtime_state={},
+        providers=providers,
+        request_insights={},
+    )
+
+
 def _collect_keyword_hits(text: str, keywords: tuple[str, ...] | set[str] | list[str]) -> list[str]:
     """Return de-duplicated keywords that match one text using boundary-aware checks."""
     hits: list[str] = []
@@ -1113,39 +1154,58 @@ class Router:
         if not cfg.get("enabled"):
             return False
 
-        normalized = str(model_requested or "auto").strip().lower() or "auto"
-        ctx = _RoutingContext(
-            system_prompt="",
-            last_user_message="",
-            full_text="",
-            total_tokens=0,
-            stable_prefix_tokens=0,
-            requested_output_tokens=0,
-            total_requested_tokens=0,
-            requested_image_outputs=1,
-            requested_image_side_px=0,
-            requested_image_size="",
-            requested_image_policy="",
-            required_capability="",
-            cache_preference="",
-            model_requested=normalized,
-            has_tools=False,
-            client_profile="generic",
-            profile_hints={},
-            hook_hints={},
-            applied_hooks=[],
-            headers={},
-            provider_health={},
-            provider_runtime_state={},
-            providers=self.config.providers,
-            request_insights={},
-        )
+        ctx = _context_for_model_requested(self.config.providers, model_requested)
         for rule in cfg.get("rules", []):
             match = rule.get("match", {})
             if "model_requested" not in _static_match_keys(match):
                 continue
             if self._match_static(match, ctx):
                 return True
+        return False
+
+    def model_requested_is_accepted(self, model_requested: str) -> bool:
+        """Return whether a request naming ``model_requested`` passes the identity gate.
+
+        This is the single answer to "does the gateway accept this model id".
+        It asks the same routing layers the completion endpoint asks, with the
+        same context the endpoint builds, so every surface that decides whether
+        an id may be sent — the pre-flight identity gate and the ``/v1/models``
+        listing — agrees by construction instead of by convention.
+        """
+        cfg = self.config.static_rules
+        if cfg.get("enabled"):
+            ctx = _context_for_model_requested(self.config.providers, model_requested)
+
+            # Layer 0: policy rules, in the same order the request path uses them.
+            if self._layer_policy(ctx):
+                return True
+
+            # Layer 1: static rules. Keyed on the requested id itself, this is
+            # what makes ids such as a static ``model_requested`` trigger routable.
+            for rule in cfg.get("rules", []):
+                match = rule.get("match", {})
+                if self._match_static(match, ctx):
+                    return True
+
+        # No static or policy rule keys on the raw id. Fall back to the layers
+        # that resolve an id without a whole request: routing modes, model
+        # shortcuts, configured providers, and the virtual "auto" selector.
+        normalized = str(model_requested or "auto").strip().lower() or "auto"
+        if normalized == "auto":
+            return True
+        if normalized in self.config.providers:
+            return True
+        modes = self.config.routing_modes
+        if modes.get("enabled") and normalized in modes.get("modes", {}):
+            return True
+        shortcuts = self.config.model_shortcuts
+        if shortcuts.get("enabled"):
+            for name, spec in shortcuts.get("shortcuts", {}).items():
+                if normalized == str(name).strip().lower():
+                    return True
+                for alias in spec.get("aliases", []) or []:
+                    if normalized == str(alias).strip().lower():
+                        return True
         return False
 
     async def route(
