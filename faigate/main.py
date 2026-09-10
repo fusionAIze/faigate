@@ -912,6 +912,12 @@ def _is_known_model_identity(
     use it. The router is consulted first; a lightweight config-only fallback
     keeps the check honest when no router is installed (for example in tests).
 
+    When a router is installed it is consulted with the *instantiated* backend
+    names (``_providers``), not the raw config provider names. A bare provider
+    name is a routing target, not a request id: a provider whose backend never
+    instantiated (for example an unresolved ``${ENV_VAR}`` key kept it out of
+    ``_providers``) is neither accepted nor listed.
+
     ``routable_by_name`` is retained for callers that already resolved the id
     against a router. It is always superseded by the router query when a router
     is installed, because the router is authoritative.
@@ -925,7 +931,8 @@ def _is_known_model_identity(
     try:
         router = globals().get("_router")
         if router is not None:
-            return bool(router.model_requested_is_accepted(model_id))
+            provider_names = frozenset(globals().get("_providers", {}))
+            return bool(router.model_requested_is_accepted(model_id, provider_names=provider_names))
 
         if routable_by_name:
             return True

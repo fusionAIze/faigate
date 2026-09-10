@@ -459,3 +459,71 @@ metrics:
     router = Router(cfg)
     assert router.static_rule_matches_model_requested("heartbeat") is True
     assert router.static_rule_matches_model_requested("totally-invented-xyz") is False
+
+
+def test_gate_and_list_agree_when_a_config_provider_is_not_instantiated(tmp_path, monkeypatch):
+    """The gate and the list agree when a config provider is missing at runtime.
+
+    A provider can be present in ``config.providers`` yet absent from the
+    runtime backend map ``_providers`` — for example when its ``api_key`` still
+    carries an unresolved ``${ENV_VAR}`` placeholder and startup skips it. A bare
+    provider name is a routing *target*, not a request id, so only an
+    instantiated provider may be accepted or listed. Both surfaces must answer
+    the same way in both directions, otherwise one drifts from the other.
+    """
+
+    cfg = load_config(
+        _write_config(
+            tmp_path,
+            """
+server:
+  host: "127.0.0.1"
+  port: 8090
+providers:
+  gemini-flash-lite:
+    backend: openai-compat
+    base_url: "https://api.example.com/v1"
+    api_key: "secret"
+    model: "gemini-flash-lite"
+  anthropic-haiku:
+    backend: anthropic-compat
+    base_url: "https://api.example.com/v1"
+    api_key: "${ANTHROPIC_API_KEY}"
+    model: "claude-haiku-3-5"
+fallback_chain:
+  - gemini-flash-lite
+static_rules:
+  enabled: true
+  rules:
+    - name: heartbeat
+      route_to: gemini-flash-lite
+      match:
+        model_requested: ["heartbeat"]
+metrics:
+  enabled: false
+""",
+        )
+    )
+    monkeypatch.setattr(main_module, "_config", cfg, raising=False)
+    # anthropic-haiku carries an unresolved key, so it is never instantiated.
+    monkeypatch.setattr(
+        main_module,
+        "_providers",
+        {name: _ProviderStub() for name in cfg.providers if name != "anthropic-haiku"},
+        raising=False,
+    )
+    monkeypatch.setattr(main_module, "_router", Router(cfg), raising=False)
+
+    listed = set(main_module._routable_model_entries().keys())
+
+    candidates = set(cfg.providers)
+    candidates.add("auto")
+    candidates.add("heartbeat")
+    accepted = {candidate for candidate in candidates if main_module._is_known_model_identity(candidate, cfg)}
+
+    assert "anthropic-haiku" not in accepted
+    assert "anthropic-haiku" not in listed
+    assert "gemini-flash-lite" in accepted
+    assert "gemini-flash-lite" in listed
+    assert sorted(accepted - listed) == []
+    assert sorted(listed - accepted) == []

@@ -1163,7 +1163,12 @@ class Router:
                 return True
         return False
 
-    def model_requested_is_accepted(self, model_requested: str) -> bool:
+    def model_requested_is_accepted(
+        self,
+        model_requested: str,
+        *,
+        provider_names: set[str] | frozenset[str] | None = None,
+    ) -> bool:
         """Return whether a request naming ``model_requested`` passes the identity gate.
 
         This is the single answer to "does the gateway accept this model id".
@@ -1171,6 +1176,13 @@ class Router:
         same context the endpoint builds, so every surface that decides whether
         an id may be sent — the pre-flight identity gate and the ``/v1/models``
         listing — agrees by construction instead of by convention.
+
+        ``provider_names`` is the authoritative set of routing targets the
+        caller wants considered concrete providers. The identity gate passes the
+        instantiated backend names, not every name present in the raw config:
+        a bare provider name is a routing *target*, not a request id, and must
+        only be accepted when that target is actually available. Defaults to the
+        configured provider names for callers without a runtime backend map.
         """
         cfg = self.config.static_rules
         if cfg.get("enabled"):
@@ -1189,11 +1201,12 @@ class Router:
 
         # No static or policy rule keys on the raw id. Fall back to the layers
         # that resolve an id without a whole request: routing modes, model
-        # shortcuts, configured providers, and the virtual "auto" selector.
+        # shortcuts, concrete providers, and the virtual "auto" selector.
         normalized = str(model_requested or "auto").strip().lower() or "auto"
         if normalized == "auto":
             return True
-        if normalized in self.config.providers:
+        provider_map = set(provider_names) if provider_names is not None else set(self.config.providers)
+        if normalized in provider_map:
             return True
         modes = self.config.routing_modes
         if modes.get("enabled") and normalized in modes.get("modes", {}):
