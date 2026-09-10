@@ -238,6 +238,90 @@ git commit -m "chore(catalog): refresh bundled snapshot for vX.Y.Z"
 The script downloads the current public catalog, validates structure, and
 swaps the snapshot file in place atomically.
 
+## The model-knowledge cut: what lives where
+
+faigate holds model knowledge in two regimes that once contradicted each other
+silently: a catalog that updates without a release, and hardcoded Python
+tables that need a release. The "cut" splits every model fact into one of four
+bands, each with a single home. The split is by *kind of knowledge*, not by
+source, and each band has a different authority and blast radius.
+
+| Band | Kind | Home |
+|------|------|------|
+| **Facts** | capabilities, prices, modalities, aliases, versions, lifecycle | public catalog |
+| **Assessment** | `quality_tier`, `reasoning_strength`, `cluster`, `degrade_to` | private overlay |
+| **Wiring** | transport, auth, probe strategy | private overlay |
+| **Policy** | scoring, fallback order | stays in code |
+
+**Facts** are third-party verifiable and therefore public. Concrete example:
+the per-model input caps are evidence-tagged facts resolved through
+`faigate/provider_catalog.py:1420` (`get_model_input_cap_fact`), which returns
+`None` for any id outside the curated set rather than the provider-wide
+`262144` floor (`faigate/provider_catalog.py:416` has the placeholder value).
+
+**Assessment** is the operator's own judgement (which model is "quality",
+which one it degrades to) and carries the IP line decided 2026-04-26; it must
+not ship public.
+
+**Wiring** is operationally verifiable but a wiring error in *data* is harder to
+localise than in code, so it migrates only under a stricter gate.
+
+**Policy** — scoring and fallback order — is a program. It loses type checking
+and testability the moment it moves into data, so it stays code
+(`faigate/router.py` scoring; `faigate/main.py` fallback chain).
+
+### Evidence rule
+
+Every fact carries an `evidence` block by schema. The level follows a three-step
+scale with distinct consequences:
+
+| Level | Feeds | May do |
+|-------|-------|--------|
+| `belegt` | enforceable + advisory | carry hard decisions (router, capacity calc, error output) |
+| `plausibel` | advisory only | best-effort routing, flagged to the client as an estimate |
+| `unbestaetigt` | neither | nothing — invisible to router, capacity, error output |
+
+The split is implemented in `faigate/catalog_views.py:86`
+(`split_catalog_facts`); the level names are fixed at
+`faigate/catalog_views.py:45-47`. The 413 path applies the rule through
+`faigate/main.py:338` (`_resolve_advertised_input_limit`): a `belegt` cap is
+advertised unchanged, a `plausibel` cap is marked `estimated: true`, and a
+missing/unverified cap never invents a number — it passes through to the
+provider or reports the operator byte limit, per `FAIGATE_UNVERIFIED_CAP_MODE`
+(`faigate/main.py:372`). Machine-generated facts land as `unbestaetigt`; the
+single human step is promotion to `belegt`, which requires a source and
+`as_of`.
+
+### ID path scheme
+
+The canonical model identity is a path built from split fields, never a string
+maintained by hand:
+
+```
+[hop/]vendor/model[:variant]
+```
+
+`auto/` is reserved for *intents* (auto, staged cascade), never a provider or
+vendor. The path is built by `faigate/model_identity.py:29`
+(`join_identity_path`, kept in lockstep with
+`faigate.registry.provider_identity`). Resolution follows a fixed precedence —
+exact long form, declared short name, derived short name, then kuerzel aliases
+— and ambiguity is reported as a candidate list, never silently collapsed
+(`faigate/model_identity.py:141`, `ModelIdentityResolver.resolve`). The long
+form is what faigate returns, logs, and bills; a kuerzel alias (`ds`, `kc`)
+resolves but never surfaces (`faigate/model_identity.py:1`).
+
+### The migration order was deliberate
+
+Facts moved first, assessment second, wiring last — the order is migration
+safety, not value: the integrity guard must exist before the catalog carries
+anything expensive. The sync guard rejects a catalog that shrinks below a
+minimum or against the bundled baseline (`faigate/metadata_catalog_sync.py:133`,
+`_validate_integrity`), and an unknown model id is answered with
+`model_not_found` instead of a silent 200 from a substitute model
+(`faigate/main.py:5386`, `_is_known_model_identity` at
+`faigate/main.py:962`).
+
 ## Related
 
 * [docs/blueprints/model-updater/prd.md](blueprints/model-updater/prd.md) — full PRD
