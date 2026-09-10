@@ -5,7 +5,6 @@ Run with: pytest tests/benchmarks/test_performance.py --benchmark-only
 """
 
 import sys
-import types
 from pathlib import Path
 
 import pytest
@@ -13,21 +12,9 @@ import pytest
 # Set up mock environment before imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-# Mock httpx before importing our modules
-_httpx = types.ModuleType("httpx")
-_httpx.Timeout = type("Timeout", (), {"__init__": lambda *a, **kw: None})
-_httpx.Limits = type("Limits", (), {"__init__": lambda *a, **kw: None})
-_httpx.AsyncClient = type(
-    "AsyncClient",
-    (),
-    {
-        "__init__": lambda *a, **kw: None,
-        "aclose": lambda self: None,
-    },
-)
-sys.modules["httpx"] = _httpx
+import httpx  # noqa: F401,E402
 
-# Import faigate modules after mocking  # noqa: E402
+# Import faigate modules  # noqa: E402
 from faigate import config  # noqa: E402
 
 

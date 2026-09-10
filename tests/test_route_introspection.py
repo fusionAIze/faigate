@@ -3,41 +3,15 @@
 # ruff: noqa: E402
 
 import json
-import sys
 import types
 from pathlib import Path
 
+# Use the genuine httpx: provider clients are constructed but never make a
+# request in these tests, so no network client is needed. A global stub here
+# would leak into every module collected afterwards.
+import httpx  # noqa: F401  (genuine package; see tests/conftest.py)
 import pytest
 from starlette.requests import Request
-
-# Mock httpx before importing our modules
-_httpx = types.ModuleType("httpx")
-
-
-class _Timeout:
-    def __init__(self, *a, **kw):
-        pass
-
-
-class _Limits:
-    def __init__(self, *a, **kw):
-        pass
-
-
-class _AsyncClient:
-    def __init__(self, *a, **kw):
-        pass
-
-    async def aclose(self):
-        pass
-
-
-_httpx.Timeout = _Timeout
-_httpx.Limits = _Limits
-_httpx.AsyncClient = _AsyncClient
-_httpx.TimeoutException = Exception
-_httpx.ConnectError = Exception
-sys.modules["httpx"] = _httpx
 
 import faigate.main as main_module
 from faigate.adaptation import AdaptiveRouteState

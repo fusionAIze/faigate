@@ -7,42 +7,13 @@ invalid payloads to upstream APIs.
 
 # ruff: noqa: E402
 
-import sys
-import types
 from pathlib import Path
 
+# Use the genuine httpx: provider clients are constructed but never make a
+# request in these tests, so no network client is needed. A global stub here
+# would leak into every module collected afterwards.
+import httpx  # noqa: F401  (genuine package; see tests/conftest.py)
 import pytest
-
-# Mock httpx before importing provider code
-_httpx = types.ModuleType("httpx")
-
-
-class _Timeout:
-    def __init__(self, *a, **kw):
-        pass
-
-
-class _Limits:
-    def __init__(self, *a, **kw):
-        pass
-
-
-class _AsyncClient:
-    def __init__(self, *a, **kw):
-        pass
-
-    async def aclose(self):
-        pass
-
-
-_httpx.Timeout = _Timeout
-_httpx.Limits = _Limits
-_httpx.AsyncClient = _AsyncClient
-_httpx.Request = object
-_httpx.Response = object
-_httpx.TimeoutException = Exception
-_httpx.ConnectError = Exception
-sys.modules["httpx"] = _httpx
 
 import faigate.providers as _providers_module  # noqa: E402
 from faigate.oauth.backend import OAuthBackend  # noqa: E402
