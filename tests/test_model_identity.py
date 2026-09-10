@@ -228,8 +228,7 @@ def test_identity_check_fails_open_on_internal_error(api_client, monkeypatch):
     def _broken_lookup(*_args, **_kwargs):
         raise RuntimeError("knowledge base unavailable")
 
-    monkeypatch.setattr(main_module, "_find_routing_mode", _broken_lookup)
-    monkeypatch.setattr(main_module, "_find_model_shortcut", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(main_module._router, "model_requested_is_accepted", _broken_lookup)
 
     assert main_module._is_known_model_identity("fabricated-id", main_module._config) is True
 
@@ -279,22 +278,57 @@ def test_real_config_model_requested_and_providers_are_accepted(monkeypatch):
         raising=False,
     )
 
-    router = Router(cfg)
-    monkeypatch.setattr(main_module, "_router", router, raising=False)
+    monkeypatch.setattr(main_module, "_router", Router(cfg), raising=False)
 
     for provider_name in _real_config_provider_names(cfg):
-        routable = router.static_rule_matches_model_requested(provider_name)
-        assert main_module._is_known_model_identity(provider_name, cfg, routable_by_name=routable) is True, (
+        assert main_module._is_known_model_identity(provider_name, cfg) is True, (
             f"configured provider '{provider_name}' was rejected"
         )
 
     for trigger in _real_config_model_requested_triggers(cfg):
-        routable = router.static_rule_matches_model_requested(trigger)
-        assert main_module._is_known_model_identity(trigger, cfg, routable_by_name=routable) is True, (
+        assert main_module._is_known_model_identity(trigger, cfg) is True, (
             f"model_requested trigger '{trigger}' was rejected"
         )
 
     assert main_module._is_known_model_identity("totally-invented-xyz", cfg) is False
+
+
+@pytest.mark.skipif(not REAL_CONFIG_PATH.is_file(), reason="real faigate config not present")
+def test_real_config_list_and_gate_agree(monkeypatch):
+    """Against the real config, /v1/models and the gate accept the same ids.
+
+    The list must not hide an id the gate accepts, and must not advertise one it
+    rejects. Reading the candidate universe from the raw config shape keeps this
+    check from trusting either side under test.
+    """
+
+    cfg = load_config(REAL_CONFIG_PATH)
+    monkeypatch.setattr(main_module, "_config", cfg, raising=False)
+    monkeypatch.setattr(
+        main_module,
+        "_providers",
+        {name: _ProviderStub() for name in cfg.providers},
+        raising=False,
+    )
+    monkeypatch.setattr(main_module, "_router", Router(cfg), raising=False)
+
+    listed = set(main_module._routable_model_entries().keys())
+
+    candidates = set(cfg.providers)
+    candidates |= set(cfg.routing_modes.get("modes", {}))
+    candidates |= set(cfg.model_shortcuts.get("shortcuts", {}))
+    candidates.add("auto")
+    candidates.update(_real_config_model_requested_triggers(cfg))
+
+    accepted = {candidate for candidate in candidates if main_module._is_known_model_identity(candidate, cfg)}
+
+    accepted_not_listed = sorted(accepted - listed)
+    listed_not_accepted = sorted(listed - accepted)
+
+    assert accepted_not_listed == [], (
+        f"the gate accepts these ids but /v1/models does not list them: {accepted_not_listed}"
+    )
+    assert listed_not_accepted == [], f"/v1/models lists these ids but the gate rejects them: {listed_not_accepted}"
 
 
 def test_structural_config_model_requested_and_providers_are_accepted(tmp_path, monkeypatch):
@@ -368,8 +402,7 @@ metrics:
         {name: _ProviderStub() for name in cfg.providers},
         raising=False,
     )
-    router = Router(cfg)
-    monkeypatch.setattr(main_module, "_router", router, raising=False)
+    monkeypatch.setattr(main_module, "_router", Router(cfg), raising=False)
 
     expected = [
         "deepseek-v4-pro",
@@ -386,10 +419,7 @@ metrics:
         "default",
     ]
     for model_id in expected:
-        routable = router.static_rule_matches_model_requested(model_id)
-        assert main_module._is_known_model_identity(model_id, cfg, routable_by_name=routable) is True, (
-            f"routable id '{model_id}' was rejected"
-        )
+        assert main_module._is_known_model_identity(model_id, cfg) is True, f"routable id '{model_id}' was rejected"
 
     assert main_module._is_known_model_identity("totally-invented-xyz", cfg) is False
 
@@ -429,3 +459,206 @@ metrics:
     router = Router(cfg)
     assert router.static_rule_matches_model_requested("heartbeat") is True
     assert router.static_rule_matches_model_requested("totally-invented-xyz") is False
+
+
+def test_gate_and_list_agree_when_a_config_provider_is_not_instantiated(tmp_path, monkeypatch):
+    """The gate and the list agree when a config provider is missing at runtime.
+
+    A provider can be present in ``config.providers`` yet absent from the
+    runtime backend map ``_providers`` — for example when its ``api_key`` still
+    carries an unresolved ``${ENV_VAR}`` placeholder and startup skips it. A bare
+    provider name is a routing *target*, not a request id, so only an
+    instantiated provider may be accepted or listed. Both surfaces must answer
+    the same way in both directions, otherwise one drifts from the other.
+    """
+
+    cfg = load_config(
+        _write_config(
+            tmp_path,
+            """
+server:
+  host: "127.0.0.1"
+  port: 8090
+providers:
+  gemini-flash-lite:
+    backend: openai-compat
+    base_url: "https://api.example.com/v1"
+    api_key: "secret"
+    model: "gemini-flash-lite"
+  anthropic-haiku:
+    backend: anthropic-compat
+    base_url: "https://api.example.com/v1"
+    api_key: "${ANTHROPIC_API_KEY}"
+    model: "claude-haiku-3-5"
+fallback_chain:
+  - gemini-flash-lite
+static_rules:
+  enabled: true
+  rules:
+    - name: heartbeat
+      route_to: gemini-flash-lite
+      match:
+        model_requested: ["heartbeat"]
+metrics:
+  enabled: false
+""",
+        )
+    )
+    monkeypatch.setattr(main_module, "_config", cfg, raising=False)
+    # anthropic-haiku carries an unresolved key, so it is never instantiated.
+    monkeypatch.setattr(
+        main_module,
+        "_providers",
+        {name: _ProviderStub() for name in cfg.providers if name != "anthropic-haiku"},
+        raising=False,
+    )
+    monkeypatch.setattr(main_module, "_router", Router(cfg), raising=False)
+
+    listed = set(main_module._routable_model_entries().keys())
+
+    candidates = set(cfg.providers)
+    candidates.add("auto")
+    candidates.add("heartbeat")
+    accepted = {candidate for candidate in candidates if main_module._is_known_model_identity(candidate, cfg)}
+
+    assert "anthropic-haiku" not in accepted
+    assert "anthropic-haiku" not in listed
+    assert "gemini-flash-lite" in accepted
+    assert "gemini-flash-lite" in listed
+    assert sorted(accepted - listed) == []
+    assert sorted(listed - accepted) == []
+
+
+def test_list_and_gate_agree_across_full_candidate_universe(tmp_path, monkeypatch):
+    """The list and the gate agree on every candidate id, in both directions.
+
+    A static ``model_requested`` pattern such as ``"gemini"`` is matched by
+    substring, so a provider named ``gemini-pro`` is routable by name even when
+    its backend is not instantiated. The list must consult the same static
+    matcher the gate uses rather than re-deriving a narrower literal-trigger
+    set, or ids like ``gemini-pro`` are accepted by the gate but hidden from
+    ``/v1/models``.
+
+    The candidate universe mixes every source the router resolves — provider
+    names (instantiated and not), static triggers, routing modes, model
+    shortcuts — plus a few invented names, and asserts both directions against
+    the real configuration shape instead of a stub provider.
+    """
+    cfg = load_config(
+        _write_config(
+            tmp_path,
+            """
+server:
+  host: "127.0.0.1"
+  port: 8090
+providers:
+  deepseek-v4-flash:
+    backend: openai-compat
+    base_url: "https://api.example.com/v1"
+    api_key: "secret"
+    model: "deepseek-v4-flash"
+  deepseek-v4-pro:
+    backend: openai-compat
+    base_url: "https://api.example.com/v1"
+    api_key: "secret"
+    model: "deepseek-v4-pro"
+  deepseek-v4-flash-vision-exp:
+    backend: openai-compat
+    base_url: "https://api.example.com/v1"
+    api_key: "${DEEPSEEK_API_KEY}"
+    model: "deepseek-v4-flash-vision-exp"
+  gemini-flash:
+    backend: openai-compat
+    base_url: "https://api.example.com/v1"
+    api_key: "${GEMINI_API_KEY}"
+    model: "gemini-flash"
+  gemini-flash-lite:
+    backend: openai-compat
+    base_url: "https://api.example.com/v1"
+    api_key: "${GEMINI_API_KEY}"
+    model: "gemini-flash-lite"
+  gemini-pro:
+    backend: openai-compat
+    base_url: "https://api.example.com/v1"
+    api_key: "${GEMINI_API_KEY}"
+    model: "gemini-pro"
+routing_modes:
+  enabled: true
+  modes:
+    auto:
+      description: "Balanced (default)"
+    eco:
+      description: "Cheapest possible"
+model_shortcuts:
+  enabled: false
+  shortcuts:
+    gemini-pro:
+      target: gemini-pro
+static_rules:
+  enabled: true
+  rules:
+    - name: explicit-flash
+      route_to: gemini-flash
+      match:
+        model_requested: ["flash", "gemini", "vision"]
+    - name: explicit-reasoner
+      route_to: deepseek-v4-pro
+      match:
+        model_requested: ["reasoner", "r1", "think", "deepseek-v4-pro"]
+    - name: explicit-chat
+      route_to: deepseek-v4-flash
+      match:
+        model_requested: ["chat", "ds", "default", "deepseek-v4-flash"]
+metrics:
+  enabled: false
+""",
+        )
+    )
+    monkeypatch.setattr(main_module, "_config", cfg, raising=False)
+    # Only the two literal-key providers instantiate; the four whose keys are
+    # unresolved stay out of _providers yet remain static-routable by name.
+    monkeypatch.setattr(
+        main_module,
+        "_providers",
+        {name: _ProviderStub() for name in ("deepseek-v4-flash", "deepseek-v4-pro")},
+        raising=False,
+    )
+    monkeypatch.setattr(main_module, "_router", Router(cfg), raising=False)
+
+    listed = set(main_module._routable_model_entries().keys())
+
+    candidates: set[str] = set(cfg.providers)
+    candidates |= set(cfg.routing_modes.get("modes", {}))
+    candidates |= set(cfg.model_shortcuts.get("shortcuts", {}))
+    candidates.add("auto")
+
+    def _collect_triggers(node) -> None:
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key == "model_requested":
+                    patterns = value if isinstance(value, list) else [value]
+                    candidates.update(str(pattern) for pattern in patterns)
+                else:
+                    _collect_triggers(value)
+        elif isinstance(node, list):
+            for item in node:
+                _collect_triggers(item)
+
+    for rule in cfg.static_rules.get("rules", []):
+        _collect_triggers(rule.get("match", {}))
+    candidates.update({"totally-invented-xyz", "another-bogus-id", "not-a-real-model"})
+
+    accepted = {candidate for candidate in candidates if main_module._is_known_model_identity(candidate, cfg)}
+
+    accepted_not_listed = sorted(accepted - listed)
+    listed_not_accepted = sorted(listed - accepted)
+
+    assert accepted_not_listed == [], (
+        f"the gate accepts these ids but /v1/models does not list them: {accepted_not_listed}"
+    )
+    assert listed_not_accepted == [], f"/v1/models lists these ids but the gate rejects them: {listed_not_accepted}"
+
+    # The specific regression: the four substring-routable provider names must
+    # appear even though their backends are not instantiated.
+    for name in ("deepseek-v4-flash-vision-exp", "gemini-flash", "gemini-flash-lite", "gemini-pro"):
+        assert name in listed, f"static-routable provider name {name!r} is missing from /v1/models"

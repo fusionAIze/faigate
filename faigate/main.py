@@ -907,13 +907,20 @@ def _is_known_model_identity(
     """Return whether a requested model id resolves to a routable identity.
 
     The routing engine is the single source of truth for what is routable, so the
-    caller passes ``routable_by_name`` when routing already proved the id names a
-    static ``model_requested`` rule. When that is false the check still recognises
-    ids that resolve to a configured provider (canonical slug), a model shortcut,
-    a routing mode, or the virtual "auto" selector. Curated catalog entries are
-    intentionally not accepted here: only ids that can actually become a routing
-    target may pass. A curated but unconfigured entry therefore stays a
-    ``model_not_found``.
+    check delegates to ``Router.model_requested_is_accepted``: the same call that
+    decides whether ``/v1/models`` advertises an id decides whether a request may
+    use it. The router is consulted first; a lightweight config-only fallback
+    keeps the check honest when no router is installed (for example in tests).
+
+    When a router is installed it is consulted with the *instantiated* backend
+    names (``_providers``), not the raw config provider names. A bare provider
+    name is a routing target, not a request id: a provider whose backend never
+    instantiated (for example an unresolved ``${ENV_VAR}`` key kept it out of
+    ``_providers``) is neither accepted nor listed.
+
+    ``routable_by_name`` is retained for callers that already resolved the id
+    against a router. It is always superseded by the router query when a router
+    is installed, because the router is authoritative.
 
     The check fails open. If identity resolution cannot be completed — for
     example because an internal knowledge source is unavailable — the id is
@@ -922,6 +929,11 @@ def _is_known_model_identity(
     """
 
     try:
+        router = globals().get("_router")
+        if router is not None:
+            provider_names = frozenset(globals().get("_providers", {}))
+            return bool(router.model_requested_is_accepted(model_id, provider_names=provider_names))
+
         if routable_by_name:
             return True
         normalized = _normalize_model_id(model_id)
@@ -2863,24 +2875,91 @@ def _provider_modalities(capabilities: dict[str, Any]) -> list[str]:
     return sorted(modalities)
 
 
-@app.get("/v1/models")
-async def list_models():
-    """OpenAI-compatible model listing."""
-    models = []
-    # Expose a virtual "auto" model + each real provider
-    models.append(
-        {
-            "id": "auto",
-            "object": "model",
-            "owned_by": "faigate",
-            "description": "Auto-routed to optimal provider",
-        }
-    )
-    if _config.routing_modes.get("enabled"):
-        for name, spec in _config.routing_modes.get("modes", {}).items():
-            models.append(
+def _static_rule_model_requested_triggers(static_rules: dict[str, Any]) -> list[str]:
+    """Return every ``model_requested`` trigger declared by the given static rules.
+
+    A rule may place ``model_requested`` directly in ``match`` or nested inside
+    an ``any`` OR-group, so both shapes are walked. Order follows the
+    configuration, so a new rule surfaces in the model list automatically.
+    """
+    triggers: list[str] = []
+
+    def collect(match: Any) -> None:
+        if not isinstance(match, dict):
+            return
+        patterns = match.get("model_requested")
+        if isinstance(patterns, str):
+            patterns = [patterns]
+        if isinstance(patterns, list):
+            for pattern in patterns:
+                trigger = str(pattern or "").strip()
+                if trigger and trigger not in triggers:
+                    triggers.append(trigger)
+        for sub in match.get("any", []) or []:
+            collect(sub)
+
+    for rule in static_rules.get("rules", []) or []:
+        if isinstance(rule, dict):
+            collect(rule.get("match", {}))
+    return triggers
+
+
+def _routable_model_entries(
+    config: Config | None = None,
+    providers: dict[str, Any] | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Return the ordered ``{model_id: entry}`` of everything the gateway routes.
+
+    This is the single source of truth for "what is routable". ``list_models``
+    serializes it and model-identity checks query the same registry, so the
+    advertised model list and the accepted model identities cannot drift apart.
+
+    A model id is claimed by exactly one source. Sources are consulted in
+    precedence order and the first source to claim an id wins:
+
+      1. concrete providers (full upstream metadata),
+      2. enabled routing modes,
+      3. enabled static-rule ``model_requested`` triggers,
+      4. enabled model shortcuts,
+      5. the always-available virtual ``auto`` selector.
+
+    Aliases remain routable but are not expanded into separate entries; they are
+    advertised on the entry that owns them.
+    """
+    cfg = config if config is not None else _config
+    provider_map = providers if providers is not None else _providers
+
+    entries: dict[str, dict[str, Any]] = {}
+
+    def claim(model_id: str, entry: dict[str, Any]) -> None:
+        key = str(model_id).strip().lower()
+        if not key or key in entries:
+            return
+        entry["id"] = model_id
+        entries[key] = entry
+
+    for name, provider in provider_map.items():
+        claim(
+            name,
+            {
+                "object": "model",
+                "owned_by": provider.backend_type,
+                "description": f"{provider.model} ({provider.tier})",
+                "contract": provider.contract,
+                "capabilities": provider.capabilities,
+                "modalities": _provider_modalities(provider.capabilities or {}),
+                "context_window": provider.context_window,
+                "limits": provider.limits,
+                "cache": provider.cache,
+            },
+        )
+
+    modes_cfg = cfg.routing_modes
+    if modes_cfg.get("enabled"):
+        for name, spec in modes_cfg.get("modes", {}).items():
+            claim(
+                name,
                 {
-                    "id": name,
                     "object": "model",
                     "owned_by": "faigate",
                     "description": spec.get("description") or "Virtual routing mode",
@@ -2888,37 +2967,121 @@ async def list_models():
                     "aliases": spec.get("aliases", []),
                     "best_for": spec.get("best_for", ""),
                     "savings": spec.get("savings", ""),
-                }
+                },
             )
-    if _config.model_shortcuts.get("enabled"):
-        for name, spec in _config.model_shortcuts.get("shortcuts", {}).items():
-            models.append(
+
+    static_cfg = cfg.static_rules
+    if static_cfg.get("enabled"):
+        # Static ``model_requested`` keys make an id routable by name. The gate
+        # decides that through the router's static matcher, so the list consults
+        # the same matcher rather than re-deriving a narrower literal-trigger
+        # set. Every name in a finite candidate universe — configured provider,
+        # routing mode, model shortcut, and literal trigger — is asked "does a
+        # static rule key on this id?" so the list and the gate cannot drift.
+        router = globals().get("_router")
+        if router is not None:
+            static_candidates: list[str] = list(_static_rule_model_requested_triggers(static_cfg))
+            for name in cfg.providers:
+                if name not in static_candidates:
+                    static_candidates.append(name)
+            for name in modes_cfg.get("modes", {}):
+                if name not in static_candidates:
+                    static_candidates.append(name)
+            for name in cfg.model_shortcuts.get("shortcuts", {}):
+                if name not in static_candidates:
+                    static_candidates.append(name)
+            for candidate in static_candidates:
+                rule = router.static_rule_for_model_requested(candidate)
+                if rule is None:
+                    continue
+                route_to = str(rule.get("route_to", "") or "")
+                rule_name = str(rule.get("name", "") or "")
+                claim(
+                    candidate,
+                    {
+                        "object": "model",
+                        "owned_by": "faigate",
+                        "description": f"Static route to {route_to}" if route_to else "Static routing alias",
+                        "static_rule": rule_name,
+                        "route_to": route_to,
+                    },
+                )
+        else:
+            # No router installed (config-only callers, some tests): fall back
+            # to the literal trigger set with per-rule metadata.
+            for rule in static_cfg.get("rules", []) or []:
+                if not isinstance(rule, dict):
+                    continue
+                route_to = str(rule.get("route_to", "") or "")
+                rule_name = str(rule.get("name", "") or "")
+                for trigger in _static_rule_model_requested_triggers({"rules": [rule]}):
+                    claim(
+                        trigger,
+                        {
+                            "object": "model",
+                            "owned_by": "faigate",
+                            "description": f"Static route to {route_to}" if route_to else "Static routing alias",
+                            "static_rule": rule_name,
+                            "route_to": route_to,
+                        },
+                    )
+
+    shortcuts_cfg = cfg.model_shortcuts
+    if shortcuts_cfg.get("enabled"):
+        for name, spec in shortcuts_cfg.get("shortcuts", {}).items():
+            claim(
+                name,
                 {
-                    "id": name,
                     "object": "model",
                     "owned_by": "faigate",
                     "description": spec.get("description") or f"Shortcut to {spec['target']}",
                     "shortcut": True,
                     "target": spec["target"],
                     "aliases": spec.get("aliases", []),
-                }
+                },
             )
-    for name, p in _providers.items():
-        models.append(
-            {
-                "id": name,
-                "object": "model",
-                "owned_by": p.backend_type,
-                "description": f"{p.model} ({p.tier})",
-                "contract": p.contract,
-                "capabilities": p.capabilities,
-                "modalities": _provider_modalities(p.capabilities or {}),
-                "context_window": p.context_window,
-                "limits": p.limits,
-                "cache": p.cache,
-            }
-        )
-    return {"object": "list", "data": models}
+
+    claim(
+        "auto",
+        {
+            "object": "model",
+            "owned_by": "faigate",
+            "description": "Auto-routed to optimal provider",
+        },
+    )
+
+    return entries
+
+
+def _routable_model_ids(
+    config: Config | None = None,
+    providers: dict[str, Any] | None = None,
+    *,
+    include_aliases: bool = True,
+) -> set[str]:
+    """Return every model id the gateway can route.
+
+    ``include_aliases`` adds the alias strings advertised on mode and shortcut
+    entries, because resolution accepts them for one-hop indirection even
+    though they are not separate entries in the model list.
+    """
+    cfg = config if config is not None else _config
+    provider_map = providers if providers is not None else _providers
+    entries = _routable_model_entries(cfg, provider_map)
+    model_ids = set(entries)
+    if include_aliases:
+        for entry in entries.values():
+            for alias in entry.get("aliases", []) or []:
+                alias_text = str(alias or "").strip().lower()
+                if alias_text:
+                    model_ids.add(alias_text)
+    return model_ids
+
+
+@app.get("/v1/models")
+async def list_models():
+    """OpenAI-compatible model listing of every routable model id."""
+    return {"object": "list", "data": list(_routable_model_entries().values())}
 
 
 @app.get("/api/stats")
@@ -5072,8 +5235,7 @@ async def chat_completions(request: Request):
 
     headers = _collect_routing_headers(request)
     requested_model_id = str(body.get("model", "auto") or "auto")
-    routable_by_name = _router.static_rule_matches_model_requested(requested_model_id)
-    if not _is_known_model_identity(requested_model_id, _config, routable_by_name=routable_by_name):
+    if not _is_known_model_identity(requested_model_id, _config):
         return _client_error_response(
             f"Model '{requested_model_id}' not found",
             error_type="model_not_found",
