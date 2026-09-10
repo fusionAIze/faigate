@@ -200,14 +200,6 @@ class MetadataCatalogSync:
                 etag=None,
                 error=f"network: {exc}",
             )
-        except Exception as exc:  # pragma: no cover - defensive
-            logger.warning("catalog sync: unexpected error url=%s err=%s", url, exc)
-            return FetchResult(
-                status=SyncStatus.ERROR,
-                payload=None,
-                etag=None,
-                error=f"unexpected: {exc}",
-            )
 
         new_etag = response_headers.get("etag") or response_headers.get("ETag")
 
