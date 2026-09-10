@@ -272,3 +272,100 @@ async def test_list_and_gate_agree_on_candidate_ids(models_config):
     )
     assert listed_not_accepted == [], f"/v1/models lists these ids but the gate rejects them: {listed_not_accepted}"
     assert router is not None
+
+
+def _registry_named_config(tmp_path: Path, monkeypatch) -> None:
+    """Install a config whose provider name is a real registry identity.
+
+    A provider named ``deepseek`` is a known ``registry.ALL`` key, so the
+    derived identity metadata actually attaches — unlike the synthetic names
+    used elsewhere. This isolates the derivation path against the real registry
+    shape without depending on the operator's live config.
+    """
+    cfg = load_config(
+        _write_config(
+            tmp_path,
+            """
+server:
+  host: "127.0.0.1"
+  port: 8090
+providers:
+  deepseek:
+    backend: openai-compat
+    base_url: "https://api.example.com/v1"
+    api_key: "secret"
+    model: "deepseek-chat"
+    tier: default
+  gemini-flash:
+    backend: openai-compat
+    base_url: "https://api.example.com/v1"
+    api_key: "secret"
+    model: "gemini-flash"
+    tier: default
+routing_modes:
+  enabled: true
+  default: auto
+  modes:
+    auto:
+      description: "Balanced (default)"
+model_shortcuts:
+  enabled: false
+  shortcuts: {}
+static_rules:
+  enabled: true
+  rules:
+    - name: heartbeat
+      route_to: gemini-flash
+      match:
+        model_requested: ["heartbeat"]
+metrics:
+  enabled: false
+""",
+        )
+    )
+    monkeypatch.setattr(main_module, "_config", cfg, raising=False)
+    monkeypatch.setattr(
+        main_module,
+        "_providers",
+        {
+            name: _ProviderStub(name=name, model=str(spec.get("model", name)), tier=str(spec.get("tier", "default")))
+            for name, spec in cfg.providers.items()
+        },
+        raising=False,
+    )
+    monkeypatch.setattr(main_module, "_router", Router(cfg), raising=False)
+
+
+def test_registry_named_provider_entry_carries_derived_identity(tmp_path, monkeypatch):
+    """A provider whose name is a registry identity gets ``short_name``/``long_form``.
+
+    TASK-C7: this derivation rides the *same* ``_routable_model_entries`` the
+    gate queries, and only enriches the entry — it never adds an ``id``, so the
+    accepted/listed agreement is untouched.
+    """
+    _registry_named_config(tmp_path, monkeypatch)
+
+    entries = main_module._routable_model_entries()
+    deepseek = entries["deepseek"]
+
+    assert deepseek["id"] == "deepseek"
+    assert deepseek["short_name"] == "deepseek/deepseek-reasoner"
+    assert deepseek["long_form"] == "deepseek/deepseek-reasoner"
+
+
+def test_derived_identity_never_changes_the_id_set(tmp_path, monkeypatch):
+    """Deriving ``short_name``/``long_form`` must not add or remove listed ids.
+
+    Both directions hold: the ids the gate accepts are exactly the ids the list
+    advertises, before and after identity metadata is attached.
+    """
+    _registry_named_config(tmp_path, monkeypatch)
+
+    listed = set(main_module._routable_model_entries().keys())
+    candidates = _candidate_ids(main_module._config)
+    accepted = {
+        candidate for candidate in candidates if main_module._is_known_model_identity(candidate, main_module._config)
+    }
+
+    assert sorted(accepted - listed) == []
+    assert sorted(listed - accepted) == []
