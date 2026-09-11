@@ -1,0 +1,25 @@
+# Layer-3 repository override: the release destinations for this repository.
+#
+# The release workflow reads this file through ops_engine.config_loader.load_ops_yaml
+# and resolves EVERY destination from it. Nothing here is restated as a literal in
+# .forgejo/ — no forge repository, no API host, no CI variable. A release that
+# reaches one forge and not the other is the failure this file exists to prevent.
+#
+# The forge is a value, not a key name. Order is publication order.
+destinations:
+  - forge: forgejo
+    repo: fusionaize/faigate
+    role: release
+    visibility: private
+  - forge: github
+    repo: fusionAIze/faigate
+    role: release
+    visibility: public
+
+# This repository's tracker prefixes. The release workflow reads them from here and
+# hands them to the audience gate, so no workflow carries a vocabulary as a literal.
+# Measured, not guessed: these are the prefixes that actually occur in this
+# repository's commit subjects and planning backlog — TASK and AC from the PRD
+# lanes, FJ and FAI from the tracker, OPS and ADR from operations and decisions.
+# Must stay on ONE line — the extractor reads a single `tracker_prefixes:` line.
+tracker_prefixes: [AC, ADR, FAI, FJ, OPS, SW, TASK]
