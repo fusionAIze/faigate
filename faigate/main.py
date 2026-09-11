@@ -3163,6 +3163,31 @@ def _routable_model_entries(
                 },
             )
 
+    # Catalog identities: a model that exists only in the catalog (and has no
+    # configured backend) is still addressable, so it must be listed here. The
+    # routing gate accepts an id exactly when the shared
+    # ``model_identity.catalog_model_identities()`` list resolves it, so listing
+    # its long forms from that same list keeps ``/v1/models`` and the gate from
+    # drifting. The derived short name and any kuerzel alias ride the entry as
+    # ``aliases``, matching how modes and shortcuts advertise their aliases.
+    for identity in _catalog_model_identities():
+        aliases: list[str] = list(identity.aliases)
+        short_name = identity.effective_short_name
+        if short_name and short_name.lower() != identity.long_form.lower():
+            aliases.append(short_name)
+        claim(
+            identity.long_form,
+            {
+                "object": "model",
+                "owned_by": "faigate",
+                "description": f"Catalog model {identity.vendor}/{identity.model}",
+                "catalog": True,
+                "long_form": identity.long_form,
+                "short_name": short_name,
+                "aliases": aliases,
+            },
+        )
+
     claim(
         "auto",
         {
