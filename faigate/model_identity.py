@@ -192,3 +192,50 @@ class ModelIdentityResolver:
     def long_forms(self) -> list[str]:
         """Return the canonical long forms, in declaration order."""
         return [identity.long_form for identity in self._identities]
+
+
+def catalog_model_identities() -> list[ModelIdentity]:
+    """Build model identities from the catalog, with ``registry.ALL`` fallback.
+
+    This is the single source of truth for "what the gateway can address": the
+    catalog carries the split ``vendor`` / ``model`` (plus optional ``hop`` /
+    ``variant``) fields, and ``registry.ALL`` covers the offline case (no catalog
+    at all) and any identity the catalog omits. Identity resolution — the
+    resolver that answers "does this requested token name a known model" — and
+    the routing gate that accepts or rejects a request must both call this same
+    function, so the two can never drift onto different sources.
+
+    Order is catalog first, then ``registry.ALL``. A long form is deduplicated
+    so a provider present in both sources contributes exactly one identity.
+    """
+    from . import registry
+    from .provider_catalog import catalog_provider_identities
+
+    identities: list[ModelIdentity] = []
+    seen: set[str] = set()
+
+    def _add(vendor: str, model: str, hop: list[str] | None, variant: str | None) -> None:
+        identity = ModelIdentity.from_fields(
+            vendor=vendor,
+            model=model,
+            hop=hop,
+            variant=variant,
+        )
+        key = identity.long_form.lower()
+        if key in seen:
+            return
+        seen.add(key)
+        identities.append(identity)
+
+    for fields in catalog_provider_identities():
+        _add(fields["vendor"], fields["model"], fields["hop"], fields["variant"] or None)
+
+    for name in registry.known_names():
+        identity = registry.provider_identity(name)
+        if identity is None:
+            continue
+        vendor, model, _long_form = identity
+        entry = registry.ALL.get(name) or {}
+        _add(vendor, model, entry.get("hop") or [], entry.get("variant"))
+
+    return identities

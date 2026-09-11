@@ -11,6 +11,7 @@ from typing import Any
 
 from .config import Config
 from .lane_registry import get_canonical_model_catalog, get_canonical_model_routes
+from .model_identity import ModelIdentityResolver, catalog_model_identities
 from .provider_catalog import (
     _get_packages_for_provider,
     _get_pricing_for_provider_and_model,
@@ -19,6 +20,21 @@ from .provider_catalog import (
 
 logger = logging.getLogger("faigate.router")
 _BOUNDARY_TEXT_RE = re.compile(r"[a-z0-9]")
+
+
+def _get_catalog_identity_resolver() -> ModelIdentityResolver:
+    """Return the shared resolver over catalog + registry identities.
+
+    The routing gate and the model-identity resolver both consume the same
+    ``catalog_model_identities()`` list through this helper, so a provider that
+    only exists in the catalog is accepted by the gate exactly when the resolver
+    can also resolve it. Built on demand from the same source rather than cached,
+    so an env-override or metadata-dir change (as tests exercise) is honoured
+    instead of serving a stale resolver.
+    """
+    return ModelIdentityResolver(catalog_model_identities())
+
+
 _OPENCODE_COMPLEXITY_HINTS = (
     "architecture",
     "tradeoff",
@@ -1229,7 +1245,12 @@ class Router:
                 for alias in spec.get("aliases", []) or []:
                     if normalized == str(alias).strip().lower():
                         return True
-        return False
+        # Catalog identities: a provider that lives only in the catalog (and has
+        # no instantiated backend of its own) is still an addressable model id.
+        # This is the same identity list the resolver consumes, so the gate and
+        # the resolver agree on what is routable instead of drifting apart.
+        resolution = _get_catalog_identity_resolver().resolve(normalized)
+        return resolution.identity is not None
 
     async def route(
         self,

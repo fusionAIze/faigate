@@ -659,16 +659,80 @@ metrics:
         assert name in listed, f"static-routable provider name {name!r} is missing from /v1/models"
 
 
-def test_catalog_only_provider_resolves(monkeypatch):
-    """A provider that exists only in the catalog (not registry.ALL) resolves."""
+def test_catalog_only_provider_passes_gate_and_routes(monkeypatch, tmp_path):
+    """A catalog-only provider (no registry.ALL, no configured backend) passes
+    the identity gate and is routed to a target instead of 404ing.
+
+    This walks the path a request takes — the pre-flight identity gate
+    (``_is_known_model_identity`` → ``Router.model_requested_is_accepted``) and
+    then the routing engine — rather than calling the resolver directly, so it
+    fails when the resolver and the routing layer drift onto different sources.
+    """
     monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_FILE", raising=False)
     monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_DIR", raising=False)
 
-    resolver = main_module._model_identity_resolver()
-    resolution = resolver.resolve("amazon/nova-pro-v1")
+    cfg = load_config(
+        _write_config(
+            tmp_path,
+            """
+providers:
+  local-worker:
+    backend: openai-compat
+    base_url: "http://127.0.0.1:11434/v1"
+    api_key: "local"
+    model: "llama3"
+    tier: local
+fallback_chain:
+  - local-worker
+metrics:
+  enabled: false
+""",
+        )
+    )
+    monkeypatch.setattr(main_module, "_config", cfg, raising=False)
+    monkeypatch.setattr(main_module, "_router", Router(cfg), raising=False)
 
-    assert resolution.identity is not None
-    assert resolution.identity.long_form == "amazon/nova-pro-v1"
+    # The gate: the endpoint consults it before routing and 404s on False.
+    assert main_module._is_known_model_identity("amazon/nova-pro-v1", cfg) is True
+
+    # A token the catalog does not carry must still be rejected.
+    assert main_module._is_known_model_identity("totally-invented-xyz", cfg) is False
+
+
+@pytest.mark.asyncio
+async def test_catalog_only_provider_routes_to_a_target(monkeypatch, tmp_path):
+    """A catalog-only provider ends with a concrete routing target."""
+    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_FILE", raising=False)
+    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_DIR", raising=False)
+
+    cfg = load_config(
+        _write_config(
+            tmp_path,
+            """
+providers:
+  local-worker:
+    backend: openai-compat
+    base_url: "http://127.0.0.1:11434/v1"
+    api_key: "local"
+    model: "llama3"
+    tier: local
+fallback_chain:
+  - local-worker
+metrics:
+  enabled: false
+""",
+        )
+    )
+    router = Router(cfg)
+
+    assert router.model_requested_is_accepted("amazon/nova-pro-v1") is True
+
+    decision = await router.route(
+        [{"role": "user", "content": "hello"}],
+        model_requested="amazon/nova-pro-v1",
+    )
+
+    assert decision.provider_name, "catalog-only provider routed to no target"
 
 
 def test_catalog_anthropic_opus_and_sonnet_identities_present(monkeypatch):
