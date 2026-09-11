@@ -165,5 +165,61 @@ def test_catalog_sourced_cap_is_belegt(monkeypatch) -> None:
     assert fact["evidence"]["source_url"]
 
 
+# --------------------------------------------------------------------------- #
+# DEFEKT 1 — byte-gate rejection must report the byte limit, not the token cap
+#
+# When _read_json_body raises PayloadTooLargeError because the raw body exceeded
+# security.max_json_body_bytes, the 413 response must report that byte value in
+# the limit field with unit "bytes" — regardless of whether the requested model
+# has a belegt token cap.  Previously the code resolved the model's token cap
+# and reported 1 000 000 tokens, giving the caller a completely wrong wall.
+# --------------------------------------------------------------------------- #
+
+
+def test_byte_gate_rejection_reports_byte_limit_not_token_cap(monkeypatch) -> None:
+    """When the byte gate fired, the 413 must carry the byte limit, not a token cap.
+
+    Reproduces DEFEKT 1: exc carries byte_limit but _payload_too_large_response
+    used to ignore it and resolve the model's token cap instead.
+
+    Expected after the fix:
+        limit  == 1048576   (the byte wall that actually fired)
+        unit   == "bytes"
+        x-faigate-request-limit  == "1048576"
+
+    Failure on the unfixed code shows 1000000 tokens — the wrong wall.
+    """
+    _use_bundled_catalog(monkeypatch)
+
+    exc = main.PayloadTooLargeError(
+        "chat body exceeded security.max_json_body_bytes (2000000 > 1048576)"
+    )
+    exc.model_id = "claude-opus-4-6"
+    exc.byte_limit = 1_048_576
+
+    resp = main._payload_too_large_response(
+        "Request body is too large",
+        exc=exc,
+        model_id=exc.model_id,
+    )
+
+    payload = json.loads(resp.body)
+    # On unfixed code: limit == 1000000, unit == "tokens" (token cap reported instead of byte wall)
+    assert payload.get("unit") != "tokens" or payload.get("limit") != 1_000_000, (
+        "byte-gate 413 reported the model token cap (1000000 tokens) "
+        "instead of the byte limit that actually fired — DEFEKT 1"
+    )
+    assert payload["limit"] == 1_048_576, (
+        f"Expected byte limit 1048576 but got {payload.get('limit')} "
+        f"(unit={payload.get('unit')!r}) — byte-gate reported the wrong wall"
+    )
+    assert payload["unit"] == "bytes", (
+        f"Expected unit 'bytes' but got {payload.get('unit')!r}"
+    )
+    assert resp.headers.get("x-faigate-request-limit") == "1048576", (
+        f"Expected header 1048576 but got {resp.headers.get('x-faigate-request-limit')!r}"
+    )
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-q"])

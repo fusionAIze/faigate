@@ -69,7 +69,7 @@ Example:
 
 ```yaml
 security:
-  max_json_body_bytes: 1048576
+  max_json_body_bytes: 2097152
   max_upload_bytes: 10485760
 ```
 

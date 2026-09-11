@@ -1754,11 +1754,11 @@ def _normalize_security(data: dict[str, Any]) -> dict[str, Any]:
         "response_headers": bool(raw.get("response_headers", True)),
         "cache_control": str(raw.get("cache_control", "no-store")).strip() or "no-store",
         "max_json_body_bytes": _normalize_positive_int(
-            raw.get("max_json_body_bytes", 1_048_576),
+            raw.get("max_json_body_bytes", 2_097_152),
             field_name="security.max_json_body_bytes",
             provider_name="runtime",
         )
-        or 1_048_576,
+        or 2_097_152,
         "max_upload_bytes": _normalize_positive_int(
             raw.get("max_upload_bytes", 10_485_760),
             field_name="security.max_upload_bytes",
@@ -2093,7 +2093,7 @@ class Config:
             {
                 "response_headers": True,
                 "cache_control": "no-store",
-                "max_json_body_bytes": 1_048_576,
+                "max_json_body_bytes": 2_097_152,
                 "max_upload_bytes": 10_485_760,
                 "max_header_value_chars": 160,
             },

@@ -34,7 +34,7 @@ There are two separate mechanisms, and they are orthogonal:
 
 1. **Body size gate (bytes).** `_read_json_body`
    (`faigate/main.py:2118`) reads the raw request body and compares its length
-   against `security.max_json_body_bytes` (default `1_048_576` bytes). If it
+   against `security.max_json_body_bytes` (default `2_097_152` bytes). If it
    exceeds that, it raises `PayloadTooLargeError`, which the completion
    endpoints translate into a `413`. This gate counts **bytes**, never tokens,
    and never looks at `cache_read`.

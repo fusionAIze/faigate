@@ -131,12 +131,19 @@ def _provider_requires_static_api_key(name: str, cfg: dict[str, Any]) -> bool:
 class PayloadTooLargeError(ValueError):
     """Raised when one request or upload exceeds configured size limits.
 
-    Carries an optional ``model_id`` sniffed from the raw body so the 413 can
-    report the requested model's cap even though the body was rejected before
-    it could be parsed.
+    Carries two optional attributes:
+
+    * ``model_id`` — sniffed from the raw body so the 413 can identify the
+      requested model even though the body was rejected before it could be
+      parsed.
+    * ``byte_limit`` — the byte threshold that actually fired (set by
+      ``_read_json_body``).  When present, the 413 response must report this
+      byte limit rather than the model's token cap, because the byte gate and
+      the token cap describe different walls and must not be conflated.
     """
 
     model_id: str | None = None
+    byte_limit: int | None = None
 
 
 @dataclass
@@ -415,17 +422,26 @@ def _payload_too_large_response(
     }
     headers: dict[str, str] = {}
 
+    byte_limit_from_exc: int | None = getattr(exc, "byte_limit", None) if exc is not None else None
+
     if limit is not None:
         resolved_limit = limit
         estimated = False
         unit = "tokens"
+    elif byte_limit_from_exc is not None:
+        # The byte gate fired.  Report the byte threshold that actually rejected
+        # the request; the model's token cap describes a different wall and must
+        # not be substituted here.
+        resolved_limit = byte_limit_from_exc
+        estimated = False
+        unit = "bytes"
     else:
         resolved_limit, estimated = _resolve_advertised_input_limit(model_id)
         unit = "tokens"
         if resolved_limit is None and _unverified_cap_mode() == "byte_limit":
             config = globals().get("_config")
             security = getattr(config, "security", {}) or {}
-            resolved_limit = int(security.get("max_json_body_bytes", 1_048_576))
+            resolved_limit = int(security.get("max_json_body_bytes", 2_097_152))
             estimated = False
             unit = "bytes"
 
@@ -2279,10 +2295,11 @@ def _sniff_requested_model(raw: bytes) -> str | None:
 async def _read_json_body(request: Request, *, operation: str) -> dict[str, Any]:
     """Read and size-check one JSON request body."""
     raw = await request.body()
-    max_bytes = int((_config.security or {}).get("max_json_body_bytes", 1_048_576))
+    max_bytes = int((_config.security or {}).get("max_json_body_bytes", 2_097_152))
     if len(raw) > max_bytes:
         exc = PayloadTooLargeError(f"{operation} body exceeded security.max_json_body_bytes ({len(raw)} > {max_bytes})")
         exc.model_id = _sniff_requested_model(raw)
+        exc.byte_limit = max_bytes
         raise exc
     try:
         parsed = json.loads(raw.decode("utf-8"))

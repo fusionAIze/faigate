@@ -3145,7 +3145,7 @@ def build_initial_config(
         "security": {
             "response_headers": True,
             "cache_control": "no-store",
-            "max_json_body_bytes": 1048576,
+            "max_json_body_bytes": 2097152,
             "max_upload_bytes": 10485760,
             "max_header_value_chars": 160,
         },
