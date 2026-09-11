@@ -176,12 +176,23 @@ targeted **262,144 tokens** because the bundled catalog advertised that value
 uniformly for every provider at the time. The current catalog
 (`faigate/assets/metadata/catalog.v1.json`) has grown materially.
 
-**Verified counts (2026-09-12 catalog):**
+**Verified counts**, read from the catalog this repo bundles
+(`faigate/assets/metadata/catalog.v1.json`) at this commit — 41 `model_caps`
+entries in total:
 
 | Evidence level | Cap entries |
-|---------------|------------|
-| `belegt`      | 16         |
-| `plausibel`   | (remainder of 41 total) |
+|---------------|------------:|
+| `belegt`      | 16 |
+| `plausibel`   | 1 |
+| `unbestaetigt`| 24 |
+
+These counts describe the *bundled snapshot*, not the metadata repository's
+current head. That head already carries provenance for most of the unverified
+caps: 32 `belegt`, 2 `plausibel`, 7 `unbestaetigt` over the same 41 entries. The
+next `scripts/refresh-bundled-catalog` therefore roughly doubles both numbers
+below — `belegt` 16 -> 32, and caps at or above 900,000 tokens 10 -> 20. The
+conclusion does not move: a raise to 2 MiB leaves every one of them out of
+reach, and the refresh only widens the gap.
 
 **Belegt caps ≥ 900,000 tokens (10 entries):**
 
