@@ -895,26 +895,35 @@ def test_model_input_cap_catalog_wins_over_hardcoded_dict_without_env(monkeypatc
     monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_FILE", raising=False)
     monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_DIR", raising=False)
 
-    # deepseek-v4-pro is in both sources with the same number; the catalog says
-    # "unconfirmed", the dict used to claim "confirmed". The catalog must win.
+    # deepseek-v4-pro is in both sources with the same cap number; the refreshed
+    # bundled catalog carries a sourced "confirmed" entry. Catalog wins over the
+    # hardcoded fallback regardless — the important invariant is that the catalog
+    # evidence level is preserved, not the hardcoded dict's level.
     fact = pc.get_model_input_cap_fact("deepseek-v4-pro")
     assert fact is not None
     assert fact["max_input_tokens"] == 1000000
-    assert fact["evidence"]["level"] == "unconfirmed"
+    assert fact["evidence"]["level"] == "confirmed"
 
 
-def test_model_input_cap_hardcoded_fallback_is_unconfirmed(monkeypatch):
-    """A model only in the hardcoded dict carries unconfirmed, never confirmed."""
+def test_model_input_cap_hardcoded_fallback_is_unconfirmed(monkeypatch, tmp_path):
+    """When the catalog has no entry for a model the hardcoded fallback carries unconfirmed.
+
+    An empty catalog is injected to isolate the hardcoded dict path. The
+    fallback has no source URL, so it must never carry a stronger label than
+    unconfirmed — that invariant is what this test pins.
+    """
     import faigate.provider_catalog as pc
 
-    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_FILE", raising=False)
-    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_DIR", raising=False)
+    # Inject an empty catalog so the fallback dict is the only source.
+    empty_metadata_dir = _write_metadata_catalog(tmp_path, model_caps={})
+    _patch_metadata_env(monkeypatch, pc, empty_metadata_dir)
 
-    # gpt-5.6-sol is in both sources with level "unconfirmed"; assert the label
-    # reflects provenance either way (never a source-less "confirmed").
+    # gpt-5.6-sol is in the hardcoded dict; with an empty catalog the fallback
+    # must label it unconfirmed (no source URL, oldest unverified fact).
     fact = pc.get_model_input_cap_fact("gpt-5.6-sol")
     assert fact is not None
     assert fact["evidence"]["level"] == "unconfirmed"
+    assert "source_url" not in fact["evidence"]
 
 
 def test_model_input_cap_normalizes_dot_version_separators(monkeypatch):
