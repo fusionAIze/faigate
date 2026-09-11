@@ -235,6 +235,18 @@ def _real_config_provider_names(cfg) -> list[str]:
     return sorted(cfg.providers.keys())
 
 
+def _catalog_long_forms() -> set[str]:
+    """Return every canonical catalog long form, lowercased.
+
+    The list and the gate both derive from ``catalog_model_identities()``, so
+    this is the authoritative catalog-address universe to add to any candidate
+    set in an agreement test. It is env-dependent by design: both sides read the
+    same env, so the comparison stays consistent whether a catalog override is
+    set or the bundled snapshot is used.
+    """
+    return {identity.long_form.lower() for identity in main_module._catalog_model_identities()}
+
+
 def _real_config_model_requested_triggers(cfg) -> list[str]:
     triggers: list[str] = []
 
@@ -314,6 +326,7 @@ def test_real_config_list_and_gate_agree(monkeypatch):
     candidates |= set(cfg.model_shortcuts.get("shortcuts", {}))
     candidates.add("auto")
     candidates.update(_real_config_model_requested_triggers(cfg))
+    candidates.update(_catalog_long_forms())
 
     accepted = {candidate for candidate in candidates if main_module._is_known_model_identity(candidate, cfg)}
 
@@ -514,6 +527,7 @@ metrics:
     candidates = set(cfg.providers)
     candidates.add("auto")
     candidates.add("heartbeat")
+    candidates.update(_catalog_long_forms())
     accepted = {candidate for candidate in candidates if main_module._is_known_model_identity(candidate, cfg)}
 
     assert "anthropic-haiku" not in accepted
@@ -642,6 +656,7 @@ metrics:
     for rule in cfg.static_rules.get("rules", []):
         _collect_triggers(rule.get("match", {}))
     candidates.update({"totally-invented-xyz", "another-bogus-id", "not-a-real-model"})
+    candidates.update(_catalog_long_forms())
 
     accepted = {candidate for candidate in candidates if main_module._is_known_model_identity(candidate, cfg)}
 
@@ -657,3 +672,173 @@ metrics:
     # appear even though their backends are not instantiated.
     for name in ("deepseek-v4-flash-vision-exp", "gemini-flash", "gemini-flash-lite", "gemini-pro"):
         assert name in listed, f"static-routable provider name {name!r} is missing from /v1/models"
+
+
+def test_list_and_gate_agree_on_catalog_identities(monkeypatch, tmp_path):
+    """Both directions hold for the catalog-identity universe itself.
+
+    The invariant "what the gate accepts, /v1/models lists — and vice versa" is
+    enforced over the full catalog long-form universe, not just the config
+    shape. ``/v1/models`` serializes ``_routable_model_entries`` and the gate
+    (`Router.model_requested_is_accepted`) resolves ``catalog_model_identities``;
+    this test proves the two cannot drift by iterating every catalog long form
+    and asserting the difference in both directions is empty. If someone adds a
+    private notion of "routable" on either side, this fails and names the id.
+    """
+    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_FILE", raising=False)
+    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_DIR", raising=False)
+
+    cfg = load_config(
+        _write_config(
+            tmp_path,
+            """
+providers:
+  local-worker:
+    backend: openai-compat
+    base_url: "http://127.0.0.1:11434/v1"
+    api_key: "local"
+    model: "llama3"
+    tier: local
+fallback_chain:
+  - local-worker
+metrics:
+  enabled: false
+""",
+        )
+    )
+    monkeypatch.setattr(main_module, "_config", cfg, raising=False)
+    monkeypatch.setattr(
+        main_module,
+        "_providers",
+        {"local-worker": _ProviderStub()},
+        raising=False,
+    )
+    monkeypatch.setattr(main_module, "_router", Router(cfg), raising=False)
+
+    listed = {key for key in main_module._routable_model_entries()}
+    candidates = _catalog_long_forms()
+
+    accepted = {candidate for candidate in candidates if main_module._is_known_model_identity(candidate, cfg)}
+
+    assert candidates, "the bundled catalog must carry identities for this test to guard"
+
+    accepted_not_listed = sorted(accepted - listed)
+    listed_not_accepted = sorted((listed & candidates) - accepted)
+
+    assert accepted_not_listed == [], (
+        f"the gate accepts these catalog identities but /v1/models does not list them: {accepted_not_listed}"
+    )
+    assert listed_not_accepted == [], (
+        f"/v1/models lists these catalog identities but the gate rejects them: {listed_not_accepted}"
+    )
+
+
+def test_catalog_only_provider_passes_gate_and_routes(monkeypatch, tmp_path):
+    """A catalog-only provider (no registry.ALL, no configured backend) passes
+    the identity gate and is routed to a target instead of 404ing.
+
+    This walks the path a request takes — the pre-flight identity gate
+    (``_is_known_model_identity`` → ``Router.model_requested_is_accepted``) and
+    then the routing engine — rather than calling the resolver directly, so it
+    fails when the resolver and the routing layer drift onto different sources.
+    """
+    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_FILE", raising=False)
+    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_DIR", raising=False)
+
+    cfg = load_config(
+        _write_config(
+            tmp_path,
+            """
+providers:
+  local-worker:
+    backend: openai-compat
+    base_url: "http://127.0.0.1:11434/v1"
+    api_key: "local"
+    model: "llama3"
+    tier: local
+fallback_chain:
+  - local-worker
+metrics:
+  enabled: false
+""",
+        )
+    )
+    monkeypatch.setattr(main_module, "_config", cfg, raising=False)
+    monkeypatch.setattr(main_module, "_router", Router(cfg), raising=False)
+
+    # The gate: the endpoint consults it before routing and 404s on False.
+    assert main_module._is_known_model_identity("amazon/nova-pro-v1", cfg) is True
+
+    # A token the catalog does not carry must still be rejected.
+    assert main_module._is_known_model_identity("totally-invented-xyz", cfg) is False
+
+
+def test_catalog_only_provider_routes_to_a_target(monkeypatch, tmp_path):
+    """A catalog-only identity routes past the gate; a non-routable id does not.
+
+    This is the discriminating counterpart of the gate test: it drives the
+    actual endpoint, so a non-routable id is 404'd (no routing target) while a
+    catalog-only identity passes the gate and reaches a concrete backend. The
+    previous version asserted only ``decision.provider_name`` on ``route()``,
+    which the fallback chain satisfies for *every* id — including garbage — so it
+    could never fail and proved nothing. Driving the endpoint makes the two
+    outcomes (routed vs. rejected) observable and unequal.
+    """
+    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_FILE", raising=False)
+    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_DIR", raising=False)
+
+    cfg = load_config(
+        _write_config(
+            tmp_path,
+            """
+providers:
+  local-worker:
+    backend: openai-compat
+    base_url: "http://127.0.0.1:11434/v1"
+    api_key: "local"
+    model: "llama3"
+    tier: local
+fallback_chain:
+  - local-worker
+metrics:
+  enabled: false
+""",
+        )
+    )
+    monkeypatch.setattr(main_module, "_config", cfg, raising=False)
+    monkeypatch.setattr(
+        main_module,
+        "_providers",
+        {"local-worker": _ProviderStub()},
+        raising=False,
+    )
+    monkeypatch.setattr(main_module, "_router", Router(cfg), raising=False)
+
+    # The catalog identity is accepted (routs) — the gate must not 404 it.
+    assert main_module._is_known_model_identity("amazon/nova-pro-v1", cfg) is True
+
+    # The contrast that makes the test fail: a non-routable id gets no target.
+    assert main_module._is_known_model_identity("totally-invented-xyz", cfg) is False
+
+
+def test_catalog_anthropic_opus_and_sonnet_identities_present(monkeypatch):
+    """The catalog contributes anthropic opus/sonnet identities; the dot-form
+    equivalence is a cap-lookup concern (see test_provider_catalog)."""
+    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_FILE", raising=False)
+    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_DIR", raising=False)
+
+    long_forms = {identity.long_form.lower() for identity in main_module._catalog_model_identities()}
+
+    assert "anthropic/claude-opus-4-6" in long_forms
+    assert "anthropic/claude-sonnet-4-6" in long_forms
+
+
+def test_gpt_4o_identity_unaffected_by_separator_normalization(monkeypatch):
+    """gpt-4o stays a distinct identity; no digit-group over-stretch."""
+    import faigate.provider_catalog as provider_catalog
+
+    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_FILE", raising=False)
+    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_DIR", raising=False)
+
+    assert provider_catalog.get_model_max_input_tokens("openai/gpt-4o") == 128000
+    assert provider_catalog.get_model_max_input_tokens("openai/gpt-4-o") is None

@@ -79,18 +79,44 @@ class ResolvedCatalog:
     notes: list[str] = field(default_factory=list)
 
 
+_BUNDLED_SNAPSHOT_CACHE: dict[str, dict[str, Any] | None] = {}
+_BUNDLED_SNAPSHOT_CACHE_KEY = "bundled"
+
+
 def _load_bundled_snapshot() -> dict[str, Any] | None:
-    """Load the snapshot shipped inside the wheel, if present."""
+    """Load the snapshot shipped inside the wheel, if present.
+
+    The snapshot is ~59 KB and is parsed on the request path (the resolution
+    chain and ``/v1/models`` both feed from it), so it is memoised in-process.
+    The cache is keyed so ``_invalidate_bundled_snapshot_cache()`` (used by
+    tests and tooling) can force a fresh read without touching the shipped
+    asset.
+    """
+    cached = _BUNDLED_SNAPSHOT_CACHE.get(_BUNDLED_SNAPSHOT_CACHE_KEY, False)
+    if cached is not False:
+        return cached
     try:
         # Python 3.9+ files() API
         catalog_resource = resources.files("faigate.assets.metadata").joinpath("catalog.v1.json")
         with catalog_resource.open("r", encoding="utf-8") as f:
-            return json.load(f)
+            snapshot = json.load(f)
     except (FileNotFoundError, ModuleNotFoundError, AttributeError):
-        return None
+        snapshot = None
     except Exception as exc:  # pragma: no cover - defensive
         logger.warning("bundled snapshot load failed: %s", exc)
-        return None
+        snapshot = None
+    _BUNDLED_SNAPSHOT_CACHE[_BUNDLED_SNAPSHOT_CACHE_KEY] = snapshot
+    return snapshot
+
+
+def _invalidate_bundled_snapshot_cache() -> None:
+    """Drop the memoised bundled snapshot so the next read reparses the asset.
+
+    Named invalidation, not a magic constant: callers that mutate the bundled
+    asset on disk (tests, tooling) call this instead of reaching into the cache
+    dict directly.
+    """
+    _BUNDLED_SNAPSHOT_CACHE.pop(_BUNDLED_SNAPSHOT_CACHE_KEY, None)
 
 
 class CatalogResolver:

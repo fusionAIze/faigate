@@ -888,6 +888,70 @@ def test_model_input_cap_fact_carries_catalog_evidence(tmp_path, monkeypatch):
     assert fact["evidence"]["level"] == "unbestaetigt"
 
 
+def test_model_input_cap_catalog_wins_over_hardcoded_dict_without_env(monkeypatch):
+    """Without an env override the bundled catalog still wins over the fallback dict."""
+    import faigate.provider_catalog as pc
+
+    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_FILE", raising=False)
+    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_DIR", raising=False)
+
+    # deepseek-v4-pro is in both sources with the same number; the catalog says
+    # "unbestaetigt", the dict used to claim "belegt". The catalog must win.
+    fact = pc.get_model_input_cap_fact("deepseek-v4-pro")
+    assert fact is not None
+    assert fact["max_input_tokens"] == 1000000
+    assert fact["evidence"]["level"] == "unbestaetigt"
+
+
+def test_model_input_cap_hardcoded_fallback_is_unbestaetigt(monkeypatch):
+    """A model only in the hardcoded dict carries unbestaetigt, never belegt."""
+    import faigate.provider_catalog as pc
+
+    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_FILE", raising=False)
+    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_DIR", raising=False)
+
+    # gpt-5.6-sol is in both sources with level "unbestaetigt"; assert the label
+    # reflects provenance either way (never a source-less "belegt").
+    fact = pc.get_model_input_cap_fact("gpt-5.6-sol")
+    assert fact is not None
+    assert fact["evidence"]["level"] == "unbestaetigt"
+
+
+def test_model_input_cap_normalizes_dot_version_separators(monkeypatch):
+    """A dot-form request resolves the hyphen-form catalog entry: 4.6 == 4-6."""
+    import faigate.provider_catalog as pc
+
+    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_FILE", raising=False)
+    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_DIR", raising=False)
+
+    assert pc.get_model_max_input_tokens("anthropic/claude-opus-4.6") == 1000000
+    assert pc.get_model_max_input_tokens("anthropic/claude-sonnet-4.6") == 1000000
+
+
+def test_model_input_cap_does_not_equate_letter_suffixes(monkeypatch):
+    """The digit-group rule must not turn gpt-4o into gpt-4-o."""
+    import faigate.provider_catalog as pc
+
+    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_FILE", raising=False)
+    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_DIR", raising=False)
+
+    assert pc.get_model_max_input_tokens("openai/gpt-4o") == 128000
+    assert pc.get_model_max_input_tokens("openai/gpt-4-o") is None
+
+
+def test_catalog_provider_identities_include_catalog_only_providers(monkeypatch):
+    """A provider that lives only in the catalog still yields an identity."""
+    import faigate.provider_catalog as pc
+
+    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_FILE", raising=False)
+    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_DIR", raising=False)
+
+    identities = pc.catalog_provider_identities()
+    by_long = {f"{i['vendor']}/{i['model']}".lower() for i in identities}
+    # amazon-bedrock has no registry.ALL entry but is in the bundled catalog.
+    assert "amazon/nova-pro-v1" in by_long
+
+
 def test_provider_catalog_context_window_survives_external_merge(tmp_path, monkeypatch):
     """External catalog overlays must preserve the embedded context_window/limits.
 

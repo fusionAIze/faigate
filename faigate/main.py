@@ -61,7 +61,7 @@ from .lane_registry import (
     get_route_add_recommendations,
 )
 from .metrics import MetricsStore, calc_cost
-from .model_identity import ModelIdentity, ModelIdentityResolver, derive_short_name
+from .model_identity import ModelIdentity, ModelIdentityResolver, catalog_model_identities, derive_short_name
 from .oauth_readiness import oauth_readiness_block
 from .provider_availability import (
     record_availability_from_config,
@@ -2992,32 +2992,14 @@ def _static_rule_model_requested_triggers(static_rules: dict[str, Any]) -> list[
 
 
 def _catalog_model_identities() -> list[ModelIdentity]:
-    """Build model identities from the split provider registry.
+    """Build model identities from the catalog, with ``registry.ALL`` fallback.
 
-    Each ``registry.ALL`` entry carries ``vendor`` / ``model`` (plus optional
-    ``hop`` / ``variant``), so the derived short name and the canonical long
-    form come straight out of the identity fields — no curation needed. The
-    resolver built from this list is the one place that turns a requested
-    token (long form, derived short name, or kuerzel alias) into the canonical
-    long form faigate returns, logs, and bills.
+    Thin alias over :func:`faigate.model_identity.catalog_model_identities` so
+    the resolver and the router's identity gate share the exact same
+    computation. See that function for the source precedence (catalog first,
+    ``registry.ALL`` offline fallback) and the deduplication contract.
     """
-    from . import registry
-
-    identities: list[ModelIdentity] = []
-    for name in registry.known_names():
-        identity = registry.provider_identity(name)
-        if identity is None:
-            continue
-        vendor, model, _long_form = identity
-        identities.append(
-            ModelIdentity.from_fields(
-                vendor=vendor,
-                model=model,
-                hop=registry.ALL[name].get("hop") or [],
-                variant=registry.ALL[name].get("variant"),
-            )
-        )
-    return identities
+    return catalog_model_identities()
 
 
 def _model_identity_resolver() -> ModelIdentityResolver:
@@ -3180,6 +3162,31 @@ def _routable_model_entries(
                     "aliases": spec.get("aliases", []),
                 },
             )
+
+    # Catalog identities: a model that exists only in the catalog (and has no
+    # configured backend) is still addressable, so it must be listed here. The
+    # routing gate accepts an id exactly when the shared
+    # ``model_identity.catalog_model_identities()`` list resolves it, so listing
+    # its long forms from that same list keeps ``/v1/models`` and the gate from
+    # drifting. The derived short name and any kuerzel alias ride the entry as
+    # ``aliases``, matching how modes and shortcuts advertise their aliases.
+    for identity in _catalog_model_identities():
+        aliases: list[str] = list(identity.aliases)
+        short_name = identity.effective_short_name
+        if short_name and short_name.lower() != identity.long_form.lower():
+            aliases.append(short_name)
+        claim(
+            identity.long_form,
+            {
+                "object": "model",
+                "owned_by": "faigate",
+                "description": f"Catalog model {identity.vendor}/{identity.model}",
+                "catalog": True,
+                "long_form": identity.long_form,
+                "short_name": short_name,
+                "aliases": aliases,
+            },
+        )
 
     claim(
         "auto",
