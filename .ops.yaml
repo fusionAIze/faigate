@@ -1,0 +1,15 @@
+# Layer-3 repository override (DST-002): the release destinations for this
+# repository. The forge is a value, not a key name (DST-001). This is the config
+# layer — the only place an organisation name, a forge repository, or a role is
+# declared. The release workflow reads this file via config_loader.load_ops_yaml
+# and resolves BOTH destinations from it; nothing here is restated as a literal
+# in .forgejo/.
+destinations:
+  - forge: forgejo
+    repo: fusionaize/faigate
+    role: release
+    visibility: private
+  - forge: github
+    repo: fusionAIze/faigate
+    role: release
+    visibility: public

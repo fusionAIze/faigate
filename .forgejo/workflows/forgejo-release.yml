@@ -1,0 +1,793 @@
+name: Create Forgejo Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Tag to create release for (e.g. v1.0.0)"
+        required: true
+        type: string
+
+jobs:
+  # REL-023 — the gate is a GATE: the release job cannot run unless the boundary
+  # and version gate here passes. The gate job and the release job were two
+  # independent workflows whose verdicts could disagree unnoticed (a red
+  # release-gate shipped v3.4.0 and v3.4.1 anyway). The boundary and version
+  # gates below are the same checks release-gate.yml runs, but placed BEFORE the
+  # release in the same workflow so a red gate skips publication instead of
+  # running beside it. CONTRACT.md section "Release gate and release
+  # relationship (REL-023)" states the decision.
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: https://github.com/actions/checkout@v4
+      - name: Refuse a forge destination outside the config layer
+        run: |
+          set -euo pipefail
+          DEST_HOSTS="$(mktemp)"
+          trap 'rm -f "$DEST_HOSTS"' EXIT
+          python3 - "$DEST_HOSTS" <<'FORGE_HOSTS_PY'
+          import sys
+          from pathlib import Path
+
+          out = sys.argv[1]
+          hosts = []
+          ops = Path(".ops.yaml")
+          if ops.exists():
+              for raw in ops.read_text(encoding="utf-8").splitlines():
+                  line = raw.split("#", 1)[0].strip()
+                  if not line.startswith("forge_hosts:"):
+                      continue
+                  value = line[len("forge_hosts:"):].strip()
+                  if value.startswith("[") and value.endswith("]"):
+                      value = value[1:-1]
+                  for item in value.split(","):
+                      item = item.strip().strip("'\"")
+                      if item:
+                          hosts.append(item)
+          Path(out).write_text("\n".join(hosts) + ("\n" if hosts else ""),
+                               encoding="utf-8")
+          FORGE_HOSTS_PY
+          python3 scripts/ci_variable_boundary_gate.py --dir .forgejo \
+            --dest-hosts "$DEST_HOSTS"
+      - name: Refuse a Layer-1 boundary bypass (org name or CI env read in src)
+        run: |
+          set -euo pipefail
+          ORG_VOCAB="$(mktemp)"
+          CI_ENV_VOCAB="$(mktemp)"
+          DEST_HOSTS="$(mktemp)"
+          trap 'rm -f "$ORG_VOCAB" "$CI_ENV_VOCAB" "$DEST_HOSTS"' EXIT
+          printf '%s\n' Capacium capacium capacium-ops LangeVC langevc lvc-ops \
+            > "$ORG_VOCAB"
+          printf '%s\n' GITHUB_REPOSITORY GITHUB_TOKEN > "$CI_ENV_VOCAB"
+          python3 - "$DEST_HOSTS" <<'FORGE_HOSTS_PY'
+          import sys
+          from pathlib import Path
+
+          out = sys.argv[1]
+          hosts = []
+          ops = Path(".ops.yaml")
+          if ops.exists():
+              for raw in ops.read_text(encoding="utf-8").splitlines():
+                  line = raw.split("#", 1)[0].strip()
+                  if not line.startswith("forge_hosts:"):
+                      continue
+                  value = line[len("forge_hosts:"):].strip()
+                  if value.startswith("[") and value.endswith("]"):
+                      value = value[1:-1]
+                  for item in value.split(","):
+                      item = item.strip().strip("'\"")
+                      if item:
+                          hosts.append(item)
+          Path(out).write_text("\n".join(hosts) + ("\n" if hosts else ""),
+                               encoding="utf-8")
+          FORGE_HOSTS_PY
+          python3 scripts/ci_variable_boundary_gate.py \
+            --py-dir src \
+            --org-vocab "$ORG_VOCAB" \
+            --ci-env "$CI_ENV_VOCAB" \
+            --dest-hosts "$DEST_HOSTS"
+          python3 scripts/ci_variable_boundary_gate.py \
+            --py-dir scripts \
+            --org-vocab "$ORG_VOCAB" \
+            --ci-env "$CI_ENV_VOCAB" \
+            --dest-hosts "$DEST_HOSTS"
+      - name: Check tag against the declared version
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF##refs/tags/}"
+          args=(check-tag "$tag")
+          version="${tag#v}"
+          if [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-[0-9A-Za-z.-]+$ ]]; then
+            args+=(--allow-prereleases)
+          fi
+          python3 scripts/version-sync.py "${args[@]}"
+  release:
+    needs: gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: https://github.com/actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # REL-004 — the release title is a GATE, not an agreement. The name must
+      # be exactly "Ops Engine vX.Y.Z", or the taught prerelease form
+      # "Ops Engine vX.Y.Z-rcN"; a tag whose rendered title does not conform is
+      # refused here with a named error, before any release object exists on
+      # either forge. The gate runs before any release object; the GitHub
+      # release is a byte-for-byte derivative of this one, published from this
+      # same job's workspace below, so a title that fails here can never produce
+      # a GitHub release either.
+      #
+      # REL-022 — the gate deliberately knew only the stable form, so it refused
+      # an rc title it did not understand. It now knows ONE additional form, the
+      # organisation's decided prerelease shape: a lowercase "rc" immediately
+      # followed by at least one digit (-rc1). The refusal it already gave a
+      # malformed prerelease was correct and survives: "-rc" with no number,
+      # a trailing bare "-", an uppercase "-RC1", and any other suffix such as
+      # "-beta" still do not match and are still refused by name. This file
+      # commits to the pattern; CONTRACT.md section "Release titles and
+      # pre-releases (REL-022)" records the decision underneath it.
+      - name: Gate the release title
+        id: title
+        env:
+          TAG_NAME: "${{ github.event.inputs.tag_name || github.ref_name }}"
+        run: |
+          set -euo pipefail
+          RELEASE_NAME="Ops Engine ${TAG_NAME}"
+          python3 - "${RELEASE_NAME}" <<'TITLE_GATE_PY'
+          import re
+          import sys
+
+          NAME_RE = re.compile(
+              r"^Ops Engine v[0-9]+\.[0-9]+\.[0-9]+(?:-rc[0-9]+)?$"
+          )
+          name = sys.argv[1]
+          if not NAME_RE.match(name):
+              sys.stderr.write(
+                  "ReleaseTitleError: release name %r does not match the "
+                  "required convention ^Ops Engine v[0-9]+\\.[0-9]+\\.[0-9]+$ "
+                  "or its prerelease form ...-rc[0-9]+$. Refusing before any "
+                  "release object exists on either forge.\n" % name
+              )
+              sys.exit(2)
+          sys.stdout.write("title gate: %r conforms\n" % name)
+          TITLE_GATE_PY
+          echo "release_name=${RELEASE_NAME}" >> "$GITHUB_OUTPUT"
+
+      # The release body is the CHANGELOG entry for this version, not commit
+      # subjects. A tag whose version has no `## X.Y.Z` section fails here,
+      # before any release object exists. ChangelogParser understands both
+      # heading forms present in CHANGELOG.md: `## 3.1.0` and
+      # `## [2.1.2] — 2026-06-04`.
+      - name: Extract release notes from CHANGELOG
+        id: notes
+        env:
+          TAG_NAME: "${{ github.event.inputs.tag_name || github.ref_name }}"
+        run: |
+          set -euo pipefail
+
+          NOTES="$(python3 - "$TAG_NAME" <<'PY'
+          import re
+          import sys
+
+          # REL-006 — stdlib-only notes extractor. The previous extractor did
+          # `from ops_engine.utils.changelog_parser import ChangelogParser`,
+          # which runs ops_engine/__init__.py and transitively imports
+          # config_loader.py -> `import yaml` / `import pydantic`. Neither is
+          # present on the bare runner image, so the release job died with
+          # `ModuleNotFoundError: No module named 'yaml'` — it only ever passed
+          # on developer machines. The regex and extraction below are a
+          # byte-for-byte faithful copy of ChangelogParser, using only `re` and
+          # `sys`, so nothing outside the stdlib is needed and there is no
+          # install step to fail.
+          HEADER_PATTERN = re.compile(
+              r"^##\s+"
+              r"(?:\[)?(?:[\w-]+\s+)?v?"
+              r"(\d+\.\d+\.\d+(?:[-.\w]*)?)"
+              r"(?:\])?"
+              r".*$",
+              re.MULTILINE,
+          )
+
+          tag = sys.argv[1]
+          version = tag.lstrip("v")
+          with open("CHANGELOG.md", encoding="utf-8") as fh:
+              content = fh.read()
+          matches = list(HEADER_PATTERN.finditer(content))
+          target_match = None
+          target_idx = -1
+          for idx, m in enumerate(matches):
+              if m.group(1) == version:
+                  target_match = m
+                  target_idx = idx
+                  break
+          if target_match is None:
+              notes = ""
+          else:
+              start = target_match.end()
+              if target_idx + 1 < len(matches):
+                  end = matches[target_idx + 1].start()
+              else:
+                  end = len(content)
+              notes = content[start:end].strip()
+          if not notes:
+              sys.stderr.write(
+                  "MissingChangelogEntryError: no '## %s' section in CHANGELOG.md; "
+                  "a release with no notes would post commit subjects, so the "
+                  "release is refused.\n" % version
+              )
+              sys.exit(2)
+          sys.stdout.write(notes)
+          PY
+          )"
+
+          {
+            echo "notes<<EOF"
+            echo "${NOTES}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      # REL-011 — the release body is addressed at an EXTERNAL reader. A tag
+      # whose extracted notes carry an internal ticket reference
+      # ([A-Z]{2,5}-[0-9]+, e.g. LVC-248) names the team that wrote the
+      # release, not the consumer the body is for; the notes step above
+      # already refuses a tag whose version has no changelog section, and this
+      # step refuses a section that still talks in internal tickets. The gate
+      # runs BEFORE any release object is created on either forge, so a
+      # failing gate fails the release run. The gate is a committed stdlib-only
+      # script that imports nothing outside the standard library (REL-006: the
+      # bare runner has neither yaml nor pydantic).
+      #
+      # The code-and-number shape cannot tell an internal project code from an
+      # external identifier: CVE advisory ids, RFC/ISO numbers, PEP-8, gRPC
+      # and ordinary technical prose (UTF-8, SHA-256, TLS-1.3, HTTP-2,
+      # AES-256) all share it, and no denylist of universal prefixes is ever
+      # complete. The engine therefore classifies nothing by shape: it refuses
+      # a ticket-shaped token only when its prefix is among the prefixes THIS
+      # step declares via --ticket-prefixes. The engine ships no organisation
+      # vocabulary — the template cannot know one organisation's tracker.
+      #
+      # REL-021 — the prefixes arrive from the config layer, never as a literal
+      # in this file. This step reads a ``tracker_prefixes`` list from the
+      # committed .ops.yaml (the same Layer-3 config layer ADP-008 moved the
+      # release destinations into) and writes it one-prefix-per-line for the
+      # gate. With no ``tracker_prefixes`` declared — the correct default for a
+      # template, and the audience gate's own "refuse nothing" case — the file
+      # is empty and nothing is refused. A layover declares its own prefixes in
+      # its own .ops.yaml and never edits this workflow. The literal list this
+      # step used to write is refused by ci_variable_boundary_gate.py
+      # (--ticket-prefixes) if it is ever reintroduced.
+      # ops-engine ships no withheld-vocabulary forbid file, so --forbid-file
+      # is absent — an absent forbid file is the proven normal case.
+      - name: Gate the release notes for an external audience
+        env:
+          NOTES: "${{ steps.notes.outputs.notes }}"
+        run: |
+          set -euo pipefail
+          NOTES_FILE="$(mktemp)"
+          PREFIXES_FILE="$(mktemp)"
+          trap 'rm -f "$NOTES_FILE" "$PREFIXES_FILE"' EXIT
+          printf '%s\n' "$NOTES" > "$NOTES_FILE"
+          python3 - "$PREFIXES_FILE" <<'PREFIXES_PY'
+          import sys
+          from pathlib import Path
+
+          out = sys.argv[1]
+          prefixes = []
+          ops = Path(".ops.yaml")
+          if ops.exists():
+              for raw in ops.read_text(encoding="utf-8").splitlines():
+                  line = raw.split("#", 1)[0].strip()
+                  if not line.startswith("tracker_prefixes:"):
+                      continue
+                  value = line[len("tracker_prefixes:"):].strip()
+                  if value.startswith("[") and value.endswith("]"):
+                      value = value[1:-1]
+                  for item in value.split(","):
+                      item = item.strip().strip("'\"")
+                      if item:
+                          prefixes.append(item)
+          Path(out).write_text("\n".join(prefixes) + ("\n" if prefixes else ""),
+                               encoding="utf-8")
+          PREFIXES_PY
+          python3 scripts/release_notes_audience_gate.py \
+            --ticket-prefixes "$PREFIXES_FILE" "$NOTES_FILE"
+
+      # Reproducible build: four assets from committed constraints.
+      #
+      # One command sequence produces the wheel, the sdist, SHA256SUMS and the
+      # SBOM. Byte identity across two runs is guaranteed by (a) the committed
+      # constraints file, which pins the build's resolution, and (b) a fixed
+      # SOURCE_DATE_EPOCH, which removes the gzip mtime and metadata provenance
+      # timestamps from both archives. The SBOM is derived from constraints.txt
+      # alone, so it describes the pinned build set rather than the incidental
+      # packages this runner happens to carry.
+      - name: Build reproducible assets
+        env:
+          TAG_NAME: "${{ github.event.inputs.tag_name || github.ref_name }}"
+        run: |
+          set -euo pipefail
+
+          export SOURCE_DATE_EPOCH=1700000000
+
+          # REL-008 — the build toolchain installs into an isolated venv, never
+          # the runner's system Python. `ubuntu-latest` (and the Forgejo runner
+          # image) marks its system interpreter PEP 668 externally managed, so
+          # `python3 -m pip install ...` against it dies with
+          # `error: externally-managed-environment`. A venv is the escape hatch
+          # pip itself honours: `check_externally_managed()` returns immediately
+          # under `running_under_virtualenv()` (sys.prefix != base_prefix), so
+          # the install below is permitted while the system interpreter stays
+          # untouched.
+          #
+          # Chosen over the alternatives:
+          #   * `--break-system-packages` — defeats the protection PEP 668
+          #     exists for, on a shared image we do not control; a later job or
+          #     a consumer-installed package can then collide silently.
+          #   * `pipx run build` — assumes `pipx` is present on the runner,
+          #     trading one tool assumption for another; `python3 -m venv` is
+          #     stdlib, guaranteed on any CPython >= 3.3.
+          #
+          # REL-008 rework — the venv is created OUTSIDE the source tree, in a
+          # `mktemp -d` directory under $TMPDIR. When it lived inside the
+          # checkout (`.release-venv`), `python -m build --sdist` swept the whole
+          # venv into the tarball — 708 of 816 sdist members were
+          # `.release-venv/*`, and pyvenv.cfg embedded the build machine's
+          # absolute path (`command = <interp> -m venv /ABS/WORKTREE/.release-venv`).
+          # SOURCE_DATE_EPOCH clamps tar mtimes but cannot normalise that path
+          # string, so two runners building the identical tree produced sdists
+          # differing by exactly that line (2016603 vs 2016606 bytes): the sdist
+          # was not reproducible. A venv under $TMPDIR is never inside the tree
+          # hatchling packages, so no future artifact can sweep it in regardless
+          # of hatchling's file selection — a stronger guarantee than an exclude.
+          RELEASE_VENV="$(mktemp -d)/release-venv"
+          python3 -m venv "$RELEASE_VENV"
+          "$RELEASE_VENV/bin/python" -m pip install --quiet "build" "hatchling==1.32.0"
+
+          # 1 + 2: the wheel and the sdist, from the same source tree.
+          "$RELEASE_VENV/bin/python" -m build --sdist --wheel
+
+          # 3: SHA256SUMS over exactly the two archives, keyed by bare
+          #    basename. The four assets are published flat on both forges (the
+          #    uploads use `basename "$asset"`), so the checksum file must name
+          #    each archive by basename alone — a leading `dist/` would make a
+          #    consumer's `sha256sum -c` fail against the flat download.
+          #    `(cd dist && sha256sum ...)` emits basenames.
+          (cd dist && sha256sum *.whl *.tar.gz) > SHA256SUMS
+
+          # 4: the SBOM, CycloneDX 1.5, listing exactly the pinned packages in
+          # constraints.txt — never `pip freeze`, which would record the build
+          # machine's own incidental environment.
+          python3 - "$TAG_NAME" <<'PY'
+          import json
+          import re
+          import sys
+          from pathlib import Path
+
+          tag = sys.argv[1]
+          pins = []
+          for raw in Path("constraints.txt").read_text(encoding="utf-8").splitlines():
+              line = raw.split("#", 1)[0].strip()
+              m = re.match(r"^([A-Za-z0-9_.-]+)==([A-Za-z0-9_.+!-]+)", line)
+              if m:
+                  pins.append((m.group(1), m.group(2)))
+
+          components = [
+              {
+                  "type": "library",
+                  "bom-ref": f"pypi:{name}@{version}",
+                  "name": name,
+                  "version": version,
+                  "purl": f"pkg:pypi/{name}@{version}",
+              }
+              for name, version in pins
+          ]
+
+          sbom = {
+              "bomFormat": "CycloneDX",
+              "specVersion": "1.5",
+              "serialNumber": "urn:uuid:b0b0b0b0-0000-4000-8000-000000000000",
+              "version": 1,
+              "metadata": {
+                  "component": {
+                      "type": "application",
+                      "bom-ref": "ops-engine",
+                      "name": "ops-engine",
+                      "version": tag.lstrip("v"),
+                  }
+              },
+              "components": components,
+          }
+          Path("sbom.cdx.json").write_text(
+              json.dumps(sbom, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+          print(f"SBOM: {len(components)} pinned components from constraints.txt")
+          PY
+
+          ls -la dist SHA256SUMS sbom.cdx.json
+
+      # REL-010 — the OSV scan runs over the SBOM this build just produced, in
+      # this job's own workspace, BEFORE any release object exists on either
+      # forge. It used to live in a separate workflow (release-gate.yml) that
+      # could not see the build's output, so it polled for the release and
+      # re-downloaded sbom.cdx.json over the network — a second acquisition of
+      # the exact bytes written a step earlier. That re-fetch is gone: the
+      # scanner reads sbom.cdx.json from the workspace, so the gate is a check
+      # over the build's own output, and a failing scan aborts the job before
+      # any release object is created on either forge.
+      #
+      # Floor: CVSS base score 7.0 (HIGH and CRITICAL) blocks the release.
+      # Rationale (PRD 8): a floor set too high never fires, so it is a green
+      # that lies; a floor set too low blocks every release and is disabled
+      # within a month. HIGH/CRITICAL are the classes a release should not
+      # ship; MEDIUM and LOW are surfaced but tolerated. The floor is one
+      # constant the evaluator reads; the prose here states the same floor and
+      # defends the choice against the two failure modes.
+      - name: Gate the SBOM against OSV
+        run: |
+          set -euo pipefail
+
+          # The SBOM is an input this gate consumes, not a file this gate
+          # fabricates. A stable release tag must carry REL-002's SBOM; its
+          # absence is a named failure, never a silent green.
+          if [[ ! -f "sbom.cdx.json" ]]; then
+            echo "::error::NoSbomToScanError: sbom.cdx.json missing. The reproducible build must have emitted it. Nothing was scanned, so nothing is approved." >&2
+            exit 1
+          fi
+
+          # osv-scanner is pinned with its published SHA256 rather than a bare
+          # redirect, so the tool that decides the release is the version this
+          # gate was written against and nothing newer silently.
+          scanner_version=2.5.1
+          sha=f9f25499a2c8cc367b3af45df2ea7eeca7fbccceab9c35079968f4b3652194be
+          url="https://github.com/google/osv-scanner/releases/download/v${scanner_version}/osv-scanner_linux_amd64"
+          curl -fsSL -o /tmp/osv-scanner "$url"
+          printf '%s  %s\n' "$sha" "/tmp/osv-scanner" | sha256sum -c - >/dev/null
+          chmod +x /tmp/osv-scanner
+
+          echo "osv-gate: scanning sbom.cdx.json against OSV (scanner ${scanner_version})"
+          echo "osv-gate: floor = CVSS base score 7.0 (HIGH/CRITICAL blocks; MEDIUM/LOW surfaced below)."
+
+          # The gate's decision is made over the JSON osv-scanner emits, so the
+          # exit code below is the gate's, not the scanner's habit of exiting
+          # non-zero on ANY finding.
+          /tmp/osv-scanner scan --sbom=sbom.cdx.json --format=json 2>/dev/null \
+            > /tmp/osv-scan.json
+          OSV_SCAN_JSON=/tmp/osv-scan.json python3 - <<'OSV_GATE_PY'
+          import json
+          import os
+          import sys
+
+          FLOOR = 7.0  # CVSS base score; must match the prose floor above.
+          with open(os.environ["OSV_SCAN_JSON"], encoding="utf-8") as fh:
+              data = json.load(fh)
+          findings = 0
+          worst = 0.0
+          rows = []
+          for res in data.get("results", []):
+              for pkg in res.get("packages", []):
+                  name = (pkg.get("package") or {}).get("name", "unknown")
+                  for group in pkg.get("groups", []):
+                      ids = group.get("ids", [])
+                      raw = group.get("max_severity")
+                      score = None
+                      if raw:
+                          try:
+                              score = float(raw)
+                          except (TypeError, ValueError):
+                              score = None
+                      findings += 1
+                      if score is not None:
+                          worst = max(worst, score)
+                          rows.append((name, ";".join(ids[:2]), score))
+                      else:
+                          rows.append((name, ";".join(ids[:2]), None))
+
+          print(f"osv-gate: {findings} advisories; highest CVSS base score {worst:g}; floor {FLOOR:g}")
+          for name, ids, score in sorted(rows):
+              if score is None:
+                  print(f"osv-gate:   {name:<36} {ids}  (no CVSS base score published)")
+              else:
+                  verdict = "BLOCK" if score >= FLOOR else "OK"
+                  print(f"osv-gate:   {verdict:<5} {name:<36} {score:g}  {ids}")
+
+          print("osv-gate: NOT covered: advisories published AFTER this scan (the OSV database is", end=" ")
+          print("itself a snapshot); and unpinned transitive resolution at the consumer's install", end=" ")
+          print("time (LVC-249) is out of scope of this SBOM, which pins only the build set.")
+
+          if worst >= FLOOR:
+              print(f"osv-gate: RELEASE REFUSED (highest {worst:g} >= floor {FLOOR:g})")
+              sys.exit(1)
+          print("osv-gate: RELEASE PERMITTED")
+          sys.exit(0)
+          OSV_GATE_PY
+
+      # ADP-004 / ADP-008 — the workflow calls the ENGINE to publish; it no
+      # longer reimplements publication. The four curl steps that used to POST
+      # each forge's release API are gone: they hardcoded the mirror forge's
+      # API and upload hosts and the mirror repository name as shell literals.
+      # The engine (`ReleaseHandler.publish_release`) creates the release and
+      # attaches every artifact on EVERY destination resolved from config —
+      # one build, published outward, nothing re-downloaded (REL-010), with a
+      # partial publication reported rather than swallowed.
+      #
+      # Destination resolution (ADP-008): the destinations come from the
+      # committed `.ops.yaml` at the repository root — the Layer-3 config
+      # override (DST-002) — read through config_loader.load_ops_yaml. BOTH
+      # the canonical Forgejo destination and the mirror are declared there,
+      # in the config layer, not in this file: no forge repository, no API
+      # host, and no Actions variable survive here. The previous per-destination
+      # Actions variable was a regression against the standing operator
+      # decision (LVC-247/248) and is gone. A missing or empty `.ops.yaml` is a
+      # named refusal, not a silently narrowed release: the previous shape
+      # (unset variable -> [] -> Forgejo-only release reporting success) is
+      # exactly what must not ship.
+      #
+      # ADP-011 — two forges carry two different credentials, and the adapter
+      # factory now serves a credential PER destination, keyed by forge value,
+      # so the workflow no longer hand-builds each adapter inline. The factory
+      # (`adapters_for` with a `credentials` mapping) constructs both adapters
+      # — the Forgejo adapter from the runner token and the GitHub mirror
+      # adapter from the mirror token — in one call; a destination whose forge
+      # has no credential in the mapping is a named refusal (`MissingCredentialError`),
+      # never a silent unauthenticated publication. The webhook secret rides in
+      # the same credential to satisfy the ingress contract even though
+      # publication never parses a webhook (ADP-006). A credential is not a
+      # destination: the tokens stay in the runner's secret store and arrive
+      # here as input; neither the factory nor this workflow stores or logs one.
+      - name: Create Release
+        env:
+          TAG_NAME: "${{ github.event.inputs.tag_name || github.ref_name }}"
+          NOTES: "${{ steps.notes.outputs.notes }}"
+          NAME_TEMPLATE: "Ops Engine {tag_name}"
+          FORGEJO_REPOSITORY: "${{ github.repository }}"
+          FORGEJO_BASE_URL: "${{ github.server_url }}"
+          FORGEJO_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          FORGEJO_WEBHOOK_SECRET: "${{ secrets.FORGEJO_WEBHOOK_SECRET }}"
+          GH_MIRROR_TOKEN: "${{ secrets.GH_MIRROR_TOKEN }}"
+          GH_MIRROR_WEBHOOK_SECRET: "${{ secrets.GH_MIRROR_WEBHOOK_SECRET }}"
+        run: |
+          set -euo pipefail
+
+          # The four assets live split across the repository (dist/*.whl and
+          # dist/*.tar.gz) and the workspace root (SHA256SUMS and
+          # sbom.cdx.json). The engine attaches whatever files sit in ONE
+          # directory, so stage them flat here: the SHA256SUMS is keyed by
+          # bare basename (the build step ran `(cd dist && sha256sum ...)`),
+          # so a consumer's `sha256sum -c` still verifies the flat publish.
+          mkdir -p release-assets
+          cp dist/*.whl dist/*.tar.gz SHA256SUMS sbom.cdx.json release-assets/
+
+          # The engine is installed into an isolated venv OUTSIDE the source
+          # tree (REL-008: an in-tree venv is swept into the sdist and breaks
+          # byte-for-byte reproducibility).
+          ENGINE_VENV="$(mktemp -d)/engine-venv"
+          python3 -m venv "$ENGINE_VENV"
+          "$ENGINE_VENV/bin/python" -m pip install --quiet -r constraints.txt -e .
+
+          "$ENGINE_VENV/bin/python" - <<'PUBLISH_PY'
+          import asyncio
+          import os
+          import subprocess
+          import sys
+
+          from ops_engine.adapters.factory import Credential, adapters_for
+          from ops_engine.config_loader import (
+              OpsEngineConfig,
+              OpsYamlError,
+              load_ops_yaml,
+          )
+          from ops_engine.modules.release import ReleaseHandler
+
+          # The release destinations come from the committed .ops.yaml at the
+          # repository root (Layer 3), loaded through config_loader.load_ops_yaml.
+          # No destination, forge repository, or API host is a literal in this
+          # workflow layer — the config layer owns them. A missing or empty
+          # .ops.yaml is a named refusal, never a silently narrowed release.
+          try:
+              layer3 = load_ops_yaml(".")
+          except OpsYamlError as exc:
+              print(f"::error::OpsYamlError: {exc}", file=sys.stderr)
+              sys.exit(2)
+
+          if layer3 is None:
+              print(
+                  "::error::MissingOpsYamlError: no .ops.yaml at the repository "
+                  "root; the release destination is a committed file, not a CI "
+                  "variable. Refusing to publish a release with no declared "
+                  "destinations.",
+                  file=sys.stderr,
+              )
+              sys.exit(2)
+
+          destinations = layer3.destinations
+          if not destinations:
+              print(
+                  "::error::MissingReleaseDestinationsError: .ops.yaml declares "
+                  "no destinations; refusing to publish to zero forges rather "
+                  "than silently narrowing the release.",
+                  file=sys.stderr,
+              )
+              sys.exit(2)
+
+          repo = os.environ["FORGEJO_REPOSITORY"]
+          tag_name = os.environ["TAG_NAME"]
+          release_notes = os.environ["NOTES"]
+          name_template = os.environ["NAME_TEMPLATE"]
+          forgejo_base_url = os.environ["FORGEJO_BASE_URL"]
+
+          # Materialise the Layer-3 destinations into a typed Layer-2 config so
+          # that ReleaseHandler.publish_release (whose internal
+          # resolve_destinations takes no repo_dir) re-resolves the same list.
+          org, _, repo_name = repo.partition("/")
+          config = OpsEngineConfig.load(
+              {
+                  "orgs": {
+                      org: {
+                          "repositories": {
+                              repo_name: {
+                                  "destinations": [
+                                      {
+                                          "forge": d.forge,
+                                          "repo": d.repo,
+                                          "role": d.role,
+                                          "visibility": d.visibility,
+                                      }
+                                      for d in destinations
+                                  ]
+                              }
+                          }
+                      }
+                  }
+              }
+          )
+
+          # REL-020 — the mirror tag is pushed from the CANONICAL tag object, never
+          # invented by the release API. https://github.com's POST /releases takes a
+          # ``tag_name`` and, when that tag does not yet exist on the mirror, CREATES
+          # it at the mirror's DEFAULT-BRANCH HEAD at that moment — so the mirror tag
+          # points at a commit this repository never tagged. v3.4.0 shipped exactly
+          # that: the mirror tag landed on the commit whose pyproject read 3.3.0,
+          # and a real ``pip install`` from the mirror tag delivered 3.4.0's name and
+          # 3.3.0's code. mirror.yml force-pushes the canonical tag ref too, but it
+          # runs on its own schedule and the release step must not race it.
+          #
+          # The two git operations below run with subprocess so no forge API is
+          # involved in where the tag points. They are:
+          #   1. push the canonical tag ref, verbatim, onto the mirror (the same
+          #      ``+refs/tags/x:refs/tags/x`` mirror.yml performs) so that the API's
+          #      create_release below finds the tag ALREADY PRESENT and uses its real
+          #      target — the API never gets the chance to invent one.
+          #   2. after publication, peel the tag to its commit on BOTH forges and
+          #      refuse by name when they differ.
+          mirror_dest = next(
+              (d for d in destinations if d.forge.strip().lower() == "github"), None
+          )
+
+          def _mirror_remote(github_repo: str) -> str:
+              """The github destination's push remote, built from the repo value the
+              config layer resolved plus the mirror credential. github.com is the
+              forge the mirror belongs to; the repository itself is never a literal
+              (its value came from load_ops_yaml above)."""
+              return f"https://x-access-token:{os.environ['GH_MIRROR_TOKEN']}@github.com/{github_repo}.git"
+
+          def _canonical_tag_target() -> str:
+              """The commit the canonical tag peels to (``refs/tags/<tag>^{}``). The
+              peel normalises annotated and lightweight tags onto their commit so the
+              comparison below is always commit-vs-commit."""
+              return subprocess.check_output(
+                  ["git", "rev-parse", f"refs/tags/{tag_name}^{{}}"],
+                  text=True,
+              ).strip()
+
+          def _push_mirror_tag(remote: str) -> None:
+              """Push the canonical tag ref verbatim onto the mirror, before the API
+              creates a release there. A missing mirror tag would otherwise make the
+              API invent one at the mirror's default-branch head."""
+              subprocess.run(
+                  [
+                      "git", "push", "--force", remote,
+                      f"refs/tags/{tag_name}:refs/tags/{tag_name}",
+                  ],
+                  check=True,
+              )
+
+          def _verify_mirror_tag(tag_name: str, canonical: str, remote: str) -> None:
+              """Compare the peeled tag target on both forges and refuse by name when
+              they differ. ``git ls-remote <remote> refs/tags/<tag>^{}`` returns the
+              peeled commit SHA for an annotated mirror tag; for a lightweight mirror
+              tag the peeled form emits no line and the bare ref IS the commit. Query
+              both and prefer the peeled form so the compare is always commit-vs-commit
+              against the canonical ``rev-parse ...^{}``."""
+              ls = subprocess.run(
+                  [
+                      "git", "ls-remote", remote,
+                      f"refs/tags/{tag_name}",
+                      f"refs/tags/{tag_name}^{{}}",
+                  ],
+                  capture_output=True,
+                  text=True,
+              )
+              targets = {}
+              for line in ls.stdout.splitlines():
+                  sha, _, ref = line.partition("\t")
+                  targets[ref] = sha.strip()
+              mirror_target = targets.get(f"refs/tags/{tag_name}^{{}}") or targets.get(
+                  f"refs/tags/{tag_name}", ""
+              )
+              if not mirror_target or mirror_target != canonical:
+                  print(
+                      f"::error::MirrorTagDriftError: tag {tag_name} targets "
+                      f"{canonical} on the canonical forge but "
+                      f"{mirror_target or '(absent)'} on the mirror "
+                      f"{remote}; the mirror tag does not mirror the "
+                      f"canonical tag. Refusing the release.",
+                      file=sys.stderr,
+                  )
+                  sys.exit(1)
+              print(f"mirror tag verified: {tag_name} -> {mirror_target}")
+
+          async def main():
+              # REL-020 — push the canonical tag object onto the mirror BEFORE the
+              # engine publishes, so the github create_release cannot invent a tag.
+              if mirror_dest is not None:
+                  _push_mirror_tag(_mirror_remote(mirror_dest.repo))
+
+              # ADP-011 — the factory serves the credential each destination's
+              # forge declares, so the two forges' distinct tokens are mapped
+              # in one call. A destination whose forge has no credential here
+              # is a named refusal, not a silent unauthenticated publication.
+              credentials = {
+                  "forgejo": Credential(
+                      token=os.environ["FORGEJO_TOKEN"],
+                      webhook_secret=os.environ["FORGEJO_WEBHOOK_SECRET"],
+                  ),
+                  "github": Credential(
+                      token=os.environ["GH_MIRROR_TOKEN"],
+                      webhook_secret=os.environ["GH_MIRROR_WEBHOOK_SECRET"],
+                  ),
+              }
+              adapters = adapters_for(
+                  destinations,
+                  credentials=credentials,
+                  base_url=forgejo_base_url,
+              )
+
+              report = await ReleaseHandler.publish_release(
+                  config,
+                  repo,
+                  tag_name,
+                  release_notes,
+                  "release-assets",
+                  name_template=name_template,
+                  adapters=adapters,
+              )
+
+              published = ", ".join(report.published) or "(none)"
+              failed = ", ".join(report.failed) or "(none)"
+              print(f"published destinations: {published}")
+              print(f"failed destinations:    {failed}")
+              if report.failed:
+                  # A partial publication is a REPORTED failure, never a silent
+                  # success: the run goes red so the operator sees the drift.
+                  print(
+                      "::error::PartialPublicationError: the release was not "
+                      "published to every destination; failed: " + failed
+                  )
+                  sys.exit(1)
+
+              # REL-020 — after publication, refuse by name if the mirror tag does
+              # not target the same commit the canonical tag does.
+              if mirror_dest is not None:
+                  _verify_mirror_tag(
+                      tag_name,
+                      _canonical_tag_target(),
+                      _mirror_remote(mirror_dest.repo),
+                  )
+
+          asyncio.run(main())
+          PUBLISH_PY
