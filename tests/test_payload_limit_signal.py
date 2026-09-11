@@ -4,9 +4,9 @@ The gateway's payload-too-large response must report the cap of the *requested
 model*, never the provider-wide ``max()`` placeholder (262144). Three things are
 pinned here:
 
-1. A request whose model has a hard ``belegt`` cap reports that model's cap when
+1. A request whose model has a hard ``confirmed`` cap reports that model's cap when
    the ingress 413 fires — the value a client can plan against.
-2. A model without a ``belegt`` cap falls back to the b2 rule (passthrough or the
+2. A model without a ``confirmed`` cap falls back to the b2 rule (passthrough or the
    operator byte limit), never to an invented ``max()`` number.
 3. The reported number is always unit-labelled so ``tokens`` (a model cap) can
    never be mistaken for ``bytes`` (the operator body limit).
@@ -54,11 +54,11 @@ def test_413_reports_the_requested_models_cap(monkeypatch) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Criterion 2 — no belegt cap: b2 rule, no max()
+# Criterion 2 — no confirmed cap: b2 rule, no max()
 # --------------------------------------------------------------------------- #
 
 
-def test_no_belegt_cap_produces_no_invented_max() -> None:
+def test_no_confirmed_cap_produces_no_invented_max() -> None:
     resp = main._payload_too_large_response("too large", model_id="provider/unknown-model")
 
     payload = json.loads(resp.body)
@@ -79,7 +79,7 @@ def test_unknown_model_resolves_to_none() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_belegt_cap_is_labelled_tokens(monkeypatch) -> None:
+def test_confirmed_cap_is_labelled_tokens(monkeypatch) -> None:
     _use_bundled_catalog(monkeypatch)
     resp = main._payload_too_large_response("too large", model_id="claude-opus-4-6")
 
@@ -147,21 +147,21 @@ def test_sniffed_model_flows_into_the_413(monkeypatch) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_hardcoded_fallback_cap_is_unbestaetigt() -> None:
+def test_hardcoded_fallback_cap_is_unconfirmed() -> None:
     fact = provider_catalog.get_model_input_cap_fact("deepseek-v4-flash")
 
     assert fact is not None
     assert fact["max_input_tokens"] == 1000000
-    assert fact["evidence"]["level"] == "unbestaetigt"
+    assert fact["evidence"]["level"] == "unconfirmed"
 
 
-def test_catalog_sourced_cap_is_belegt(monkeypatch) -> None:
+def test_catalog_sourced_cap_is_confirmed(monkeypatch) -> None:
     _use_bundled_catalog(monkeypatch)
     fact = provider_catalog.get_model_input_cap_fact("claude-opus-4-6")
 
     assert fact is not None
     assert fact["max_input_tokens"] == 1000000
-    assert fact["evidence"]["level"] == "belegt"
+    assert fact["evidence"]["level"] == "confirmed"
     assert fact["evidence"]["source_url"]
 
 

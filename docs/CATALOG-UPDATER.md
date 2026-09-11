@@ -277,19 +277,19 @@ scale with distinct consequences:
 
 | Level | Feeds | May do |
 |-------|-------|--------|
-| `belegt` | enforceable + advisory | carry hard decisions (router, capacity calc, error output) |
-| `plausibel` | advisory only | best-effort routing, flagged to the client as an estimate |
-| `unbestaetigt` | neither | nothing — invisible to router, capacity, error output |
+| `confirmed` | enforceable + advisory | carry hard decisions (router, capacity calc, error output) |
+| `plausible` | advisory only | best-effort routing, flagged to the client as an estimate |
+| `unconfirmed` | neither | nothing — invisible to router, capacity, error output |
 
 The split is implemented in `faigate/catalog_views.py:86`
 (`split_catalog_facts`); the level names are fixed at
 `faigate/catalog_views.py:45-47`. The 413 path applies the rule through
-`faigate/main.py:338` (`_resolve_advertised_input_limit`): a `belegt` cap is
-advertised unchanged, a `plausibel` cap is marked `estimated: true`, and a
+`faigate/main.py:338` (`_resolve_advertised_input_limit`): a `confirmed` cap is
+advertised unchanged, a `plausible` cap is marked `estimated: true`, and a
 missing/unverified cap never invents a number — it passes through to the
 provider or reports the operator byte limit, per `FAIGATE_UNVERIFIED_CAP_MODE`
-(`faigate/main.py:372`). Machine-generated facts land as `unbestaetigt`; the
-single human step is promotion to `belegt`, which requires a source and
+(`faigate/main.py:372`). Machine-generated facts land as `unconfirmed`; the
+single human step is promotion to `confirmed`, which requires a source and
 `as_of`.
 
 ### ID path scheme

@@ -44,7 +44,7 @@ ticket's *intent* (make the catalog restore trust), not its *mechanism*.
 |---------------|------|----------------------------|
 | Integrity guard rejects a shrunk catalog vs. bundled baseline | `faigate/metadata_catalog_sync.py:133` | Related to B's goal "catch what the operator sees" — but by shape, not by health signal. |
 | `model_not_found` instead of silent substitute 200 | `faigate/main.py:5386` | Closes the "silent drift" failure mode FJ-56-173 framed, via identity, not health. |
-| Evidence gate (`belegt`/`plausibel`/`unbestaetigt`) | `faigate/catalog_views.py:86` | A new correctness layer with no FJ-56-173 counterpart. |
+| Evidence gate (`confirmed`/`plausible`/`unconfirmed`) | `faigate/catalog_views.py:86` | A new correctness layer with no FJ-56-173 counterpart. |
 | Canonical identity path `[hop/]vendor/model[:variant]` | `faigate/model_identity.py:29` | No FJ-56-173 counterpart. |
 
 **Important distinction kept honest:** the deprecation *signal* that existed

@@ -475,7 +475,7 @@
         "vision"
       ],
       "evidence": {
-        "level": "belegt",
+        "level": "confirmed",
         "source_url": "https://api-docs.deepseek.com/quick_start/pricing"
       },
       "official_source_url": "https://api-docs.deepseek.com/quick_start/pricing",
@@ -1339,7 +1339,7 @@
         "max_input_tokens": 300000,
         "max_output_tokens": 10000,
         "evidence": {
-          "level": "belegt",
+          "level": "confirmed",
           "source_url": "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json",
           "as_of": "2026-09-11"
         }
@@ -1372,7 +1372,7 @@
         "max_input_tokens": 16384,
         "max_output_tokens": 16384,
         "evidence": {
-          "level": "belegt",
+          "level": "confirmed",
           "source_url": "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json",
           "as_of": "2026-09-11"
         }
@@ -1405,7 +1405,7 @@
         "max_input_tokens": 123000,
         "max_output_tokens": 16000,
         "evidence": {
-          "level": "belegt",
+          "level": "confirmed",
           "source_url": "https://openrouter.ai/api/v1/models",
           "as_of": "2026-09-11"
         }
@@ -1438,7 +1438,7 @@
         "max_input_tokens": 262144,
         "max_output_tokens": 128000,
         "evidence": {
-          "level": "belegt",
+          "level": "confirmed",
           "source_url": "https://openrouter.ai/api/v1/models",
           "as_of": "2026-09-11"
         }
@@ -1470,7 +1470,7 @@
         "max_input_tokens": 1048576,
         "max_output_tokens": 65536,
         "evidence": {
-          "level": "belegt",
+          "level": "confirmed",
           "source_url": "https://openrouter.ai/api/v1/models",
           "as_of": "2026-09-11"
         }
@@ -1510,7 +1510,7 @@
         "max_input_tokens": 1048576,
         "max_output_tokens": 65536,
         "evidence": {
-          "level": "belegt",
+          "level": "confirmed",
           "source_url": "https://openrouter.ai/api/v1/models",
           "as_of": "2026-09-11"
         }
@@ -1550,7 +1550,7 @@
         "max_input_tokens": 1048576,
         "max_output_tokens": 65536,
         "evidence": {
-          "level": "belegt",
+          "level": "confirmed",
           "source_url": "https://openrouter.ai/api/v1/models",
           "as_of": "2026-09-11"
         }
@@ -1590,7 +1590,7 @@
         "max_input_tokens": 131072,
         "max_output_tokens": 32768,
         "evidence": {
-          "level": "belegt",
+          "level": "confirmed",
           "source_url": "https://openrouter.ai/api/v1/models",
           "as_of": "2026-09-11"
         }
@@ -1610,19 +1610,19 @@
     "deepseek-v4-pro": {
       "max_input_tokens": 1000000,
       "evidence": {
-        "level": "unbestaetigt"
+        "level": "unconfirmed"
       }
     },
     "deepseek-v4-flash": {
       "max_input_tokens": 1000000,
       "evidence": {
-        "level": "unbestaetigt"
+        "level": "unconfirmed"
       }
     },
     "claude-haiku-3-5": {
       "max_input_tokens": 200000,
       "evidence": {
-        "level": "plausibel",
+        "level": "plausible",
         "source_url": "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json",
         "as_of": "2026-09-11"
       }
@@ -1630,7 +1630,7 @@
     "gemini-3.6-flash": {
       "max_input_tokens": 1048576,
       "evidence": {
-        "level": "belegt",
+        "level": "confirmed",
         "source_url": "https://openrouter.ai/api/v1/models",
         "as_of": "2026-09-11"
       }
@@ -1638,7 +1638,7 @@
     "gemini-3.7-flash": {
       "max_input_tokens": 1048576,
       "evidence": {
-        "level": "belegt",
+        "level": "confirmed",
         "source_url": "https://openrouter.ai/api/v1/models",
         "as_of": "2026-09-11"
       }
@@ -1646,7 +1646,7 @@
     "gemini-3.8-flash": {
       "max_input_tokens": 1048576,
       "evidence": {
-        "level": "belegt",
+        "level": "confirmed",
         "source_url": "https://openrouter.ai/api/v1/models",
         "as_of": "2026-09-11"
       }
@@ -1654,7 +1654,7 @@
     "gpt-oss-120b": {
       "max_input_tokens": 131072,
       "evidence": {
-        "level": "belegt",
+        "level": "confirmed",
         "source_url": "https://openrouter.ai/api/v1/models",
         "as_of": "2026-09-11"
       }
@@ -1662,133 +1662,133 @@
     "gpt-5.6-sol": {
       "max_input_tokens": 922000,
       "evidence": {
-        "level": "unbestaetigt"
+        "level": "unconfirmed"
       }
     },
     "gpt-5.6-terra": {
       "max_input_tokens": 922000,
       "evidence": {
-        "level": "unbestaetigt"
+        "level": "unconfirmed"
       }
     },
     "gpt-5.6-luna": {
       "max_input_tokens": 922000,
       "evidence": {
-        "level": "unbestaetigt"
+        "level": "unconfirmed"
       }
     },
     "gpt-5.5": {
       "max_input_tokens": 1050000,
       "evidence": {
-        "level": "unbestaetigt"
+        "level": "unconfirmed"
       }
     },
     "gpt-5.5-pro": {
       "max_input_tokens": 1050000,
       "evidence": {
-        "level": "unbestaetigt"
+        "level": "unconfirmed"
       }
     },
     "o3": {
       "max_input_tokens": 200000,
       "evidence": {
-        "level": "unbestaetigt"
+        "level": "unconfirmed"
       }
     },
     "o3-mini": {
       "max_input_tokens": 200000,
       "evidence": {
-        "level": "unbestaetigt"
+        "level": "unconfirmed"
       }
     },
     "o4-mini": {
       "max_input_tokens": 200000,
       "evidence": {
-        "level": "unbestaetigt"
+        "level": "unconfirmed"
       }
     },
     "claude-opus-5": {
       "max_input_tokens": 1000000,
       "evidence": {
-        "level": "unbestaetigt"
+        "level": "unconfirmed"
       }
     },
     "claude-sonnet-5": {
       "max_input_tokens": 1000000,
       "evidence": {
-        "level": "unbestaetigt"
+        "level": "unconfirmed"
       }
     },
     "claude-haiku-4-5": {
       "max_input_tokens": 200000,
       "evidence": {
-        "level": "unbestaetigt"
+        "level": "unconfirmed"
       }
     },
     "claude-code": {
       "max_input_tokens": 262144,
       "evidence": {
-        "level": "unbestaetigt"
+        "level": "unconfirmed"
       }
     },
     "gemini-3.1-pro": {
       "max_input_tokens": 1048576,
       "evidence": {
-        "level": "unbestaetigt"
+        "level": "unconfirmed"
       }
     },
     "gemini-3.1-flash": {
       "max_input_tokens": 1048576,
       "evidence": {
-        "level": "unbestaetigt"
+        "level": "unconfirmed"
       }
     },
     "gemini-3-flash-lite": {
       "max_input_tokens": 1048576,
       "evidence": {
-        "level": "unbestaetigt"
+        "level": "unconfirmed"
       }
     },
     "llama-4-maverick": {
       "max_input_tokens": 131072,
       "evidence": {
-        "level": "unbestaetigt"
+        "level": "unconfirmed"
       }
     },
     "llama-4-scout": {
       "max_input_tokens": 131072,
       "evidence": {
-        "level": "unbestaetigt"
+        "level": "unconfirmed"
       }
     },
     "qwen-3.6-27b": {
       "max_input_tokens": 262144,
       "evidence": {
-        "level": "unbestaetigt"
+        "level": "unconfirmed"
       }
     },
     "qwen3-coder": {
       "max_input_tokens": 262144,
       "evidence": {
-        "level": "unbestaetigt"
+        "level": "unconfirmed"
       }
     },
     "glm-5.3": {
       "max_input_tokens": 1000000,
       "evidence": {
-        "level": "unbestaetigt"
+        "level": "unconfirmed"
       }
     },
     "kimi-k2.6": {
       "max_input_tokens": 262144,
       "evidence": {
-        "level": "unbestaetigt"
+        "level": "unconfirmed"
       }
     },
     "claude-opus-4-6": {
       "max_input_tokens": 1000000,
       "evidence": {
-        "level": "belegt",
+        "level": "confirmed",
         "source_url": "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json",
         "as_of": "2026-09-11"
       }
@@ -1796,7 +1796,7 @@
     "claude-sonnet-4-6": {
       "max_input_tokens": 1000000,
       "evidence": {
-        "level": "belegt",
+        "level": "confirmed",
         "source_url": "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json",
         "as_of": "2026-09-11"
       }
@@ -1804,7 +1804,7 @@
     "gemini-2.5-pro": {
       "max_input_tokens": 1048576,
       "evidence": {
-        "level": "belegt",
+        "level": "confirmed",
         "source_url": "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json",
         "as_of": "2026-09-11"
       }
@@ -1812,7 +1812,7 @@
     "gemini-2.5-flash": {
       "max_input_tokens": 1048576,
       "evidence": {
-        "level": "belegt",
+        "level": "confirmed",
         "source_url": "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json",
         "as_of": "2026-09-11"
       }
@@ -1820,7 +1820,7 @@
     "gemini-2.5-flash-lite": {
       "max_input_tokens": 1048576,
       "evidence": {
-        "level": "belegt",
+        "level": "confirmed",
         "source_url": "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json",
         "as_of": "2026-09-11"
       }
@@ -1828,7 +1828,7 @@
     "gpt-4o": {
       "max_input_tokens": 128000,
       "evidence": {
-        "level": "belegt",
+        "level": "confirmed",
         "source_url": "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json",
         "as_of": "2026-09-11"
       }
@@ -1836,7 +1836,7 @@
     "gpt-5.4": {
       "max_input_tokens": 1050000,
       "evidence": {
-        "level": "belegt",
+        "level": "confirmed",
         "source_url": "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json",
         "as_of": "2026-09-11"
       }
@@ -1844,7 +1844,7 @@
     "gpt-5.3-codex": {
       "max_input_tokens": 272000,
       "evidence": {
-        "level": "belegt",
+        "level": "confirmed",
         "source_url": "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json",
         "as_of": "2026-09-11"
       }
@@ -1852,7 +1852,7 @@
     "gpt-5.1-codex-mini": {
       "max_input_tokens": 272000,
       "evidence": {
-        "level": "belegt",
+        "level": "confirmed",
         "source_url": "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json",
         "as_of": "2026-09-11"
       }
@@ -1860,7 +1860,7 @@
     "deepseek-v4-flash-vision-exp": {
       "max_input_tokens": 1000000,
       "evidence": {
-        "level": "belegt",
+        "level": "confirmed",
         "source_url": "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json",
         "as_of": "2026-09-11"
       }
@@ -1868,7 +1868,7 @@
     "grok-code-fast-1": {
       "max_input_tokens": 256000,
       "evidence": {
-        "level": "belegt",
+        "level": "confirmed",
         "source_url": "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json",
         "as_of": "2026-09-11"
       }
@@ -1876,7 +1876,7 @@
     "glm-5": {
       "max_input_tokens": 204800,
       "evidence": {
-        "level": "belegt",
+        "level": "confirmed",
         "source_url": "https://openrouter.ai/api/v1/models",
         "as_of": "2026-09-11"
       }
@@ -1884,7 +1884,7 @@
     "auto-router": {
       "max_input_tokens": 2000000,
       "evidence": {
-        "level": "unbestaetigt",
+        "level": "unconfirmed",
         "source_url": "https://openrouter.ai/api/v1/models",
         "as_of": "2026-09-11"
       }
@@ -1895,63 +1895,63 @@
       "model": "gemini-3-flash",
       "label": "Gemini 3 Flash",
       "evidence": {
-        "level": "unbestaetigt"
+        "level": "unconfirmed"
       }
     },
     "google/gemini-flash-lite": {
       "model": "gemini-3-flash-lite",
       "label": "Gemini 3 Flash-Lite",
       "evidence": {
-        "level": "unbestaetigt"
+        "level": "unconfirmed"
       }
     },
     "google/gemini-pro-high": {
       "model": "gemini-3.1-pro",
       "label": "Gemini 3.1 Pro (High)",
       "evidence": {
-        "level": "unbestaetigt"
+        "level": "unconfirmed"
       }
     },
     "google/gemini-pro-low": {
       "model": "gemini-3.1-pro",
       "label": "Gemini 3.1 Pro (Low)",
       "evidence": {
-        "level": "unbestaetigt"
+        "level": "unconfirmed"
       }
     },
     "anthropic/opus-4.6": {
       "model": "claude-opus-4-6",
       "label": "Claude Opus 4.6",
       "evidence": {
-        "level": "unbestaetigt"
+        "level": "unconfirmed"
       }
     },
     "anthropic/sonnet-4.6": {
       "model": "claude-sonnet-4-6",
       "label": "Claude Sonnet 4.6",
       "evidence": {
-        "level": "unbestaetigt"
+        "level": "unconfirmed"
       }
     },
     "openai/gpt-4o": {
       "model": "gpt-4o",
       "label": "GPT-4o",
       "evidence": {
-        "level": "unbestaetigt"
+        "level": "unconfirmed"
       }
     },
     "deepseek/reasoner": {
       "model": "deepseek-reasoner",
       "label": "DeepSeek R1 (Reasoner)",
       "evidence": {
-        "level": "unbestaetigt"
+        "level": "unconfirmed"
       }
     },
     "deepseek/chat": {
       "model": "deepseek-chat",
       "label": "DeepSeek V3 (Chat)",
       "evidence": {
-        "level": "unbestaetigt"
+        "level": "unconfirmed"
       }
     }
   },

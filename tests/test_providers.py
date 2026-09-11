@@ -1064,11 +1064,11 @@ class TestPayloadTooLargeThreshold:
 
     TASK-B2/B3 supersede the provider-wide 262144 placeholder: the threshold in
     the body ``limit`` field and the ``x-faigate-request-limit`` header is now
-    resolved from a ``belegt`` per-model cap when one exists, and never invented
+    resolved from a ``confirmed`` per-model cap when one exists, and never invented
     from the flat provider floor when it does not.
     """
 
-    def test_413_exposes_limit_from_belegt_model_cap(self, monkeypatch):
+    def test_413_exposes_limit_from_confirmed_model_cap(self, monkeypatch):
         import faigate.main as main
         from faigate import provider_catalog
 
@@ -1077,7 +1077,7 @@ class TestPayloadTooLargeThreshold:
             "get_model_input_cap_fact",
             lambda model_id: {
                 "max_input_tokens": 262144,
-                "evidence": {"level": "belegt", "source_url": "https://example.test", "as_of": "2026-08-21"},
+                "evidence": {"level": "confirmed", "source_url": "https://example.test", "as_of": "2026-08-21"},
             },
         )
 
@@ -1090,7 +1090,7 @@ class TestPayloadTooLargeThreshold:
         assert payload["limit"] == 262144
         assert resp.headers.get("x-faigate-request-limit") == "262144"
 
-    def test_413_without_belegt_cap_advertises_no_invented_limit(self):
+    def test_413_without_confirmed_cap_advertises_no_invented_limit(self):
         import faigate.main as main
 
         resp = main._payload_too_large_response("too large", model_id="provider/unknown-model")

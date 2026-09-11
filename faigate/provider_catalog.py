@@ -1479,7 +1479,7 @@ def get_model_max_input_tokens(model_id: str) -> int | None:
     return None
 
 
-_MODEL_INPUT_CAP_EVIDENCE = {"level": "unbestaetigt"}
+_MODEL_INPUT_CAP_EVIDENCE = {"level": "unconfirmed"}
 
 
 def get_model_input_cap_fact(model_id: str) -> dict[str, Any] | None:
@@ -1488,9 +1488,9 @@ def get_model_input_cap_fact(model_id: str) -> dict[str, Any] | None:
     This is the evidence-aware counterpart of :func:`get_model_max_input_tokens`.
     The catalog is the only authority: a cap sourced from the catalog's
     ``model_caps`` block carries the block's own ``evidence.level``, whether that
-    is ``belegt`` (a sourced fact), ``plausibel``, or ``unbestaetigt``. The
+    is ``confirmed`` (a sourced fact), ``plausible``, or ``unconfirmed``. The
     hardcoded ``_MODEL_INPUT_CAPS`` map is an offline *fallback* only, and a
-    fallback value without a source is itself ``unbestaetigt`` by construction —
+    fallback value without a source is itself ``unconfirmed`` by construction —
     it is the oldest unverified fact in the system, so it must never out-rank a
     catalog fact or carry a stronger label. An id outside both sets returns
     ``None`` — never the provider-wide 262144 floor, which is a placeholder, not
@@ -1501,7 +1501,7 @@ def get_model_input_cap_fact(model_id: str) -> dict[str, Any] | None:
     entry.
 
     The returned dict is shaped for :func:`faigate.catalog_views.split_catalog_facts`,
-    so a consumer can separate ``belegt`` (hard) from ``plausibel`` (advisory)
+    so a consumer can separate ``confirmed`` (hard) from ``plausible`` (advisory)
     facts with no second piece of view-splitting logic.
     """
     if model_id is None:

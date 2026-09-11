@@ -827,7 +827,7 @@ def test_model_input_cap_reads_from_catalog_first(tmp_path, monkeypatch):
         model_caps={
             "catalog-only-model": {
                 "max_input_tokens": 777000,
-                "evidence": {"level": "belegt", "source_url": "https://example.test/cap"},
+                "evidence": {"level": "confirmed", "source_url": "https://example.test/cap"},
             },
         },
     )
@@ -858,7 +858,7 @@ def test_model_input_cap_catalog_overrides_dict(tmp_path, monkeypatch):
         model_caps={
             "gpt-5.6-sol": {
                 "max_input_tokens": 111111,
-                "evidence": {"level": "belegt", "source_url": "https://example.test/cap"},
+                "evidence": {"level": "confirmed", "source_url": "https://example.test/cap"},
             },
         },
     )
@@ -868,7 +868,7 @@ def test_model_input_cap_catalog_overrides_dict(tmp_path, monkeypatch):
 
 
 def test_model_input_cap_fact_carries_catalog_evidence(tmp_path, monkeypatch):
-    """A catalog-sourced cap carries the block's evidence, not the hardcoded belegt."""
+    """A catalog-sourced cap carries the block's evidence, not the hardcoded confirmed."""
     import faigate.provider_catalog as pc
 
     metadata_dir = _write_metadata_catalog(
@@ -876,7 +876,7 @@ def test_model_input_cap_fact_carries_catalog_evidence(tmp_path, monkeypatch):
         model_caps={
             "deepseek-v4-flash": {
                 "max_input_tokens": 1000000,
-                "evidence": {"level": "unbestaetigt"},
+                "evidence": {"level": "unconfirmed"},
             },
         },
     )
@@ -885,7 +885,7 @@ def test_model_input_cap_fact_carries_catalog_evidence(tmp_path, monkeypatch):
     fact = pc.get_model_input_cap_fact("deepseek-v4-flash")
     assert fact is not None
     assert fact["max_input_tokens"] == 1000000
-    assert fact["evidence"]["level"] == "unbestaetigt"
+    assert fact["evidence"]["level"] == "unconfirmed"
 
 
 def test_model_input_cap_catalog_wins_over_hardcoded_dict_without_env(monkeypatch):
@@ -896,25 +896,25 @@ def test_model_input_cap_catalog_wins_over_hardcoded_dict_without_env(monkeypatc
     monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_DIR", raising=False)
 
     # deepseek-v4-pro is in both sources with the same number; the catalog says
-    # "unbestaetigt", the dict used to claim "belegt". The catalog must win.
+    # "unconfirmed", the dict used to claim "confirmed". The catalog must win.
     fact = pc.get_model_input_cap_fact("deepseek-v4-pro")
     assert fact is not None
     assert fact["max_input_tokens"] == 1000000
-    assert fact["evidence"]["level"] == "unbestaetigt"
+    assert fact["evidence"]["level"] == "unconfirmed"
 
 
-def test_model_input_cap_hardcoded_fallback_is_unbestaetigt(monkeypatch):
-    """A model only in the hardcoded dict carries unbestaetigt, never belegt."""
+def test_model_input_cap_hardcoded_fallback_is_unconfirmed(monkeypatch):
+    """A model only in the hardcoded dict carries unconfirmed, never confirmed."""
     import faigate.provider_catalog as pc
 
     monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_FILE", raising=False)
     monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_DIR", raising=False)
 
-    # gpt-5.6-sol is in both sources with level "unbestaetigt"; assert the label
-    # reflects provenance either way (never a source-less "belegt").
+    # gpt-5.6-sol is in both sources with level "unconfirmed"; assert the label
+    # reflects provenance either way (never a source-less "confirmed").
     fact = pc.get_model_input_cap_fact("gpt-5.6-sol")
     assert fact is not None
-    assert fact["evidence"]["level"] == "unbestaetigt"
+    assert fact["evidence"]["level"] == "unconfirmed"
 
 
 def test_model_input_cap_normalizes_dot_version_separators(monkeypatch):

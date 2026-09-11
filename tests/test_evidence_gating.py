@@ -1,12 +1,12 @@
 """Acceptance tests for evidence-gated input-cap enforcement (TASK-B2 + TASK-B3).
 
 The catalog carries per-model input caps as facts tagged with ``evidence.level``
-on the three-step scale ``unbestaetigt < plausibel < belegt``. The gateway must
+on the three-step scale ``unconfirmed < plausible < confirmed``. The gateway must
 let that scale decide what a 413 may advertise:
 
-* ``belegt``     -> hard decision, the cap is exposed unchanged.
-* ``plausibel``  -> best-effort, the cap is exposed but flagged as an estimate.
-* ``unbestaetigt`` -> invisible: no 413 is produced from it, no number is
+* ``confirmed``     -> hard decision, the cap is exposed unchanged.
+* ``plausible``  -> best-effort, the cap is exposed but flagged as an estimate.
+* ``unconfirmed`` -> invisible: no 413 is produced from it, no number is
   invented in its place. Instead the request passes through to the provider,
   or falls back to the operator-configured byte limit, per
   ``FAIGATE_UNVERIFIED_CAP_MODE``.
@@ -36,12 +36,12 @@ def _fact(level: str, cap: int = 1000000) -> dict[str, object]:
 
 
 # --------------------------------------------------------------------------- #
-# TASK-B2 criterion 1 — unbestaetigt produces no 413 from that cap
+# TASK-B2 criterion 1 — unconfirmed produces no 413 from that cap
 # --------------------------------------------------------------------------- #
 
 
-def test_unbestaetigt_cap_is_invisible(monkeypatch) -> None:
-    monkeypatch.setattr(provider_catalog, "get_model_input_cap_fact", lambda model_id: _fact("unbestaetigt"))
+def test_unconfirmed_cap_is_invisible(monkeypatch) -> None:
+    monkeypatch.setattr(provider_catalog, "get_model_input_cap_fact", lambda model_id: _fact("unconfirmed"))
 
     limit, estimated = main._resolve_advertised_input_limit("some-model")
 
@@ -57,12 +57,12 @@ def test_missing_cap_is_invisible() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# TASK-B2 criterion 2 — plausibel is flagged to the client as an estimate
+# TASK-B2 criterion 2 — plausible is flagged to the client as an estimate
 # --------------------------------------------------------------------------- #
 
 
-def test_plausibel_cap_is_flagged_as_estimate(monkeypatch) -> None:
-    monkeypatch.setattr(provider_catalog, "get_model_input_cap_fact", lambda model_id: _fact("plausibel", 200000))
+def test_plausible_cap_is_flagged_as_estimate(monkeypatch) -> None:
+    monkeypatch.setattr(provider_catalog, "get_model_input_cap_fact", lambda model_id: _fact("plausible", 200000))
 
     resp = main._payload_too_large_response("too large", model_id="some-model")
 
@@ -73,11 +73,11 @@ def test_plausibel_cap_is_flagged_as_estimate(monkeypatch) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# TASK-B2 criterion 3 — belegt acts unchanged
+# TASK-B2 criterion 3 — confirmed acts unchanged
 # --------------------------------------------------------------------------- #
 
 
-def test_belegt_cap_acts_unchanged(monkeypatch) -> None:
+def test_confirmed_cap_acts_unchanged(monkeypatch) -> None:
     monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_FILE", raising=False)
     monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_DIR", raising=False)
     assert provider_catalog.get_model_max_input_tokens("claude-opus-4-6") == 1000000
@@ -88,7 +88,7 @@ def test_belegt_cap_acts_unchanged(monkeypatch) -> None:
     assert estimated is False
 
 
-def test_belegt_cap_is_surfaced_without_estimate_flag(monkeypatch) -> None:
+def test_confirmed_cap_is_surfaced_without_estimate_flag(monkeypatch) -> None:
     monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_FILE", raising=False)
     monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_DIR", raising=False)
     resp = main._payload_too_large_response("too large", model_id="claude-opus-4-6")
@@ -104,7 +104,7 @@ def test_belegt_cap_is_surfaced_without_estimate_flag(monkeypatch) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_no_belegt_cap_produces_no_invented_limit() -> None:
+def test_no_confirmed_cap_produces_no_invented_limit() -> None:
     resp = main._payload_too_large_response("too large", model_id="provider/unknown-model")
 
     payload = json.loads(resp.body)
@@ -113,7 +113,7 @@ def test_no_belegt_cap_produces_no_invented_limit() -> None:
     assert "x-faigate-request-limit" not in resp.headers
 
 
-def test_no_belegt_cap_defaults_to_passthrough(monkeypatch) -> None:
+def test_no_confirmed_cap_defaults_to_passthrough(monkeypatch) -> None:
     monkeypatch.delenv("FAIGATE_UNVERIFIED_CAP_MODE", raising=False)
 
     limit, estimated = main._resolve_advertised_input_limit("provider/unknown-model")
@@ -172,7 +172,7 @@ def test_base_advertised_the_262144_placeholder_is_replaced() -> None:
     On the base commit the byte-rejection 413 surfaced ``limit == 262144`` (the
     ``max()`` over the flat provider floor) regardless of the model. After this
     change that invented number is never produced for a model without a hard
-    ``belegt`` cap: the limit is absent under ``passthrough`` and equals the
+    ``confirmed`` cap: the limit is absent under ``passthrough`` and equals the
     operator byte limit under ``byte_limit``.
     """
     # No providers are consulted anymore: the placeholder aggregation path is gone.
@@ -183,18 +183,18 @@ def test_base_advertised_the_262144_placeholder_is_replaced() -> None:
     assert "limit" not in payload
 
 
-def test_hardcoded_fallback_caps_are_unbestaetigt() -> None:
-    """Every hardcoded fallback cap is an ``unbestaetigt`` fact, never ``belegt``.
+def test_hardcoded_fallback_caps_are_unconfirmed() -> None:
+    """Every hardcoded fallback cap is an ``unconfirmed`` fact, never ``confirmed``.
 
     The ``_MODEL_INPUT_CAPS`` map is an offline fallback with no per-value
     source, so it must not carry a stronger evidence label than the catalog. A
-    sourced catalog fact is ``belegt``; a hardcoded value without a source is the
-    oldest unverified fact in the system and is labelled ``unbestaetigt``.
+    sourced catalog fact is ``confirmed``; a hardcoded value without a source is the
+    oldest unverified fact in the system and is labelled ``unconfirmed``.
     """
     for model_id in provider_catalog._MODEL_INPUT_CAPS:
         fact = provider_catalog.get_model_input_cap_fact(model_id)
         assert fact is not None, f"{model_id!r} must carry an evidence-tagged cap fact"
-        assert fact["evidence"]["level"] == "unbestaetigt"
+        assert fact["evidence"]["level"] == "unconfirmed"
         assert "source_url" not in fact["evidence"]
         assert fact["max_input_tokens"] == provider_catalog.get_model_max_input_tokens(model_id)
 

@@ -128,30 +128,30 @@ def test_full_chain_guard_evidence_resolve_cap(tmp_path: Path) -> None:
     assert len(resolved.payload["providers"]) == _HAPPY_PROVIDER_COUNT
 
     # 2. Evidence gate: a fact without a recognised level is invisible.
-    fact_belegt = {
+    fact_confirmed = {
         "max_input_tokens": 123,
-        "evidence": {"level": "belegt"},
+        "evidence": {"level": "confirmed"},
     }
-    fact_plausibel = {
+    fact_plausible = {
         "max_input_tokens": 200,
-        "evidence": {"level": "plausibel"},
+        "evidence": {"level": "plausible"},
     }
-    fact_unbestaetigt = {
+    fact_unconfirmed = {
         "max_input_tokens": 999,
-        "evidence": {"level": "unbestaetigt"},
+        "evidence": {"level": "unconfirmed"},
     }
     views = split_catalog_facts(
         {
-            "belegt": fact_belegt,
-            "plausibel": fact_plausibel,
-            "unbestaetigt": fact_unbestaetigt,
+            "confirmed": fact_confirmed,
+            "plausible": fact_plausible,
+            "unconfirmed": fact_unconfirmed,
         }
     )
-    assert "belegt" in views.enforceable
-    assert "plausibel" in views.advisory
-    assert "plausibel" not in views.enforceable
-    assert "unbestaetigt" not in views.enforceable
-    assert "unbestaetigt" not in views.advisory
+    assert "confirmed" in views.enforceable
+    assert "plausible" in views.advisory
+    assert "plausible" not in views.enforceable
+    assert "unconfirmed" not in views.enforceable
+    assert "unconfirmed" not in views.advisory
 
     # 3. Identity resolution: a long-form and short-form both resolve.
     identities = [
@@ -174,7 +174,7 @@ def test_full_chain_guard_evidence_resolve_cap(tmp_path: Path) -> None:
     assert fact is not None
     # The catalog records the fact as unverified; the hardcoded map is only a
     # fallback and must not out-rank the catalog's evidence level.
-    assert fact["evidence"]["level"] == "unbestaetigt"
+    assert fact["evidence"]["level"] == "unconfirmed"
 
 
 def test_gate_and_models_share_one_source() -> None:
