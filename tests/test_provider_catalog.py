@@ -776,6 +776,48 @@ def _patch_metadata_env(monkeypatch, pc, metadata_dir: Path) -> None:
     monkeypatch.setattr(pc, "_EXTERNAL_CATALOG_MTIME", 0.0)
 
 
+def test_model_caps_index_populated_from_bundled_snapshot_without_env(tmp_path, monkeypatch):
+    """Without any env override, model_caps is read from the bundled snapshot."""
+    import faigate.provider_catalog as pc
+
+    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_FILE", raising=False)
+    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_DIR", raising=False)
+
+    index = pc._model_caps_index()
+
+    # The catalog grows as sources are scraped; pinning an exact count makes this
+    # test fail on every legitimate catalog update. What it must prove is that the
+    # bundled snapshot is read at all, not how much it happens to carry today.
+    assert len(index) >= 36
+    assert index["deepseek-v4-pro"] == 1000000
+    assert index["gpt-5.6-sol"] == 922000
+
+
+def test_model_input_cap_env_file_override_takes_precedence(tmp_path, monkeypatch):
+    """A populated FAIGATE_PROVIDER_METADATA_FILE wins over the bundled snapshot."""
+    import faigate.provider_catalog as pc
+
+    snapshot = tmp_path / "provider-catalog.json"
+    snapshot.write_text(
+        json.dumps(
+            {
+                "schema_version": "fusionaize-provider-catalog/v1.3",
+                "model_caps": {
+                    "gpt-5.6-sol": {"max_input_tokens": 111111},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("FAIGATE_PROVIDER_METADATA_FILE", str(snapshot))
+    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_DIR", raising=False)
+
+    index = pc._model_caps_index()
+
+    assert index["gpt-5.6-sol"] == 111111
+    assert "deepseek-v4-pro" not in index
+
+
 def test_model_input_cap_reads_from_catalog_first(tmp_path, monkeypatch):
     """A cap that exists only in model_caps (no dict entry) is delivered."""
     import faigate.provider_catalog as pc
