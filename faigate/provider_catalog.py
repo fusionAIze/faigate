@@ -1357,17 +1357,26 @@ def _load_external_catalog_payload() -> dict[str, Any]:
     knowledge cut migrates input-token ceilings into a sibling top-level block,
     ``model_caps``, which a provider-only reader drops. This accessor preserves
     the whole payload so those sibling blocks stay reachable through the same
-    env-override → metadata-dir chain the provider catalog already uses.
+    env-override → metadata-dir chain the provider catalog already uses. When
+    neither override is set, it falls back to the bundled snapshot shipped in
+    ``faigate/assets/metadata/catalog.v1.json`` so the migrated ``model_caps``
+    block is reachable even before an external catalog is synced.
     """
     metadata_path = str(os.environ.get(_EXTERNAL_CATALOG_ENV, "") or "").strip()
     if metadata_path:
         return _load_catalog_payload(metadata_path)
 
     metadata_dir = str(os.environ.get(_EXTERNAL_CATALOG_DIR_ENV, "") or "").strip()
-    if not metadata_dir:
+    if metadata_dir:
+        root = Path(metadata_dir).expanduser()
+        return _load_catalog_payload(root / _METADATA_CATALOG_RELATIVE_PATH)
+
+    try:
+        from .catalog_resolver import _load_bundled_snapshot
+    except Exception:  # pragma: no cover - defensive
         return {}
-    root = Path(metadata_dir).expanduser()
-    return _load_catalog_payload(root / _METADATA_CATALOG_RELATIVE_PATH)
+    bundled = _load_bundled_snapshot()
+    return bundled if bundled is not None else {}
 
 
 def _load_external_model_caps() -> dict[str, Any]:
@@ -1463,20 +1472,45 @@ def get_model_input_cap_fact(model_id: str) -> dict[str, Any] | None:
 
     model_caps = _load_external_model_caps()
     raw = model_caps.get(tail) or model_caps.get(candidate)
+    hard_cap = _MODEL_INPUT_CAPS.get(tail) or _MODEL_INPUT_CAPS.get(candidate)
+
+    catalog_fact = None
     if isinstance(raw, dict) and isinstance(raw.get("max_input_tokens"), int):
         cap = raw["max_input_tokens"]
         evidence = raw.get("evidence")
         if not isinstance(evidence, dict):
             evidence = dict(_MODEL_INPUT_CAP_EVIDENCE)
-        return {"max_input_tokens": cap, "evidence": dict(evidence)}
+        catalog_fact = {"max_input_tokens": cap, "evidence": dict(evidence)}
 
-    cap = _MODEL_INPUT_CAPS.get(tail) or _MODEL_INPUT_CAPS.get(candidate)
-    if cap is None:
-        return None
-    return {
-        "max_input_tokens": cap,
-        "evidence": dict(_MODEL_INPUT_CAP_EVIDENCE),
-    }
+    # An explicitly-configured catalog (env file or dir) is authoritative: its
+    # evidence.level flows through, even a downgrade to ``unbestaetigt``. The
+    # bundled snapshot is only a fallback, so its weaker facts must not demote
+    # the human-checked ``belegt`` fact already recorded for the model.
+    explicit = _external_catalog_explicitly_configured()
+    if catalog_fact is not None and (explicit or hard_cap is None):
+        return catalog_fact
+
+    if hard_cap is not None:
+        return {
+            "max_input_tokens": hard_cap,
+            "evidence": dict(_MODEL_INPUT_CAP_EVIDENCE),
+        }
+
+    return catalog_fact
+
+
+def _external_catalog_explicitly_configured() -> bool:
+    """True when an operator set an explicit catalog override, not the fallback.
+
+    When ``FAIGATE_PROVIDER_METADATA_FILE`` or ``FAIGATE_PROVIDER_METADATA_DIR``
+    is set, the operator deliberately pointed at a catalog, so its facts — even
+    ``unbestaetigt`` ones — are authoritative. Without either, the bundled
+    snapshot is only a fallback whose weak facts must not demote the hardcoded
+    ``belegt`` values.
+    """
+    if str(os.environ.get(_EXTERNAL_CATALOG_ENV, "") or "").strip():
+        return True
+    return bool(str(os.environ.get(_EXTERNAL_CATALOG_DIR_ENV, "") or "").strip())
 
 
 def _normalize_catalog_entry(entry: Any) -> dict[str, Any]:
