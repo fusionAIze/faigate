@@ -77,17 +77,21 @@ def test_plausibel_cap_is_flagged_as_estimate(monkeypatch) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_belegt_cap_acts_unchanged() -> None:
-    assert provider_catalog.get_model_max_input_tokens("deepseek-v4-pro") == 1000000
+def test_belegt_cap_acts_unchanged(monkeypatch) -> None:
+    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_FILE", raising=False)
+    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_DIR", raising=False)
+    assert provider_catalog.get_model_max_input_tokens("claude-opus-4-6") == 1000000
 
-    limit, estimated = main._resolve_advertised_input_limit("deepseek-v4-pro")
+    limit, estimated = main._resolve_advertised_input_limit("claude-opus-4-6")
 
     assert limit == 1000000
     assert estimated is False
 
 
-def test_belegt_cap_is_surfaced_without_estimate_flag() -> None:
-    resp = main._payload_too_large_response("too large", model_id="deepseek-v4-pro")
+def test_belegt_cap_is_surfaced_without_estimate_flag(monkeypatch) -> None:
+    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_FILE", raising=False)
+    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_DIR", raising=False)
+    resp = main._payload_too_large_response("too large", model_id="claude-opus-4-6")
 
     payload = json.loads(resp.body)
     assert payload["limit"] == 1000000
@@ -179,14 +183,19 @@ def test_base_advertised_the_262144_placeholder_is_replaced() -> None:
     assert "limit" not in payload
 
 
-def test_curated_caps_are_belegt_with_evidence() -> None:
-    """Every curated model cap is a ``belegt`` fact carrying source and date."""
+def test_hardcoded_fallback_caps_are_unbestaetigt() -> None:
+    """Every hardcoded fallback cap is an ``unbestaetigt`` fact, never ``belegt``.
+
+    The ``_MODEL_INPUT_CAPS`` map is an offline fallback with no per-value
+    source, so it must not carry a stronger evidence label than the catalog. A
+    sourced catalog fact is ``belegt``; a hardcoded value without a source is the
+    oldest unverified fact in the system and is labelled ``unbestaetigt``.
+    """
     for model_id in provider_catalog._MODEL_INPUT_CAPS:
         fact = provider_catalog.get_model_input_cap_fact(model_id)
         assert fact is not None, f"{model_id!r} must carry an evidence-tagged cap fact"
-        assert fact["evidence"]["level"] == "belegt"
-        assert fact["evidence"]["source_url"]
-        assert fact["evidence"]["as_of"]
+        assert fact["evidence"]["level"] == "unbestaetigt"
+        assert "source_url" not in fact["evidence"]
         assert fact["max_input_tokens"] == provider_catalog.get_model_max_input_tokens(model_id)
 
 

@@ -657,3 +657,38 @@ metrics:
     # appear even though their backends are not instantiated.
     for name in ("deepseek-v4-flash-vision-exp", "gemini-flash", "gemini-flash-lite", "gemini-pro"):
         assert name in listed, f"static-routable provider name {name!r} is missing from /v1/models"
+
+
+def test_catalog_only_provider_resolves(monkeypatch):
+    """A provider that exists only in the catalog (not registry.ALL) resolves."""
+    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_FILE", raising=False)
+    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_DIR", raising=False)
+
+    resolver = main_module._model_identity_resolver()
+    resolution = resolver.resolve("amazon/nova-pro-v1")
+
+    assert resolution.identity is not None
+    assert resolution.identity.long_form == "amazon/nova-pro-v1"
+
+
+def test_catalog_anthropic_opus_and_sonnet_identities_present(monkeypatch):
+    """The catalog contributes anthropic opus/sonnet identities; the dot-form
+    equivalence is a cap-lookup concern (see test_provider_catalog)."""
+    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_FILE", raising=False)
+    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_DIR", raising=False)
+
+    long_forms = {identity.long_form.lower() for identity in main_module._catalog_model_identities()}
+
+    assert "anthropic/claude-opus-4-6" in long_forms
+    assert "anthropic/claude-sonnet-4-6" in long_forms
+
+
+def test_gpt_4o_identity_unaffected_by_separator_normalization(monkeypatch):
+    """gpt-4o stays a distinct identity; no digit-group over-stretch."""
+    import faigate.provider_catalog as provider_catalog
+
+    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_FILE", raising=False)
+    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_DIR", raising=False)
+
+    assert provider_catalog.get_model_max_input_tokens("openai/gpt-4o") == 128000
+    assert provider_catalog.get_model_max_input_tokens("openai/gpt-4-o") is None

@@ -1350,6 +1350,40 @@ _MODEL_INPUT_CAPS: dict[str, int] = {
 }
 
 
+def _normalize_model_version_separators(model_id: str) -> str:
+    """Treat ``.`` and ``-`` as equal *inside digit groups*.
+
+    A version like ``4.6`` and ``4-6`` name the same release, but ``gpt-4o``
+    and ``gpt-4-o`` are different names. The rule therefore only rewrites a
+    separator that sits between two digits (``4.6`` -> ``4-6``), never the
+    ``4.o`` in a name suffix. This is the same idea the caps chain uses to
+    normalise a requested trailing model id before lookup.
+    """
+    if not model_id:
+        return model_id
+    return re.sub(r"(\d)\.(\d)", r"\1-\2", model_id)
+
+
+def _model_lookup_keys(candidate: str) -> list[str]:
+    """Return the candidate spellings a cap lookup should try for one model id.
+
+    The catalogs key caps by the trailing model id (``gpt-5.6-sol``) and by the
+    full ``provider/model`` form. Both spellings are tried, each additionally
+    normalised so ``claude-opus-4.6`` and ``claude-opus-4-6`` answer the same
+    fact. Order matters: exact spelling first, normalised second, provider model
+    form before its normalised variant.
+    """
+    tail = candidate.rsplit("/", 1)[-1]
+    keys: list[str] = []
+    for value in (tail, candidate):
+        if value and value not in keys:
+            keys.append(value)
+        normalised = _normalize_model_version_separators(value)
+        if normalised and normalised not in keys:
+            keys.append(normalised)
+    return keys
+
+
 def _load_external_catalog_payload() -> dict[str, Any]:
     """Return the full external catalog payload (not just ``providers``).
 
@@ -1424,40 +1458,47 @@ def get_model_max_input_tokens(model_id: str) -> int | None:
 
     Normalises the common ``provider/model`` form to the trailing model id, then
     falls back to the raw id, so both ``openrouter/gpt-5.6-sol`` and
-    ``gpt-5.6-sol`` resolve. Returns ``None`` when neither source records a cap.
+    ``gpt-5.6-sol`` resolve. Version separators are also normalised
+    (``claude-opus-4.6`` == ``claude-opus-4-6``) so a dot-form request answers
+    from a hyphen-form catalog entry. Returns ``None`` when neither source
+    records a cap.
     """
     if not model_id:
         return None
     candidate = str(model_id).strip()
-    tail = candidate.rsplit("/", 1)[-1]
+    if not candidate:
+        return None
+    keys = _model_lookup_keys(candidate)
     catalog_index = _model_caps_index()
-    return (
-        catalog_index.get(tail)
-        or catalog_index.get(candidate)
-        or _MODEL_INPUT_CAPS.get(tail)
-        or _MODEL_INPUT_CAPS.get(candidate)
-    )
+    for key in keys:
+        if key in catalog_index:
+            return catalog_index[key]
+    for key in keys:
+        if key in _MODEL_INPUT_CAPS:
+            return _MODEL_INPUT_CAPS[key]
+    return None
 
 
-_MODEL_INPUT_CAP_EVIDENCE = {
-    "level": "belegt",
-    "source_url": "https://github.com/fusionAIze/fusionaize-metadata",
-    "as_of": "2026-08-21",
-}
+_MODEL_INPUT_CAP_EVIDENCE = {"level": "unbestaetigt"}
 
 
 def get_model_input_cap_fact(model_id: str) -> dict[str, Any] | None:
     """Return one model's max_input_tokens as an evidence-tagged fact, or ``None``.
 
     This is the evidence-aware counterpart of :func:`get_model_max_input_tokens`.
-    A cap sourced from the catalog's ``model_caps`` block carries the block's own
-    ``evidence.level``, so a migrated ``unbestaetigt`` fact is invisible to the
-    router, capacity calculator, and error output exactly like any other
-    unverified fact. A cap sourced from the hardcoded ``_MODEL_INPUT_CAPS`` map
-    carries ``belegt`` — those 23 values are human-checked against the LiteLLM
-    and OmniRoute registry reports (see the ``_MODEL_INPUT_CAPS`` provenance
-    note). An id outside both sets returns ``None`` — never the provider-wide
-    262144 floor, which is a placeholder, not a per-model truth.
+    The catalog is the only authority: a cap sourced from the catalog's
+    ``model_caps`` block carries the block's own ``evidence.level``, whether that
+    is ``belegt`` (a sourced fact), ``plausibel``, or ``unbestaetigt``. The
+    hardcoded ``_MODEL_INPUT_CAPS`` map is an offline *fallback* only, and a
+    fallback value without a source is itself ``unbestaetigt`` by construction —
+    it is the oldest unverified fact in the system, so it must never out-rank a
+    catalog fact or carry a stronger label. An id outside both sets returns
+    ``None`` — never the provider-wide 262144 floor, which is a placeholder, not
+    a per-model truth.
+
+    Version-separator spellings are normalised on lookup (``claude-opus-4.6`` ==
+    ``claude-opus-4-6``) so a dot-form request answers the hyphen-form catalog
+    entry.
 
     The returned dict is shaped for :func:`faigate.catalog_views.split_catalog_facts`,
     so a consumer can separate ``belegt`` (hard) from ``plausibel`` (advisory)
@@ -1468,27 +1509,32 @@ def get_model_input_cap_fact(model_id: str) -> dict[str, Any] | None:
     candidate = str(model_id).strip()
     if not candidate:
         return None
-    tail = candidate.rsplit("/", 1)[-1]
+    keys = _model_lookup_keys(candidate)
 
     model_caps = _load_external_model_caps()
-    raw = model_caps.get(tail) or model_caps.get(candidate)
-    hard_cap = _MODEL_INPUT_CAPS.get(tail) or _MODEL_INPUT_CAPS.get(candidate)
+    raw = None
+    for key in keys:
+        entry = model_caps.get(key)
+        if isinstance(entry, dict) and isinstance(entry.get("max_input_tokens"), int):
+            raw = entry
+            break
 
-    catalog_fact = None
-    if isinstance(raw, dict) and isinstance(raw.get("max_input_tokens"), int):
+    hard_cap = None
+    for key in keys:
+        value = _MODEL_INPUT_CAPS.get(key)
+        if isinstance(value, int):
+            hard_cap = value
+            break
+
+    # The catalog wins whenever it records the model, even a bundled-snapshot
+    # fact. It carries a real source and is the newer truth. The hardcoded map
+    # only answers when the catalog is silent.
+    if raw is not None:
         cap = raw["max_input_tokens"]
         evidence = raw.get("evidence")
         if not isinstance(evidence, dict):
             evidence = dict(_MODEL_INPUT_CAP_EVIDENCE)
-        catalog_fact = {"max_input_tokens": cap, "evidence": dict(evidence)}
-
-    # An explicitly-configured catalog (env file or dir) is authoritative: its
-    # evidence.level flows through, even a downgrade to ``unbestaetigt``. The
-    # bundled snapshot is only a fallback, so its weaker facts must not demote
-    # the human-checked ``belegt`` fact already recorded for the model.
-    explicit = _external_catalog_explicitly_configured()
-    if catalog_fact is not None and (explicit or hard_cap is None):
-        return catalog_fact
+        return {"max_input_tokens": cap, "evidence": dict(evidence)}
 
     if hard_cap is not None:
         return {
@@ -1496,17 +1542,16 @@ def get_model_input_cap_fact(model_id: str) -> dict[str, Any] | None:
             "evidence": dict(_MODEL_INPUT_CAP_EVIDENCE),
         }
 
-    return catalog_fact
+    return None
 
 
 def _external_catalog_explicitly_configured() -> bool:
     """True when an operator set an explicit catalog override, not the fallback.
 
     When ``FAIGATE_PROVIDER_METADATA_FILE`` or ``FAIGATE_PROVIDER_METADATA_DIR``
-    is set, the operator deliberately pointed at a catalog, so its facts — even
-    ``unbestaetigt`` ones — are authoritative. Without either, the bundled
-    snapshot is only a fallback whose weak facts must not demote the hardcoded
-    ``belegt`` values.
+    is set, the operator deliberately pointed at a catalog. Without either, the
+    bundled snapshot is used. Retained as a public signal for callers that want
+    to distinguish operator-driven catalogs from the shipped fallback.
     """
     if str(os.environ.get(_EXTERNAL_CATALOG_ENV, "") or "").strip():
         return True
@@ -1655,6 +1700,39 @@ def _build_discovery_metadata(provider_name: str, catalog_entry: dict[str, Any])
         "disclosure": _DISCOVERY_DISCLOSURE,
         "disclosure_required": bool(operator_url),
     }
+
+
+def catalog_provider_identities() -> list[dict[str, Any]]:
+    """Return the catalog's split identity fields, one dict per provider entry.
+
+    The bundled/external catalog carries ``vendor`` / ``model`` (plus optional
+    ``hop`` / ``variant``) per provider. This is the authoritative identity
+    source: it is read through the same env-override → metadata-dir → bundled
+    chain the caps use, so a provider that lives only in the catalog (and not in
+    the static ``registry.ALL``) still contributes an identity. Entries without
+    both ``vendor`` and ``model`` are skipped, never guessed.
+    """
+    payload = _load_external_catalog_payload()
+    raw_catalog = payload.get("providers")
+    if not isinstance(raw_catalog, dict):
+        return []
+    identities: list[dict[str, Any]] = []
+    for entry in raw_catalog.values():
+        if not isinstance(entry, dict):
+            continue
+        vendor = str(entry.get("vendor") or "").strip()
+        model = str(entry.get("model") or "").strip()
+        if not vendor or not model:
+            continue
+        identities.append(
+            {
+                "vendor": vendor,
+                "model": model,
+                "hop": [str(seg) for seg in (entry.get("hop") or []) if str(seg)],
+                "variant": str(entry.get("variant") or "").strip(),
+            }
+        )
+    return identities
 
 
 def get_provider_catalog() -> dict[str, dict[str, Any]]:

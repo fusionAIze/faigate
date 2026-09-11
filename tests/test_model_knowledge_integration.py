@@ -172,7 +172,9 @@ def test_full_chain_guard_evidence_resolve_cap(tmp_path: Path) -> None:
     assert cap == 1000000
     fact = provider_catalog.get_model_input_cap_fact("deepseek-v4-flash")
     assert fact is not None
-    assert fact["evidence"]["level"] == "belegt"
+    # The catalog records the fact as unverified; the hardcoded map is only a
+    # fallback and must not out-rank the catalog's evidence level.
+    assert fact["evidence"]["level"] == "unbestaetigt"
 
 
 def test_gate_and_models_share_one_source() -> None:

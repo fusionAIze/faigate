@@ -2992,31 +2992,47 @@ def _static_rule_model_requested_triggers(static_rules: dict[str, Any]) -> list[
 
 
 def _catalog_model_identities() -> list[ModelIdentity]:
-    """Build model identities from the split provider registry.
+    """Build model identities from the catalog, with ``registry.ALL`` fallback.
 
-    Each ``registry.ALL`` entry carries ``vendor`` / ``model`` (plus optional
-    ``hop`` / ``variant``), so the derived short name and the canonical long
-    form come straight out of the identity fields — no curation needed. The
-    resolver built from this list is the one place that turns a requested
-    token (long form, derived short name, or kuerzel alias) into the canonical
-    long form faigate returns, logs, and bills.
+    The catalog is the source of truth for what the gateway can address: it
+    carries 50 providers with split ``vendor`` / ``model`` (plus optional
+    ``hop`` / ``variant``) fields, more than the 41 static ``registry.ALL``
+    entries. Identity resolution must read those fields from the catalog so a
+    provider that exists only in the catalog still resolves, using the same
+    env-override → metadata-dir → bundled chain the caps path uses. ``registry.ALL``
+    covers the offline case (no catalog at all) and any identity the catalog
+    omits. A long form is deduplicated so a provider present in both sources
+    contributes exactly one identity.
     """
     from . import registry
 
     identities: list[ModelIdentity] = []
+    seen: set[str] = set()
+
+    def _add(vendor: str, model: str, hop: list[str] | None, variant: str | None) -> None:
+        identity = ModelIdentity.from_fields(
+            vendor=vendor,
+            model=model,
+            hop=hop,
+            variant=variant,
+        )
+        key = identity.long_form.lower()
+        if key in seen:
+            return
+        seen.add(key)
+        identities.append(identity)
+
+    for fields in provider_catalog_module.catalog_provider_identities():
+        _add(fields["vendor"], fields["model"], fields["hop"], fields["variant"] or None)
+
     for name in registry.known_names():
         identity = registry.provider_identity(name)
         if identity is None:
             continue
         vendor, model, _long_form = identity
-        identities.append(
-            ModelIdentity.from_fields(
-                vendor=vendor,
-                model=model,
-                hop=registry.ALL[name].get("hop") or [],
-                variant=registry.ALL[name].get("variant"),
-            )
-        )
+        entry = registry.ALL.get(name) or {}
+        _add(vendor, model, entry.get("hop") or [], entry.get("variant"))
+
     return identities
 
 
