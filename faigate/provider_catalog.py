@@ -1350,48 +1350,68 @@ _MODEL_INPUT_CAPS: dict[str, int] = {
 }
 
 
-def _catalog_capacity_index() -> dict[str, int]:
-    """Build a model-id → max_input_tokens index from the live catalog.
+def _load_external_catalog_payload() -> dict[str, Any]:
+    """Return the full external catalog payload (not just ``providers``).
 
-    Reads the same source the provider catalog resolves through (env override,
-    metadata dir, or bundled snapshot) and indexes every entry that carries
-    ``capacity.max_input_tokens``. The canonical model id is the entry's
-    ``model`` field when present (also accepted under its ``provider/model``
-    form), otherwise the entry's own key. A provider catalog whose entry lacks
-    ``capacity`` contributes nothing, so an absent or thin catalog degrades to
-    the bundled ``_MODEL_INPUT_CAPS`` fallback instead of inventing a value.
+    ``providers`` is only one top-level block of ``catalog.v1.json``. The model
+    knowledge cut migrates input-token ceilings into a sibling top-level block,
+    ``model_caps``, which a provider-only reader drops. This accessor preserves
+    the whole payload so those sibling blocks stay reachable through the same
+    env-override → metadata-dir chain the provider catalog already uses.
+    """
+    metadata_path = str(os.environ.get(_EXTERNAL_CATALOG_ENV, "") or "").strip()
+    if metadata_path:
+        return _load_catalog_payload(metadata_path)
+
+    metadata_dir = str(os.environ.get(_EXTERNAL_CATALOG_DIR_ENV, "") or "").strip()
+    if not metadata_dir:
+        return {}
+    root = Path(metadata_dir).expanduser()
+    return _load_catalog_payload(root / _METADATA_CATALOG_RELATIVE_PATH)
+
+
+def _load_external_model_caps() -> dict[str, Any]:
+    """Return the catalog's top-level ``model_caps`` block, or ``{}``.
+
+    The block is model-keyed and optional. A catalog without it (or no catalog
+    at all) yields ``{}`` so the hardcoded ``_MODEL_INPUT_CAPS`` map remains the
+    offline fallback instead of inventing a value.
+    """
+    payload = _load_external_catalog_payload()
+    model_caps = payload.get("model_caps")
+    return model_caps if isinstance(model_caps, dict) else {}
+
+
+def _model_caps_index() -> dict[str, int]:
+    """Build a model-id → max_input_tokens index from the catalog's ``model_caps``.
+
+    The ``model_caps`` block is model-keyed (unlike ``providers``, which is
+    provider-keyed) — the input ceiling is a property of the concrete model, not
+    of any single provider. Only the numeric ``max_input_tokens`` is indexed here;
+    the accompanying ``evidence`` is carried separately by
+    :func:`get_model_input_cap_fact` so an unverified cap never hard-rejects a
+    request. A missing or thin block contributes nothing, degrading to the
+    bundled ``_MODEL_INPUT_CAPS`` fallback.
     """
     index: dict[str, int] = {}
-    try:
-        catalog = _get_catalog_source()
-    except Exception:  # pragma: no cover - defensive: catalog must never break routing
-        return index
-    for name, entry in catalog.items():
-        capacity = entry.get("capacity")
-        if not isinstance(capacity, dict):
+    model_caps = _load_external_model_caps()
+    for model_id, fact in model_caps.items():
+        if not isinstance(fact, dict):
             continue
-        cap = capacity.get("max_input_tokens")
+        cap = fact.get("max_input_tokens")
         if not isinstance(cap, int) or isinstance(cap, bool) or cap <= 0:
             continue
-        keys = {str(name)}
-        model = str(entry.get("model") or "").strip()
-        if model:
-            keys.add(model)
-            vendor = str(entry.get("vendor") or "").strip()
-            if vendor:
-                keys.add(f"{vendor}/{model}")
-        for key in keys:
-            index[key] = cap
+        index[str(model_id)] = cap
     return index
 
 
 def get_model_max_input_tokens(model_id: str) -> int | None:
     """Return the authoritative max_input_tokens for a concrete model ID.
 
-    Catalog-first: the live catalog's per-entry ``capacity.max_input_tokens``
-    wins so a fact can be updated without a code change. When the catalog has
-    no entry for the model, the hardcoded ``_MODEL_INPUT_CAPS`` map remains the
-    offline fallback, so the 23 binding IDs keep answering without a catalog.
+    Catalog-first: the resolved catalog's top-level ``model_caps`` block wins so
+    a fact can be updated without a code change. When the catalog has no cap for
+    the model, the hardcoded ``_MODEL_INPUT_CAPS`` map remains the offline
+    fallback, so the 23 binding IDs keep answering without a catalog.
 
     Normalises the common ``provider/model`` form to the trailing model id, then
     falls back to the raw id, so both ``openrouter/gpt-5.6-sol`` and
@@ -1401,7 +1421,7 @@ def get_model_max_input_tokens(model_id: str) -> int | None:
         return None
     candidate = str(model_id).strip()
     tail = candidate.rsplit("/", 1)[-1]
-    catalog_index = _catalog_capacity_index()
+    catalog_index = _model_caps_index()
     return (
         catalog_index.get(tail)
         or catalog_index.get(candidate)
@@ -1421,17 +1441,36 @@ def get_model_input_cap_fact(model_id: str) -> dict[str, Any] | None:
     """Return one model's max_input_tokens as an evidence-tagged fact, or ``None``.
 
     This is the evidence-aware counterpart of :func:`get_model_max_input_tokens`.
-    The 23 curated caps are human-checked against the LiteLLM and OmniRoute
-    registry reports (see the ``_MODEL_INPUT_CAPS`` provenance note), so they
-    carry ``belegt``. An id outside the curated set returns ``None`` — there is
-    no recorded fact to act on — never the provider-wide 262144 floor, which is
-    a placeholder, not a per-model truth.
+    A cap sourced from the catalog's ``model_caps`` block carries the block's own
+    ``evidence.level``, so a migrated ``unbestaetigt`` fact is invisible to the
+    router, capacity calculator, and error output exactly like any other
+    unverified fact. A cap sourced from the hardcoded ``_MODEL_INPUT_CAPS`` map
+    carries ``belegt`` — those 23 values are human-checked against the LiteLLM
+    and OmniRoute registry reports (see the ``_MODEL_INPUT_CAPS`` provenance
+    note). An id outside both sets returns ``None`` — never the provider-wide
+    262144 floor, which is a placeholder, not a per-model truth.
 
     The returned dict is shaped for :func:`faigate.catalog_views.split_catalog_facts`,
     so a consumer can separate ``belegt`` (hard) from ``plausibel`` (advisory)
     facts with no second piece of view-splitting logic.
     """
-    cap = get_model_max_input_tokens(model_id)
+    if model_id is None:
+        return None
+    candidate = str(model_id).strip()
+    if not candidate:
+        return None
+    tail = candidate.rsplit("/", 1)[-1]
+
+    model_caps = _load_external_model_caps()
+    raw = model_caps.get(tail) or model_caps.get(candidate)
+    if isinstance(raw, dict) and isinstance(raw.get("max_input_tokens"), int):
+        cap = raw["max_input_tokens"]
+        evidence = raw.get("evidence")
+        if not isinstance(evidence, dict):
+            evidence = dict(_MODEL_INPUT_CAP_EVIDENCE)
+        return {"max_input_tokens": cap, "evidence": dict(evidence)}
+
+    cap = _MODEL_INPUT_CAPS.get(tail) or _MODEL_INPUT_CAPS.get(candidate)
     if cap is None:
         return None
     return {
