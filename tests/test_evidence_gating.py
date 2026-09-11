@@ -184,19 +184,58 @@ def test_base_advertised_the_262144_placeholder_is_replaced() -> None:
 
 
 def test_hardcoded_fallback_caps_are_unconfirmed() -> None:
-    """Every hardcoded fallback cap is an ``unconfirmed`` fact, never ``confirmed``.
+    """A cap that originates from ``_MODEL_INPUT_CAPS`` alone is ``unconfirmed``.
 
-    The ``_MODEL_INPUT_CAPS`` map is an offline fallback with no per-value
-    source, so it must not carry a stronger evidence label than the catalog. A
-    sourced catalog fact is ``confirmed``; a hardcoded value without a source is the
-    oldest unverified fact in the system and is labelled ``unconfirmed``.
+    The invariant is about *origin*, not membership: when the catalog has no
+    entry for a model, the hardcoded fallback value must be labelled
+    ``unconfirmed`` and must carry no ``source_url``.  If the catalog *does*
+    have the model, the catalog's evidence level wins — that is correct
+    behaviour (the catalog is the source of truth).
+
+    The structural guarantee: there must be at least one model in
+    ``_MODEL_INPUT_CAPS`` that is absent from the catalog so the fallback path
+    is exercised, OR the check below verifies the fall-through code path by
+    patching the catalog to empty.  Either way, a value produced by the
+    hardcoded map must never carry a level stronger than ``unconfirmed``.
     """
-    for model_id in provider_catalog._MODEL_INPUT_CAPS:
+    catalog_caps = provider_catalog._load_external_model_caps()
+
+    # For every hardcoded ID that is absent from the catalog, the resolved
+    # fact must come from the fallback and therefore be unconfirmed.
+    fallback_only_ids = [
+        mid for mid in provider_catalog._MODEL_INPUT_CAPS
+        if not any(
+            provider_catalog._model_lookup_keys(mid)[i] in catalog_caps
+            for i in range(len(provider_catalog._model_lookup_keys(mid)))
+        )
+    ]
+    for model_id in fallback_only_ids:
         fact = provider_catalog.get_model_input_cap_fact(model_id)
         assert fact is not None, f"{model_id!r} must carry an evidence-tagged cap fact"
-        assert fact["evidence"]["level"] == "unconfirmed"
+        assert fact["evidence"]["level"] == "unconfirmed", (
+            f"{model_id!r} came from _MODEL_INPUT_CAPS (no catalog entry) "
+            f"but evidence level is {fact['evidence']['level']!r}"
+        )
         assert "source_url" not in fact["evidence"]
         assert fact["max_input_tokens"] == provider_catalog.get_model_max_input_tokens(model_id)
+
+    # Structural check: simulate a model that exists only in _MODEL_INPUT_CAPS
+    # (not in the catalog) by using a sentinel key that the catalog will never
+    # contain.  The resolved fact must be unconfirmed with no source_url.
+    sentinel = "__test_sentinel_hardcoded_only__"
+    original_caps = provider_catalog._MODEL_INPUT_CAPS
+    provider_catalog._MODEL_INPUT_CAPS = {**original_caps, sentinel: 999999}
+    try:
+        fact = provider_catalog.get_model_input_cap_fact(sentinel)
+        assert fact is not None, "sentinel key must resolve via _MODEL_INPUT_CAPS"
+        assert fact["evidence"]["level"] == "unconfirmed", (
+            f"hardcoded-only sentinel returned level {fact['evidence']['level']!r}; "
+            "a value from _MODEL_INPUT_CAPS must always be unconfirmed"
+        )
+        assert "source_url" not in fact["evidence"]
+        assert fact["max_input_tokens"] == 999999
+    finally:
+        provider_catalog._MODEL_INPUT_CAPS = original_caps
 
 
 def test_unknown_model_cap_fact_is_none() -> None:

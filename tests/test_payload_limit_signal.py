@@ -148,11 +148,27 @@ def test_sniffed_model_flows_into_the_413(monkeypatch) -> None:
 
 
 def test_hardcoded_fallback_cap_is_unconfirmed() -> None:
-    fact = provider_catalog.get_model_input_cap_fact("deepseek-v4-flash")
+    """A cap resolved exclusively from the hardcoded map is ``unconfirmed``.
 
-    assert fact is not None
-    assert fact["max_input_tokens"] == 1000000
-    assert fact["evidence"]["level"] == "unconfirmed"
+    The test checks *origin*: when a model id exists only in
+    ``_MODEL_INPUT_CAPS`` and not in the catalog's ``model_caps`` block, the
+    returned fact must carry ``unconfirmed`` evidence.  A sentinel key that the
+    catalog will never contain is used so the assertion stays stable regardless
+    of which real model ids graduate from the hardcoded map to the catalog.
+    """
+    sentinel = "__test_sentinel_hardcoded_only__"
+    original_caps = provider_catalog._MODEL_INPUT_CAPS
+    provider_catalog._MODEL_INPUT_CAPS = {**original_caps, sentinel: 1000000}
+    try:
+        fact = provider_catalog.get_model_input_cap_fact(sentinel)
+        assert fact is not None
+        assert fact["max_input_tokens"] == 1000000
+        assert fact["evidence"]["level"] == "unconfirmed", (
+            f"hardcoded-only sentinel returned level {fact['evidence']['level']!r}; "
+            "a value from _MODEL_INPUT_CAPS must always be unconfirmed"
+        )
+    finally:
+        provider_catalog._MODEL_INPUT_CAPS = original_caps
 
 
 def test_catalog_sourced_cap_is_confirmed(monkeypatch) -> None:
