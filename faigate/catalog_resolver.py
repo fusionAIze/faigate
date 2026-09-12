@@ -15,6 +15,8 @@ import json
 import logging
 import os
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from importlib import resources
 from typing import Any
@@ -82,6 +84,57 @@ class ResolvedCatalog:
 _BUNDLED_SNAPSHOT_CACHE: dict[str, dict[str, Any] | None] = {}
 _BUNDLED_SNAPSHOT_CACHE_KEY = "bundled"
 
+# In-process switch that hides the bundled link from the resolution chain. It
+# is a module global, not an environment variable or config key, so no operator
+# setting, config file, or CLI flag can reach it: only code that imports this
+# private module can flip it. That is deliberate — production must always have
+# the bundled snapshot as its final resort, and a test needs a way to exercise
+# the "no catalog reachable" branch that the chain otherwise makes unreachable
+# by construction.
+_BUNDLED_SNAPSHOT_SUPPRESSED = False
+
+
+def _set_bundled_snapshot_suppressed(suppressed: bool) -> None:
+    """Test-only: hide or restore the bundled link of the resolution chain.
+
+    With the chain collapsed into ``env-override → metadata-dir → bundled
+    snapshot``, pointing an override at an empty location no longer produces
+    "no catalog": that is now a broken pointer and resolution continues to the
+    bundled asset. A test that wants to observe the no-catalog branch has to
+    say so directly, which is what this switch is for.
+
+    Callers should prefer :func:`suppressed_bundled_snapshot` so the flag is
+    restored even when the test fails; a bare call is available for fixtures
+    that pair it with ``monkeypatch``.
+    """
+    global _BUNDLED_SNAPSHOT_SUPPRESSED
+    _BUNDLED_SNAPSHOT_SUPPRESSED = bool(suppressed)
+
+
+@contextmanager
+def suppressed_bundled_snapshot() -> Iterator[None]:
+    """Context manager that makes the bundled link unreachable, then restores it.
+
+    The explicit way to ask the chain for "no catalog is reachable at all": with
+    the link hidden, an override that yields nothing leaves every reader at the
+    chain's terminal branch, which is exactly the state a test needs to observe.
+
+    Nesting restores the previous state rather than unconditionally clearing the
+    flag, so an inner block cannot lift suppression while an outer block is
+    still inside its ``with`` body.
+    """
+    previous = _BUNDLED_SNAPSHOT_SUPPRESSED
+    _set_bundled_snapshot_suppressed(True)
+    try:
+        yield
+    finally:
+        _set_bundled_snapshot_suppressed(previous)
+
+
+def _bundled_snapshot_is_suppressed() -> bool:
+    """True when :func:`_set_bundled_snapshot_suppressed` has hidden the link."""
+    return _BUNDLED_SNAPSHOT_SUPPRESSED
+
 
 def _load_bundled_snapshot() -> dict[str, Any] | None:
     """Load the snapshot shipped inside the wheel, if present.
@@ -91,7 +144,13 @@ def _load_bundled_snapshot() -> dict[str, Any] | None:
     The cache is keyed so ``_invalidate_bundled_snapshot_cache()`` (used by
     tests and tooling) can force a fresh read without touching the shipped
     asset.
+
+    Returns ``None`` while the link is hidden by
+    :func:`_set_bundled_snapshot_suppressed`, which is the only way to reach the
+    chain's terminal no-catalog branch on purpose.
     """
+    if _BUNDLED_SNAPSHOT_SUPPRESSED:
+        return None
     cached = _BUNDLED_SNAPSHOT_CACHE.get(_BUNDLED_SNAPSHOT_CACHE_KEY, False)
     if cached is not False:
         return cached

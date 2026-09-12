@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+import faigate.provider_catalog as pc
 from faigate.config import load_config
 from faigate.provider_catalog import (
     build_provider_catalog_report,
@@ -24,6 +25,36 @@ def _write_config(tmp_path: Path, body: str) -> Path:
     path = tmp_path / "config.yaml"
     path.write_text(body, encoding="utf-8")
     return path
+
+
+@pytest.fixture(autouse=True)
+def _pin_catalog_review_age_to_fresh(monkeypatch):
+    """Freeze the curated catalog's review age so these tests stay about content.
+
+    ``build_provider_catalog_report`` raises ``catalog-stale`` once a curated
+    entry is older than ``max_catalog_age_days``. That alert is a function of the
+    wall clock: left alone, every test here that counts alerts would flip to red
+    on its own the day the shipped ``last_reviewed`` crosses the threshold — a
+    red suite with no code change, and with it no promise actually broken.
+
+    Pinning the review date to "today" keeps the cohort each test asserts on
+    independent of when the suite runs: ``catalog_age_days`` becomes 0 for every
+    entry, so the only alerts that can appear are the content alerts the test
+    deliberately provokes. Freshness itself is still covered — directly, through
+    ``build_provider_refresh_guidance`` and its ``freshness_overrides``.
+    """
+    monkeypatch.setattr(pc, "_tracked_item", _with_pinned_review_date(pc._tracked_item))
+
+
+def _with_pinned_review_date(real):
+    """Wrap ``_tracked_item`` so the entry's ``last_reviewed`` reads as today."""
+
+    def _pinned(provider_name, provider, catalog_entry, *, today):
+        fresh_entry = dict(catalog_entry)
+        fresh_entry["last_reviewed"] = today.isoformat()
+        return real(provider_name, provider, fresh_entry, today=today)
+
+    return _pinned
 
 
 def test_provider_catalog_report_has_no_alert_for_aligned_model(tmp_path: Path):
@@ -687,15 +718,35 @@ def test_provider_catalog_declares_context_window_everywhere():
 
 
 def test_provider_catalog_declares_in_band_input_cap():
-    """Every catalog entry must declare limits.max_input_tokens within the (240000, 275000] band."""
+    """Every entry must declare a usable input cap, and say how well it knows it.
+
+    This used to assert a narrow ``(240000, 275000]`` band around the static
+    table's single remembered number, 262144. That band is not a property of the
+    resolved catalog: since the chain falls through to the curated snapshot,
+    each provider's cap is its own declared ``max_input_tokens`` (200000,
+    1048576, 131072, ...). Keeping the band would fail on every legitimate
+    catalog refresh while proving nothing.
+
+    What the catalog does promise is that the cap is a usable integer and that
+    its ``context_evidence.level`` is one of the recognised values — so a caller
+    can see whether a number is sourced or is a migration placeholder rather
+    than have to trust it blindly.
+    """
     catalog = get_provider_catalog()
+    recognised_levels = {"confirmed", "plausible", "unconfirmed"}
 
     for name, entry in catalog.items():
         limits = entry.get("limits")
         assert isinstance(limits, dict), f"provider {name!r} must declare limits as a dict, got {limits!r}"
         cap = limits.get("max_input_tokens")
-        assert isinstance(cap, int) and 240000 < cap <= 275000, (
-            f"provider {name!r} max_input_tokens must be in (240000, 275000], got {cap!r}"
+        assert isinstance(cap, int) and not isinstance(cap, bool) and cap > 0, (
+            f"provider {name!r} max_input_tokens must be a positive int, got {cap!r}"
+        )
+        level = str((entry.get("context_evidence") or {}).get("level") or "").strip()
+        assert level in recognised_levels, (
+            f"provider {name!r} declares max_input_tokens={cap} with evidence level "
+            f"{level!r}; expected one of {sorted(recognised_levels)} so the cap's "
+            "provenance is visible to callers"
         )
 
 
@@ -834,21 +885,28 @@ def test_model_input_cap_reads_from_catalog_first(tmp_path, monkeypatch):
     assert get_model_max_input_tokens("catalog-only-model") == 777000
 
 
-def test_model_input_cap_is_none_without_catalog(tmp_path, monkeypatch):
-    """With no catalog on disk no cap is produced — a number is never invented.
+def test_model_input_cap_is_none_without_catalog():
+    """With no catalog reachable no cap is produced — a number is never invented.
 
     There is no embedded fallback table any more. A model the catalog cannot
     describe has no known cap, and saying so is the honest answer; returning a
     remembered number would state a fact this process cannot support.
+
+    "No catalog reachable" is asked for explicitly, through the resolver's
+    test-only suppression of the bundled link. It used to be staged by pointing
+    ``FAIGATE_PROVIDER_METADATA_DIR`` at an empty directory, which stopped
+    meaning anything once the chain learned to fall through a dangling pointer to
+    the bundled snapshot: that setup now resolves the full snapshot and the test
+    would assert nothing.
     """
     import faigate.provider_catalog as pc
+    from faigate.catalog_resolver import suppressed_bundled_snapshot
 
-    empty_dir = tmp_path / "empty-metadata"
-    empty_dir.mkdir()
-    _patch_metadata_env(monkeypatch, pc, empty_dir)
-
-    assert get_model_max_input_tokens("gpt-5.6-sol") is None
-    assert get_model_max_input_tokens("openrouter/gpt-5.6-sol") is None
+    with suppressed_bundled_snapshot():
+        _reset_catalog_caches(pc)
+        assert get_model_max_input_tokens("gpt-5.6-sol") is None
+        assert get_model_max_input_tokens("openrouter/gpt-5.6-sol") is None
+    _reset_catalog_caches(pc)
 
 
 def test_model_input_cap_catalog_overrides_dict(tmp_path, monkeypatch):

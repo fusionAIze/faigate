@@ -1017,25 +1017,37 @@ class TestCatalogWindowAndLimitsEnrichment:
     """TASK-005 AC3: the backend object must surface catalog context_window/limits.
 
     The curated catalog declaratively owns the native context window (e.g.
-    1048576 for deepseek) and the uniform input cap (262144). ProviderBackend
-    must backfill these from the catalog when config does not declare them, so
+    1048576 for deepseek) and the per-provider input cap. ProviderBackend must
+    backfill these from the catalog when config does not declare them, so
     ``/v1/models`` reports non-null values, while keeping operator-declared
     values authoritative.
+
+    The expected values are read from the catalog itself rather than hardcoded:
+    they are per-provider facts owned by the catalog data, not constants of this
+    code, and hardcoding them made the test fail on every legitimate catalog
+    refresh — the promise here is that the backfill happens, not which numbers
+    the catalog happens to carry today.
     """
 
     def test_backfills_native_context_window_from_catalog(self):
+        from faigate.provider_catalog import get_provider_catalog_entry
+
         backend = ProviderBackend(
             "deepseek-chat",
             {"base_url": "https://api.example.com/v1", "model": "deepseek-v4-pro"},
         )
-        assert backend.context_window == 1048576
+        entry = get_provider_catalog_entry("deepseek-chat")
+        assert backend.context_window == entry["context_window"]
 
     def test_backfills_input_cap_from_catalog(self):
+        from faigate.provider_catalog import get_provider_catalog_entry
+
         backend = ProviderBackend(
             "deepseek-chat",
             {"base_url": "https://api.example.com/v1", "model": "deepseek-v4-pro"},
         )
-        assert backend.limits["max_input_tokens"] == 262144
+        entry = get_provider_catalog_entry("deepseek-chat")
+        assert backend.limits["max_input_tokens"] == entry["limits"]["max_input_tokens"]
 
     def test_operator_declared_values_win_over_catalog(self):
         backend = ProviderBackend(
