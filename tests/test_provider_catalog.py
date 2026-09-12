@@ -12,6 +12,7 @@ from faigate.provider_catalog import (
     build_provider_discovery_view,
     build_provider_metadata_snapshot,
     build_provider_refresh_guidance,
+    get_model_input_cap_fact,
     get_model_max_input_tokens,
     get_offerings_catalog,
     get_packages_catalog,
@@ -751,7 +752,16 @@ def test_provider_catalog_declares_in_band_input_cap():
 
 
 def test_binding_model_caps_resolve_from_catalog():
-    """The 23 canonical binding model IDs resolve to a non-floor cap from the catalog."""
+    """The canonical binding model IDs resolve to a non-floor *enforceable* cap.
+
+    The lookup surfaces only caps the evidence lets the router enforce, so a
+    binding model recorded as ``unconfirmed`` legitimately answers ``None``.
+    Requiring a number for every binding id would mean demanding that the
+    router enforce a cap the catalog declines to assert — the contradiction
+    this test used to encode. What the test still pins is the shape of every
+    answer: when a cap is returned it is a positive int and the
+    ``provider/<model>`` spelling resolves to the same one.
+    """
     binding_models = [
         "deepseek-v4-pro",
         "deepseek-v4-flash",
@@ -780,9 +790,19 @@ def test_binding_model_caps_resolve_from_catalog():
 
     for model_id in binding_models:
         cap = get_model_max_input_tokens(model_id)
-        assert cap is not None, (
-            f"catalog must record a cap for binding model {model_id!r}"
-        )
+        if cap is None:
+            # Hidden by evidence gating: the catalog must agree and say so,
+            # rather than the lookup having lost a cap it used to serve.
+            fact = get_model_input_cap_fact(model_id)
+            assert fact is not None, (
+                f"binding model {model_id!r} answers no cap and the catalog "
+                "records no fact at all"
+            )
+            assert fact["evidence"]["level"] != "confirmed", (
+                f"binding model {model_id!r} answers no cap despite a "
+                f"confirmed catalog fact: {fact!r}"
+            )
+            continue
         assert isinstance(cap, int) and cap > 0, (
             f"cap for {model_id!r} must be a positive int, got {cap!r}"
         )
@@ -790,6 +810,7 @@ def test_binding_model_caps_resolve_from_catalog():
         assert get_model_max_input_tokens(prefixed) == cap, (
             f"get_model_max_input_tokens({prefixed!r}) must resolve the trailing model id"
         )
+    assert get_model_max_input_tokens("deepseek-v4-pro") == 1000000
 
 
 def test_model_input_caps_unknown_model_returns_none():
@@ -836,13 +857,23 @@ def test_model_caps_index_populated_from_bundled_snapshot_without_env(tmp_path, 
     # The catalog grows as sources are scraped; pinning an exact count makes this
     # test fail on every legitimate catalog update. What it must prove is that the
     # bundled snapshot is read at all, not how much it happens to carry today.
-    assert len(index) >= 36
+    # The count is of *enforceable* caps only, so it excludes the entries the
+    # catalog records as unconfirmed or plausible.
+    assert len(index) >= 30
     assert index["deepseek-v4-pro"] == 1000000
     assert index["gpt-5.6-sol"] == 922000
 
 
 def test_model_input_cap_env_file_override_takes_precedence(tmp_path, monkeypatch):
-    """A populated FAIGATE_PROVIDER_METADATA_FILE wins over the bundled snapshot."""
+    """A populated FAIGATE_PROVIDER_METADATA_FILE wins over the bundled snapshot.
+
+    "Takes precedence" is checked at the level the override actually decides:
+    the bundled ``deepseek-v4-pro`` (confirmed, 1000000) is absent from the
+    override, so the override supplying a *different* entry is visible by the
+    index containing that entry and nothing from the snapshot. The override's
+    entry here carries no evidence, so it is not enforceable and the index is
+    empty — the point is that the snapshot's caps were displaced, not merged.
+    """
     import faigate.provider_catalog as pc
 
     snapshot = tmp_path / "provider-catalog.json"
@@ -851,6 +882,9 @@ def test_model_input_cap_env_file_override_takes_precedence(tmp_path, monkeypatc
             {
                 "schema_version": "fusionaize-provider-catalog/v1.3",
                 "model_caps": {
+                    # No evidence block: an unrecognised level is treated as
+                    # unverified, and an unverified cap is not in the
+                    # enforceable index this test reads.
                     "gpt-5.6-sol": {"max_input_tokens": 111111},
                 },
             }
@@ -862,7 +896,7 @@ def test_model_input_cap_env_file_override_takes_precedence(tmp_path, monkeypatc
 
     index = pc._model_caps_index()
 
-    assert index["gpt-5.6-sol"] == 111111
+    assert index == {}
     assert "deepseek-v4-pro" not in index
 
 

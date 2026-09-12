@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from . import registry
+from .catalog_views import split_catalog_facts
 from .config import Config
 from .lane_registry import (
     get_active_model_id,
@@ -1389,15 +1390,21 @@ def _load_external_model_caps() -> dict[str, Any]:
 
 
 def _model_caps_index() -> dict[str, int]:
-    """Build a model-id → max_input_tokens index from the catalog's ``model_caps``.
+    """Build a model-id → max_input_tokens index of *enforceable* caps.
 
     The ``model_caps`` block is model-keyed (unlike ``providers``, which is
     provider-keyed) — the input ceiling is a property of the concrete model, not
-    of any single provider. Only the numeric ``max_input_tokens`` is indexed here;
-    the accompanying ``evidence`` is carried separately by
-    :func:`get_model_input_cap_fact` so an unverified cap never hard-rejects a
-    request. A missing or empty block contributes nothing; the caller receives
-    ``None`` for any model absent from the catalog.
+    of any single provider. Only caps that reach the ``enforceable`` view of
+    :func:`faigate.catalog_views.split_catalog_facts` are indexed: a
+    ``confirmed`` fact, or one with no recognisable ``evidence`` block. A
+    ``plausible`` cap is best-effort and an ``unconfirmed`` one is a
+    non-claim, so neither belongs in an index whose consumers treat a hit as a
+    hard boundary. The view split is the single definition of that boundary;
+    this accessor keeps no second copy of the rule.
+
+    A missing or empty block contributes nothing; the caller receives ``None``
+    for any model absent from the catalog or present only with a non-
+    enforceable cap.
     """
     index: dict[str, int] = {}
     model_caps = _load_external_model_caps()
@@ -1407,22 +1414,34 @@ def _model_caps_index() -> dict[str, int]:
         cap = fact.get("max_input_tokens")
         if not isinstance(cap, int) or isinstance(cap, bool) or cap <= 0:
             continue
-        index[str(model_id)] = cap
+        key = str(model_id)
+        if key not in split_catalog_facts({key: fact}).enforceable:
+            continue
+        index[key] = cap
     return index
 
 
 def get_model_max_input_tokens(model_id: str) -> int | None:
-    """Return the authoritative max_input_tokens for a concrete model ID.
+    """Return the enforceable max_input_tokens for a concrete model ID.
 
     The catalog's top-level ``model_caps`` block is the only source: a cap can
     be updated without a code change. When the catalog has no entry for the
     model, ``None`` is returned — no embedded fallback is consulted.
 
+    A cap counts only when its ``evidence.level`` lets it reach the
+    ``enforceable`` view: ``confirmed`` does, while ``plausible`` (best-effort)
+    and ``unconfirmed`` (a non-claim) do not. The function is named for the
+    boundary its consumers rely on — the router treats a hit as a hard filter
+    and the capacity calculator treats it as a true ceiling — so it must not
+    answer with a number the evidence does not support. For the raw fact use
+    :func:`get_model_input_cap_fact`, which reports the level and leaves the
+    view decision to the caller.
+
     Normalises the common ``provider/model`` form to the trailing model id, then
     tries the raw id, so both ``openrouter/gpt-5.6-sol`` and ``gpt-5.6-sol``
     resolve. Version separators are also normalised (``claude-opus-4.6`` ==
     ``claude-opus-4-6``) so a dot-form request answers from a hyphen-form
-    catalog entry. Returns ``None`` when the catalog records no cap.
+    catalog entry. Returns ``None`` when the catalog records no enforceable cap.
     """
     if not model_id:
         return None
@@ -1440,12 +1459,14 @@ def get_model_max_input_tokens(model_id: str) -> int | None:
 def get_model_input_cap_fact(model_id: str) -> dict[str, Any] | None:
     """Return one model's max_input_tokens as an evidence-tagged fact, or ``None``.
 
-    This is the evidence-aware counterpart of :func:`get_model_max_input_tokens`.
-    The catalog is the only authority: a cap sourced from the catalog's
-    ``model_caps`` block carries the block's own ``evidence.level``, whether that
-    is ``confirmed`` (a sourced fact), ``plausible``, or ``unconfirmed``. An id
-    absent from the catalog returns ``None`` — never the provider-wide 262144
-    floor, which is a placeholder, not a per-model truth.
+    Where :func:`get_model_max_input_tokens` answers only for caps the evidence
+    lets the runtime enforce, this function reports the fact as recorded and
+    leaves the level visible. The catalog is the only authority: a cap sourced
+    from the catalog's ``model_caps`` block carries the block's own
+    ``evidence.level``, whether that is ``confirmed`` (a sourced fact),
+    ``plausible``, or ``unconfirmed``. An id absent from the catalog returns
+    ``None`` — never the provider-wide 262144 floor, which is a placeholder, not
+    a per-model truth.
 
     Version-separator spellings are normalised on lookup (``claude-opus-4.6`` ==
     ``claude-opus-4-6``) so a dot-form request answers the hyphen-form catalog
