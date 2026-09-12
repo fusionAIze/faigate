@@ -5,12 +5,14 @@ from pathlib import Path
 
 import pytest
 
+import faigate.provider_catalog as pc
 from faigate.config import load_config
 from faigate.provider_catalog import (
     build_provider_catalog_report,
     build_provider_discovery_view,
     build_provider_metadata_snapshot,
     build_provider_refresh_guidance,
+    get_model_input_cap_fact,
     get_model_max_input_tokens,
     get_offerings_catalog,
     get_packages_catalog,
@@ -24,6 +26,36 @@ def _write_config(tmp_path: Path, body: str) -> Path:
     path = tmp_path / "config.yaml"
     path.write_text(body, encoding="utf-8")
     return path
+
+
+@pytest.fixture(autouse=True)
+def _pin_catalog_review_age_to_fresh(monkeypatch):
+    """Freeze the curated catalog's review age so these tests stay about content.
+
+    ``build_provider_catalog_report`` raises ``catalog-stale`` once a curated
+    entry is older than ``max_catalog_age_days``. That alert is a function of the
+    wall clock: left alone, every test here that counts alerts would flip to red
+    on its own the day the shipped ``last_reviewed`` crosses the threshold — a
+    red suite with no code change, and with it no promise actually broken.
+
+    Pinning the review date to "today" keeps the cohort each test asserts on
+    independent of when the suite runs: ``catalog_age_days`` becomes 0 for every
+    entry, so the only alerts that can appear are the content alerts the test
+    deliberately provokes. Freshness itself is still covered — directly, through
+    ``build_provider_refresh_guidance`` and its ``freshness_overrides``.
+    """
+    monkeypatch.setattr(pc, "_tracked_item", _with_pinned_review_date(pc._tracked_item))
+
+
+def _with_pinned_review_date(real):
+    """Wrap ``_tracked_item`` so the entry's ``last_reviewed`` reads as today."""
+
+    def _pinned(provider_name, provider, catalog_entry, *, today):
+        fresh_entry = dict(catalog_entry)
+        fresh_entry["last_reviewed"] = today.isoformat()
+        return real(provider_name, provider, fresh_entry, today=today)
+
+    return _pinned
 
 
 def test_provider_catalog_report_has_no_alert_for_aligned_model(tmp_path: Path):
@@ -687,61 +719,92 @@ def test_provider_catalog_declares_context_window_everywhere():
 
 
 def test_provider_catalog_declares_in_band_input_cap():
-    """Every catalog entry must declare limits.max_input_tokens within the (240000, 275000] band."""
+    """Every entry must declare a usable input cap, and say how well it knows it.
+
+    This used to assert a narrow ``(240000, 275000]`` band around the static
+    table's single remembered number, 262144. That band is not a property of the
+    resolved catalog: since the chain falls through to the curated snapshot,
+    each provider's cap is its own declared ``max_input_tokens`` (200000,
+    1048576, 131072, ...). Keeping the band would fail on every legitimate
+    catalog refresh while proving nothing.
+
+    What the catalog does promise is that the cap is a usable integer and that
+    its ``context_evidence.level`` is one of the recognised values — so a caller
+    can see whether a number is sourced or is a migration placeholder rather
+    than have to trust it blindly.
+    """
     catalog = get_provider_catalog()
+    recognised_levels = {"confirmed", "plausible", "unconfirmed"}
 
     for name, entry in catalog.items():
         limits = entry.get("limits")
         assert isinstance(limits, dict), f"provider {name!r} must declare limits as a dict, got {limits!r}"
         cap = limits.get("max_input_tokens")
-        assert isinstance(cap, int) and 240000 < cap <= 275000, (
-            f"provider {name!r} max_input_tokens must be in (240000, 275000], got {cap!r}"
+        assert isinstance(cap, int) and not isinstance(cap, bool) and cap > 0, (
+            f"provider {name!r} max_input_tokens must be a positive int, got {cap!r}"
+        )
+        level = str((entry.get("context_evidence") or {}).get("level") or "").strip()
+        assert level in recognised_levels, (
+            f"provider {name!r} declares max_input_tokens={cap} with evidence level "
+            f"{level!r}; expected one of {sorted(recognised_levels)} so the cap's "
+            "provenance is visible to callers"
         )
 
 
-def test_model_input_caps_cover_binding_models():
-    """The 23 binding model IDs each resolve to a real (non-floor) input cap."""
-    import faigate.provider_catalog as pc
+def test_binding_model_caps_resolve_from_catalog():
+    """The canonical binding model IDs resolve to a non-floor *enforceable* cap.
 
-    real_caps = {
-        "deepseek-v4-pro": 1000000,
-        "deepseek-v4-flash": 1000000,
-        "gpt-5.6-sol": 922000,
-        "gpt-5.6-terra": 922000,
-        "gpt-5.6-luna": 922000,
-        "gpt-5.5": 1050000,
-        "gpt-5.5-pro": 1050000,
-        "o3": 200000,
-        "o3-mini": 200000,
-        "o4-mini": 200000,
-        "claude-opus-5": 1000000,
-        "claude-sonnet-5": 1000000,
-        "claude-haiku-4-5": 200000,
-        "claude-code": 262144,  # Shim; documented mirror, not a native window
-        "gemini-3.1-pro": 1048576,
-        "gemini-3.1-flash": 1048576,
-        "gemini-3-flash-lite": 1048576,
-        "llama-4-maverick": 131072,
-        "llama-4-scout": 131072,
-        "qwen-3.6-27b": 262144,
-        "qwen3-coder": 262144,
-        "glm-5.3": 1000000,
-        "kimi-k2.6": 262144,
-    }
+    The lookup surfaces only caps the evidence lets the router enforce, so a
+    binding model recorded as ``unconfirmed`` legitimately answers ``None``.
+    Requiring a number for every binding id would mean demanding that the
+    router enforce a cap the catalog declines to assert — the contradiction
+    this test used to encode. What the test still pins is the shape of every
+    answer: when a cap is returned it is a positive int and the
+    ``provider/<model>`` spelling resolves to the same one.
+    """
+    binding_models = [
+        "deepseek-v4-pro",
+        "deepseek-v4-flash",
+        "gpt-5.6-sol",
+        "gpt-5.6-terra",
+        "gpt-5.6-luna",
+        "gpt-5.5",
+        "gpt-5.5-pro",
+        "o3",
+        "o3-mini",
+        "o4-mini",
+        "claude-opus-5",
+        "claude-sonnet-5",
+        "claude-haiku-4-5",
+        "claude-code",
+        "gemini-3.1-pro",
+        "gemini-3.1-flash",
+        "gemini-3-flash-lite",
+        "llama-4-maverick",
+        "llama-4-scout",
+        "qwen-3.6-27b",
+        "qwen3-coder",
+        "glm-5.3",
+        "kimi-k2.6",
+    ]
 
-    expected = set(real_caps)
-    declared = set(pc._MODEL_INPUT_CAPS)
-    assert declared == expected, (
-        f"model cap map must match the 23 binding IDs exactly; "
-        f"missing={sorted(expected - declared)}, extra={sorted(declared - expected)}"
-    )
-
-    for model_id, expected_cap in real_caps.items():
-        assert get_model_max_input_tokens(model_id) == expected_cap
+    for model_id in binding_models:
+        cap = get_model_max_input_tokens(model_id)
+        if cap is None:
+            # Hidden by evidence gating: the catalog must agree and say so,
+            # rather than the lookup having lost a cap it used to serve.
+            fact = get_model_input_cap_fact(model_id)
+            assert fact is not None, f"binding model {model_id!r} answers no cap and the catalog records no fact at all"
+            assert fact["evidence"]["level"] != "confirmed", (
+                f"binding model {model_id!r} answers no cap despite a confirmed catalog fact: {fact!r}"
+            )
+            continue
+        assert isinstance(cap, int) and cap > 0, f"cap for {model_id!r} must be a positive int, got {cap!r}"
         prefixed = f"openrouter/{model_id}"
-        assert get_model_max_input_tokens(prefixed) == expected_cap, (
+        assert get_model_max_input_tokens(prefixed) == cap, (
             f"get_model_max_input_tokens({prefixed!r}) must resolve the trailing model id"
         )
+    assert get_model_max_input_tokens("deepseek-v4-pro") == 1000000
 
 
 def test_model_input_caps_unknown_model_returns_none():
@@ -788,13 +851,23 @@ def test_model_caps_index_populated_from_bundled_snapshot_without_env(tmp_path, 
     # The catalog grows as sources are scraped; pinning an exact count makes this
     # test fail on every legitimate catalog update. What it must prove is that the
     # bundled snapshot is read at all, not how much it happens to carry today.
-    assert len(index) >= 36
+    # The count is of *enforceable* caps only, so it excludes the entries the
+    # catalog records as unconfirmed or plausible.
+    assert len(index) >= 30
     assert index["deepseek-v4-pro"] == 1000000
     assert index["gpt-5.6-sol"] == 922000
 
 
 def test_model_input_cap_env_file_override_takes_precedence(tmp_path, monkeypatch):
-    """A populated FAIGATE_PROVIDER_METADATA_FILE wins over the bundled snapshot."""
+    """A populated FAIGATE_PROVIDER_METADATA_FILE wins over the bundled snapshot.
+
+    "Takes precedence" is checked at the level the override actually decides:
+    the bundled ``deepseek-v4-pro`` (confirmed, 1000000) is absent from the
+    override, so the override supplying a *different* entry is visible by the
+    index containing that entry and nothing from the snapshot. The override's
+    entry here carries no evidence, so it is not enforceable and the index is
+    empty — the point is that the snapshot's caps were displaced, not merged.
+    """
     import faigate.provider_catalog as pc
 
     snapshot = tmp_path / "provider-catalog.json"
@@ -803,6 +876,9 @@ def test_model_input_cap_env_file_override_takes_precedence(tmp_path, monkeypatc
             {
                 "schema_version": "fusionaize-provider-catalog/v1.3",
                 "model_caps": {
+                    # No evidence block: an unrecognised level is treated as
+                    # unverified, and an unverified cap is not in the
+                    # enforceable index this test reads.
                     "gpt-5.6-sol": {"max_input_tokens": 111111},
                 },
             }
@@ -814,7 +890,7 @@ def test_model_input_cap_env_file_override_takes_precedence(tmp_path, monkeypatc
 
     index = pc._model_caps_index()
 
-    assert index["gpt-5.6-sol"] == 111111
+    assert index == {}
     assert "deepseek-v4-pro" not in index
 
 
@@ -827,7 +903,7 @@ def test_model_input_cap_reads_from_catalog_first(tmp_path, monkeypatch):
         model_caps={
             "catalog-only-model": {
                 "max_input_tokens": 777000,
-                "evidence": {"level": "belegt", "source_url": "https://example.test/cap"},
+                "evidence": {"level": "confirmed", "source_url": "https://example.test/cap"},
             },
         },
     )
@@ -837,16 +913,28 @@ def test_model_input_cap_reads_from_catalog_first(tmp_path, monkeypatch):
     assert get_model_max_input_tokens("catalog-only-model") == 777000
 
 
-def test_model_input_cap_falls_back_to_bundled_dict_without_catalog(tmp_path, monkeypatch):
-    """With no catalog on disk the hardcoded dict still answers unchanged."""
+def test_model_input_cap_is_none_without_catalog():
+    """With no catalog reachable no cap is produced — a number is never invented.
+
+    There is no embedded fallback table any more. A model the catalog cannot
+    describe has no known cap, and saying so is the honest answer; returning a
+    remembered number would state a fact this process cannot support.
+
+    "No catalog reachable" is asked for explicitly, through the resolver's
+    test-only suppression of the bundled link. It used to be staged by pointing
+    ``FAIGATE_PROVIDER_METADATA_DIR`` at an empty directory, which stopped
+    meaning anything once the chain learned to fall through a dangling pointer to
+    the bundled snapshot: that setup now resolves the full snapshot and the test
+    would assert nothing.
+    """
     import faigate.provider_catalog as pc
+    from faigate.catalog_resolver import suppressed_bundled_snapshot
 
-    empty_dir = tmp_path / "empty-metadata"
-    empty_dir.mkdir()
-    _patch_metadata_env(monkeypatch, pc, empty_dir)
-
-    assert get_model_max_input_tokens("gpt-5.6-sol") == 922000
-    assert get_model_max_input_tokens("openrouter/gpt-5.6-sol") == 922000
+    with suppressed_bundled_snapshot():
+        _reset_catalog_caches(pc)
+        assert get_model_max_input_tokens("gpt-5.6-sol") is None
+        assert get_model_max_input_tokens("openrouter/gpt-5.6-sol") is None
+    _reset_catalog_caches(pc)
 
 
 def test_model_input_cap_catalog_overrides_dict(tmp_path, monkeypatch):
@@ -858,7 +946,7 @@ def test_model_input_cap_catalog_overrides_dict(tmp_path, monkeypatch):
         model_caps={
             "gpt-5.6-sol": {
                 "max_input_tokens": 111111,
-                "evidence": {"level": "belegt", "source_url": "https://example.test/cap"},
+                "evidence": {"level": "confirmed", "source_url": "https://example.test/cap"},
             },
         },
     )
@@ -868,7 +956,7 @@ def test_model_input_cap_catalog_overrides_dict(tmp_path, monkeypatch):
 
 
 def test_model_input_cap_fact_carries_catalog_evidence(tmp_path, monkeypatch):
-    """A catalog-sourced cap carries the block's evidence, not the hardcoded belegt."""
+    """A catalog-sourced cap carries the block's evidence, not the hardcoded confirmed."""
     import faigate.provider_catalog as pc
 
     metadata_dir = _write_metadata_catalog(
@@ -876,7 +964,7 @@ def test_model_input_cap_fact_carries_catalog_evidence(tmp_path, monkeypatch):
         model_caps={
             "deepseek-v4-flash": {
                 "max_input_tokens": 1000000,
-                "evidence": {"level": "unbestaetigt"},
+                "evidence": {"level": "unconfirmed"},
             },
         },
     )
@@ -885,7 +973,7 @@ def test_model_input_cap_fact_carries_catalog_evidence(tmp_path, monkeypatch):
     fact = pc.get_model_input_cap_fact("deepseek-v4-flash")
     assert fact is not None
     assert fact["max_input_tokens"] == 1000000
-    assert fact["evidence"]["level"] == "unbestaetigt"
+    assert fact["evidence"]["level"] == "unconfirmed"
 
 
 def test_model_input_cap_catalog_wins_over_hardcoded_dict_without_env(monkeypatch):
@@ -895,26 +983,33 @@ def test_model_input_cap_catalog_wins_over_hardcoded_dict_without_env(monkeypatc
     monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_FILE", raising=False)
     monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_DIR", raising=False)
 
-    # deepseek-v4-pro is in both sources with the same number; the catalog says
-    # "unbestaetigt", the dict used to claim "belegt". The catalog must win.
+    # deepseek-v4-pro is in both sources with the same cap number; the refreshed
+    # bundled catalog carries a sourced "confirmed" entry. Catalog wins over the
+    # hardcoded fallback regardless — the important invariant is that the catalog
+    # evidence level is preserved, not the hardcoded dict's level.
     fact = pc.get_model_input_cap_fact("deepseek-v4-pro")
     assert fact is not None
     assert fact["max_input_tokens"] == 1000000
-    assert fact["evidence"]["level"] == "unbestaetigt"
+    assert fact["evidence"]["level"] == "confirmed"
 
 
-def test_model_input_cap_hardcoded_fallback_is_unbestaetigt(monkeypatch):
-    """A model only in the hardcoded dict carries unbestaetigt, never belegt."""
+def test_model_input_cap_absent_without_catalog(monkeypatch, tmp_path):
+    """An empty catalog yields no cap fact at all, not an unsourced one.
+
+    The embedded fallback table is gone, so there is nothing left that could
+    answer without provenance. This pins that absence.
+    """
     import faigate.provider_catalog as pc
 
-    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_FILE", raising=False)
-    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_DIR", raising=False)
+    # Inject an empty catalog: there is no second source behind it.
+    empty_metadata_dir = _write_metadata_catalog(tmp_path, model_caps={})
+    _patch_metadata_env(monkeypatch, pc, empty_metadata_dir)
 
-    # gpt-5.6-sol is in both sources with level "unbestaetigt"; assert the label
-    # reflects provenance either way (never a source-less "belegt").
-    fact = pc.get_model_input_cap_fact("gpt-5.6-sol")
-    assert fact is not None
-    assert fact["evidence"]["level"] == "unbestaetigt"
+    # An empty catalog knows no caps, so no evidence-tagged fact can exist.
+    # The 413 path turns this into a passthrough or the operator byte limit —
+    # never a per-model token number nobody can source.
+    assert pc.get_model_input_cap_fact("gpt-5.6-sol") is None
+    assert pc.get_model_max_input_tokens("gpt-5.6-sol") is None
 
 
 def test_model_input_cap_normalizes_dot_version_separators(monkeypatch):
@@ -981,3 +1076,704 @@ def test_provider_catalog_context_window_survives_external_merge(tmp_path, monke
     assert entry["recommended_model"] == "deepseek/chat-overlay"
     assert entry["context_window"] > 0
     assert 240000 < entry["limits"]["max_input_tokens"] <= 275000
+
+
+# --------------------------------------------------------------------------- #
+# Structural guard: no embedded cap table in provider_catalog.py
+# --------------------------------------------------------------------------- #
+
+
+def _embedded_cap_table_literals(source: str) -> list[str]:
+    """Names of dict/AnnAssign literals in *source* that look like cap tables.
+
+    A literal matches when its value is an ``ast.Dict`` whose keys are all
+    string constants, at least one of which contains a digit (model IDs like
+    ``"gpt-4"``, ``"deepseek-v2"``), and whose values are all integer
+    constants.
+
+    Scope: this sees only dict *literals* written at the assignment statement
+    itself, anywhere in the tree (module level or inside a function). It is
+    blind to a table that is built rather than written — see the docstring of
+    :func:`test_no_embedded_cap_table_in_provider_catalog` for the list of
+    evasions this deliberately does not chase.
+    """
+    import ast
+
+    offending: list[str] = []
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, (ast.Assign, ast.AnnAssign)):
+            continue
+        value_node = node.value if isinstance(node, ast.Assign) else node.value
+        if not isinstance(value_node, ast.Dict) or not value_node.keys:
+            continue
+
+        keys = value_node.keys
+        values = value_node.values
+        if not all(isinstance(k, ast.Constant) and isinstance(k.value, str) for k in keys):
+            continue
+        if not any(any(c.isdigit() for c in k.value) for k in keys):  # type: ignore[union-attr]
+            continue
+        if not all(isinstance(v, ast.Constant) and isinstance(v.value, int) for v in values):
+            continue
+
+        if isinstance(node, ast.AnnAssign):
+            if isinstance(node.target, ast.Name):
+                offending.append(node.target.id)
+        else:
+            offending.extend(t.id for t in node.targets if isinstance(t, ast.Name))
+
+    return offending
+
+
+def test_no_embedded_cap_table_in_provider_catalog() -> None:
+    """Detect a hardcoded model-cap dict literal written into provider_catalog.py.
+
+    The catalog is the sole source of per-model input-token caps. This test
+    keeps the obvious re-introduction — a dict literal of model-id keys and
+    integer caps, whatever the variable is called — out of the module.
+
+    Honest scope. The check is structural, not a name list, so it catches any
+    variable name; and it walks the whole tree, so a literal assigned inside a
+    function is caught too. That is the entire reach. It does not catch a table
+    that is assembled rather than written as an assignment literal, e.g.:
+
+      * ``_X = (("gpt-4", 100),)`` — a tuple of pairs
+      * ``_X = dict(gpt4=100)`` — a ``dict(...)`` call
+      * ``_X = {k: 100 for k in ["gpt-4"]}`` — a comprehension
+      * ``_OUTER = {"holder": {"gpt-4": 100}}`` — nested one level down
+      * ``_X = {}; _X.update({"gpt-4": 100})`` — built by mutation
+
+    These are known gaps, pinned by
+    :func:`test_embedded_cap_table_guard_does_not_see_built_tables` so that the
+    guard's reach stays what this docstring says it is rather than drifting by
+    implication. Closing them with more AST patterns is a treadmill: each new
+    pattern invites the next spelling.
+
+    The invariant that actually carries the weight is behavioural, not
+    structural: a silent fallback wired into ``get_model_max_input_tokens``
+    leaves this guard green, and is caught by
+    :func:`test_model_input_cap_is_none_without_catalog` and
+    :func:`test_model_input_cap_absent_without_catalog`, which assert that no
+    cap is produced without a catalog behind it.
+
+    RED-PROOF: add ``_MY_NEW_CAPS: dict[str, int] = {"some-model-4": 123456}``
+    (or the bare ``_MY_NEW_CAPS = {...}`` form) anywhere in
+    ``faigate/provider_catalog.py`` and this test fails naming the variable.
+    """
+    import inspect
+
+    import faigate.provider_catalog as pc
+
+    offending = _embedded_cap_table_literals(inspect.getsource(pc))
+
+    assert not offending, (
+        "Embedded cap table(s) detected in faigate/provider_catalog.py: "
+        + ", ".join(offending)
+        + ". Per-model input-token caps must live in the catalog only."
+    )
+
+
+def test_embedded_cap_table_guard_catches_literal_spellings() -> None:
+    """ROT-PROOF for the two literal spellings the guard claims to catch."""
+    module_level = '_MY_NEW_CAPS: dict[str, int] = {"some-model-4": 123456}'
+    bare = '_OTHER_CAPS = {"gpt-4": 100, "gpt-5": 200}'
+    in_function = 'def load():\n    _NESTED_CAPS = {"claude-3": 300}\n    return _NESTED_CAPS'
+
+    assert _embedded_cap_table_literals(module_level) == ["_MY_NEW_CAPS"]
+    assert _embedded_cap_table_literals(bare) == ["_OTHER_CAPS"]
+    assert _embedded_cap_table_literals(in_function) == ["_NESTED_CAPS"]
+
+
+def test_embedded_cap_table_guard_does_not_see_built_tables() -> None:
+    """ROT-PROOF for the gaps: a built table is invisible to this guard.
+
+    Pinning the gaps makes them an explicit, reviewed decision. If a future
+    change widens the guard, this test goes red and the docstring above must be
+    updated in the same commit — the guard and its stated reach cannot drift
+    apart silently.
+    """
+    built = {
+        "tuple of pairs": '_X = (("gpt-4", 100),)',
+        "dict() call": "_X = dict(gpt4=100)",
+        "comprehension": '_X = {k: 100 for k in ["gpt-4"]}',
+        "nested one level": '_OUTER = {"holder": {"gpt-4": 100}}',
+        "built by mutation": '_X = {}\n_X.update({"gpt-4": 100})',
+    }
+
+    for name, source in built.items():
+        assert _embedded_cap_table_literals(source) == [], (
+            f"guard now catches the {name!r} spelling — widen the docstring of "
+            "test_no_embedded_cap_table_in_provider_catalog to match"
+        )
+
+
+# Fields that only ever appear in a catalog entry. One is enough: a dict of
+# dicts carrying any of these is provider knowledge, not configuration.
+_CATALOG_ONLY_FIELDS = frozenset(
+    {
+        "context_window",
+        "aliases",
+        "recommended_model",
+        "auth_modes",
+        "provider_type",
+        "tier_status",
+        "limits",
+        "context_evidence",
+        "entry_type",
+    }
+)
+
+
+def _embedded_provider_table_literals(source: str) -> list[str]:
+    """Names of dict-of-dict literals in *source* that look like provider tables.
+
+    A literal matches when its value is an ``ast.Dict`` whose values are
+    themselves ``ast.Dict`` literals carrying at least one catalog-only field.
+
+    Scope matches :func:`_embedded_cap_table_literals` exactly: it walks the
+    whole tree, so a table declared inside a function is seen, and it is
+    likewise blind to a table that is assembled rather than written. The two
+    guards must not differ in reach — the provider guard was previously
+    module-level only, which made it strictly weaker than this one.
+    """
+    import ast
+
+    offending: list[str] = []
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, (ast.Assign, ast.AnnAssign)):
+            continue
+        value_node = node.value if isinstance(node, ast.Assign) else node.value
+        if not isinstance(value_node, ast.Dict) or not value_node.keys:
+            continue
+
+        if not any(
+            isinstance(inner, ast.Dict)
+            and any(isinstance(k, ast.Constant) and k.value in _CATALOG_ONLY_FIELDS for k in inner.keys)
+            for inner in value_node.values
+        ):
+            continue
+
+        if isinstance(node, ast.AnnAssign):
+            if isinstance(node.target, ast.Name):
+                offending.append(node.target.id)
+        else:
+            offending.extend(t.id for t in node.targets if isinstance(t, ast.Name))
+
+    return offending
+
+
+def test_no_embedded_provider_table_in_provider_catalog() -> None:
+    """Detect a hardcoded provider table written into provider_catalog.py.
+
+    The catalog is the sole source of provider knowledge. A dict literal whose
+    values are dicts carrying catalog-only fields (``context_window``,
+    ``aliases``, ...) is a provider table under any name, so the check is
+    structural rather than a list of forbidden names.
+
+    ``_CATALOG`` is a KNOWN, STILL-LIVE violation: 907 lines of embedded
+    provider entries, seeded by ``_get_catalog_source`` and then overlaid by the
+    resolved catalog. It is named here rather than asserted away. Deleting it
+    is deferred: emptying it fails 19 further tests, because the snapshot does
+    not yet carry every merged field the table contributes (notably a runtime
+    ``recommended_model``). Until that migration lands, this guard's job is to
+    keep the count at exactly one: a second embedded table is a regression, and
+    so is any change to the legacy block, which lives here as a pinned
+    allowance rather than as a silent pass.
+
+    Honest scope. The guard walks the whole tree, so it sees a table assigned
+    inside a function as well as at module level — the same reach as
+    :func:`test_no_embedded_cap_table_in_provider_catalog`, and deliberately no
+    weaker than it. It shares that guard's blind spot: a table that is assembled
+    rather than written as an assignment literal (tuple of pairs, ``dict(...)``
+    call, comprehension, nested one level deeper, or built by ``.update()``) is
+    not seen. Those gaps are pinned by
+    :func:`test_embedded_provider_table_guard_does_not_see_built_tables`.
+
+    RED-PROOF 1: add a second table, e.g.
+        _MY_PROVIDERS = {"acme": {"context_window": 128000, "aliases": ["acme"]}}
+    anywhere in ``faigate/provider_catalog.py`` and this test fails naming it.
+    RED-PROOF 2: rename ``_CATALOG`` and this test fails, because the known
+    allowance no longer matches — forcing the allowance to be revisited rather
+    than silently kept.
+    """
+    import inspect
+
+    import faigate.provider_catalog as pc
+
+    offending = set(_embedded_provider_table_literals(inspect.getsource(pc)))
+
+    # The one table allowed to exist today, by name, on purpose.
+    known = {"_CATALOG"}
+    unexpected = offending - known
+
+    assert not unexpected, (
+        "provider_catalog.py declares a new embedded provider table: "
+        f"{sorted(unexpected)}. Provider knowledge belongs in the catalog, "
+        "not in code — see the bundled snapshot in assets/metadata/. "
+        f"(The legacy table(s) {sorted(known)} are a pinned, tracked exception; "
+        "see this test's docstring.)"
+    )
+    assert offending == known, (
+        "the pinned embedded-table allowance no longer matches the module: "
+        f"found {sorted(offending)}, allowance is {sorted(known)}. Update the "
+        "allowance in this test and its docstring together — the guard and the "
+        "known violation must not drift apart."
+    )
+
+
+def test_embedded_provider_table_guard_catches_literal_spellings() -> None:
+    """ROT-PROOF for the provider-table spellings, including in-function."""
+    module_level = '_MY_PROVIDERS = {"acme": {"context_window": 128000, "aliases": ["acme"]}}'
+    in_function = 'def load():\n    _NESTED_PROVIDERS = {"acme": {"aliases": ["acme"]}}\n    return _NESTED_PROVIDERS'
+
+    assert _embedded_provider_table_literals(module_level) == ["_MY_PROVIDERS"]
+    assert _embedded_provider_table_literals(in_function) == ["_NESTED_PROVIDERS"]
+
+
+def test_embedded_provider_table_guard_does_not_see_built_tables() -> None:
+    """ROT-PROOF for the provider guard's gaps, matching the cap guard's."""
+    built = {
+        "tuple of pairs": '_X = (("acme", {"context_window": 1}),)',
+        "dict() call": '_X = dict(acme={"context_window": 1})',
+        "comprehension": '_X = {k: {"context_window": 1} for k in ["acme"]}',
+        "built by mutation": '_X = {}\n_X.update({"acme": {"context_window": 1}})',
+    }
+
+    for name, source in built.items():
+        assert _embedded_provider_table_literals(source) == [], (
+            f"guard now catches the {name!r} spelling — widen the docstring of "
+            "test_no_embedded_provider_table_in_provider_catalog to match"
+        )
+
+
+# --------------------------------------------------------------------------- #
+# recommended_model: a derived field, pinned against the catalog it derives from
+# --------------------------------------------------------------------------- #
+
+
+def _resolved_catalog_without_env() -> dict:
+    """Resolve the catalog with every ``FAIGATE_*`` override cleared.
+
+    The operator shell in this repo really does export
+    ``FAIGATE_PROVIDER_METADATA_DIR`` / ``..._FILE``; a test that reads the
+    chain without clearing them measures the operator's working copy, not the
+    shipped snapshot. Callers that want the bundled catalog must go through
+    here.
+    """
+    import os
+
+    saved = {
+        name: os.environ.pop(name, None)
+        for name in (
+            "FAIGATE_PROVIDER_METADATA_FILE",
+            "FAIGATE_PROVIDER_METADATA_DIR",
+            "FAIGATE_OFFERINGS_METADATA_FILE",
+            "FAIGATE_PROVIDER_METADATA_PRODUCT",
+        )
+    }
+    try:
+        _reset_catalog_caches(pc)
+        return pc._resolve_catalog_payload()
+    finally:
+        for name, value in saved.items():
+            if value is not None:
+                os.environ[name] = value
+        _reset_catalog_caches(pc)
+
+
+def _recommended_model_literals(source: str) -> list[tuple[str, str]]:
+    """``(provider_name, literal)`` for every inline ``recommended_model`` value.
+
+    The embedded table is ``_CATALOG = {"<provider>": {..., "recommended_model": ...}}``
+    — the provider name is the *outer dict key*, not a ``provider_name`` field.
+    Only *inline string* values are collected. A value computed by
+    :func:`faigate.provider_catalog.get_active_model_id` is wiring, not a
+    recorded fact, and is deliberately out of scope — see
+    :func:`test_recommended_model_inline_literals_name_a_catalog_model`.
+    """
+    import ast
+
+    found: list[tuple[str, str]] = []
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, ast.Dict):
+            continue
+        for provider_key, entry in zip(node.keys, node.values):
+            if not (isinstance(provider_key, ast.Constant) and isinstance(provider_key.value, str)):
+                continue
+            if not isinstance(entry, ast.Dict):
+                continue
+            for key, value in zip(entry.keys, entry.values):
+                if (
+                    isinstance(key, ast.Constant)
+                    and key.value == "recommended_model"
+                    and isinstance(value, ast.Constant)
+                    and isinstance(value.value, str)
+                ):
+                    found.append((provider_key.value, value.value))
+    return found
+
+
+def test_recommended_model_inline_literals_name_a_catalog_model() -> None:
+    """An inline ``recommended_model`` must name the catalog's model or an alias.
+
+    ``recommended_model`` is not a catalog field: the bundled snapshot records
+    only ``model`` plus ``aliases``, and the resolved value is derived. It
+    therefore cannot be compared as a fact against a catalog fact without
+    saying which half is which. The distinction this test draws:
+
+    * **Derived -- out of scope.** Eight entries compute the value with
+      ``get_active_model_id(...)``. That is runtime wiring and is intentionally
+      free to differ from ``model``; asserting on it would pin the wiring, not
+      the data.
+    * **Recorded -- in scope.** Every other entry writes a string literal. That
+      literal claims to name a model this provider offers, so it must appear in
+      the catalog's ``model`` or in that entry's ``aliases``. A literal that
+      appears in neither is a stale doppelganger: not a fact about the provider,
+      and not a router alias either.
+
+    What this does NOT require: that the literal equal ``model`` outright.
+    Router and pseudo providers (``clawrouter``/``openrouter-fallback`` ->
+    ``auto``, ``kilo-auto-*`` -> ``kilo-auto/<tier>``, ``pollinations`` ->
+    ``pollinations/openai``) legitimately recommend a routing target rather than
+    the concrete ``model``; and ``qwen/qwen3.6-plus`` / ``nvidia/nemotron`` are
+    the same models as the catalog's bare ``qwen3-6-plus`` / ``nemotron``,
+    spelled for the upstream API. Those are accepted.
+
+    What it does NOT do: it does not pick a winner for the five genuine
+    disagreements pinned in :data:`_CATALOG_KNOWN_DIVERGENCES`. Those need a
+    catalog-data decision, which is out of scope here; the test's job is to
+    keep them visible and to fail the moment a sixth appears or one is fixed
+    without the list being updated. Two local runners
+    (:data:`_CATALOG_LOCAL_RUNNER_DIVERGENCES`) are wiring, not facts, and are
+    named as such rather than compared against a placeholder.
+
+    RED-PROOF: set ``"recommended_model"`` on any provider to a model absent
+    from both ``model`` and ``aliases`` (e.g. ``"glm-9.9-not-real"``) and this
+    test names that provider. Verified against ``zai`` in
+    :func:`test_recommended_model_guard_catches_a_stale_literal`.
+    """
+    import inspect
+
+    import faigate.provider_catalog as pc
+
+    catalog = _resolved_catalog_without_env()
+    providers = catalog.get("providers") if isinstance(catalog, dict) else None
+    assert isinstance(providers, dict) and providers, "bundled snapshot did not resolve"
+
+    stale: list[tuple[str, str, str]] = []
+    for provider, literal in _recommended_model_literals(inspect.getsource(pc)):
+        entry = providers.get(provider)
+        if entry is None:
+            # A provider that lives only in the embedded table is covered by
+            # test_no_embedded_provider_table_in_provider_catalog, not here.
+            continue
+        known = {str(entry.get("model") or "")}
+        known.update(str(alias) for alias in entry.get("aliases") or [])
+        known = {_normalize_dots(value) for value in known if value}
+        tail = _normalize_dots(literal.rsplit("/", 1)[-1])
+        # A provider-qualified name is accepted when its tail is a model the
+        # catalog knows: "qwen/qwen3.6-plus" and "nvidia/nemotron" are the same
+        # model as the catalog's bare "qwen3-6-plus" / "nemotron", spelled for
+        # the upstream API. This is the naming difference the module already
+        # normalizes elsewhere, not a second opinion about the model.
+        if _normalize_dots(literal) in known or tail in known:
+            continue
+        # Router/pseudo targets are wiring-shaped: a bare routing keyword.
+        # Accept those rather than pin a router's policy.
+        if tail in _ROUTER_TARGETS:
+            continue
+        stale.append((provider, literal, str(entry.get("model") or "")))
+
+    # The divergences that exist today. Each is named with a reason, and the set
+    # must match exactly: a new one is a regression, and a *fixed* one is a
+    # prompt to delete its line (the same "pinned allowance" shape used for the
+    # embedded _CATALOG table). The two local runners in
+    # _CATALOG_LOCAL_RUNNER_DIVERGENCES are wiring, not facts: the literal
+    # suggests a model for the operator's own box rather than naming a
+    # vendor-published one, and are therefore excluded from the comparison.
+    remaining = {(provider, literal) for provider, literal, _model in stale} - _CATALOG_LOCAL_RUNNER_DIVERGENCES
+    unexpected = sorted(remaining - _CATALOG_KNOWN_DIVERGENCES)
+    fixed = sorted(_CATALOG_KNOWN_DIVERGENCES - remaining)
+
+    assert not unexpected, (
+        "embedded recommended_model literal(s) name no model the catalog knows:\n  "
+        + "\n  ".join(
+            f"{provider}: recommended_model={literal!r} is neither the catalog model "
+            f"{_catalog_model_of(providers, provider)!r} nor one of its aliases"
+            for provider, literal in unexpected
+        )
+        + "\nEither point the literal at the catalog model/alias, migrate the model "
+        "into the catalog, or add it to _CATALOG_KNOWN_DIVERGENCES with a reason."
+    )
+    assert not fixed, (
+        "these recommended_model divergences are listed as known but no longer "
+        f"diverge: {fixed}. Delete their entries from _CATALOG_KNOWN_DIVERGENCES "
+        "and this docstring together — the list and reality must not drift apart."
+    )
+
+
+def _catalog_model_of(providers: dict, provider: str) -> str:
+    entry = providers.get(provider) or {}
+    return str(entry.get("model") or "")
+
+
+def _normalize_dots(value: str) -> str:
+    """Treat ``claude-opus-4.6`` and ``claude-opus-4-6`` as the same spelling."""
+    return value.replace(".", "-")
+
+
+# Bare routing keywords a router provider legitimately recommends instead of a
+# concrete model. Spelling-normalised. Keep this list short and justified: it is
+# the set of values this test refuses to check against the catalog.
+_ROUTER_TARGETS = frozenset(
+    {
+        "auto",
+        "auto-router",
+        "coding-auto",
+        "tier-frontier",
+        "tier-balanced",
+        "tier-free",
+        "openai",
+        "local-model",
+        "your-model-id",
+        "minimax-m2.1-gs32",
+    }
+)
+
+# A local runner has no vendor-published model: the catalog records a
+# placeholder ("local-model", "llama3.2") and the embedded literal suggests a
+# concrete model for the operator to pull. Comparing the two would compare a
+# suggestion against a placeholder; both are honest, so both are accepted.
+_CATALOG_LOCAL_RUNNER_DIVERGENCES = frozenset(
+    {
+        ("lmstudio", "lmstudio/minimax-m2.1-gs32"),
+        ("ollama", "ollama/llama3.3"),
+    }
+)
+
+# Real disagreements between the embedded literal and the catalog's own model.
+# NOT fixed here: choosing the winning model is a catalog-data decision, and
+# this session is scoped to the wiring. They are pinned so they cannot be
+# forgotten or quietly multiplied.
+_CATALOG_KNOWN_DIVERGENCES = frozenset(
+    {
+        ("zai", "glm-4.7"),  # catalog says glm-5
+        ("minimax", "minimax/MiniMax-M2.7"),  # catalog says MiniMax-M2.1
+        ("huggingface", "huggingface/deepseek-ai/DeepSeek-R1"),  # catalog: zephyr-7b-beta
+        ("moonshot", "moonshot/kimi-k2.5"),  # catalog says moonshot-v1-8k
+        ("cerebras", "qwen-3-235b-a22b-instruct-2507"),  # catalog says llama3.3-70b
+    }
+)
+
+
+def test_recommended_model_literal_extractor_ignores_derived_values() -> None:
+    """ROT-PROOF: the extractor sees literals and leaves ``get_active_model_id`` alone."""
+    source = (
+        "_CATALOG = {\n"
+        '    "acme": {"recommended_model": get_active_model_id("x/y")},\n'
+        '    "beta": {"recommended_model": "glm-5"},\n'
+        "}\n"
+    )
+    assert _recommended_model_literals(source) == [("beta", "glm-5")]
+
+
+def test_recommended_model_guard_catches_a_stale_literal() -> None:
+    """ROT-PROOF: a literal naming no catalog model is reported."""
+    import inspect
+
+    import faigate.provider_catalog as pc
+
+    providers = _resolved_catalog_without_env()["providers"]
+    victim = "zai"
+    assert victim in providers, "fixture provider vanished from the snapshot"
+
+    real_source = inspect.getsource(pc)
+    poisoned = real_source.replace(
+        '"recommended_model": "glm-4.7"',
+        '"recommended_model": "glm-9.9-not-real"',
+        1,
+    )
+    assert poisoned != real_source, "rot-proof no longer rewrites the zai literal"
+
+    literals = _recommended_model_literals(poisoned)
+    entry = providers[victim]
+    known = {_normalize_dots(str(entry.get("model") or ""))}
+    known.update(_normalize_dots(str(a)) for a in entry.get("aliases") or [])
+
+    poisoned_hits = [
+        literal for provider, literal in literals if provider == victim and _normalize_dots(literal) not in known
+    ]
+    assert poisoned_hits == ["glm-9.9-not-real"], (
+        f"the stale-literal check no longer flags a model absent from the catalog; extracted {literals!r}"
+    )
+
+    # And the real source still reports exactly the pinned zai divergence.
+    clean_hits = [
+        literal
+        for provider, literal in _recommended_model_literals(real_source)
+        if provider == victim and _normalize_dots(literal) not in known
+    ]
+    assert clean_hits == ["glm-4.7"], (
+        "the zai divergence changed; update _CATALOG_KNOWN_DIVERGENCES and this "
+        f"rot-proof together (got {clean_hits!r})"
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Catalog loading chain: one implementation, one answer
+# --------------------------------------------------------------------------- #
+
+
+def _catalog_views(pc) -> dict[str, set[str]]:
+    """Provider-name sets as seen through every loader of the catalog chain.
+
+    ``_load_external_provider_catalog`` (the provider-name path),
+    ``_load_external_catalog`` (the legacy accessor) and the ``providers`` block
+    of ``_load_external_catalog_payload`` (the caps/identity path) all answer
+    the same question — "which provider entries does the catalog hold right
+    now?". Comparing names, not just counts, also catches a same-size but
+    different-set divergence. Before the chain was collapsed these disagreed by
+    which internal helper the caller happened to use.
+    """
+    return {
+        "_load_external_provider_catalog": set(pc._load_external_provider_catalog()),
+        "_load_external_catalog": set(pc._load_external_catalog()),
+        "_load_external_catalog_payload": set(pc._load_external_catalog_payload().get("providers", {})),
+    }
+
+
+def _reset_catalog_caches(pc) -> None:
+    from faigate.catalog_resolver import _invalidate_bundled_snapshot_cache
+
+    pc._EXTERNAL_CATALOG_CACHE = None
+    pc._EXTERNAL_CATALOG_MTIME = 0.0
+    pc._CATALOG_RESOLVER = None
+    _invalidate_bundled_snapshot_cache()
+
+
+def _write_catalog_file(path: Path, providers: dict) -> Path:
+    path.write_text(
+        json.dumps({"schema_version": "fusionaize-provider-catalog/v1.3", "providers": providers}),
+        encoding="utf-8",
+    )
+    return path
+
+
+@pytest.mark.parametrize(
+    ("state", "env_file", "env_dir"),
+    [
+        ("both_env_set", "file", "dir"),
+        ("only_file", "file", None),
+        ("only_dir", None, "dir"),
+        ("dir_set_file_missing", None, "empty_dir"),
+        ("nothing_set", None, None),
+    ],
+)
+def test_catalog_loaders_agree_in_every_on_disk_state(
+    tmp_path: Path, monkeypatch, state: str, env_file: str | None, env_dir: str | None
+) -> None:
+    """Every loader must see the same provider set for the same on-disk state.
+
+    The chain is ``env-override → metadata-dir → bundled snapshot``. A set but
+    empty or non-existent metadata directory must not block the fall back to the
+    bundled snapshot: the override is a location hint, not a commitment to a
+    catalog that is not there. The file override is link 1 and takes precedence;
+    the dir is link 2 and only consulted when no file override is set.
+    """
+    import faigate.provider_catalog as pc
+
+    # Distinct provider names per link make the answer decidable: a loader that
+    # reads a different link names a different provider.
+    file_catalog = tmp_path / "file-catalog.v1.json"
+    _write_catalog_file(file_catalog, {"file-only-provider": {"vendor": "file", "model": "one"}})
+
+    dir_root = tmp_path / "metadata-dir"
+    (dir_root / "providers").mkdir(parents=True)
+    _write_catalog_file(
+        dir_root / "providers" / "catalog.v1.json",
+        {"dir-only-provider": {"vendor": "dir", "model": "one"}},
+    )
+    empty_dir = tmp_path / "empty-metadata-dir"
+    empty_dir.mkdir()
+
+    if env_file == "file":
+        monkeypatch.setenv("FAIGATE_PROVIDER_METADATA_FILE", str(file_catalog))
+    else:
+        monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_FILE", raising=False)
+
+    if env_dir == "dir":
+        monkeypatch.setenv("FAIGATE_PROVIDER_METADATA_DIR", str(dir_root))
+    elif env_dir == "empty_dir":
+        monkeypatch.setenv("FAIGATE_PROVIDER_METADATA_DIR", str(empty_dir))
+    else:
+        monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_DIR", raising=False)
+
+    _reset_catalog_caches(pc)
+    views = _catalog_views(pc)
+
+    # Provider sets carried by each link: the bundled snapshot is read straight
+    # from the shipped asset so this test does not hardcode its membership.
+    from faigate.catalog_resolver import _load_bundled_snapshot
+
+    bundled = _load_bundled_snapshot() or {}
+    bundled_names = set(bundled.get("providers", {}))
+
+    # Link precedence is file → dir → bundled: a set file wins outright, a set
+    # dir wins over the bundled snapshot, and a dir that holds no catalog falls
+    # through to the bundled snapshot.
+    expected: set[str] = {
+        "both_env_set": {"file-only-provider"},
+        "only_file": {"file-only-provider"},
+        "only_dir": {"dir-only-provider"},
+        "dir_set_file_missing": bundled_names,
+        "nothing_set": bundled_names,
+    }[state]
+
+    assert expected, f"state={state!r}: fixture expectation must not be empty"
+
+    distinct = {frozenset(names) for names in views.values()}
+    assert len(distinct) == 1, (
+        f"state={state!r}: catalog loaders disagree on the provider set: "
+        f"{ {name: sorted(names) for name, names in views.items()} }. "
+        "All of them read the same chain (env-override → metadata-dir → bundled "
+        "snapshot) and must answer the same."
+    )
+    resolved = next(iter(distinct))
+    assert resolved == expected, (
+        f"state={state!r}: all loaders agree, but on the wrong set ({sorted(resolved)}); expected {sorted(expected)}."
+    )
+
+    # Identities are a projection of the same providers block: every provider
+    # entry carrying vendor+model must yield exactly one identity dict.
+    payload = pc._load_external_catalog_payload()
+    with_identity = [
+        name
+        for name, entry in payload.get("providers", {}).items()
+        if isinstance(entry, dict) and entry.get("vendor") and entry.get("model")
+    ]
+    identity_count = len(pc.catalog_provider_identities())
+    assert identity_count == len(with_identity), (
+        f"state={state!r}: catalog_provider_identities sees {identity_count} "
+        f"identit(ies) but the resolved providers block has {len(with_identity)} "
+        "entries carrying vendor+model."
+    )
+
+
+def test_catalog_dir_set_but_file_missing_falls_back_to_bundled(monkeypatch, tmp_path: Path) -> None:
+    """A set-but-dead metadata dir must not disable the bundled fall back.
+
+    ``FAIGATE_PROVIDER_METADATA_DIR`` pointing at an empty or non-existent
+    directory is a broken pointer, not a claim that the catalog is empty. The
+    docstring's promise — "when neither override yields a catalog file, fall
+    back to the bundled snapshot" — has to hold here too.
+    """
+    import faigate.provider_catalog as pc
+
+    monkeypatch.setenv("FAIGATE_PROVIDER_METADATA_DIR", str(tmp_path / "does-not-exist"))
+    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_FILE", raising=False)
+    _reset_catalog_caches(pc)
+
+    assert len(pc._load_external_provider_catalog()) > 0
+    assert len(pc._load_external_catalog_payload().get("providers", {})) > 0
+    assert len(pc.catalog_provider_identities()) > 0
+    assert len(pc._load_external_model_caps()) > 0

@@ -347,15 +347,15 @@ def _resolve_advertised_input_limit(
     model-caps map and carries an ``evidence.level``; this helper turns that
     fact into one of three outcomes governed by the evidence scale:
 
-    * ``belegt``     -> the cap is returned unchanged and ``estimate=False``.
-    * ``plausibel``  -> the cap is returned but flagged ``estimate=True``, so a
+    * ``confirmed``     -> the cap is returned unchanged and ``estimate=False``.
+    * ``plausible``  -> the cap is returned but flagged ``estimate=True``, so a
       client sees it as a best-effort figure rather than a guarantee.
-    * ``unbestaetigt`` / missing -> ``(None, ...)``: no hard cap is invented.
+    * ``unconfirmed`` / missing -> ``(None, ...)``: no hard cap is invented.
       The 413 then either passes the limit through to the provider or falls
       back to the operator-configured *byte* limit, per ``FAIGATE_UNVERIFIED_CAP_MODE``.
 
     The second tuple element is the "is estimate" flag: ``False`` for a hard
-    ``belegt`` number, ``True`` for a best-effort ``plausibel`` number.
+    ``confirmed`` number, ``True`` for a best-effort ``plausible`` number.
     """
     fact = provider_catalog_module.get_model_input_cap_fact(model_id) if model_id else None
     if fact is None:
@@ -370,7 +370,7 @@ def _resolve_advertised_input_limit(
 
 
 def _unverified_cap_mode() -> str:
-    """Return how a 413 should behave when a model has no ``belegt`` input cap.
+    """Return how a 413 should behave when a model has no ``confirmed`` input cap.
 
     Configurable via ``FAIGATE_UNVERIFIED_CAP_MODE``:
 
@@ -395,8 +395,8 @@ def _payload_too_large_response(
     header is resolved from an evidence-tagged per-model cap, never from the
     provider-wide 262144 placeholder:
 
-    * a hard ``belegt`` cap is advertised unchanged;
-    * a ``plausibel`` cap is advertised but marked as an estimate
+    * a hard ``confirmed`` cap is advertised unchanged;
+    * a ``plausible`` cap is advertised but marked as an estimate
       (``estimated: true`` in the body, ``~`` prefix on the header);
     * no cap at all is passed through, or reported as the operator byte limit,
       depending on ``FAIGATE_UNVERIFIED_CAP_MODE`` — an invented token number is

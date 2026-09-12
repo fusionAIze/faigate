@@ -1017,25 +1017,37 @@ class TestCatalogWindowAndLimitsEnrichment:
     """TASK-005 AC3: the backend object must surface catalog context_window/limits.
 
     The curated catalog declaratively owns the native context window (e.g.
-    1048576 for deepseek) and the uniform input cap (262144). ProviderBackend
-    must backfill these from the catalog when config does not declare them, so
+    1048576 for deepseek) and the per-provider input cap. ProviderBackend must
+    backfill these from the catalog when config does not declare them, so
     ``/v1/models`` reports non-null values, while keeping operator-declared
     values authoritative.
+
+    The expected values are read from the catalog itself rather than hardcoded:
+    they are per-provider facts owned by the catalog data, not constants of this
+    code, and hardcoding them made the test fail on every legitimate catalog
+    refresh — the promise here is that the backfill happens, not which numbers
+    the catalog happens to carry today.
     """
 
     def test_backfills_native_context_window_from_catalog(self):
+        from faigate.provider_catalog import get_provider_catalog_entry
+
         backend = ProviderBackend(
             "deepseek-chat",
             {"base_url": "https://api.example.com/v1", "model": "deepseek-v4-pro"},
         )
-        assert backend.context_window == 1048576
+        entry = get_provider_catalog_entry("deepseek-chat")
+        assert backend.context_window == entry["context_window"]
 
     def test_backfills_input_cap_from_catalog(self):
+        from faigate.provider_catalog import get_provider_catalog_entry
+
         backend = ProviderBackend(
             "deepseek-chat",
             {"base_url": "https://api.example.com/v1", "model": "deepseek-v4-pro"},
         )
-        assert backend.limits["max_input_tokens"] == 262144
+        entry = get_provider_catalog_entry("deepseek-chat")
+        assert backend.limits["max_input_tokens"] == entry["limits"]["max_input_tokens"]
 
     def test_operator_declared_values_win_over_catalog(self):
         backend = ProviderBackend(
@@ -1064,11 +1076,11 @@ class TestPayloadTooLargeThreshold:
 
     TASK-B2/B3 supersede the provider-wide 262144 placeholder: the threshold in
     the body ``limit`` field and the ``x-faigate-request-limit`` header is now
-    resolved from a ``belegt`` per-model cap when one exists, and never invented
+    resolved from a ``confirmed`` per-model cap when one exists, and never invented
     from the flat provider floor when it does not.
     """
 
-    def test_413_exposes_limit_from_belegt_model_cap(self, monkeypatch):
+    def test_413_exposes_limit_from_confirmed_model_cap(self, monkeypatch):
         import faigate.main as main
         from faigate import provider_catalog
 
@@ -1077,7 +1089,7 @@ class TestPayloadTooLargeThreshold:
             "get_model_input_cap_fact",
             lambda model_id: {
                 "max_input_tokens": 262144,
-                "evidence": {"level": "belegt", "source_url": "https://example.test", "as_of": "2026-08-21"},
+                "evidence": {"level": "confirmed", "source_url": "https://example.test", "as_of": "2026-08-21"},
             },
         )
 
@@ -1090,7 +1102,7 @@ class TestPayloadTooLargeThreshold:
         assert payload["limit"] == 262144
         assert resp.headers.get("x-faigate-request-limit") == "262144"
 
-    def test_413_without_belegt_cap_advertises_no_invented_limit(self):
+    def test_413_without_confirmed_cap_advertises_no_invented_limit(self):
         import faigate.main as main
 
         resp = main._payload_too_large_response("too large", model_id="provider/unknown-model")

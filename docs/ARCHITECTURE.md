@@ -153,9 +153,9 @@ Three mechanisms hold the cut together (details in
 [CATALOG-UPDATER.md](./CATALOG-UPDATER.md)):
 
 1. **Evidence gate.** Every fact carries an `evidence.level`
-   (`belegt` / `plausibel` / `unbestaetigt`) that decides whether the runtime
-   may enforce it, advise on it, or neither. `belegt` carries hard decisions,
-   `plausibel` is best-effort and flagged as an estimate, `unbestaetigt` is
+   (`confirmed` / `plausible` / `unconfirmed`) that decides whether the runtime
+   may enforce it, advise on it, or neither. `confirmed` carries hard decisions,
+   `plausible` is best-effort and flagged as an estimate, `unconfirmed` is
    invisible to routing, capacity, and error output
    (`faigate/catalog_views.py:86`).
 

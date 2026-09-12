@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from . import registry
+from .catalog_views import split_catalog_facts
 from .config import Config
 from .lane_registry import (
     get_active_model_id,
@@ -121,56 +122,39 @@ _CATALOG_RESOLVER: Any = None
 
 
 def _resolve_catalog_via_chain() -> dict[str, Any]:
-    """Fallback to the remote sync chain (private→public→bundled).
+    """Return the provider entries of the single catalog chain.
 
-    Used when neither FAIGATE_PROVIDER_METADATA_FILE nor a populated
-    FAIGATE_PROVIDER_METADATA_DIR yields a catalog file on disk.
+    Kept as a thin alias so callers written against the earlier name keep
+    working; it no longer runs a second, remote-first resolver chain (that chain
+    made the same on-disk state resolve differently depending on the entry
+    point). See :func:`_resolve_catalog_payload`.
     """
-    global _CATALOG_RESOLVER
-    try:
-        from .catalog_resolver import CatalogResolver
-    except Exception:
-        return {}
-
-    if _CATALOG_RESOLVER is None:
-        _CATALOG_RESOLVER = CatalogResolver()
-    try:
-        resolved = _CATALOG_RESOLVER.resolve()
-    except Exception as exc:
-        logger.debug("catalog resolver fallback failed: %s", exc)
-        return {}
-    return resolved.payload.get("providers", {})
+    return _resolve_catalog_payload().get("providers", {})
 
 
 def _load_external_catalog() -> dict[str, Any]:
-    """Load external catalog.v1.json if available."""
+    """Return the resolved catalog's provider entries.
+
+    Delegates to the single chain (:func:`_resolve_catalog_payload`). The
+    mtime cache only memoises the cheap ``stat`` on the override file; the
+    bundled snapshot has its own in-process cache in ``catalog_resolver``.
+    """
     global _EXTERNAL_CATALOG_CACHE, _EXTERNAL_CATALOG_MTIME
 
     catalog_path = _get_external_catalog_path()
 
-    # Check if cache is still valid
+    # Fast path: memoise the file read while it exists and is unchanged.
     if _EXTERNAL_CATALOG_CACHE is not None and catalog_path.exists():
         current_mtime = catalog_path.stat().st_mtime
         if current_mtime <= _EXTERNAL_CATALOG_MTIME:
             return _EXTERNAL_CATALOG_CACHE
-        # File has changed, invalidate cache
         _EXTERNAL_CATALOG_CACHE = None
 
-    if not catalog_path.exists():
-        # No file on disk: try the remote sync chain (private→public→bundled).
-        # CatalogResolver has its own caching, so we don't memoize here.
-        return _resolve_catalog_via_chain()
-
-    try:
-        with open(catalog_path, encoding="utf-8") as f:
-            data = json.load(f)
-        _EXTERNAL_CATALOG_CACHE = data.get("providers", {})
+    providers = _resolve_catalog_via_chain()
+    if catalog_path.exists():
+        _EXTERNAL_CATALOG_CACHE = providers
         _EXTERNAL_CATALOG_MTIME = catalog_path.stat().st_mtime
-    except Exception:
-        _EXTERNAL_CATALOG_CACHE = {}
-        _EXTERNAL_CATALOG_MTIME = 0.0
-
-    return _EXTERNAL_CATALOG_CACHE
+    return providers
 
 
 def _load_external_overlay() -> dict[str, Any]:
@@ -1306,49 +1290,6 @@ _CATALOG: dict[str, dict[str, Any]] = {
 }
 
 
-# ── Model-keyed input-token caps ─────────────────────────────────────
-#
-# The provider catalog above is keyed by *provider*, and every entry advertises
-# the same flat 262144 max_input_tokens. That number is a floor, not a per-model
-# truth: the actual input-token ceiling is a property of the concrete model a
-# request resolves to, not of the provider that serves it. This map records the
-# authoritative max_input_tokens for the 23 binding model IDs used by the
-# canonical lanes, so routing can reject oversized inputs at the real boundary
-# instead of pretending every provider accepts 262144.
-#
-# Provenance: values are grounded in the LiteLLM and OmniRoute provider registry
-# reports (2026-08-21). Where the two disagree, OmniRoute is authoritative
-# because it carries per-model contextLength directly; LiteLLM corroborates.
-# `claude-code` is a Shim with no real model of its own, so its cap is the
-# documented 262144 it mirrors rather than a native context window.
-
-
-_MODEL_INPUT_CAPS: dict[str, int] = {
-    "deepseek-v4-pro": 1000000,
-    "deepseek-v4-flash": 1000000,
-    "gpt-5.6-sol": 922000,
-    "gpt-5.6-terra": 922000,
-    "gpt-5.6-luna": 922000,
-    "gpt-5.5": 1050000,
-    "gpt-5.5-pro": 1050000,
-    "o3": 200000,
-    "o3-mini": 200000,
-    "o4-mini": 200000,
-    "claude-opus-5": 1000000,
-    "claude-sonnet-5": 1000000,
-    "claude-haiku-4-5": 200000,
-    "claude-code": 262144,  # Shim; documented mirror, not a native context window
-    "gemini-3.1-pro": 1048576,
-    "gemini-3.1-flash": 1048576,
-    "gemini-3-flash-lite": 1048576,
-    "llama-4-maverick": 131072,
-    "llama-4-scout": 131072,
-    "qwen-3.6-27b": 262144,
-    "qwen3-coder": 262144,
-    "glm-5.3": 1000000,
-    "kimi-k2.6": 262144,
-}
-
 
 def _normalize_model_version_separators(model_id: str) -> str:
     """Treat ``.`` and ``-`` as equal *inside digit groups*.
@@ -1384,41 +1325,64 @@ def _model_lookup_keys(candidate: str) -> list[str]:
     return keys
 
 
-def _load_external_catalog_payload() -> dict[str, Any]:
-    """Return the full external catalog payload (not just ``providers``).
+def _resolve_catalog_payload() -> dict[str, Any]:
+    """Resolve the catalog payload through the one and only chain.
 
-    ``providers`` is only one top-level block of ``catalog.v1.json``. The model
-    knowledge cut migrates input-token ceilings into a sibling top-level block,
-    ``model_caps``, which a provider-only reader drops. This accessor preserves
-    the whole payload so those sibling blocks stay reachable through the same
-    env-override → metadata-dir chain the provider catalog already uses. When
-    neither override is set, it falls back to the bundled snapshot shipped in
-    ``faigate/assets/metadata/catalog.v1.json`` so the migrated ``model_caps``
-    block is reachable even before an external catalog is synced.
+    ``env-override (FAIGATE_PROVIDER_METADATA_FILE) → metadata-dir
+    (FAIGATE_PROVIDER_METADATA_DIR) → bundled snapshot``.
+
+    This is the single implementation every catalog reader goes through. The
+    previous shape had two competing chains for the same data — a provider-only
+    loader that returned ``{}`` on a dead override, and a payload loader that
+    read the bundled asset — so the same on-disk state produced different
+    answers depending on which helper a caller used.
+
+    A set-but-empty or non-existent override is a broken pointer, not a claim
+    that the catalog is empty. Each link contributes only if it actually yields
+    a payload; otherwise resolution continues to the next link, ending at the
+    bundled snapshot shipped in ``faigate/assets/metadata/catalog.v1.json``. The
+    chain therefore never returns ``{}`` unless even the bundled asset is
+    unreadable (a packaging failure, not a missing configuration).
     """
     metadata_path = str(os.environ.get(_EXTERNAL_CATALOG_ENV, "") or "").strip()
     if metadata_path:
-        return _load_catalog_payload(metadata_path)
+        payload = _load_catalog_payload(metadata_path)
+        if payload:
+            return payload
 
     metadata_dir = str(os.environ.get(_EXTERNAL_CATALOG_DIR_ENV, "") or "").strip()
     if metadata_dir:
         root = Path(metadata_dir).expanduser()
-        return _load_catalog_payload(root / _METADATA_CATALOG_RELATIVE_PATH)
+        payload = _load_catalog_payload(root / _METADATA_CATALOG_RELATIVE_PATH)
+        if payload:
+            return payload
 
     try:
         from .catalog_resolver import _load_bundled_snapshot
     except Exception:  # pragma: no cover - defensive
         return {}
     bundled = _load_bundled_snapshot()
-    return bundled if bundled is not None else {}
+    return bundled if isinstance(bundled, dict) else {}
+
+
+def _load_external_catalog_payload() -> dict[str, Any]:
+    """Return the full resolved catalog payload (not just ``providers``).
+
+    ``providers`` is only one top-level block of ``catalog.v1.json``. The model
+    knowledge cut migrates input-token ceilings into a sibling top-level block,
+    ``model_caps``, which a provider-only reader drops. This accessor preserves
+    the whole payload so those sibling blocks stay reachable through the same
+    chain every other catalog reader uses, without a second chain.
+    """
+    return _resolve_catalog_payload()
 
 
 def _load_external_model_caps() -> dict[str, Any]:
     """Return the catalog's top-level ``model_caps`` block, or ``{}``.
 
     The block is model-keyed and optional. A catalog without it (or no catalog
-    at all) yields ``{}`` so the hardcoded ``_MODEL_INPUT_CAPS`` map remains the
-    offline fallback instead of inventing a value.
+    at all) yields ``{}``; the caller is responsible for deciding what to do
+    when no cap is recorded (typically returning ``None``).
     """
     payload = _load_external_catalog_payload()
     model_caps = payload.get("model_caps")
@@ -1426,15 +1390,25 @@ def _load_external_model_caps() -> dict[str, Any]:
 
 
 def _model_caps_index() -> dict[str, int]:
-    """Build a model-id → max_input_tokens index from the catalog's ``model_caps``.
+    """Build a model-id → max_input_tokens index of *enforceable* caps.
 
     The ``model_caps`` block is model-keyed (unlike ``providers``, which is
     provider-keyed) — the input ceiling is a property of the concrete model, not
-    of any single provider. Only the numeric ``max_input_tokens`` is indexed here;
-    the accompanying ``evidence`` is carried separately by
-    :func:`get_model_input_cap_fact` so an unverified cap never hard-rejects a
-    request. A missing or thin block contributes nothing, degrading to the
-    bundled ``_MODEL_INPUT_CAPS`` fallback.
+    of any single provider. Only caps that reach the ``enforceable`` view of
+    :func:`faigate.catalog_views.split_catalog_facts` are indexed, and that is
+    exactly the ``confirmed`` ones. A ``plausible`` cap is best-effort and an
+    ``unconfirmed`` one is a non-claim, so neither belongs in an index whose
+    consumers treat a hit as a hard boundary. A cap with a missing or
+    unrecognised ``evidence`` block is unverified by construction and is
+    therefore excluded as well — a hand-written or freshly imported entry is
+    the shape that most often arrives without evidence, and it must not be
+    enforced merely because nobody wrote down where it came from. The view
+    split is the single definition of that boundary; this accessor keeps no
+    second copy of the rule.
+
+    A missing or empty block contributes nothing; the caller receives ``None``
+    for any model absent from the catalog or present only with a non-
+    enforceable cap.
     """
     index: dict[str, int] = {}
     model_caps = _load_external_model_caps()
@@ -1444,24 +1418,34 @@ def _model_caps_index() -> dict[str, int]:
         cap = fact.get("max_input_tokens")
         if not isinstance(cap, int) or isinstance(cap, bool) or cap <= 0:
             continue
-        index[str(model_id)] = cap
+        key = str(model_id)
+        if key not in split_catalog_facts({key: fact}).enforceable:
+            continue
+        index[key] = cap
     return index
 
 
 def get_model_max_input_tokens(model_id: str) -> int | None:
-    """Return the authoritative max_input_tokens for a concrete model ID.
+    """Return the enforceable max_input_tokens for a concrete model ID.
 
-    Catalog-first: the resolved catalog's top-level ``model_caps`` block wins so
-    a fact can be updated without a code change. When the catalog has no cap for
-    the model, the hardcoded ``_MODEL_INPUT_CAPS`` map remains the offline
-    fallback, so the 23 binding IDs keep answering without a catalog.
+    The catalog's top-level ``model_caps`` block is the only source: a cap can
+    be updated without a code change. When the catalog has no entry for the
+    model, ``None`` is returned — no embedded fallback is consulted.
+
+    A cap counts only when its ``evidence.level`` lets it reach the
+    ``enforceable`` view: ``confirmed`` does, while ``plausible`` (best-effort)
+    and ``unconfirmed`` (a non-claim) do not. The function is named for the
+    boundary its consumers rely on — the router treats a hit as a hard filter
+    and the capacity calculator treats it as a true ceiling — so it must not
+    answer with a number the evidence does not support. For the raw fact use
+    :func:`get_model_input_cap_fact`, which reports the level and leaves the
+    view decision to the caller.
 
     Normalises the common ``provider/model`` form to the trailing model id, then
-    falls back to the raw id, so both ``openrouter/gpt-5.6-sol`` and
-    ``gpt-5.6-sol`` resolve. Version separators are also normalised
-    (``claude-opus-4.6`` == ``claude-opus-4-6``) so a dot-form request answers
-    from a hyphen-form catalog entry. Returns ``None`` when neither source
-    records a cap.
+    tries the raw id, so both ``openrouter/gpt-5.6-sol`` and ``gpt-5.6-sol``
+    resolve. Version separators are also normalised (``claude-opus-4.6`` ==
+    ``claude-opus-4-6``) so a dot-form request answers from a hyphen-form
+    catalog entry. Returns ``None`` when the catalog records no enforceable cap.
     """
     if not model_id:
         return None
@@ -1473,26 +1457,18 @@ def get_model_max_input_tokens(model_id: str) -> int | None:
     for key in keys:
         if key in catalog_index:
             return catalog_index[key]
-    for key in keys:
-        if key in _MODEL_INPUT_CAPS:
-            return _MODEL_INPUT_CAPS[key]
     return None
-
-
-_MODEL_INPUT_CAP_EVIDENCE = {"level": "unbestaetigt"}
 
 
 def get_model_input_cap_fact(model_id: str) -> dict[str, Any] | None:
     """Return one model's max_input_tokens as an evidence-tagged fact, or ``None``.
 
-    This is the evidence-aware counterpart of :func:`get_model_max_input_tokens`.
-    The catalog is the only authority: a cap sourced from the catalog's
-    ``model_caps`` block carries the block's own ``evidence.level``, whether that
-    is ``belegt`` (a sourced fact), ``plausibel``, or ``unbestaetigt``. The
-    hardcoded ``_MODEL_INPUT_CAPS`` map is an offline *fallback* only, and a
-    fallback value without a source is itself ``unbestaetigt`` by construction —
-    it is the oldest unverified fact in the system, so it must never out-rank a
-    catalog fact or carry a stronger label. An id outside both sets returns
+    Where :func:`get_model_max_input_tokens` answers only for caps the evidence
+    lets the runtime enforce, this function reports the fact as recorded and
+    leaves the level visible. The catalog is the only authority: a cap sourced
+    from the catalog's ``model_caps`` block carries the block's own
+    ``evidence.level``, whether that is ``confirmed`` (a sourced fact),
+    ``plausible``, or ``unconfirmed``. An id absent from the catalog returns
     ``None`` — never the provider-wide 262144 floor, which is a placeholder, not
     a per-model truth.
 
@@ -1501,7 +1477,7 @@ def get_model_input_cap_fact(model_id: str) -> dict[str, Any] | None:
     entry.
 
     The returned dict is shaped for :func:`faigate.catalog_views.split_catalog_facts`,
-    so a consumer can separate ``belegt`` (hard) from ``plausibel`` (advisory)
+    so a consumer can separate ``confirmed`` (hard) from ``plausible`` (advisory)
     facts with no second piece of view-splitting logic.
     """
     if model_id is None:
@@ -1512,35 +1488,14 @@ def get_model_input_cap_fact(model_id: str) -> dict[str, Any] | None:
     keys = _model_lookup_keys(candidate)
 
     model_caps = _load_external_model_caps()
-    raw = None
     for key in keys:
         entry = model_caps.get(key)
         if isinstance(entry, dict) and isinstance(entry.get("max_input_tokens"), int):
-            raw = entry
-            break
-
-    hard_cap = None
-    for key in keys:
-        value = _MODEL_INPUT_CAPS.get(key)
-        if isinstance(value, int):
-            hard_cap = value
-            break
-
-    # The catalog wins whenever it records the model, even a bundled-snapshot
-    # fact. It carries a real source and is the newer truth. The hardcoded map
-    # only answers when the catalog is silent.
-    if raw is not None:
-        cap = raw["max_input_tokens"]
-        evidence = raw.get("evidence")
-        if not isinstance(evidence, dict):
-            evidence = dict(_MODEL_INPUT_CAP_EVIDENCE)
-        return {"max_input_tokens": cap, "evidence": dict(evidence)}
-
-    if hard_cap is not None:
-        return {
-            "max_input_tokens": hard_cap,
-            "evidence": dict(_MODEL_INPUT_CAP_EVIDENCE),
-        }
+            cap = entry["max_input_tokens"]
+            evidence = entry.get("evidence")
+            if not isinstance(evidence, dict):
+                evidence = {"level": "unconfirmed"}
+            return {"max_input_tokens": cap, "evidence": dict(evidence)}
 
     return None
 
@@ -1654,16 +1609,26 @@ def materialize_provider_metadata_snapshot(
 
 
 def _load_external_provider_catalog() -> dict[str, dict[str, Any]]:
-    metadata_path = str(os.environ.get(_EXTERNAL_CATALOG_ENV, "") or "").strip()
-    if metadata_path:
-        payload = _load_catalog_payload(metadata_path)
-        return _normalize_catalog_payload(payload)
+    """Return the provider entries of the resolved catalog.
 
+    Same chain as every other catalog reader (:func:`_resolve_catalog_payload`);
+    this accessor only projects the ``providers`` block. It used to have its own
+    env-only chain that never consulted the bundled snapshot and returned ``{}``
+    when the override pointed at nothing — see the chain tests.
+    """
     metadata_dir = str(os.environ.get(_EXTERNAL_CATALOG_DIR_ENV, "") or "").strip()
-    if not metadata_dir:
-        return {}
-    product = str(os.environ.get(_EXTERNAL_CATALOG_PRODUCT_ENV, _DEFAULT_METADATA_PRODUCT) or "")
-    return _normalize_catalog_payload(build_provider_metadata_snapshot(metadata_dir, product=product))
+    if metadata_dir and not str(os.environ.get(_EXTERNAL_CATALOG_ENV, "") or "").strip():
+        # A metadata directory is a repository, not a bare catalog: apply the
+        # product overlay the same way the sync/materializer path does. A dir
+        # without a catalog file yields nothing here and falls through to the
+        # bundled snapshot, exactly like the shared chain does.
+        product = str(os.environ.get(_EXTERNAL_CATALOG_PRODUCT_ENV, _DEFAULT_METADATA_PRODUCT) or "")
+        catalog = _normalize_catalog_payload(
+            build_provider_metadata_snapshot(metadata_dir, product=product)
+        )
+        if catalog:
+            return catalog
+    return _normalize_catalog_payload(_resolve_catalog_payload())
 
 
 def _get_catalog_source() -> dict[str, dict[str, Any]]:
