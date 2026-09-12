@@ -30,6 +30,8 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from starlette.datastructures import UploadFile
 
+import faigate
+
 from . import __version__
 from . import provider_catalog as provider_catalog_module
 from .adaptation import AdaptiveRouteState
@@ -2773,6 +2775,7 @@ async def health():
         "status": "ok",
         "service_status": "ok",
         "runtime_status": "ok",
+        "version": faigate.__version__,
         "summary": {
             **_health_summary(),
             "providers_request_ready": readiness["providers_ready"],
