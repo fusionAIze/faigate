@@ -245,7 +245,19 @@ def _candidate_ids(cfg) -> set[str]:
 
     for rule in cfg.static_rules.get("rules", []):
         _collect(rule.get("match", {}))
+    candidates.update(_catalog_long_forms())
     return candidates
+
+
+def _catalog_long_forms() -> set[str]:
+    """Return the canonical catalog long forms the list and gate both derive from.
+
+    Mirrors ``catalog_model_identities()``, which is the shared source for
+    ``_routable_model_entries`` (the list) and ``Router.model_requested_is_accepted``
+    (the gate). Adding them to the candidate universe is what lets an agreement
+    test catch a drift where one side grows a private notion of "routable".
+    """
+    return {identity.long_form.lower() for identity in main_module._catalog_model_identities()}
 
 
 @pytest.mark.asyncio
@@ -256,7 +268,7 @@ async def test_list_and_gate_agree_on_candidate_ids(models_config):
     accept an id the list hides. If either side grows a private notion of
     "routable", exactly one direction fails and this test says which id.
     """
-    listed = set(await _model_ids())
+    listed = {model_id.lower() for model_id in await _model_ids()}
     router = main_module._router
     candidates = _candidate_ids(main_module._config)
 

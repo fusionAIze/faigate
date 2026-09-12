@@ -32,7 +32,24 @@ def _load_benchmark_module():
 
 
 def test_catalog_limits_are_read_programmatically():
-    """AC-2: per-provider limits + 413 cap come from the catalog, not literals."""
+    """AC-2: per-provider limits + 413 cap come from the catalog, not literals.
+
+    Two distinct bands are involved and the test must keep them distinct:
+
+    * the per-*provider* band, ``providers[*].limits.max_input_tokens``, read by
+      ``read_limits_from_catalog`` — a provider-wide placeholder;
+    * the per-*model* band, the catalog's top-level ``model_caps`` block, whose
+      entries carry an ``evidence.level``. This is the band the live 413
+      actually advertises, via ``faigate.main._resolve_advertised_input_limit``.
+
+    ``read_limits_from_catalog`` derives ``max_cap`` as ``max(per-provider
+    caps)`` whenever ``faigate.main._max_input_token_cap`` is unimportable —
+    which it is in this tree. Asserting ``max_cap in per_provider.values()``
+    would therefore be a tautology (the max of a set is in the set) and could
+    never fail. The guarantee guarded here is the real provenance rule: a
+    seat's advertised cap is a positive integer drawn from the evidence-tagged
+    model-cap band, and each seat's provider lane declares its own positive cap.
+    """
     bench = _load_benchmark_module()
     reading = bench.read_limits_from_catalog()
 
@@ -55,11 +72,50 @@ def test_catalog_limits_are_read_programmatically():
         assert key in declared, f"{key} missing from programmatic limits"
         assert declared[key] is not None
         assert declared[key] > 0
-    # Uniformity: every declared cap equals the advertised max cap (the
-    # catalog band is intentionally uniform; the assertion guards a silent
-    # split, not the value itself).
-    caps = {v for v in declared.values() if v is not None}
-    assert set(caps) == {reading.max_cap}
+
+    # Provenance, in the band that actually governs an advertisement. The old
+    # uniform-band assertion ("262144 for every lane") became false once caps
+    # were resolved per lane; the assertion that briefly replaced it
+    # (``max_cap in declared.values()``) was vacuous, because ``max_cap`` is
+    # itself ``max(declared.values())`` whenever no live backend is importable
+    # — a set's maximum is trivially a member of the set. The real rule is the
+    # one ``_resolve_advertised_input_limit`` enforces: an advertised token
+    # number is a per-model fact carrying an evidence level, and is never
+    # invented from the provider-wide placeholder band.
+    from faigate.main import _resolve_advertised_input_limit
+    from faigate.provider_catalog import get_model_input_cap_fact
+
+    placeholder_band = {v for v in declared.values() if v is not None}
+    for seat in bench.FIVE_SEATS:
+        fact = get_model_input_cap_fact(seat)
+        advertised, estimated = _resolve_advertised_input_limit(seat)
+        if fact is None:
+            # No evidence-tagged model fact: no token number may be advertised,
+            # and the provider-wide placeholder must not leak in as one.
+            assert advertised is None, (
+                f"413 for {seat} advertises {advertised} with no evidence-tagged "
+                f"model-cap fact; the provider placeholder band {sorted(placeholder_band)} "
+                "must never be surfaced as a hard cap"
+            )
+            assert estimated is False
+            continue
+        level = str((fact.get("evidence") or {}).get("level") or "")
+        cap = fact["max_input_tokens"]
+        if level == "confirmed":
+            assert advertised == cap and estimated is False, (
+                f"413 for {seat} advertised {advertised} (estimated={estimated}); a "
+                f"confirmed model cap {cap} must pass through unchanged"
+            )
+        elif level == "plausible":
+            assert advertised == cap and estimated is True, (
+                f"413 for {seat} advertised {advertised} (estimated={estimated}); a "
+                f"plausible model cap {cap} must be shown as a best-effort estimate"
+            )
+        else:
+            assert advertised is None, (
+                f"413 for {seat} advertised {advertised} from an {level!r} fact; "
+                "no hard cap may be invented"
+            )
 
 
 def test_recorded_five_seats_are_distinct():

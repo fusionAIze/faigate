@@ -61,7 +61,7 @@ from .lane_registry import (
     get_route_add_recommendations,
 )
 from .metrics import MetricsStore, calc_cost
-from .model_identity import ModelIdentity, ModelIdentityResolver, derive_short_name
+from .model_identity import ModelIdentity, ModelIdentityResolver, catalog_model_identities, derive_short_name
 from .oauth_readiness import oauth_readiness_block
 from .provider_availability import (
     record_availability_from_config,
@@ -347,15 +347,15 @@ def _resolve_advertised_input_limit(
     model-caps map and carries an ``evidence.level``; this helper turns that
     fact into one of three outcomes governed by the evidence scale:
 
-    * ``belegt``     -> the cap is returned unchanged and ``estimate=False``.
-    * ``plausibel``  -> the cap is returned but flagged ``estimate=True``, so a
+    * ``confirmed``     -> the cap is returned unchanged and ``estimate=False``.
+    * ``plausible``  -> the cap is returned but flagged ``estimate=True``, so a
       client sees it as a best-effort figure rather than a guarantee.
-    * ``unbestaetigt`` / missing -> ``(None, ...)``: no hard cap is invented.
+    * ``unconfirmed`` / missing -> ``(None, ...)``: no hard cap is invented.
       The 413 then either passes the limit through to the provider or falls
       back to the operator-configured *byte* limit, per ``FAIGATE_UNVERIFIED_CAP_MODE``.
 
     The second tuple element is the "is estimate" flag: ``False`` for a hard
-    ``belegt`` number, ``True`` for a best-effort ``plausibel`` number.
+    ``confirmed`` number, ``True`` for a best-effort ``plausible`` number.
     """
     fact = provider_catalog_module.get_model_input_cap_fact(model_id) if model_id else None
     if fact is None:
@@ -370,7 +370,7 @@ def _resolve_advertised_input_limit(
 
 
 def _unverified_cap_mode() -> str:
-    """Return how a 413 should behave when a model has no ``belegt`` input cap.
+    """Return how a 413 should behave when a model has no ``confirmed`` input cap.
 
     Configurable via ``FAIGATE_UNVERIFIED_CAP_MODE``:
 
@@ -395,8 +395,8 @@ def _payload_too_large_response(
     header is resolved from an evidence-tagged per-model cap, never from the
     provider-wide 262144 placeholder:
 
-    * a hard ``belegt`` cap is advertised unchanged;
-    * a ``plausibel`` cap is advertised but marked as an estimate
+    * a hard ``confirmed`` cap is advertised unchanged;
+    * a ``plausible`` cap is advertised but marked as an estimate
       (``estimated: true`` in the body, ``~`` prefix on the header);
     * no cap at all is passed through, or reported as the operator byte limit,
       depending on ``FAIGATE_UNVERIFIED_CAP_MODE`` — an invented token number is
@@ -2992,32 +2992,14 @@ def _static_rule_model_requested_triggers(static_rules: dict[str, Any]) -> list[
 
 
 def _catalog_model_identities() -> list[ModelIdentity]:
-    """Build model identities from the split provider registry.
+    """Build model identities from the catalog, with ``registry.ALL`` fallback.
 
-    Each ``registry.ALL`` entry carries ``vendor`` / ``model`` (plus optional
-    ``hop`` / ``variant``), so the derived short name and the canonical long
-    form come straight out of the identity fields — no curation needed. The
-    resolver built from this list is the one place that turns a requested
-    token (long form, derived short name, or kuerzel alias) into the canonical
-    long form faigate returns, logs, and bills.
+    Thin alias over :func:`faigate.model_identity.catalog_model_identities` so
+    the resolver and the router's identity gate share the exact same
+    computation. See that function for the source precedence (catalog first,
+    ``registry.ALL`` offline fallback) and the deduplication contract.
     """
-    from . import registry
-
-    identities: list[ModelIdentity] = []
-    for name in registry.known_names():
-        identity = registry.provider_identity(name)
-        if identity is None:
-            continue
-        vendor, model, _long_form = identity
-        identities.append(
-            ModelIdentity.from_fields(
-                vendor=vendor,
-                model=model,
-                hop=registry.ALL[name].get("hop") or [],
-                variant=registry.ALL[name].get("variant"),
-            )
-        )
-    return identities
+    return catalog_model_identities()
 
 
 def _model_identity_resolver() -> ModelIdentityResolver:
@@ -3180,6 +3162,31 @@ def _routable_model_entries(
                     "aliases": spec.get("aliases", []),
                 },
             )
+
+    # Catalog identities: a model that exists only in the catalog (and has no
+    # configured backend) is still addressable, so it must be listed here. The
+    # routing gate accepts an id exactly when the shared
+    # ``model_identity.catalog_model_identities()`` list resolves it, so listing
+    # its long forms from that same list keeps ``/v1/models`` and the gate from
+    # drifting. The derived short name and any kuerzel alias ride the entry as
+    # ``aliases``, matching how modes and shortcuts advertise their aliases.
+    for identity in _catalog_model_identities():
+        aliases: list[str] = list(identity.aliases)
+        short_name = identity.effective_short_name
+        if short_name and short_name.lower() != identity.long_form.lower():
+            aliases.append(short_name)
+        claim(
+            identity.long_form,
+            {
+                "object": "model",
+                "owned_by": "faigate",
+                "description": f"Catalog model {identity.vendor}/{identity.model}",
+                "catalog": True,
+                "long_form": identity.long_form,
+                "short_name": short_name,
+                "aliases": aliases,
+            },
+        )
 
     claim(
         "auto",

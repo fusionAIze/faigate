@@ -24,7 +24,12 @@ import pytest
 
 from faigate import metadata_catalog_sync
 from faigate.catalog_cache import CatalogCache
-from faigate.catalog_resolver import CatalogResolver, ResolverConfig
+from faigate.catalog_resolver import (
+    CatalogResolver,
+    ResolverConfig,
+    _invalidate_bundled_snapshot_cache,
+    _load_bundled_snapshot,
+)
 from faigate.metadata_catalog_sync import MetadataCatalogSync
 
 
@@ -148,3 +153,35 @@ def test_error_with_cache_serves_stale_copy_instead_of_failing(tmp_path: Path) -
     assert stale.source == "public-cache"
     assert stale.payload == seeded.payload
     assert stale.etag == '"v1"'
+
+
+def test_bundled_snapshot_is_memoised_and_invalidatable(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The bundled snapshot parse happens once, not per call, and is resettable.
+
+    ``_load_bundled_snapshot`` sits on the request path (the resolution chain and
+    ``/v1/models`` both feed from it) and parses a ~59 KB JSON asset. It must be
+    memoised so the parse cost is paid once. ``_invalidate_bundled_snapshot_cache``
+    is the named invalidation hook: it makes the next call re-read.
+    """
+    # Count real parses by patching json.load, which the loader calls exactly
+    # once per uncached read.
+    import faigate.catalog_resolver as cr
+
+    real_json_load = json.load
+    parse_count = {"n": 0}
+
+    def _counting_load(*args, **kwargs):
+        parse_count["n"] += 1
+        return real_json_load(*args, **kwargs)
+
+    _invalidate_bundled_snapshot_cache()
+    monkeypatch.setattr(cr.json, "load", _counting_load)
+
+    first = _load_bundled_snapshot()
+    second = _load_bundled_snapshot()
+    assert parse_count["n"] == 1  # parsed once across two calls
+    assert first is second  # same cached object
+
+    _invalidate_bundled_snapshot_cache()
+    _load_bundled_snapshot()
+    assert parse_count["n"] == 2  # named invalidation forced a re-parse

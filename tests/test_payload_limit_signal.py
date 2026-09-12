@@ -4,9 +4,9 @@ The gateway's payload-too-large response must report the cap of the *requested
 model*, never the provider-wide ``max()`` placeholder (262144). Three things are
 pinned here:
 
-1. A request whose model has a hard ``belegt`` cap reports that model's cap when
+1. A request whose model has a hard ``confirmed`` cap reports that model's cap when
    the ingress 413 fires — the value a client can plan against.
-2. A model without a ``belegt`` cap falls back to the b2 rule (passthrough or the
+2. A model without a ``confirmed`` cap falls back to the b2 rule (passthrough or the
    operator byte limit), never to an invented ``max()`` number.
 3. The reported number is always unit-labelled so ``tokens`` (a model cap) can
    never be mistaken for ``bytes`` (the operator body limit).
@@ -30,15 +30,22 @@ from faigate import provider_catalog
 # --------------------------------------------------------------------------- #
 
 
-def test_resolve_reports_the_requested_models_cap() -> None:
-    limit, estimated = main._resolve_advertised_input_limit("deepseek-v4-flash")
+def _use_bundled_catalog(monkeypatch) -> None:
+    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_FILE", raising=False)
+    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_DIR", raising=False)
+
+
+def test_resolve_reports_the_requested_models_cap(monkeypatch) -> None:
+    _use_bundled_catalog(monkeypatch)
+    limit, estimated = main._resolve_advertised_input_limit("claude-opus-4-6")
 
     assert limit == 1000000
     assert estimated is False
 
 
-def test_413_reports_the_requested_models_cap() -> None:
-    resp = main._payload_too_large_response("too large", model_id="deepseek-v4-flash")
+def test_413_reports_the_requested_models_cap(monkeypatch) -> None:
+    _use_bundled_catalog(monkeypatch)
+    resp = main._payload_too_large_response("too large", model_id="claude-opus-4-6")
 
     payload = json.loads(resp.body)
     assert payload["type"] == "payload_too_large"
@@ -47,11 +54,11 @@ def test_413_reports_the_requested_models_cap() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Criterion 2 — no belegt cap: b2 rule, no max()
+# Criterion 2 — no confirmed cap: b2 rule, no max()
 # --------------------------------------------------------------------------- #
 
 
-def test_no_belegt_cap_produces_no_invented_max() -> None:
+def test_no_confirmed_cap_produces_no_invented_max() -> None:
     resp = main._payload_too_large_response("too large", model_id="provider/unknown-model")
 
     payload = json.loads(resp.body)
@@ -72,8 +79,9 @@ def test_unknown_model_resolves_to_none() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_belegt_cap_is_labelled_tokens() -> None:
-    resp = main._payload_too_large_response("too large", model_id="deepseek-v4-flash")
+def test_confirmed_cap_is_labelled_tokens(monkeypatch) -> None:
+    _use_bundled_catalog(monkeypatch)
+    resp = main._payload_too_large_response("too large", model_id="claude-opus-4-6")
 
     payload = json.loads(resp.body)
     assert payload["limit"] == 1000000
@@ -111,9 +119,9 @@ def test_explicit_limit_override_is_labelled_tokens() -> None:
 
 
 def test_sniff_recovers_model_from_oversized_body() -> None:
-    raw = b'{"model":"deepseek-v4-flash","messages":[{"role":"user","content":"x"}]}'
+    raw = b'{"model":"claude-opus-4-6","messages":[{"role":"user","content":"x"}]}'
 
-    assert main._sniff_requested_model(raw) == "deepseek-v4-flash"
+    assert main._sniff_requested_model(raw) == "claude-opus-4-6"
 
 
 def test_sniff_returns_none_without_model() -> None:
@@ -122,8 +130,9 @@ def test_sniff_returns_none_without_model() -> None:
     assert main._sniff_requested_model(b"\x00\xff\xfe not json") is None
 
 
-def test_sniffed_model_flows_into_the_413() -> None:
-    raw = b'{"model":"deepseek-v4-flash","messages":[]}'
+def test_sniffed_model_flows_into_the_413(monkeypatch) -> None:
+    _use_bundled_catalog(monkeypatch)
+    raw = b'{"model":"claude-opus-4-6","messages":[]}'
     model_id = main._sniff_requested_model(raw)
 
     resp = main._payload_too_large_response("too large", model_id=model_id)
@@ -134,16 +143,32 @@ def test_sniffed_model_flows_into_the_413() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Criterion 4 — the curated caps are still the source of truth
+# Criterion 4 — the catalog is the source of truth, the hardcoded map is a fallback
 # --------------------------------------------------------------------------- #
 
 
-def test_deepseek_v4_flash_cap_is_belegt() -> None:
-    fact = provider_catalog.get_model_input_cap_fact("deepseek-v4-flash")
+def test_absent_cap_returns_none_not_invented() -> None:
+    """A model absent from the catalog returns ``None``, not an invented fact.
+
+    The catalog is the sole source of cap knowledge; there is no embedded
+    fallback map. An absent model must return ``None`` so the gateway applies
+    the ``_unverified_cap_mode`` path rather than surfacing a fabricated number.
+    """
+    sentinel = "__test_sentinel_no_catalog_entry__"
+    fact = provider_catalog.get_model_input_cap_fact(sentinel)
+    assert fact is None, (
+        f"expected None for absent model, got {fact!r}"
+    )
+
+
+def test_catalog_sourced_cap_is_confirmed(monkeypatch) -> None:
+    _use_bundled_catalog(monkeypatch)
+    fact = provider_catalog.get_model_input_cap_fact("claude-opus-4-6")
 
     assert fact is not None
     assert fact["max_input_tokens"] == 1000000
-    assert fact["evidence"]["level"] == "belegt"
+    assert fact["evidence"]["level"] == "confirmed"
+    assert fact["evidence"]["source_url"]
 
 
 if __name__ == "__main__":

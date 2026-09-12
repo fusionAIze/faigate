@@ -1,5 +1,11 @@
 # fusionAIze Gate Changelog
 
+## Unreleased
+
+### Fixed
+
+- **Routing no longer enforces unconfirmed model caps.** `get_model_max_input_tokens` read the catalog's `model_caps` block without consulting each cap's `evidence.level`, so a cap the catalog marks `unconfirmed` — a non-claim — was still substituted for the provider's configured `limits.max_input_tokens` in the routing dimension-fit filter and the input-headroom score. `faigate/catalog_views.py` states that `unconfirmed` facts are invisible to the router, the capacity calculator, and error output; the 413 path already honoured that, the routing path did not. The lookup now returns a cap only when its evidence lets it reach the `enforceable` view, so the operator's provider limits govern instead and routing falls through to a fitting provider rather than pinning the request to one that cannot serve it. Use `get_model_input_cap_fact` for the raw evidence-tagged value.
+
 ## v2.7.0 - 2026-08-21
 
 ### Added

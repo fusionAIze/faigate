@@ -6,6 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import faigate.provider_catalog as pc
 from faigate.onboarding import (
     build_onboarding_report,
     build_onboarding_validation,
@@ -16,7 +17,27 @@ from faigate.onboarding import (
 )
 
 
-def test_onboarding_report_marks_missing_api_keys_and_presets(tmp_path: Path):
+def _pin_catalog_review_date(monkeypatch) -> None:
+    """Freeze the curated catalog's review age for tests about onboarding content.
+
+    The onboarding report embeds the provider-catalog report, which raises
+    ``catalog-stale`` once an entry is older than ``max_catalog_age_days``. That
+    is a function of the wall clock, not of the onboarding setup under test, so
+    without pinning it these tests would go red on their own — claiming a broken
+    onboarding promise when only the calendar moved.
+    """
+    real = pc._tracked_item
+
+    def _pinned(provider_name, provider, catalog_entry, *, today):
+        fresh_entry = dict(catalog_entry)
+        fresh_entry["last_reviewed"] = today.isoformat()
+        return real(provider_name, provider, fresh_entry, today=today)
+
+    monkeypatch.setattr(pc, "_tracked_item", _pinned)
+
+
+def test_onboarding_report_marks_missing_api_keys_and_presets(tmp_path: Path, monkeypatch):
+    _pin_catalog_review_date(monkeypatch)
     env_file = tmp_path / ".env"
     env_file.write_text("DEEPSEEK_API_KEY=\n", encoding="utf-8")
 
@@ -177,7 +198,7 @@ auto_update:
     assert "Status: blocked" in text
 
 
-def test_onboarding_report_includes_provider_catalog_alerts(tmp_path: Path):
+def test_onboarding_report_includes_provider_catalog_alerts(tmp_path: Path, monkeypatch):
     env_file = tmp_path / ".env"
     env_file.write_text("DEEPSEEK_API_KEY=sk-demo\n", encoding="utf-8")
 
@@ -211,6 +232,11 @@ auto_update:
 """.strip(),
         encoding="utf-8",
     )
+
+    # The configured model deliberately does not match the curated
+    # recommendation, so model-drift must surface. Catalog staleness is pinned
+    # away: it is a calendar artifact and would otherwise add a second alert.
+    _pin_catalog_review_date(monkeypatch)
 
     report = build_onboarding_report(config_path=config_file, env_file=env_file)
     validation = build_onboarding_validation(report)

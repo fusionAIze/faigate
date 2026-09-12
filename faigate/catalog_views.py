@@ -5,7 +5,7 @@ with an ``evidence`` block::
 
     {
         "evidence": {
-            "level": "belegt",
+            "level": "confirmed",
             "source_url": "https://api-docs.deepseek.com/",
             "as_of": "2026-09-10",
         }
@@ -13,18 +13,18 @@ with an ``evidence`` block::
 
 ``evidence.level`` follows the three-step scale fixed by the catalog schema:
 
-    unbestaetigt < plausibel < belegt
+    unconfirmed < plausible < confirmed
 
 Two views are derived at load time so the runtime only ever receives the facts
 it is allowed to act on:
 
-* **enforceable** — hard decisions. Only ``belegt`` facts. The router and the
+* **enforceable** — hard decisions. Only ``confirmed`` facts. The router and the
   capacity calculator may rely on these unconditionally.
-* **advisory** — best-effort. ``belegt`` + ``plausibel`` facts. A consumer
-  presenting this view to a client must flag the ``plausibel`` subset as an
+* **advisory** — best-effort. ``confirmed`` + ``plausible`` facts. A consumer
+  presenting this view to a client must flag the ``plausible`` subset as an
   estimate rather than a guarantee.
 
-``unbestaetigt`` facts appear in *neither* view: they are invisible to the
+``unconfirmed`` facts appear in *neither* view: they are invisible to the
 router, the capacity calculator, and error output. A fact whose ``evidence``
 block is missing, or whose level is not one of the three recognised values, is
 treated as unverified and excluded from both views for the same reason.
@@ -42,20 +42,20 @@ from typing import Any
 
 # Evidence level names fixed by the provider-catalog schema. Order is
 # meaningful: a higher rank is a stronger claim about the fact's verification.
-LEVEL_BELEGT = "belegt"
-LEVEL_PLAUSIBEL = "plausibel"
-LEVEL_UNBESTAETIGT = "unbestaetigt"
+LEVEL_CONFIRMED = "confirmed"
+LEVEL_PLAUSIBLE = "plausible"
+LEVEL_UNCONFIRMED = "unconfirmed"
 
-_LEVELS = (LEVEL_UNBESTAETIGT, LEVEL_PLAUSIBEL, LEVEL_BELEGT)
+_LEVELS = (LEVEL_UNCONFIRMED, LEVEL_PLAUSIBLE, LEVEL_CONFIRMED)
 
 # Which views each level feeds, keyed by level.
-#   belegt       -> enforceable + advisory (hard decisions also surface as advice)
-#   plausibel    -> advisory only (best-effort, flagged as estimate)
-#   unbestaetigt -> neither (invisible to router, capacity, and error output)
+#   confirmed    -> enforceable + advisory (hard decisions also surface as advice)
+#   plausible    -> advisory only (best-effort, flagged as estimate)
+#   unconfirmed  -> neither (invisible to router, capacity, and error output)
 _VIEW_MEMBERSHIP: dict[str, tuple[bool, bool]] = {
-    LEVEL_BELEGT: (True, True),
-    LEVEL_PLAUSIBEL: (False, True),
-    LEVEL_UNBESTAETIGT: (False, False),
+    LEVEL_CONFIRMED: (True, True),
+    LEVEL_PLAUSIBLE: (False, True),
+    LEVEL_UNCONFIRMED: (False, False),
 }
 
 
@@ -72,7 +72,7 @@ def evidence_level(fact: Mapping[str, Any]) -> str | None:
 
     A missing ``evidence`` block or a level outside the three recognised values
     signals an unverified fact. Returning ``None`` lets the splitter treat it
-    like ``LEVEL_UNBESTAETIGT`` without ever inventing a level.
+    like ``LEVEL_UNCONFIRMED`` without ever inventing a level.
     """
     evidence = fact.get("evidence")
     if not isinstance(evidence, Mapping):
