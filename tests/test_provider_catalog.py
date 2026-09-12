@@ -1563,13 +1563,20 @@ def test_recommended_model_inline_literals_name_a_catalog_model() -> None:
 
     # The guard must keep its whole subject: if the allowance ever claims a lane
     # that is now known (or gone), the pinned exception has rotted.
+    resolved_by_lane = {lane: target for lane, target, _is_derived, _why in entries}
     for lane, literal in _CATALOG_KNOWN_UNKNOWN_TARGETS:
         entry = providers.get(lane) or {}
         known = {_normalize_dots(str(entry.get("model") or ""))}
         known.update(_normalize_dots(str(a)) for a in entry.get("aliases") or [])
-        still_unknown = (
-            _normalize_dots(literal) not in known and _normalize_dots(literal.rsplit("/", 1)[-1]) not in known
-        )
+        # Resolve the lane the way the staleness check above does. Comparing the
+        # pinned spelling instead would keep the allowance alive after the wiring
+        # was repaired: the recorded string stays unknown forever, while the value
+        # the lane actually produces has become known. The allowance exists for
+        # the target a lane resolves to, so that is what has to be re-checked.
+        target = resolved_by_lane.get(lane, literal)
+        current = pc.get_active_model_id(target) if target in resolved_by_lane.values() else literal
+        candidates = {_normalize_dots(current), _normalize_dots(current.rsplit("/", 1)[-1])}
+        still_unknown = not (candidates & known)
         assert still_unknown, (
             f"the pinned unknown target {lane} -> {literal!r} is now known to the "
             "catalog; delete its entry from _CATALOG_KNOWN_UNKNOWN_TARGETS and "
@@ -1637,11 +1644,12 @@ _ROUTER_TARGETS = frozenset(
 # changing ``lane_registry._ACTIVE_MODEL_VERSIONS`` (or this lane's canonical
 # id), both outside tests/test_provider_catalog.py. Kept visible on purpose:
 # delete the entry once the wiring points at a catalog model.
-_CATALOG_KNOWN_UNKNOWN_TARGETS = frozenset(
-    {
-        ("anthropic-haiku", "haiku-4.5"),
-    }
-)
+# Lanes whose resolved target the catalog does not know. Empty is the correct
+# state: a lane that resolves to something the catalog cannot name is a wiring
+# fault, and the entry here is a receipt for one that is known and not yet
+# fixed. The check below deletes nothing on its own — it fails and asks, so an
+# allowance cannot outlive its reason.
+_CATALOG_KNOWN_UNKNOWN_TARGETS: frozenset[tuple[str, str]] = frozenset()
 
 
 def test_recommended_model_literal_extractor_reads_catalog_wiring() -> None:
