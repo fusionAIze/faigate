@@ -1347,6 +1347,279 @@ def test_embedded_provider_table_guard_does_not_see_built_tables() -> None:
 
 
 # --------------------------------------------------------------------------- #
+# recommended_model: a derived field, pinned against the catalog it derives from
+# --------------------------------------------------------------------------- #
+
+
+def _resolved_catalog_without_env() -> dict:
+    """Resolve the catalog with every ``FAIGATE_*`` override cleared.
+
+    The operator shell in this repo really does export
+    ``FAIGATE_PROVIDER_METADATA_DIR`` / ``..._FILE``; a test that reads the
+    chain without clearing them measures the operator's working copy, not the
+    shipped snapshot. Callers that want the bundled catalog must go through
+    here.
+    """
+    import os
+
+    saved = {
+        name: os.environ.pop(name, None)
+        for name in (
+            "FAIGATE_PROVIDER_METADATA_FILE",
+            "FAIGATE_PROVIDER_METADATA_DIR",
+            "FAIGATE_OFFERINGS_METADATA_FILE",
+            "FAIGATE_PROVIDER_METADATA_PRODUCT",
+        )
+    }
+    try:
+        _reset_catalog_caches(pc)
+        return pc._resolve_catalog_payload()
+    finally:
+        for name, value in saved.items():
+            if value is not None:
+                os.environ[name] = value
+        _reset_catalog_caches(pc)
+
+
+def _recommended_model_literals(source: str) -> list[tuple[str, str]]:
+    """``(provider_name, literal)`` for every inline ``recommended_model`` value.
+
+    The embedded table is ``_CATALOG = {"<provider>": {..., "recommended_model": ...}}``
+    — the provider name is the *outer dict key*, not a ``provider_name`` field.
+    Only *inline string* values are collected. A value computed by
+    :func:`faigate.provider_catalog.get_active_model_id` is wiring, not a
+    recorded fact, and is deliberately out of scope — see
+    :func:`test_recommended_model_inline_literals_name_a_catalog_model`.
+    """
+    import ast
+
+    found: list[tuple[str, str]] = []
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, ast.Dict):
+            continue
+        for provider_key, entry in zip(node.keys, node.values):
+            if not (isinstance(provider_key, ast.Constant) and isinstance(provider_key.value, str)):
+                continue
+            if not isinstance(entry, ast.Dict):
+                continue
+            for key, value in zip(entry.keys, entry.values):
+                if (
+                    isinstance(key, ast.Constant)
+                    and key.value == "recommended_model"
+                    and isinstance(value, ast.Constant)
+                    and isinstance(value.value, str)
+                ):
+                    found.append((provider_key.value, value.value))
+    return found
+
+
+def test_recommended_model_inline_literals_name_a_catalog_model() -> None:
+    """An inline ``recommended_model`` must name the catalog's model or an alias.
+
+    ``recommended_model`` is not a catalog field: the bundled snapshot records
+    only ``model`` plus ``aliases``, and the resolved value is derived. It
+    therefore cannot be compared as a fact against a catalog fact without
+    saying which half is which. The distinction this test draws:
+
+    * **Derived -- out of scope.** Eight entries compute the value with
+      ``get_active_model_id(...)``. That is runtime wiring and is intentionally
+      free to differ from ``model``; asserting on it would pin the wiring, not
+      the data.
+    * **Recorded -- in scope.** Every other entry writes a string literal. That
+      literal claims to name a model this provider offers, so it must appear in
+      the catalog's ``model`` or in that entry's ``aliases``. A literal that
+      appears in neither is a stale doppelganger: not a fact about the provider,
+      and not a router alias either.
+
+    What this does NOT require: that the literal equal ``model`` outright.
+    Router and pseudo providers (``clawrouter``/``openrouter-fallback`` ->
+    ``auto``, ``kilo-auto-*`` -> ``kilo-auto/<tier>``, ``pollinations`` ->
+    ``pollinations/openai``) legitimately recommend a routing target rather than
+    the concrete ``model``; and ``qwen/qwen3.6-plus`` / ``nvidia/nemotron`` are
+    the same models as the catalog's bare ``qwen3-6-plus`` / ``nemotron``,
+    spelled for the upstream API. Those are accepted.
+
+    What it does NOT do: it does not pick a winner for the five genuine
+    disagreements pinned in :data:`_CATALOG_KNOWN_DIVERGENCES`. Those need a
+    catalog-data decision, which is out of scope here; the test's job is to
+    keep them visible and to fail the moment a sixth appears or one is fixed
+    without the list being updated. Two local runners
+    (:data:`_CATALOG_LOCAL_RUNNER_DIVERGENCES`) are wiring, not facts, and are
+    named as such rather than compared against a placeholder.
+
+    RED-PROOF: set ``"recommended_model"`` on any provider to a model absent
+    from both ``model`` and ``aliases`` (e.g. ``"glm-9.9-not-real"``) and this
+    test names that provider. Verified against ``zai`` in
+    :func:`test_recommended_model_guard_catches_a_stale_literal`.
+    """
+    import inspect
+
+    import faigate.provider_catalog as pc
+
+    catalog = _resolved_catalog_without_env()
+    providers = catalog.get("providers") if isinstance(catalog, dict) else None
+    assert isinstance(providers, dict) and providers, "bundled snapshot did not resolve"
+
+    stale: list[tuple[str, str, str]] = []
+    for provider, literal in _recommended_model_literals(inspect.getsource(pc)):
+        entry = providers.get(provider)
+        if entry is None:
+            # A provider that lives only in the embedded table is covered by
+            # test_no_embedded_provider_table_in_provider_catalog, not here.
+            continue
+        known = {str(entry.get("model") or "")}
+        known.update(str(alias) for alias in entry.get("aliases") or [])
+        known = {_normalize_dots(value) for value in known if value}
+        tail = _normalize_dots(literal.rsplit("/", 1)[-1])
+        # A provider-qualified name is accepted when its tail is a model the
+        # catalog knows: "qwen/qwen3.6-plus" and "nvidia/nemotron" are the same
+        # model as the catalog's bare "qwen3-6-plus" / "nemotron", spelled for
+        # the upstream API. This is the naming difference the module already
+        # normalizes elsewhere, not a second opinion about the model.
+        if _normalize_dots(literal) in known or tail in known:
+            continue
+        # Router/pseudo targets are wiring-shaped: a bare routing keyword.
+        # Accept those rather than pin a router's policy.
+        if tail in _ROUTER_TARGETS:
+            continue
+        stale.append((provider, literal, str(entry.get("model") or "")))
+
+    # The divergences that exist today. Each is named with a reason, and the set
+    # must match exactly: a new one is a regression, and a *fixed* one is a
+    # prompt to delete its line (the same "pinned allowance" shape used for the
+    # embedded _CATALOG table). The two local runners in
+    # _CATALOG_LOCAL_RUNNER_DIVERGENCES are wiring, not facts: the literal
+    # suggests a model for the operator's own box rather than naming a
+    # vendor-published one, and are therefore excluded from the comparison.
+    remaining = {(provider, literal) for provider, literal, _model in stale} - _CATALOG_LOCAL_RUNNER_DIVERGENCES
+    unexpected = sorted(remaining - _CATALOG_KNOWN_DIVERGENCES)
+    fixed = sorted(_CATALOG_KNOWN_DIVERGENCES - remaining)
+
+    assert not unexpected, (
+        "embedded recommended_model literal(s) name no model the catalog knows:\n  "
+        + "\n  ".join(
+            f"{provider}: recommended_model={literal!r} is neither the catalog model "
+            f"{_catalog_model_of(providers, provider)!r} nor one of its aliases"
+            for provider, literal in unexpected
+        )
+        + "\nEither point the literal at the catalog model/alias, migrate the model "
+        "into the catalog, or add it to _CATALOG_KNOWN_DIVERGENCES with a reason."
+    )
+    assert not fixed, (
+        "these recommended_model divergences are listed as known but no longer "
+        f"diverge: {fixed}. Delete their entries from _CATALOG_KNOWN_DIVERGENCES "
+        "and this docstring together — the list and reality must not drift apart."
+    )
+
+
+def _catalog_model_of(providers: dict, provider: str) -> str:
+    entry = providers.get(provider) or {}
+    return str(entry.get("model") or "")
+
+
+def _normalize_dots(value: str) -> str:
+    """Treat ``claude-opus-4.6`` and ``claude-opus-4-6`` as the same spelling."""
+    return value.replace(".", "-")
+
+
+# Bare routing keywords a router provider legitimately recommends instead of a
+# concrete model. Spelling-normalised. Keep this list short and justified: it is
+# the set of values this test refuses to check against the catalog.
+_ROUTER_TARGETS = frozenset(
+    {
+        "auto",
+        "auto-router",
+        "coding-auto",
+        "tier-frontier",
+        "tier-balanced",
+        "tier-free",
+        "openai",
+        "local-model",
+        "your-model-id",
+        "minimax-m2.1-gs32",
+    }
+)
+
+# A local runner has no vendor-published model: the catalog records a
+# placeholder ("local-model", "llama3.2") and the embedded literal suggests a
+# concrete model for the operator to pull. Comparing the two would compare a
+# suggestion against a placeholder; both are honest, so both are accepted.
+_CATALOG_LOCAL_RUNNER_DIVERGENCES = frozenset(
+    {
+        ("lmstudio", "lmstudio/minimax-m2.1-gs32"),
+        ("ollama", "ollama/llama3.3"),
+    }
+)
+
+# Real disagreements between the embedded literal and the catalog's own model.
+# NOT fixed here: choosing the winning model is a catalog-data decision, and
+# this session is scoped to the wiring. They are pinned so they cannot be
+# forgotten or quietly multiplied.
+_CATALOG_KNOWN_DIVERGENCES = frozenset(
+    {
+        ("zai", "glm-4.7"),  # catalog says glm-5
+        ("minimax", "minimax/MiniMax-M2.7"),  # catalog says MiniMax-M2.1
+        ("huggingface", "huggingface/deepseek-ai/DeepSeek-R1"),  # catalog: zephyr-7b-beta
+        ("moonshot", "moonshot/kimi-k2.5"),  # catalog says moonshot-v1-8k
+        ("cerebras", "qwen-3-235b-a22b-instruct-2507"),  # catalog says llama3.3-70b
+    }
+)
+
+
+def test_recommended_model_literal_extractor_ignores_derived_values() -> None:
+    """ROT-PROOF: the extractor sees literals and leaves ``get_active_model_id`` alone."""
+    source = (
+        "_CATALOG = {\n"
+        '    "acme": {"recommended_model": get_active_model_id("x/y")},\n'
+        '    "beta": {"recommended_model": "glm-5"},\n'
+        "}\n"
+    )
+    assert _recommended_model_literals(source) == [("beta", "glm-5")]
+
+
+def test_recommended_model_guard_catches_a_stale_literal() -> None:
+    """ROT-PROOF: a literal naming no catalog model is reported."""
+    import inspect
+
+    import faigate.provider_catalog as pc
+
+    providers = _resolved_catalog_without_env()["providers"]
+    victim = "zai"
+    assert victim in providers, "fixture provider vanished from the snapshot"
+
+    real_source = inspect.getsource(pc)
+    poisoned = real_source.replace(
+        '"recommended_model": "glm-4.7"',
+        '"recommended_model": "glm-9.9-not-real"',
+        1,
+    )
+    assert poisoned != real_source, "rot-proof no longer rewrites the zai literal"
+
+    literals = _recommended_model_literals(poisoned)
+    entry = providers[victim]
+    known = {_normalize_dots(str(entry.get("model") or ""))}
+    known.update(_normalize_dots(str(a)) for a in entry.get("aliases") or [])
+
+    poisoned_hits = [
+        literal for provider, literal in literals if provider == victim and _normalize_dots(literal) not in known
+    ]
+    assert poisoned_hits == ["glm-9.9-not-real"], (
+        f"the stale-literal check no longer flags a model absent from the catalog; extracted {literals!r}"
+    )
+
+    # And the real source still reports exactly the pinned zai divergence.
+    clean_hits = [
+        literal
+        for provider, literal in _recommended_model_literals(real_source)
+        if provider == victim and _normalize_dots(literal) not in known
+    ]
+    assert clean_hits == ["glm-4.7"], (
+        "the zai divergence changed; update _CATALOG_KNOWN_DIVERGENCES and this "
+        f"rot-proof together (got {clean_hits!r})"
+    )
+
+
+# --------------------------------------------------------------------------- #
 # Catalog loading chain: one implementation, one answer
 # --------------------------------------------------------------------------- #
 
