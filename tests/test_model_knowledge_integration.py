@@ -167,35 +167,21 @@ def test_full_chain_guard_evidence_resolve_cap(tmp_path: Path) -> None:
     assert hit.identity.long_form == "deepseek/deepseek-v4-flash"
     assert identity_resolver.resolve("dv4f").identity is not None
 
-    # 4. Cap resolution is catalog-first and returns an evidence-tagged fact.
-    #    When the catalog has an entry for the model, the catalog's evidence
-    #    level is used (which may be "confirmed" for a sourced fact).  The
-    #    hardcoded _MODEL_INPUT_CAPS fallback is only consulted when the catalog
-    #    is silent; in that case the fact is always "unconfirmed".
+    # 4. Cap resolution is catalog-only and returns an evidence-tagged fact.
+    #    The catalog's evidence level is used (typically "confirmed" for a
+    #    sourced fact). No embedded fallback map exists.
     cap = provider_catalog.get_model_max_input_tokens("deepseek-v4-flash")
     assert cap == 1000000
     fact = provider_catalog.get_model_input_cap_fact("deepseek-v4-flash")
     assert fact is not None
-    # If the bundled catalog has deepseek-v4-flash, the catalog's level wins
-    # (confirmed); if it does not, the hardcoded fallback returns unconfirmed.
-    # Either way the returned level must be a recognised evidence level.
+    # The catalog's level must be a recognised evidence level.
     assert fact["evidence"]["level"] in ("confirmed", "plausible", "unconfirmed")
 
-    # Structural invariant: a model absent from the catalog that exists only in
-    # the hardcoded map must always resolve to "unconfirmed".
-    sentinel = "__test_sentinel_hardcoded_only__"
-    original_caps = provider_catalog._MODEL_INPUT_CAPS
-    provider_catalog._MODEL_INPUT_CAPS = {**original_caps, sentinel: 999999}
-    try:
-        sentinel_fact = provider_catalog.get_model_input_cap_fact(sentinel)
-        assert sentinel_fact is not None
-        assert sentinel_fact["evidence"]["level"] == "unconfirmed", (
-            f"hardcoded-only sentinel returned level "
-            f"{sentinel_fact['evidence']['level']!r}; must be unconfirmed"
-        )
-        assert "source_url" not in sentinel_fact["evidence"]
-    finally:
-        provider_catalog._MODEL_INPUT_CAPS = original_caps
+    # Structural invariant: a model absent from the catalog must return None —
+    # there is no embedded fallback to invent a value.
+    sentinel = "__test_sentinel_no_catalog_entry__"
+    assert provider_catalog.get_model_max_input_tokens(sentinel) is None
+    assert provider_catalog.get_model_input_cap_fact(sentinel) is None
 
 
 def test_gate_and_models_share_one_source() -> None:

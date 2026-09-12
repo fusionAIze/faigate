@@ -699,47 +699,44 @@ def test_provider_catalog_declares_in_band_input_cap():
         )
 
 
-def test_model_input_caps_cover_binding_models():
-    """The 23 binding model IDs each resolve to a real (non-floor) input cap."""
-    import faigate.provider_catalog as pc
+def test_binding_model_caps_resolve_from_catalog():
+    """The 23 canonical binding model IDs resolve to a non-floor cap from the catalog."""
+    binding_models = [
+        "deepseek-v4-pro",
+        "deepseek-v4-flash",
+        "gpt-5.6-sol",
+        "gpt-5.6-terra",
+        "gpt-5.6-luna",
+        "gpt-5.5",
+        "gpt-5.5-pro",
+        "o3",
+        "o3-mini",
+        "o4-mini",
+        "claude-opus-5",
+        "claude-sonnet-5",
+        "claude-haiku-4-5",
+        "claude-code",
+        "gemini-3.1-pro",
+        "gemini-3.1-flash",
+        "gemini-3-flash-lite",
+        "llama-4-maverick",
+        "llama-4-scout",
+        "qwen-3.6-27b",
+        "qwen3-coder",
+        "glm-5.3",
+        "kimi-k2.6",
+    ]
 
-    real_caps = {
-        "deepseek-v4-pro": 1000000,
-        "deepseek-v4-flash": 1000000,
-        "gpt-5.6-sol": 922000,
-        "gpt-5.6-terra": 922000,
-        "gpt-5.6-luna": 922000,
-        "gpt-5.5": 1050000,
-        "gpt-5.5-pro": 1050000,
-        "o3": 200000,
-        "o3-mini": 200000,
-        "o4-mini": 200000,
-        "claude-opus-5": 1000000,
-        "claude-sonnet-5": 1000000,
-        "claude-haiku-4-5": 200000,
-        "claude-code": 262144,  # Shim; documented mirror, not a native window
-        "gemini-3.1-pro": 1048576,
-        "gemini-3.1-flash": 1048576,
-        "gemini-3-flash-lite": 1048576,
-        "llama-4-maverick": 131072,
-        "llama-4-scout": 131072,
-        "qwen-3.6-27b": 262144,
-        "qwen3-coder": 262144,
-        "glm-5.3": 1000000,
-        "kimi-k2.6": 262144,
-    }
-
-    expected = set(real_caps)
-    declared = set(pc._MODEL_INPUT_CAPS)
-    assert declared == expected, (
-        f"model cap map must match the 23 binding IDs exactly; "
-        f"missing={sorted(expected - declared)}, extra={sorted(declared - expected)}"
-    )
-
-    for model_id, expected_cap in real_caps.items():
-        assert get_model_max_input_tokens(model_id) == expected_cap
+    for model_id in binding_models:
+        cap = get_model_max_input_tokens(model_id)
+        assert cap is not None, (
+            f"catalog must record a cap for binding model {model_id!r}"
+        )
+        assert isinstance(cap, int) and cap > 0, (
+            f"cap for {model_id!r} must be a positive int, got {cap!r}"
+        )
         prefixed = f"openrouter/{model_id}"
-        assert get_model_max_input_tokens(prefixed) == expected_cap, (
+        assert get_model_max_input_tokens(prefixed) == cap, (
             f"get_model_max_input_tokens({prefixed!r}) must resolve the trailing model id"
         )
 
@@ -837,16 +834,21 @@ def test_model_input_cap_reads_from_catalog_first(tmp_path, monkeypatch):
     assert get_model_max_input_tokens("catalog-only-model") == 777000
 
 
-def test_model_input_cap_falls_back_to_bundled_dict_without_catalog(tmp_path, monkeypatch):
-    """With no catalog on disk the hardcoded dict still answers unchanged."""
+def test_model_input_cap_is_none_without_catalog(tmp_path, monkeypatch):
+    """With no catalog on disk no cap is produced — a number is never invented.
+
+    There is no embedded fallback table any more. A model the catalog cannot
+    describe has no known cap, and saying so is the honest answer; returning a
+    remembered number would state a fact this process cannot support.
+    """
     import faigate.provider_catalog as pc
 
     empty_dir = tmp_path / "empty-metadata"
     empty_dir.mkdir()
     _patch_metadata_env(monkeypatch, pc, empty_dir)
 
-    assert get_model_max_input_tokens("gpt-5.6-sol") == 922000
-    assert get_model_max_input_tokens("openrouter/gpt-5.6-sol") == 922000
+    assert get_model_max_input_tokens("gpt-5.6-sol") is None
+    assert get_model_max_input_tokens("openrouter/gpt-5.6-sol") is None
 
 
 def test_model_input_cap_catalog_overrides_dict(tmp_path, monkeypatch):
@@ -905,25 +907,23 @@ def test_model_input_cap_catalog_wins_over_hardcoded_dict_without_env(monkeypatc
     assert fact["evidence"]["level"] == "confirmed"
 
 
-def test_model_input_cap_hardcoded_fallback_is_unconfirmed(monkeypatch, tmp_path):
-    """When the catalog has no entry for a model the hardcoded fallback carries unconfirmed.
+def test_model_input_cap_absent_without_catalog(monkeypatch, tmp_path):
+    """An empty catalog yields no cap fact at all, not an unsourced one.
 
-    An empty catalog is injected to isolate the hardcoded dict path. The
-    fallback has no source URL, so it must never carry a stronger label than
-    unconfirmed — that invariant is what this test pins.
+    The embedded fallback table is gone, so there is nothing left that could
+    answer without provenance. This pins that absence.
     """
     import faigate.provider_catalog as pc
 
-    # Inject an empty catalog so the fallback dict is the only source.
+    # Inject an empty catalog: there is no second source behind it.
     empty_metadata_dir = _write_metadata_catalog(tmp_path, model_caps={})
     _patch_metadata_env(monkeypatch, pc, empty_metadata_dir)
 
-    # gpt-5.6-sol is in the hardcoded dict; with an empty catalog the fallback
-    # must label it unconfirmed (no source URL, oldest unverified fact).
-    fact = pc.get_model_input_cap_fact("gpt-5.6-sol")
-    assert fact is not None
-    assert fact["evidence"]["level"] == "unconfirmed"
-    assert "source_url" not in fact["evidence"]
+    # An empty catalog knows no caps, so no evidence-tagged fact can exist.
+    # The 413 path turns this into a passthrough or the operator byte limit —
+    # never a per-model token number nobody can source.
+    assert pc.get_model_input_cap_fact("gpt-5.6-sol") is None
+    assert pc.get_model_max_input_tokens("gpt-5.6-sol") is None
 
 
 def test_model_input_cap_normalizes_dot_version_separators(monkeypatch):
@@ -990,3 +990,86 @@ def test_provider_catalog_context_window_survives_external_merge(tmp_path, monke
     assert entry["recommended_model"] == "deepseek/chat-overlay"
     assert entry["context_window"] > 0
     assert 240000 < entry["limits"]["max_input_tokens"] <= 275000
+
+
+# --------------------------------------------------------------------------- #
+# Structural guard: no embedded cap table in provider_catalog.py
+# --------------------------------------------------------------------------- #
+
+
+def test_no_embedded_cap_table_in_provider_catalog() -> None:
+    """Detect any hardcoded model-cap dict introduced in provider_catalog.py.
+
+    The catalog is the sole source of per-model input-token caps.  No
+    module-level ``dict[str, int]`` whose keys look like model IDs (i.e.
+    strings containing a digit) may exist in ``faigate/provider_catalog.py``.
+
+    This test must go RED if a new cap constant is added to the module — that
+    is its purpose.  The check is structural (AST-based), not membership-based,
+    so it catches any name, not just ``_MODEL_INPUT_CAPS``.
+
+    RED-PROOF: add a line like
+        _MY_NEW_CAPS: dict[str, int] = {"some-model-4": 123456}
+    to provider_catalog.py and this test fails with the offending name.
+    """
+    import ast
+    import inspect
+
+    import faigate.provider_catalog as pc
+
+    source = inspect.getsource(pc)
+    tree = ast.parse(source)
+
+    offending: list[str] = []
+    for node in ast.walk(tree):
+        # Only look at module-level assignments (Assign or AnnAssign at top level).
+        if not isinstance(node, (ast.Assign, ast.AnnAssign)):
+            continue
+        # Extract the value node.
+        value_node = node.value if isinstance(node, ast.Assign) else getattr(node, "value", None)
+        if value_node is None:
+            continue
+        if not isinstance(value_node, ast.Dict):
+            continue
+        # Determine the variable name(s).
+        if isinstance(node, ast.AnnAssign):
+            names = [node.target.id] if isinstance(node.target, ast.Name) else []
+        else:
+            names = [t.id for t in node.targets if isinstance(t, ast.Name)]
+
+        # Check: does this dict look like a model-cap table?
+        # Criterion: all keys are string constants AND at least one key contains
+        # a digit (model IDs like "gpt-4", "claude-3", "deepseek-v2").
+        # AND all values are integer constants.
+        keys = value_node.keys
+        values = value_node.values
+        if not keys:
+            continue
+
+        all_str_keys = all(isinstance(k, ast.Constant) and isinstance(k.value, str) for k in keys)
+        if not all_str_keys:
+            continue
+
+        any_model_like_key = any(
+            any(c.isdigit() for c in k.value)  # type: ignore[union-attr]
+            for k in keys
+        )
+        if not any_model_like_key:
+            continue
+
+        all_int_values = all(
+            isinstance(v, ast.Constant) and isinstance(v.value, int)
+            for v in values
+        )
+        if not all_int_values:
+            continue
+
+        # This dict matches the cap-table pattern.
+        for name in names:
+            offending.append(name)
+
+    assert not offending, (
+        "Embedded cap table(s) detected in faigate/provider_catalog.py: "
+        + ", ".join(offending)
+        + ". Per-model input-token caps must live in the catalog only."
+    )

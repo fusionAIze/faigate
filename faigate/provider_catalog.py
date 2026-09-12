@@ -1306,49 +1306,6 @@ _CATALOG: dict[str, dict[str, Any]] = {
 }
 
 
-# ── Model-keyed input-token caps ─────────────────────────────────────
-#
-# The provider catalog above is keyed by *provider*, and every entry advertises
-# the same flat 262144 max_input_tokens. That number is a floor, not a per-model
-# truth: the actual input-token ceiling is a property of the concrete model a
-# request resolves to, not of the provider that serves it. This map records the
-# authoritative max_input_tokens for the 23 binding model IDs used by the
-# canonical lanes, so routing can reject oversized inputs at the real boundary
-# instead of pretending every provider accepts 262144.
-#
-# Provenance: values are grounded in the LiteLLM and OmniRoute provider registry
-# reports (2026-08-21). Where the two disagree, OmniRoute is authoritative
-# because it carries per-model contextLength directly; LiteLLM corroborates.
-# `claude-code` is a Shim with no real model of its own, so its cap is the
-# documented 262144 it mirrors rather than a native context window.
-
-
-_MODEL_INPUT_CAPS: dict[str, int] = {
-    "deepseek-v4-pro": 1000000,
-    "deepseek-v4-flash": 1000000,
-    "gpt-5.6-sol": 922000,
-    "gpt-5.6-terra": 922000,
-    "gpt-5.6-luna": 922000,
-    "gpt-5.5": 1050000,
-    "gpt-5.5-pro": 1050000,
-    "o3": 200000,
-    "o3-mini": 200000,
-    "o4-mini": 200000,
-    "claude-opus-5": 1000000,
-    "claude-sonnet-5": 1000000,
-    "claude-haiku-4-5": 200000,
-    "claude-code": 262144,  # Shim; documented mirror, not a native context window
-    "gemini-3.1-pro": 1048576,
-    "gemini-3.1-flash": 1048576,
-    "gemini-3-flash-lite": 1048576,
-    "llama-4-maverick": 131072,
-    "llama-4-scout": 131072,
-    "qwen-3.6-27b": 262144,
-    "qwen3-coder": 262144,
-    "glm-5.3": 1000000,
-    "kimi-k2.6": 262144,
-}
-
 
 def _normalize_model_version_separators(model_id: str) -> str:
     """Treat ``.`` and ``-`` as equal *inside digit groups*.
@@ -1417,8 +1374,8 @@ def _load_external_model_caps() -> dict[str, Any]:
     """Return the catalog's top-level ``model_caps`` block, or ``{}``.
 
     The block is model-keyed and optional. A catalog without it (or no catalog
-    at all) yields ``{}`` so the hardcoded ``_MODEL_INPUT_CAPS`` map remains the
-    offline fallback instead of inventing a value.
+    at all) yields ``{}``; the caller is responsible for deciding what to do
+    when no cap is recorded (typically returning ``None``).
     """
     payload = _load_external_catalog_payload()
     model_caps = payload.get("model_caps")
@@ -1433,8 +1390,8 @@ def _model_caps_index() -> dict[str, int]:
     of any single provider. Only the numeric ``max_input_tokens`` is indexed here;
     the accompanying ``evidence`` is carried separately by
     :func:`get_model_input_cap_fact` so an unverified cap never hard-rejects a
-    request. A missing or thin block contributes nothing, degrading to the
-    bundled ``_MODEL_INPUT_CAPS`` fallback.
+    request. A missing or empty block contributes nothing; the caller receives
+    ``None`` for any model absent from the catalog.
     """
     index: dict[str, int] = {}
     model_caps = _load_external_model_caps()
@@ -1451,17 +1408,15 @@ def _model_caps_index() -> dict[str, int]:
 def get_model_max_input_tokens(model_id: str) -> int | None:
     """Return the authoritative max_input_tokens for a concrete model ID.
 
-    Catalog-first: the resolved catalog's top-level ``model_caps`` block wins so
-    a fact can be updated without a code change. When the catalog has no cap for
-    the model, the hardcoded ``_MODEL_INPUT_CAPS`` map remains the offline
-    fallback, so the 23 binding IDs keep answering without a catalog.
+    The catalog's top-level ``model_caps`` block is the only source: a cap can
+    be updated without a code change. When the catalog has no entry for the
+    model, ``None`` is returned — no embedded fallback is consulted.
 
     Normalises the common ``provider/model`` form to the trailing model id, then
-    falls back to the raw id, so both ``openrouter/gpt-5.6-sol`` and
-    ``gpt-5.6-sol`` resolve. Version separators are also normalised
-    (``claude-opus-4.6`` == ``claude-opus-4-6``) so a dot-form request answers
-    from a hyphen-form catalog entry. Returns ``None`` when neither source
-    records a cap.
+    tries the raw id, so both ``openrouter/gpt-5.6-sol`` and ``gpt-5.6-sol``
+    resolve. Version separators are also normalised (``claude-opus-4.6`` ==
+    ``claude-opus-4-6``) so a dot-form request answers from a hyphen-form
+    catalog entry. Returns ``None`` when the catalog records no cap.
     """
     if not model_id:
         return None
@@ -1473,13 +1428,7 @@ def get_model_max_input_tokens(model_id: str) -> int | None:
     for key in keys:
         if key in catalog_index:
             return catalog_index[key]
-    for key in keys:
-        if key in _MODEL_INPUT_CAPS:
-            return _MODEL_INPUT_CAPS[key]
     return None
-
-
-_MODEL_INPUT_CAP_EVIDENCE = {"level": "unconfirmed"}
 
 
 def get_model_input_cap_fact(model_id: str) -> dict[str, Any] | None:
@@ -1488,13 +1437,9 @@ def get_model_input_cap_fact(model_id: str) -> dict[str, Any] | None:
     This is the evidence-aware counterpart of :func:`get_model_max_input_tokens`.
     The catalog is the only authority: a cap sourced from the catalog's
     ``model_caps`` block carries the block's own ``evidence.level``, whether that
-    is ``confirmed`` (a sourced fact), ``plausible``, or ``unconfirmed``. The
-    hardcoded ``_MODEL_INPUT_CAPS`` map is an offline *fallback* only, and a
-    fallback value without a source is itself ``unconfirmed`` by construction —
-    it is the oldest unverified fact in the system, so it must never out-rank a
-    catalog fact or carry a stronger label. An id outside both sets returns
-    ``None`` — never the provider-wide 262144 floor, which is a placeholder, not
-    a per-model truth.
+    is ``confirmed`` (a sourced fact), ``plausible``, or ``unconfirmed``. An id
+    absent from the catalog returns ``None`` — never the provider-wide 262144
+    floor, which is a placeholder, not a per-model truth.
 
     Version-separator spellings are normalised on lookup (``claude-opus-4.6`` ==
     ``claude-opus-4-6``) so a dot-form request answers the hyphen-form catalog
@@ -1512,35 +1457,14 @@ def get_model_input_cap_fact(model_id: str) -> dict[str, Any] | None:
     keys = _model_lookup_keys(candidate)
 
     model_caps = _load_external_model_caps()
-    raw = None
     for key in keys:
         entry = model_caps.get(key)
         if isinstance(entry, dict) and isinstance(entry.get("max_input_tokens"), int):
-            raw = entry
-            break
-
-    hard_cap = None
-    for key in keys:
-        value = _MODEL_INPUT_CAPS.get(key)
-        if isinstance(value, int):
-            hard_cap = value
-            break
-
-    # The catalog wins whenever it records the model, even a bundled-snapshot
-    # fact. It carries a real source and is the newer truth. The hardcoded map
-    # only answers when the catalog is silent.
-    if raw is not None:
-        cap = raw["max_input_tokens"]
-        evidence = raw.get("evidence")
-        if not isinstance(evidence, dict):
-            evidence = dict(_MODEL_INPUT_CAP_EVIDENCE)
-        return {"max_input_tokens": cap, "evidence": dict(evidence)}
-
-    if hard_cap is not None:
-        return {
-            "max_input_tokens": hard_cap,
-            "evidence": dict(_MODEL_INPUT_CAP_EVIDENCE),
-        }
+            cap = entry["max_input_tokens"]
+            evidence = entry.get("evidence")
+            if not isinstance(evidence, dict):
+                evidence = {"level": "unconfirmed"}
+            return {"max_input_tokens": cap, "evidence": dict(evidence)}
 
     return None
 
