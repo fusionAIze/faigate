@@ -27,6 +27,23 @@ import pytest
 _REAL_MODULES: dict[str, ModuleType] = {}
 
 
+# Provider API keys that ``faigate.wizard._load_env_values`` reads from
+# ``os.environ`` before overlaying any ``.env`` file. When an operator has these
+# exported in their shell, wizard candidate detection treats the corresponding
+# providers as "ready now", which flips several wizard tests between pass and
+# fail on the same commit. Remove them for the duration of every test so the
+# suite reads only what the test itself (its ``.env`` file / fixtures) provides.
+_WIZARD_PROVIDER_API_KEYS = (
+    "ANTHROPIC_API_KEY",
+    "BLACKBOX_API_KEY",
+    "DEEPSEEK_API_KEY",
+    "GEMINI_API_KEY",
+    "KILOCODE_API_KEY",
+    "OPENAI_API_KEY",
+    "OPENROUTER_API_KEY",
+)
+
+
 def load_real_module(name: str) -> ModuleType:
     """Import the genuine top-level module even if a test stub is installed.
 
@@ -54,6 +71,20 @@ def install_real_module(name: str, *, sentinel: str) -> ModuleType:
         _REAL_MODULES[name] = real
         return real
     return load_real_module(name)
+
+
+@pytest.fixture(autouse=True)
+def _keep_wizard_provider_keys_hermetic(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep wizard candidate detection independent of the operator's shell.
+
+    ``faigate.wizard._load_env_values`` seeds from ``os.environ`` before
+    overlaying the ``.env`` file, so any provider API key exported in the shell
+    leaks into provider detection and flips tests that assert a provider still
+    needs a key. Run every test with those keys absent; tests that need a key
+    provide it explicitly via ``monkeypatch.setenv`` or their ``.env`` file.
+    """
+    for key in _WIZARD_PROVIDER_API_KEYS:
+        monkeypatch.delenv(key, raising=False)
 
 
 @pytest.fixture(autouse=True)
