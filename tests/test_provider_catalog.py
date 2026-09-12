@@ -1054,19 +1054,27 @@ def test_catalog_provider_identities_include_catalog_only_providers(monkeypatch)
     assert "amazon/nova-pro-v1" in by_long
 
 
-def test_provider_catalog_context_window_survives_external_merge(tmp_path, monkeypatch):
-    """External catalog overlays must preserve the embedded context_window/limits.
+def test_provider_catalog_external_overlay_wins_and_registers_nested_dicts(tmp_path, monkeypatch):
+    """An external overlay beats the lane-derived seed without dropping siblings.
 
-    A nested dict field (limits) merged from an external overlay must not drop
-    the embedded value, because _merge_catalog_entry recurses into dict values.
+    The catalog wire-table (:data:`faigate.provider_catalog._CATALOG`) holds only
+    a lane-derived ``recommended_model``; the fact fields (``context_window``,
+    ``limits``, …) live in the bundled snapshot, not in the table. This test used
+    to assert that an external overlay *preserved* those embedded facts while
+    replacing the model — a premise that stopped holding once the table shed its
+    fact fields. What stays true is the merge contract: the overlay's
+    ``recommended_model`` wins over the seed, and ``_merge_catalog_entry``
+    recurses into dict values so an overlay's nested ``limits`` does not clobber a
+    sibling fact it did not name.
     """
     metadata_dir = tmp_path / "metadata"
     metadata_dir.mkdir()
     (metadata_dir / "providers").mkdir()
     external = metadata_dir / "providers" / "catalog.v1.json"
     external.write_text(
-        '{"schema_version":"fusionaize-provider-catalog/v1.1",'
-        '"providers":{"deepseek-chat":{"recommended_model":"deepseek/chat-overlay"}}}'
+        '{"schema_version":"fusionaize-provider-catalog/v1.3",'
+        '"providers":{"deepseek-chat":{"recommended_model":"deepseek/chat-overlay",'
+        '"context_window":777000,"limits":{"max_input_tokens":777000}}}}'
     )
 
     monkeypatch.setenv("FAIGATE_PROVIDER_METADATA_DIR", str(metadata_dir))
@@ -1079,10 +1087,21 @@ def test_provider_catalog_context_window_survives_external_merge(tmp_path, monke
 
     entry = pc.get_provider_catalog_entry("deepseek-chat")
 
-    # Overlay replaced the model but the embedded context window/limits remain.
+    # Overlay recommended_model beats the lane-derived seed.
     assert entry["recommended_model"] == "deepseek/chat-overlay"
-    assert entry["context_window"] > 0
-    assert 240000 < entry["limits"]["max_input_tokens"] <= 275000
+    # Overlay facts are what the resolver serves when the dir replaces the snapshot.
+    assert entry["context_window"] == 777000
+    assert entry["limits"]["max_input_tokens"] == 777000
+
+    # The merge helper recurses into nested dicts, preserving a sibling fact the
+    # overlay's `limits` did not name.
+    merged = pc._merge_catalog_entry(
+        {"context_window": 1048576, "limits": {"max_input_tokens": 1048576}},
+        {"limits": {"max_output_tokens": 8192}},
+    )
+    assert merged["context_window"] == 1048576
+    assert merged["limits"]["max_input_tokens"] == 1048576
+    assert merged["limits"]["max_output_tokens"] == 8192
 
 
 # --------------------------------------------------------------------------- #

@@ -1045,7 +1045,8 @@ def _tracked_item(
     today: date,
 ) -> dict[str, Any]:
     model = str(provider.get("model", "") or "").strip()
-    recommended_model = str(catalog_entry["recommended_model"])
+    recommended_model_raw = catalog_entry.get("recommended_model")
+    recommended_model = str(recommended_model_raw) if recommended_model_raw else None
     aliases = list(catalog_entry.get("aliases", []))
     reviewed_on = date.fromisoformat(catalog_entry["last_reviewed"])
     age_days = (today - reviewed_on).days
@@ -1079,7 +1080,11 @@ def _tracked_item(
         "notes": catalog_entry.get("notes", ""),
         "last_reviewed": catalog_entry["last_reviewed"],
         "catalog_age_days": age_days,
-        "model_matches_recommendation": model == recommended_model or model in aliases,
+        "model_matches_recommendation": (
+            None
+            if recommended_model is None
+            else (model == recommended_model or model in aliases)
+        ),
         "canonical_model": lane.get("canonical_model", ""),
         "lane_family": lane.get("family", ""),
         "lane_name": lane.get("name", ""),
@@ -1136,7 +1141,7 @@ def build_provider_catalog_report(config: Config) -> dict[str, Any]:
         if (
             check_cfg.get("enabled")
             and check_cfg.get("warn_on_model_drift")
-            and not item["model_matches_recommendation"]
+            and item["model_matches_recommendation"] is False
         ):
             alerts.append(
                 _alert(
@@ -1266,7 +1271,8 @@ def build_provider_catalog_report(config: Config) -> dict[str, Any]:
                 1
                 for item in items
                 if (
-                    item.get("status") == "tracked" and not item.get("model_matches_recommendation")  # noqa: E501
+                    item.get("status") == "tracked"
+                    and item.get("model_matches_recommendation") is False
                 )
             ),
             "total_items": tracked,
