@@ -913,7 +913,7 @@ def test_model_input_cap_reads_from_catalog_first(tmp_path, monkeypatch):
     assert get_model_max_input_tokens("catalog-only-model") == 777000
 
 
-def test_model_input_cap_is_none_without_catalog():
+def test_model_input_cap_is_none_without_catalog(monkeypatch):
     """With no catalog reachable no cap is produced — a number is never invented.
 
     There is no embedded fallback table any more. A model the catalog cannot
@@ -929,6 +929,13 @@ def test_model_input_cap_is_none_without_catalog():
     """
     import faigate.provider_catalog as pc
     from faigate.catalog_resolver import suppressed_bundled_snapshot
+
+    # The suppression hides the bundled link only. An operator override in the
+    # ambient environment answers from the FIRST link and the chain never
+    # reaches the suppressed one, so the test would assert against a catalog it
+    # asked not to have. "No catalog reachable" means all three links, not one.
+    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_FILE", raising=False)
+    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_DIR", raising=False)
 
     with suppressed_bundled_snapshot():
         _reset_catalog_caches(pc)

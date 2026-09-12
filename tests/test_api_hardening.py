@@ -16,6 +16,7 @@ sys.modules.pop("faigate.providers", None)
 sys.modules.pop("faigate.updates", None)
 sys.modules.pop("faigate.main", None)
 
+import faigate  # noqa: E402
 import faigate.main as main_module  # noqa: E402
 from faigate.config import load_config  # noqa: E402
 from faigate.router import Router  # noqa: E402
@@ -734,3 +735,50 @@ def test_chat_completions_hides_upstream_provider_details(api_client, monkeypatc
     assert body["error"]["attempts"] == [
         {"provider": "cloud-default", "status": 502, "category": "upstream_server_error"}
     ]
+
+
+def test_health_reports_running_version(api_client):
+    response = api_client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json()["version"] == faigate.__version__
+
+    monkeypatch_target = "faigate.__version__"
+    original = faigate.__version__
+    try:
+        faigate.__version__ = "0.0.0+fai-220-drift-probe"
+        drifted = api_client.get("/health").json()["version"]
+    finally:
+        faigate.__version__ = original
+
+    assert drifted == "0.0.0+fai-220-drift-probe", (
+        "The /health version field must be read from faigate.__version__ at "
+        "request time; a hard-coded copy in faigate.main would keep reporting "
+        f"{original!r} instead of {monkeypatch_target!r}."
+    )
+
+
+def test_health_reports_version_when_providers_unhealthy(api_client, monkeypatch):
+    unhealthy = _ProviderStub()
+    unhealthy.health.healthy = False
+    unhealthy.health.to_dict = lambda: {
+        "name": "cloud-default",
+        "healthy": False,
+        "consecutive_failures": 3,
+        "avg_latency_ms": 0.0,
+        "last_error": "connect timeout",
+    }
+    monkeypatch.setattr(
+        main_module,
+        "_providers",
+        {"cloud-default": unhealthy},
+        raising=False,
+    )
+
+    response = api_client.get("/health")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["summary"]["providers_unhealthy"] == 1
+    assert body["providers"]["cloud-default"]["healthy"] is False
+    assert body["version"] == faigate.__version__
