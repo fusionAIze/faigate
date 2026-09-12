@@ -1,6 +1,35 @@
 # fusionAIze Gate Changelog
 
-## Unreleased
+## v2.8.0 - 2026-09-12
+
+### Changed
+
+- **Model knowledge lives in the catalog, not in the code.** The embedded
+  `_MODEL_INPUT_CAPS` table is gone: all 23 ceilings it held are in the catalog
+  with provenance and the same values, so a cap this process reports was read
+  from the catalog and no number reaches a client without a source behind it. A
+  model the catalog cannot describe now yields no cap, and the 413 path passes
+  through or names the operator byte limit rather than stating a ceiling it
+  cannot support. Two AST checks go red if a model-cap or provider table
+  reappears in `faigate/provider_catalog.py`; their documented reach is narrower
+  than complete and says so.
+- **The catalog resolves through one chain instead of three.**
+  `_load_external_provider_catalog`, `_load_external_catalog` and
+  `_load_external_catalog_payload` each walked their own version of
+  `env-override -> metadata-dir -> bundled snapshot` and answered differently
+  for the same state on disk: with the metadata directory set but its file
+  missing, the provider-name path returned no providers while the caps path
+  returned fifty. A set-but-empty or missing override is now treated as a broken
+  pointer rather than as a claim that the catalog is empty.
+- **Evidence levels are English.** `belegt`/`plausibel`/`unbestaetigt` are now
+  `confirmed`/`plausible`/`unconfirmed` in the schema, the catalog data, the
+  code and the tests. There is no alias layer: a consumer reading
+  `evidence.level` must use the new values.
+- **Catalog schema v1.4** (additive): `entry_type`, `context_window`, `limits`,
+  `context_evidence`, and `context_window_min_measured` for a measured lower
+  bound. The published catalog grew from 50 to 66 providers — the sixteen that
+  existed only in faigate's code moved in, each carrying the evidence it
+  actually has rather than an unsourced number.
 
 ### Fixed
 
