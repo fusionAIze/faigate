@@ -1,5 +1,25 @@
 # fusionAIze Gate Changelog
 
+## v2.8.1 - 2026-09-12
+
+### Fixed
+
+- **The release-title gate checked a string it had built itself.** The Forgejo
+  release job composed the title as `SkillWeave $TAG` — the template was copied
+  from skillweave without renaming the product — and then validated that same
+  string against `^SkillWeave v...$`. It reported "conforms" for a title this
+  project does not use, and could not have failed for any tag. The mismatch was
+  caught downstream by the GitHub tap gate, which knew the right convention;
+  two gates, two contracts, one of them inert. Both now read the prefix from
+  `.release-title-prefix`, so the Forgejo gate checks a value it did not
+  construct and the two cannot drift apart.
+- **Homebrew installs crashed on Apple Silicon** (fixed in the tap formula, not
+  here). pip places wheel extensions with an ad-hoc signature and Homebrew then
+  rewrites library paths inside them, invalidating it; macOS refuses to map an
+  invalidated page and SIGKILLs the process during `dlopen` with no traceback.
+  `pydantic_core` and `uvloop` were affected on the 2.8.0 upgrade. The formula
+  now re-signs what it placed.
+
 ## v2.8.0 - 2026-09-12
 
 ### Changed
