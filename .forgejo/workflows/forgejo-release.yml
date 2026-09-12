@@ -74,6 +74,11 @@ jobs:
           sys.stdout.write("title gate: %r conforms\n" % name)
           TITLE_GATE_PY
           echo "release_name=${RELEASE_NAME}" >> "$GITHUB_OUTPUT"
+          # The publish step below renders its own title from
+          # NAME_TEMPLATE. Emitting the template here, from the same
+          # PREFIX the gate just checked, is what makes the gate binding:
+          # otherwise it validates one string while another is published.
+          echo "release_name_template=${PREFIX} {tag_name}" >> "$GITHUB_OUTPUT"
 
       # The release body is the CHANGELOG entry for this version, never commit
       # subjects. A tag whose version has no section fails here, before any
