@@ -794,18 +794,12 @@ def test_binding_model_caps_resolve_from_catalog():
             # Hidden by evidence gating: the catalog must agree and say so,
             # rather than the lookup having lost a cap it used to serve.
             fact = get_model_input_cap_fact(model_id)
-            assert fact is not None, (
-                f"binding model {model_id!r} answers no cap and the catalog "
-                "records no fact at all"
-            )
+            assert fact is not None, f"binding model {model_id!r} answers no cap and the catalog records no fact at all"
             assert fact["evidence"]["level"] != "confirmed", (
-                f"binding model {model_id!r} answers no cap despite a "
-                f"confirmed catalog fact: {fact!r}"
+                f"binding model {model_id!r} answers no cap despite a confirmed catalog fact: {fact!r}"
             )
             continue
-        assert isinstance(cap, int) and cap > 0, (
-            f"cap for {model_id!r} must be a positive int, got {cap!r}"
-        )
+        assert isinstance(cap, int) and cap > 0, f"cap for {model_id!r} must be a positive int, got {cap!r}"
         prefixed = f"openrouter/{model_id}"
         assert get_model_max_input_tokens(prefixed) == cap, (
             f"get_model_max_input_tokens({prefixed!r}) must resolve the trailing model id"
@@ -1089,82 +1083,267 @@ def test_provider_catalog_context_window_survives_external_merge(tmp_path, monke
 # --------------------------------------------------------------------------- #
 
 
-def test_no_embedded_cap_table_in_provider_catalog() -> None:
-    """Detect any hardcoded model-cap dict introduced in provider_catalog.py.
+def _embedded_cap_table_literals(source: str) -> list[str]:
+    """Names of dict/AnnAssign literals in *source* that look like cap tables.
 
-    The catalog is the sole source of per-model input-token caps.  No
-    module-level ``dict[str, int]`` whose keys look like model IDs (i.e.
-    strings containing a digit) may exist in ``faigate/provider_catalog.py``.
+    A literal matches when its value is an ``ast.Dict`` whose keys are all
+    string constants, at least one of which contains a digit (model IDs like
+    ``"gpt-4"``, ``"deepseek-v2"``), and whose values are all integer
+    constants.
 
-    This test must go RED if a new cap constant is added to the module — that
-    is its purpose.  The check is structural (AST-based), not membership-based,
-    so it catches any name, not just ``_MODEL_INPUT_CAPS``.
-
-    RED-PROOF: add a line like
-        _MY_NEW_CAPS: dict[str, int] = {"some-model-4": 123456}
-    to provider_catalog.py and this test fails with the offending name.
+    Scope: this sees only dict *literals* written at the assignment statement
+    itself, anywhere in the tree (module level or inside a function). It is
+    blind to a table that is built rather than written — see the docstring of
+    :func:`test_no_embedded_cap_table_in_provider_catalog` for the list of
+    evasions this deliberately does not chase.
     """
     import ast
+
+    offending: list[str] = []
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, (ast.Assign, ast.AnnAssign)):
+            continue
+        value_node = node.value if isinstance(node, ast.Assign) else node.value
+        if not isinstance(value_node, ast.Dict) or not value_node.keys:
+            continue
+
+        keys = value_node.keys
+        values = value_node.values
+        if not all(isinstance(k, ast.Constant) and isinstance(k.value, str) for k in keys):
+            continue
+        if not any(any(c.isdigit() for c in k.value) for k in keys):  # type: ignore[union-attr]
+            continue
+        if not all(isinstance(v, ast.Constant) and isinstance(v.value, int) for v in values):
+            continue
+
+        if isinstance(node, ast.AnnAssign):
+            if isinstance(node.target, ast.Name):
+                offending.append(node.target.id)
+        else:
+            offending.extend(t.id for t in node.targets if isinstance(t, ast.Name))
+
+    return offending
+
+
+def test_no_embedded_cap_table_in_provider_catalog() -> None:
+    """Detect a hardcoded model-cap dict literal written into provider_catalog.py.
+
+    The catalog is the sole source of per-model input-token caps. This test
+    keeps the obvious re-introduction — a dict literal of model-id keys and
+    integer caps, whatever the variable is called — out of the module.
+
+    Honest scope. The check is structural, not a name list, so it catches any
+    variable name; and it walks the whole tree, so a literal assigned inside a
+    function is caught too. That is the entire reach. It does not catch a table
+    that is assembled rather than written as an assignment literal, e.g.:
+
+      * ``_X = (("gpt-4", 100),)`` — a tuple of pairs
+      * ``_X = dict(gpt4=100)`` — a ``dict(...)`` call
+      * ``_X = {k: 100 for k in ["gpt-4"]}`` — a comprehension
+      * ``_OUTER = {"holder": {"gpt-4": 100}}`` — nested one level down
+      * ``_X = {}; _X.update({"gpt-4": 100})`` — built by mutation
+
+    These are known gaps, pinned by
+    :func:`test_embedded_cap_table_guard_does_not_see_built_tables` so that the
+    guard's reach stays what this docstring says it is rather than drifting by
+    implication. Closing them with more AST patterns is a treadmill: each new
+    pattern invites the next spelling.
+
+    The invariant that actually carries the weight is behavioural, not
+    structural: a silent fallback wired into ``get_model_max_input_tokens``
+    leaves this guard green, and is caught by
+    :func:`test_model_input_cap_is_none_without_catalog` and
+    :func:`test_model_input_cap_absent_without_catalog`, which assert that no
+    cap is produced without a catalog behind it.
+
+    RED-PROOF: add ``_MY_NEW_CAPS: dict[str, int] = {"some-model-4": 123456}``
+    (or the bare ``_MY_NEW_CAPS = {...}`` form) anywhere in
+    ``faigate/provider_catalog.py`` and this test fails naming the variable.
+    """
     import inspect
 
     import faigate.provider_catalog as pc
 
-    source = inspect.getsource(pc)
-    tree = ast.parse(source)
-
-    offending: list[str] = []
-    for node in ast.walk(tree):
-        # Only look at module-level assignments (Assign or AnnAssign at top level).
-        if not isinstance(node, (ast.Assign, ast.AnnAssign)):
-            continue
-        # Extract the value node.
-        value_node = node.value if isinstance(node, ast.Assign) else getattr(node, "value", None)
-        if value_node is None:
-            continue
-        if not isinstance(value_node, ast.Dict):
-            continue
-        # Determine the variable name(s).
-        if isinstance(node, ast.AnnAssign):
-            names = [node.target.id] if isinstance(node.target, ast.Name) else []
-        else:
-            names = [t.id for t in node.targets if isinstance(t, ast.Name)]
-
-        # Check: does this dict look like a model-cap table?
-        # Criterion: all keys are string constants AND at least one key contains
-        # a digit (model IDs like "gpt-4", "claude-3", "deepseek-v2").
-        # AND all values are integer constants.
-        keys = value_node.keys
-        values = value_node.values
-        if not keys:
-            continue
-
-        all_str_keys = all(isinstance(k, ast.Constant) and isinstance(k.value, str) for k in keys)
-        if not all_str_keys:
-            continue
-
-        any_model_like_key = any(
-            any(c.isdigit() for c in k.value)  # type: ignore[union-attr]
-            for k in keys
-        )
-        if not any_model_like_key:
-            continue
-
-        all_int_values = all(
-            isinstance(v, ast.Constant) and isinstance(v.value, int)
-            for v in values
-        )
-        if not all_int_values:
-            continue
-
-        # This dict matches the cap-table pattern.
-        for name in names:
-            offending.append(name)
+    offending = _embedded_cap_table_literals(inspect.getsource(pc))
 
     assert not offending, (
         "Embedded cap table(s) detected in faigate/provider_catalog.py: "
         + ", ".join(offending)
         + ". Per-model input-token caps must live in the catalog only."
     )
+
+
+def test_embedded_cap_table_guard_catches_literal_spellings() -> None:
+    """ROT-PROOF for the two literal spellings the guard claims to catch."""
+    module_level = '_MY_NEW_CAPS: dict[str, int] = {"some-model-4": 123456}'
+    bare = '_OTHER_CAPS = {"gpt-4": 100, "gpt-5": 200}'
+    in_function = 'def load():\n    _NESTED_CAPS = {"claude-3": 300}\n    return _NESTED_CAPS'
+
+    assert _embedded_cap_table_literals(module_level) == ["_MY_NEW_CAPS"]
+    assert _embedded_cap_table_literals(bare) == ["_OTHER_CAPS"]
+    assert _embedded_cap_table_literals(in_function) == ["_NESTED_CAPS"]
+
+
+def test_embedded_cap_table_guard_does_not_see_built_tables() -> None:
+    """ROT-PROOF for the gaps: a built table is invisible to this guard.
+
+    Pinning the gaps makes them an explicit, reviewed decision. If a future
+    change widens the guard, this test goes red and the docstring above must be
+    updated in the same commit — the guard and its stated reach cannot drift
+    apart silently.
+    """
+    built = {
+        "tuple of pairs": '_X = (("gpt-4", 100),)',
+        "dict() call": "_X = dict(gpt4=100)",
+        "comprehension": '_X = {k: 100 for k in ["gpt-4"]}',
+        "nested one level": '_OUTER = {"holder": {"gpt-4": 100}}',
+        "built by mutation": '_X = {}\n_X.update({"gpt-4": 100})',
+    }
+
+    for name, source in built.items():
+        assert _embedded_cap_table_literals(source) == [], (
+            f"guard now catches the {name!r} spelling — widen the docstring of "
+            "test_no_embedded_cap_table_in_provider_catalog to match"
+        )
+
+
+# Fields that only ever appear in a catalog entry. One is enough: a dict of
+# dicts carrying any of these is provider knowledge, not configuration.
+_CATALOG_ONLY_FIELDS = frozenset(
+    {
+        "context_window",
+        "aliases",
+        "recommended_model",
+        "auth_modes",
+        "provider_type",
+        "tier_status",
+        "limits",
+        "context_evidence",
+        "entry_type",
+    }
+)
+
+
+def _embedded_provider_table_literals(source: str) -> list[str]:
+    """Names of dict-of-dict literals in *source* that look like provider tables.
+
+    A literal matches when its value is an ``ast.Dict`` whose values are
+    themselves ``ast.Dict`` literals carrying at least one catalog-only field.
+
+    Scope matches :func:`_embedded_cap_table_literals` exactly: it walks the
+    whole tree, so a table declared inside a function is seen, and it is
+    likewise blind to a table that is assembled rather than written. The two
+    guards must not differ in reach — the provider guard was previously
+    module-level only, which made it strictly weaker than this one.
+    """
+    import ast
+
+    offending: list[str] = []
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, (ast.Assign, ast.AnnAssign)):
+            continue
+        value_node = node.value if isinstance(node, ast.Assign) else node.value
+        if not isinstance(value_node, ast.Dict) or not value_node.keys:
+            continue
+
+        if not any(
+            isinstance(inner, ast.Dict)
+            and any(isinstance(k, ast.Constant) and k.value in _CATALOG_ONLY_FIELDS for k in inner.keys)
+            for inner in value_node.values
+        ):
+            continue
+
+        if isinstance(node, ast.AnnAssign):
+            if isinstance(node.target, ast.Name):
+                offending.append(node.target.id)
+        else:
+            offending.extend(t.id for t in node.targets if isinstance(t, ast.Name))
+
+    return offending
+
+
+def test_no_embedded_provider_table_in_provider_catalog() -> None:
+    """Detect a hardcoded provider table written into provider_catalog.py.
+
+    The catalog is the sole source of provider knowledge. A dict literal whose
+    values are dicts carrying catalog-only fields (``context_window``,
+    ``aliases``, ...) is a provider table under any name, so the check is
+    structural rather than a list of forbidden names.
+
+    ``_CATALOG`` is a KNOWN, STILL-LIVE violation: 907 lines of embedded
+    provider entries, seeded by ``_get_catalog_source`` and then overlaid by the
+    resolved catalog. It is named here rather than asserted away. Deleting it
+    is deferred: emptying it fails 19 further tests, because the snapshot does
+    not yet carry every merged field the table contributes (notably a runtime
+    ``recommended_model``). Until that migration lands, this guard's job is to
+    keep the count at exactly one: a second embedded table is a regression, and
+    so is any change to the legacy block, which lives here as a pinned
+    allowance rather than as a silent pass.
+
+    Honest scope. The guard walks the whole tree, so it sees a table assigned
+    inside a function as well as at module level — the same reach as
+    :func:`test_no_embedded_cap_table_in_provider_catalog`, and deliberately no
+    weaker than it. It shares that guard's blind spot: a table that is assembled
+    rather than written as an assignment literal (tuple of pairs, ``dict(...)``
+    call, comprehension, nested one level deeper, or built by ``.update()``) is
+    not seen. Those gaps are pinned by
+    :func:`test_embedded_provider_table_guard_does_not_see_built_tables`.
+
+    RED-PROOF 1: add a second table, e.g.
+        _MY_PROVIDERS = {"acme": {"context_window": 128000, "aliases": ["acme"]}}
+    anywhere in ``faigate/provider_catalog.py`` and this test fails naming it.
+    RED-PROOF 2: rename ``_CATALOG`` and this test fails, because the known
+    allowance no longer matches — forcing the allowance to be revisited rather
+    than silently kept.
+    """
+    import inspect
+
+    import faigate.provider_catalog as pc
+
+    offending = set(_embedded_provider_table_literals(inspect.getsource(pc)))
+
+    # The one table allowed to exist today, by name, on purpose.
+    known = {"_CATALOG"}
+    unexpected = offending - known
+
+    assert not unexpected, (
+        "provider_catalog.py declares a new embedded provider table: "
+        f"{sorted(unexpected)}. Provider knowledge belongs in the catalog, "
+        "not in code — see the bundled snapshot in assets/metadata/. "
+        f"(The legacy table(s) {sorted(known)} are a pinned, tracked exception; "
+        "see this test's docstring.)"
+    )
+    assert offending == known, (
+        "the pinned embedded-table allowance no longer matches the module: "
+        f"found {sorted(offending)}, allowance is {sorted(known)}. Update the "
+        "allowance in this test and its docstring together — the guard and the "
+        "known violation must not drift apart."
+    )
+
+
+def test_embedded_provider_table_guard_catches_literal_spellings() -> None:
+    """ROT-PROOF for the provider-table spellings, including in-function."""
+    module_level = '_MY_PROVIDERS = {"acme": {"context_window": 128000, "aliases": ["acme"]}}'
+    in_function = 'def load():\n    _NESTED_PROVIDERS = {"acme": {"aliases": ["acme"]}}\n    return _NESTED_PROVIDERS'
+
+    assert _embedded_provider_table_literals(module_level) == ["_MY_PROVIDERS"]
+    assert _embedded_provider_table_literals(in_function) == ["_NESTED_PROVIDERS"]
+
+
+def test_embedded_provider_table_guard_does_not_see_built_tables() -> None:
+    """ROT-PROOF for the provider guard's gaps, matching the cap guard's."""
+    built = {
+        "tuple of pairs": '_X = (("acme", {"context_window": 1}),)',
+        "dict() call": '_X = dict(acme={"context_window": 1})',
+        "comprehension": '_X = {k: {"context_window": 1} for k in ["acme"]}',
+        "built by mutation": '_X = {}\n_X.update({"acme": {"context_window": 1}})',
+    }
+
+    for name, source in built.items():
+        assert _embedded_provider_table_literals(source) == [], (
+            f"guard now catches the {name!r} spelling — widen the docstring of "
+            "test_no_embedded_provider_table_in_provider_catalog to match"
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -1288,8 +1467,7 @@ def test_catalog_loaders_agree_in_every_on_disk_state(
     )
     resolved = next(iter(distinct))
     assert resolved == expected, (
-        f"state={state!r}: all loaders agree, but on the wrong set "
-        f"({sorted(resolved)}); expected {sorted(expected)}."
+        f"state={state!r}: all loaders agree, but on the wrong set ({sorted(resolved)}); expected {sorted(expected)}."
     )
 
     # Identities are a projection of the same providers block: every provider
