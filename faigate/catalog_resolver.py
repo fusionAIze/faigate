@@ -273,6 +273,7 @@ class CatalogResolver:
             token=token,
             timeout_seconds=self._config.timeout_seconds,
         )
+        is_local_fault = result.status == SyncStatus.PACKAGING_FAILURE
         self._cache.save_state(
             tier,
             status=result.status.value,
@@ -305,14 +306,23 @@ class CatalogResolver:
         if cached is not None:
             age_seconds = time.time() - cached.written_at
             reason = result.error or result.status.value
-            notes.append(f"{tier}: remote returned {result.status.value}; using stale cache")
-            logger.warning(
-                "catalog resolve: %s remote %s — using stale cache age=%.0fs reason=%s",
-                tier,
-                result.status.value,
-                age_seconds,
-                reason,
-            )
+            if is_local_fault:
+                notes.append(f"local packaging fault ({tier}): {reason}")
+                logger.error(
+                    "catalog resolve: local packaging fault (%s) — using stale cache age=%.0fs reason=%s",
+                    tier,
+                    age_seconds,
+                    reason,
+                )
+            else:
+                notes.append(f"{tier}: remote returned {result.status.value}; using stale cache")
+                logger.warning(
+                    "catalog resolve: %s remote %s — using stale cache age=%.0fs reason=%s",
+                    tier,
+                    result.status.value,
+                    age_seconds,
+                    reason,
+                )
             return ResolvedCatalog(
                 payload=cached.payload,
                 source=f"{tier}-cache",
@@ -322,13 +332,21 @@ class CatalogResolver:
             )
 
         reason = result.error or result.status.value
-        notes.append(f"{tier}: {result.status.value} (no cache)")
-        logger.warning(
-            "catalog resolve: %s remote %s — %s (no cached fallback)",
-            tier,
-            result.status.value,
-            reason,
-        )
+        if is_local_fault:
+            notes.append(f"local packaging fault ({tier}): {reason}")
+            logger.error(
+                "catalog resolve: local packaging fault (%s) — %s (no cached fallback)",
+                tier,
+                reason,
+            )
+        else:
+            notes.append(f"{tier}: {result.status.value} (no cache)")
+            logger.warning(
+                "catalog resolve: %s remote %s — %s (no cached fallback)",
+                tier,
+                result.status.value,
+                reason,
+            )
         return None
 
     def status(self) -> dict[str, Any]:

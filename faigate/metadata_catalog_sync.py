@@ -25,6 +25,9 @@ DEFAULT_TIMEOUT_SECONDS = 10.0
 DEFAULT_MIN_ENTRIES = 10
 DEFAULT_MAX_SHRINK_RATIO = 0.5
 
+# The bundled asset whose absence or unreadability is a packaging fault.
+_BUNDLED_BASELINE_NAME = "faigate/assets/metadata/catalog.v1.json"
+
 
 class SyncStatus(str, Enum):
     FRESH = "fresh"
@@ -33,6 +36,11 @@ class SyncStatus(str, Enum):
     NOT_FOUND = "not_found"
     INVALID = "invalid"
     ERROR = "error"
+    # The remote served a syntactically fine catalog, but the bundled
+    # integrity baseline could not be read, so the catalog could not be
+    # verified. That is a local packaging fault, not a remote failure: the
+    # diagnosed cause must not point at the upstream.
+    PACKAGING_FAILURE = "packaging_failure"
 
 
 class SyncError(Exception):
@@ -118,10 +126,14 @@ def _load_bundled_baseline() -> dict[str, Any]:
             return json.load(f)
     except (FileNotFoundError, ModuleNotFoundError) as exc:
         logger.error("bundled catalog baseline unavailable: %s", exc)
-        raise BundledBaselineError(f"bundled catalog baseline unavailable: {exc}") from exc
+        raise BundledBaselineError(
+            f"bundled catalog baseline unavailable ({_BUNDLED_BASELINE_NAME}): the package is incomplete; {exc}"
+        ) from exc
     except json.JSONDecodeError as exc:
         logger.error("bundled catalog baseline is not valid JSON: %s", exc)
-        raise BundledBaselineError(f"bundled catalog baseline is not valid JSON: {exc}") from exc
+        raise BundledBaselineError(
+            f"bundled catalog baseline is not valid JSON ({_BUNDLED_BASELINE_NAME}): the package is incomplete; {exc}"
+        ) from exc
 
 
 def _count_catalog_entries(payload: dict[str, Any]) -> int:
@@ -276,9 +288,24 @@ class MetadataCatalogSync:
             )
 
         try:
+            baseline = _load_bundled_baseline()
+        except BundledBaselineError as exc:
+            # The remote answered fine; the bundled baseline is what is broken.
+            # Report a local packaging fault, never a remote one, so the
+            # diagnosis points at the package rather than the upstream.
+            logger.error("bundled integrity baseline unusable url=%s: %s", url, exc)
+            return FetchResult(
+                status=SyncStatus.PACKAGING_FAILURE,
+                payload=None,
+                etag=None,
+                http_status=status,
+                error=str(exc),
+            )
+
+        try:
             _validate_integrity(
                 payload,
-                baseline=_load_bundled_baseline(),
+                baseline=baseline,
                 min_entries=min_entries,
                 max_shrink_ratio=max_shrink_ratio,
             )
