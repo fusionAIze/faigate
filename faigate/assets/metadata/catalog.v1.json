@@ -2110,7 +2110,12 @@
       },
       "vendor": "anthropic",
       "model": "claude-code",
-      "hop": []
+      "hop": [],
+      "evidence_level": "official",
+      "official_source_url": "https://docs.anthropic.com/en/docs/about-claude/models",
+      "signup_url": "https://console.anthropic.com/",
+      "watch_sources": [],
+      "last_reviewed": "2026-08-20"
     },
     "clawrouter": {
       "aliases": [
@@ -2136,7 +2141,12 @@
       },
       "vendor": "clawrouter",
       "model": "auto-router",
-      "hop": []
+      "hop": [],
+      "evidence_level": "official",
+      "official_source_url": "https://blockrun.ai/docs/products/routing/clawrouter",
+      "signup_url": "https://blockrun.ai/",
+      "watch_sources": [],
+      "last_reviewed": "2026-08-20"
     },
     "cohere": {
       "aliases": [
@@ -2164,7 +2174,12 @@
       },
       "vendor": "cohere",
       "model": "command-a-03-2025",
-      "hop": []
+      "hop": [],
+      "evidence_level": "official",
+      "official_source_url": "https://docs.cohere.com/",
+      "signup_url": "https://dashboard.cohere.com/",
+      "watch_sources": [],
+      "last_reviewed": "2026-08-20"
     },
     "google-antigravity": {
       "aliases": [
@@ -2194,7 +2209,13 @@
       "model": "gemini-2.5-pro",
       "hop": [
         "antigravity"
-      ]
+      ],
+      "evidence_level": "unofficial",
+      "official_source_url": "https://antigravity.dev/",
+      "signup_url": "https://antigravity.dev/",
+      "watch_sources": [],
+      "last_reviewed": "2026-08-20",
+      "evidence_level_note": "faigate's code table recorded this as 'observed' \u2014 a fourth level it invented outside the published enum. Mapped to 'unofficial', which carries the same meaning in this schema: the integration was seen to work, the vendor documents none. The original word is kept here so the mapping is visible, not silent."
     },
     "google-gemini-cli": {
       "aliases": [
@@ -2223,7 +2244,12 @@
       "model": "gemini-2.5-pro",
       "hop": [
         "gemini-cli"
-      ]
+      ],
+      "evidence_level": "official",
+      "official_source_url": "https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/gemini",
+      "signup_url": "https://cloud.google.com/vertex-ai",
+      "watch_sources": [],
+      "last_reviewed": "2026-08-20"
     },
     "kilo-auto-balanced": {
       "aliases": [
@@ -2252,7 +2278,12 @@
       "model": "tier-balanced",
       "hop": [
         "kilo-auto"
-      ]
+      ],
+      "evidence_level": "official",
+      "official_source_url": "https://kilo.ai/docs/gateway/models-and-providers",
+      "signup_url": "https://kilo.ai/",
+      "watch_sources": [],
+      "last_reviewed": "2026-08-20"
     },
     "kilo-auto-free": {
       "aliases": [
@@ -2282,7 +2313,17 @@
       "model": "tier-free",
       "hop": [
         "kilo-auto"
-      ]
+      ],
+      "evidence_level": "official",
+      "official_source_url": "https://kilo.ai/docs/gateway/models-and-providers",
+      "signup_url": "https://kilo.ai/",
+      "watch_sources": [
+        {
+          "label": "free-llm-api-resources",
+          "url": "https://github.com/cheahjs/free-llm-api-resources"
+        }
+      ],
+      "last_reviewed": "2026-08-20"
     },
     "kilo-auto-frontier": {
       "aliases": [
@@ -2311,7 +2352,12 @@
       "model": "tier-frontier",
       "hop": [
         "kilo-auto"
-      ]
+      ],
+      "evidence_level": "official",
+      "official_source_url": "https://kilo.ai/docs/gateway/models-and-providers",
+      "signup_url": "https://kilo.ai/",
+      "watch_sources": [],
+      "last_reviewed": "2026-08-20"
     },
     "kilo-opus": {
       "aliases": [
@@ -2341,7 +2387,12 @@
       "model": "claude-opus-4-6",
       "hop": [
         "kilo"
-      ]
+      ],
+      "evidence_level": "official",
+      "official_source_url": "https://kilo.ai/docs/gateway/models-and-providers",
+      "signup_url": "https://kilo.ai/",
+      "watch_sources": [],
+      "last_reviewed": "2026-08-20"
     },
     "kilo-sonnet": {
       "aliases": [
@@ -2372,7 +2423,12 @@
       "model": "claude-sonnet-4-6",
       "hop": [
         "kilo"
-      ]
+      ],
+      "evidence_level": "official",
+      "official_source_url": "https://kilo.ai/docs/gateway/models-and-providers",
+      "signup_url": "https://kilo.ai/",
+      "watch_sources": [],
+      "last_reviewed": "2026-08-20"
     },
     "kiro": {
       "aliases": [
@@ -2401,7 +2457,17 @@
       "model": "claude-sonnet",
       "hop": [
         "kiro"
-      ]
+      ],
+      "evidence_level": "official",
+      "official_source_url": "https://kiro.dev/",
+      "signup_url": "https://kiro.dev/",
+      "watch_sources": [
+        {
+          "label": "free-llm-api-resources",
+          "url": "https://github.com/cheahjs/free-llm-api-resources"
+        }
+      ],
+      "last_reviewed": "2026-08-20"
     },
     "longcat": {
       "aliases": [
@@ -2428,7 +2494,17 @@
       },
       "vendor": "longcat",
       "model": "flash-lite",
-      "hop": []
+      "hop": [],
+      "evidence_level": "official",
+      "official_source_url": "https://longcat.ai/",
+      "signup_url": "https://longcat.ai/",
+      "watch_sources": [
+        {
+          "label": "free-llm-api-resources",
+          "url": "https://github.com/cheahjs/free-llm-api-resources"
+        }
+      ],
+      "last_reviewed": "2026-08-20"
     },
     "nvidia-nim": {
       "aliases": [
@@ -2455,7 +2531,12 @@
       },
       "vendor": "nvidia",
       "model": "nemotron",
-      "hop": []
+      "hop": [],
+      "evidence_level": "official",
+      "official_source_url": "https://build.nvidia.com/",
+      "signup_url": "https://build.nvidia.com/explore/discover",
+      "watch_sources": [],
+      "last_reviewed": "2026-08-20"
     },
     "pollinations": {
       "aliases": [
@@ -2484,7 +2565,17 @@
       "model": "gpt-4o",
       "hop": [
         "pollinations"
-      ]
+      ],
+      "evidence_level": "official",
+      "official_source_url": "https://pollinations.ai/",
+      "signup_url": "https://enter.pollinations.ai",
+      "watch_sources": [
+        {
+          "label": "free-llm-api-resources",
+          "url": "https://github.com/cheahjs/free-llm-api-resources"
+        }
+      ],
+      "last_reviewed": "2026-08-20"
     },
     "qoder": {
       "aliases": [
@@ -2514,7 +2605,17 @@
       "model": "kimi-k2",
       "hop": [
         "qoder"
-      ]
+      ],
+      "evidence_level": "official",
+      "official_source_url": "https://qoder.ai/",
+      "signup_url": "https://qoder.ai/",
+      "watch_sources": [
+        {
+          "label": "free-llm-api-resources",
+          "url": "https://github.com/cheahjs/free-llm-api-resources"
+        }
+      ],
+      "last_reviewed": "2026-08-20"
     },
     "qwen": {
       "aliases": [
@@ -2541,7 +2642,12 @@
       },
       "vendor": "qwen",
       "model": "qwen3-6-plus",
-      "hop": []
+      "hop": [],
+      "evidence_level": "official",
+      "official_source_url": "https://help.aliyun.com/zh/model-studio/developer-reference/quick-start",
+      "signup_url": "https://dashscope.aliyun.com/",
+      "watch_sources": [],
+      "last_reviewed": "2026-08-20"
     }
   },
   "model_caps": {

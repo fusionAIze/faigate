@@ -155,6 +155,80 @@ def test_error_with_cache_serves_stale_copy_instead_of_failing(tmp_path: Path) -
     assert stale.etag == '"v1"'
 
 
+def _broken_baseline():
+    """Simulate a bundled asset that is missing from the package."""
+    from faigate.metadata_catalog_sync import BundledBaselineError
+
+    raise BundledBaselineError(
+        "bundled catalog baseline unavailable (faigate/assets/metadata/catalog.v1.json): "
+        "the package is incomplete; catalog.v1.json gone"
+    )
+
+
+def test_packaging_fault_is_reported_as_local_not_remote(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A broken bundled baseline must not be blamed on the remote tier.
+
+    Pre-fix, a missing bundled asset became ``SyncStatus.INVALID`` and the
+    resolver logged "remote returned invalid", pointing the diagnosis at the
+    upstream. The message must instead name the local packaging fault.
+    """
+    monkeypatch.setattr(metadata_catalog_sync, "_load_bundled_baseline", _broken_baseline, raising=False)
+    monkeypatch.setattr(
+        "faigate.catalog_resolver._load_bundled_snapshot",
+        lambda: None,
+    )
+
+    resolver, _ = _make_resolver(tmp_path, plan=[(200, {"etag": '"v1"'}, _body())])
+    with caplog.at_level(logging.WARNING, logger="faigate.catalog_resolver"):
+        resolved = resolver.resolve()
+
+    # Fail closed: no unverified catalog is accepted; with the bundled link
+    # hidden the chain reaches its terminal branch.
+    assert resolved.source == "empty"
+    assert resolved.payload == {"providers": {}}
+
+    messages = [rec.getMessage() for rec in caplog.records if rec.name == "faigate.catalog_resolver"]
+    assert any("local packaging fault" in msg for msg in messages), messages
+    assert not any("remote invalid" in msg for msg in messages), messages
+    assert any("catalog.v1.json" in msg for msg in messages), messages
+
+
+def test_packaging_fault_with_cache_keeps_verified_copy_but_flags_local(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A verified cache stays served, but the cause is a local packaging fault."""
+    resolver, _ = _make_resolver(
+        tmp_path,
+        plan=[
+            (200, {"etag": '"v1"'}, _body()),  # seed the verified cache
+            (200, {"etag": '"v1"'}, _body()),  # re-fetch while baseline is broken
+        ],
+    )
+    seeded = resolver.resolve()
+    assert seeded.source == "public"
+
+    monkeypatch.setattr(metadata_catalog_sync, "_load_bundled_baseline", _broken_baseline, raising=False)
+
+    with caplog.at_level(logging.WARNING, logger="faigate.catalog_resolver"):
+        stale = resolver.resolve(force_refresh=True)
+
+    assert stale.source == "public-cache"
+    assert stale.payload == seeded.payload
+    assert any("local packaging fault" in note for note in stale.notes), stale.notes
+    errors = [
+        rec.getMessage()
+        for rec in caplog.records
+        if rec.name == "faigate.catalog_resolver" and rec.levelno >= logging.ERROR
+    ]
+    assert any("local packaging fault" in msg for msg in errors), errors
+
+
 def test_bundled_snapshot_is_memoised_and_invalidatable(monkeypatch: pytest.MonkeyPatch) -> None:
     """The bundled snapshot parse happens once, not per call, and is resettable.
 
