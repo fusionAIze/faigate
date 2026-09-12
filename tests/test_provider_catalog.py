@@ -1277,15 +1277,12 @@ def test_no_embedded_provider_table_in_provider_catalog() -> None:
     ``aliases``, ...) is a provider table under any name, so the check is
     structural rather than a list of forbidden names.
 
-    ``_CATALOG`` is a KNOWN, STILL-LIVE violation: 907 lines of embedded
-    provider entries, seeded by ``_get_catalog_source`` and then overlaid by the
-    resolved catalog. It is named here rather than asserted away. Deleting it
-    is deferred: emptying it fails 19 further tests, because the snapshot does
-    not yet carry every merged field the table contributes (notably a runtime
-    ``recommended_model``). Until that migration lands, this guard's job is to
-    keep the count at exactly one: a second embedded table is a regression, and
-    so is any change to the legacy block, which lives here as a pinned
-    allowance rather than as a silent pass.
+    ``_CATALOG`` no longer trips this guard. It shed its fact fields in the
+    wiring refactor and is now a plain lane map whose values are
+    ``get_active_model_id(...)`` calls (see :func:`test_recommended_model_inline_literals_name_a_catalog_model`),
+    so there is no longer any embedded provider table to allow. The allowance is
+    therefore empty, and the second assertion keeps it honest: the module must
+    match it exactly, with no entry silently re-introduced.
 
     Honest scope. The guard walks the whole tree, so it sees a table assigned
     inside a function as well as at module level — the same reach as
@@ -1296,12 +1293,10 @@ def test_no_embedded_provider_table_in_provider_catalog() -> None:
     not seen. Those gaps are pinned by
     :func:`test_embedded_provider_table_guard_does_not_see_built_tables`.
 
-    RED-PROOF 1: add a second table, e.g.
+    RED-PROOF: add a table, e.g.
         _MY_PROVIDERS = {"acme": {"context_window": 128000, "aliases": ["acme"]}}
-    anywhere in ``faigate/provider_catalog.py`` and this test fails naming it.
-    RED-PROOF 2: rename ``_CATALOG`` and this test fails, because the known
-    allowance no longer matches — forcing the allowance to be revisited rather
-    than silently kept.
+    anywhere in ``faigate/provider_catalog.py`` and this test fails naming it,
+    because the allowance is empty and cannot absorb it.
     """
     import inspect
 
@@ -1309,22 +1304,20 @@ def test_no_embedded_provider_table_in_provider_catalog() -> None:
 
     offending = set(_embedded_provider_table_literals(inspect.getsource(pc)))
 
-    # The one table allowed to exist today, by name, on purpose.
-    known = {"_CATALOG"}
+    # No embedded provider table is allowed: the module has none left.
+    known: set[str] = set()
     unexpected = offending - known
 
     assert not unexpected, (
         "provider_catalog.py declares a new embedded provider table: "
         f"{sorted(unexpected)}. Provider knowledge belongs in the catalog, "
-        "not in code — see the bundled snapshot in assets/metadata/. "
-        f"(The legacy table(s) {sorted(known)} are a pinned, tracked exception; "
-        "see this test's docstring.)"
+        "not in code — see the bundled snapshot in assets/metadata/."
     )
     assert offending == known, (
-        "the pinned embedded-table allowance no longer matches the module: "
+        "the embedded-table allowance no longer matches the module: "
         f"found {sorted(offending)}, allowance is {sorted(known)}. Update the "
         "allowance in this test and its docstring together — the guard and the "
-        "known violation must not drift apart."
+        "known table must not drift apart."
     )
 
 
@@ -1388,76 +1381,120 @@ def _resolved_catalog_without_env() -> dict:
         _reset_catalog_caches(pc)
 
 
-def _recommended_model_literals(source: str) -> list[tuple[str, str]]:
-    """``(provider_name, literal)`` for every inline ``recommended_model`` value.
+_CATALOG_WIRING_NAME = "_CATALOG"
 
-    The embedded table is ``_CATALOG = {"<provider>": {..., "recommended_model": ...}}``
-    — the provider name is the *outer dict key*, not a ``provider_name`` field.
-    Only *inline string* values are collected. A value computed by
-    :func:`faigate.provider_catalog.get_active_model_id` is wiring, not a
-    recorded fact, and is deliberately out of scope — see
-    :func:`test_recommended_model_inline_literals_name_a_catalog_model`.
+
+def _catalog_wiring_entries(source: str) -> list[tuple[str, str, bool, str]]:
+    """``(lane, raw_target, is_derived, why)`` for every ``_CATALOG`` lane entry.
+
+    ``_CATALOG`` no longer holds facts: it is a lane map whose values are
+    ``get_active_model_id("<family>/<lane>")`` calls, and the resolved value is
+    what ``_get_catalog_source`` seeds as ``recommended_model``. The provider
+    name is the *outer dict key*.
+
+    Two shapes are recognised (``why`` is empty):
+
+    * ``get_active_model_id("<str>")`` — ``raw_target`` is the string argument,
+      ``is_derived=True``. Resolve it the way the module does.
+    * a bare string literal — ``raw_target`` is the literal, ``is_derived=False``;
+      ``_get_catalog_source`` installs it as-is.
+
+    **Every other value shape is an error, not a skip.** ``_get_catalog_source``
+    takes *any* ``str``/``int``/``float`` into a lane's ``recommended_model``
+    (``provider_catalog.py``:762-766), so an f-string, a concatenation, a
+    ``str(...)`` call, an ``int``, or any other expression installs a live model
+    name that nothing here can vet. Such an entry is returned with
+    ``is_derived=False`` and ``raw_target`` set to its source text, and the guard
+    fails on it. Dropping it (the previous behaviour) was itself the hole: the
+    value is consumed, so it must be vetted or rejected — never ignored.
     """
     import ast
 
-    found: list[tuple[str, str]] = []
+    found: list[tuple[str, str, bool, str]] = []
     for node in ast.walk(ast.parse(source)):
-        if not isinstance(node, ast.Dict):
+        if not isinstance(node, (ast.Assign, ast.AnnAssign)):
             continue
-        for provider_key, entry in zip(node.keys, node.values):
-            if not (isinstance(provider_key, ast.Constant) and isinstance(provider_key.value, str)):
+        targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+        if not any(isinstance(t, ast.Name) and t.id == _CATALOG_WIRING_NAME for t in targets):
+            continue
+        value_node = node.value
+        if not isinstance(value_node, ast.Dict):
+            continue
+        for lane_node, entry in zip(value_node.keys, value_node.values):
+            if not (isinstance(lane_node, ast.Constant) and isinstance(lane_node.value, str)):
                 continue
-            if not isinstance(entry, ast.Dict):
+            lane = lane_node.value
+            if isinstance(entry, ast.Constant) and isinstance(entry.value, str):
+                found.append((lane, entry.value, False, ""))
                 continue
-            for key, value in zip(entry.keys, entry.values):
-                if (
-                    isinstance(key, ast.Constant)
-                    and key.value == "recommended_model"
-                    and isinstance(value, ast.Constant)
-                    and isinstance(value.value, str)
-                ):
-                    found.append((provider_key.value, value.value))
+            if (
+                isinstance(entry, ast.Call)
+                and isinstance(entry.func, ast.Name)
+                and entry.func.id == "get_active_model_id"
+                and len(entry.args) == 1
+                and isinstance(entry.args[0], ast.Constant)
+                and isinstance(entry.args[0].value, str)
+            ):
+                found.append((lane, entry.args[0].value, True, ""))
+                continue
+            found.append(
+                (
+                    lane,
+                    ast.unparse(entry),
+                    False,
+                    "is neither a get_active_model_id(<str>) call nor a bare "
+                    "string literal; _get_catalog_source would install its "
+                    "runtime value as recommended_model unchecked",
+                )
+            )
     return found
 
 
+def _catalog_wiring_assignments(source: str) -> list[tuple[str, str]]:
+    """``(lane, canonical_id)`` for the derived (``get_active_model_id``) entries."""
+    return [(lane, target) for lane, target, is_derived, _why in _catalog_wiring_entries(source) if is_derived]
+
+
 def test_recommended_model_inline_literals_name_a_catalog_model() -> None:
-    """An inline ``recommended_model`` must name the catalog's model or an alias.
+    """Every ``_CATALOG`` lane target must name a model the catalog knows.
 
-    ``recommended_model`` is not a catalog field: the bundled snapshot records
-    only ``model`` plus ``aliases``, and the resolved value is derived. It
-    therefore cannot be compared as a fact against a catalog fact without
-    saying which half is which. The distinction this test draws:
+    ``_CATALOG`` is wiring, not a fact table: it maps a configured lane to the
+    canonical id its ``recommended_model`` is derived from. The derived value is
+    seeded into ``_get_catalog_source`` and overlaid by the resolved snapshot, so
+    a lane that points at a model absent from the catalog installs a
+    ``recommended_model`` for a model the catalog never heard of. That is the
+    failure this guard exists to catch, and the wiring is now its whole subject:
+    the previous fact-table version is gone, so its five pinned divergences have
+    no subject left and are not carried over.
 
-    * **Derived -- out of scope.** Eight entries compute the value with
-      ``get_active_model_id(...)``. That is runtime wiring and is intentionally
-      free to differ from ``model``; asserting on it would pin the wiring, not
-      the data.
-    * **Recorded -- in scope.** Every other entry writes a string literal. That
-      literal claims to name a model this provider offers, so it must appear in
-      the catalog's ``model`` or in that entry's ``aliases``. A literal that
-      appears in neither is a stale doppelganger: not a fact about the provider,
-      and not a router alias either.
+    Both vettable value shapes are checked. A derived ``get_active_model_id(...)``
+    target is resolved the way the module resolves it; a bare string literal is
+    checked as written, because ``_get_catalog_source`` installs any str as a live
+    ``recommended_model``. Any *other* value shape (f-string, concatenation,
+    ``str(...)``, an int, …) also lands in ``recommended_model`` but cannot be
+    read from source, so the guard fails on the entry itself rather than skipping
+    it — an unchecked value the module consumes is a hole, not an exception.
 
-    What this does NOT require: that the literal equal ``model`` outright.
-    Router and pseudo providers (``clawrouter``/``openrouter-fallback`` ->
-    ``auto``, ``kilo-auto-*`` -> ``kilo-auto/<tier>``, ``pollinations`` ->
-    ``pollinations/openai``) legitimately recommend a routing target rather than
-    the concrete ``model``; and ``qwen/qwen3.6-plus`` / ``nvidia/nemotron`` are
-    the same models as the catalog's bare ``qwen3-6-plus`` / ``nemotron``,
-    spelled for the upstream API. Those are accepted.
+    What it does NOT require: that the lane target equal the provider's ``model``
+    outright. Several providers route through a shared canonical lane
+    (``gemini-pro-high``/``gemini-pro-low`` -> ``google/gemini-pro-low``) and
+    legitimately recommend that lane's model; the check is membership in the
+    catalog's ``model`` or ``aliases``, dot/dash-normalized, exactly as the old
+    literal guard checked.
 
-    What it does NOT do: it does not pick a winner for the five genuine
-    disagreements pinned in :data:`_CATALOG_KNOWN_DIVERGENCES`. Those need a
-    catalog-data decision, which is out of scope here; the test's job is to
-    keep them visible and to fail the moment a sixth appears or one is fixed
-    without the list being updated. Two local runners
-    (:data:`_CATALOG_LOCAL_RUNNER_DIVERGENCES`) are wiring, not facts, and are
-    named as such rather than compared against a placeholder.
+    Known exception. One lane targets a model the catalog does not know —
+    :data:`_CATALOG_KNOWN_UNKNOWN_TARGETS`. It predates this task (the old guard
+    skipped every derived value, so it was never checked) and cannot be fixed
+    here: the defect is the canonical id in ``lane_registry``, outside this
+    test's write surface. It is pinned by name with a reason and a follow-up
+    note rather than left to fail, so the guard stays sharp for every other lane.
 
-    RED-PROOF: set ``"recommended_model"`` on any provider to a model absent
-    from both ``model`` and ``aliases`` (e.g. ``"glm-9.9-not-real"``) and this
-    test names that provider. Verified against ``zai`` in
-    :func:`test_recommended_model_guard_catches_a_stale_literal`.
+    RED-PROOF: change any non-excepted lane's canonical id to a model absent from
+    that provider's ``model`` and ``aliases`` (e.g. ``get_active_model_id("deepseek/glm-9.9-not-real")``)
+    and this test names that lane; or spell the lane's target as a bare string
+    literal naming no catalog model. Both are verified against ``deepseek-chat``
+    in :func:`test_recommended_model_guard_catches_a_stale_literal` and
+    :func:`test_recommended_model_guard_catches_a_bare_literal_lane`.
     """
     import inspect
 
@@ -1467,55 +1504,78 @@ def test_recommended_model_inline_literals_name_a_catalog_model() -> None:
     providers = catalog.get("providers") if isinstance(catalog, dict) else None
     assert isinstance(providers, dict) and providers, "bundled snapshot did not resolve"
 
+    entries = _catalog_wiring_entries(inspect.getsource(pc))
+    assert entries, "no _CATALOG wiring found; the extractor lost its subject"
+
+    malformed = [(lane, raw, why) for lane, raw, _is_derived, why in entries if why]
+
     stale: list[tuple[str, str, str]] = []
-    for provider, literal in _recommended_model_literals(inspect.getsource(pc)):
-        entry = providers.get(provider)
+    for lane, target, is_derived, why in entries:
+        if why:
+            # Not a name we can vet; reported below rather than silently skipped.
+            continue
+        entry = providers.get(lane)
         if entry is None:
-            # A provider that lives only in the embedded table is covered by
+            # A lane only in the wiring map is covered by
             # test_no_embedded_provider_table_in_provider_catalog, not here.
             continue
+        # The wiring value is derived at runtime for call entries; resolve it the
+        # same way the module does rather than comparing the canonical id's
+        # spelling. A bare string literal is compared as-is: it is already the
+        # ``recommended_model`` ``_get_catalog_source`` installs.
+        literal = pc.get_active_model_id(target) if is_derived else target
         known = {str(entry.get("model") or "")}
         known.update(str(alias) for alias in entry.get("aliases") or [])
         known = {_normalize_dots(value) for value in known if value}
         tail = _normalize_dots(literal.rsplit("/", 1)[-1])
         # A provider-qualified name is accepted when its tail is a model the
-        # catalog knows: "qwen/qwen3.6-plus" and "nvidia/nemotron" are the same
-        # model as the catalog's bare "qwen3-6-plus" / "nemotron", spelled for
-        # the upstream API. This is the naming difference the module already
-        # normalizes elsewhere, not a second opinion about the model.
+        # catalog knows: the catalog may record the bare id while the lane
+        # spells it for the upstream API. This is the naming difference the
+        # module already normalizes elsewhere, not a second opinion.
         if _normalize_dots(literal) in known or tail in known:
             continue
         # Router/pseudo targets are wiring-shaped: a bare routing keyword.
         # Accept those rather than pin a router's policy.
         if tail in _ROUTER_TARGETS:
             continue
-        stale.append((provider, literal, str(entry.get("model") or "")))
+        if (lane, literal) in _CATALOG_KNOWN_UNKNOWN_TARGETS:
+            continue
+        stale.append((lane, literal, str(entry.get("model") or "")))
 
-    # The divergences that exist today. Each is named with a reason, and the set
-    # must match exactly: a new one is a regression, and a *fixed* one is a
-    # prompt to delete its line (the same "pinned allowance" shape used for the
-    # embedded _CATALOG table). The two local runners in
-    # _CATALOG_LOCAL_RUNNER_DIVERGENCES are wiring, not facts: the literal
-    # suggests a model for the operator's own box rather than naming a
-    # vendor-published one, and are therefore excluded from the comparison.
-    remaining = {(provider, literal) for provider, literal, _model in stale} - _CATALOG_LOCAL_RUNNER_DIVERGENCES
-    unexpected = sorted(remaining - _CATALOG_KNOWN_DIVERGENCES)
-    fixed = sorted(_CATALOG_KNOWN_DIVERGENCES - remaining)
-
-    assert not unexpected, (
-        "embedded recommended_model literal(s) name no model the catalog knows:\n  "
-        + "\n  ".join(
-            f"{provider}: recommended_model={literal!r} is neither the catalog model "
-            f"{_catalog_model_of(providers, provider)!r} nor one of its aliases"
-            for provider, literal in unexpected
+    # The guard must keep its whole subject: if the allowance ever claims a lane
+    # that is now known (or gone), the pinned exception has rotted.
+    for lane, literal in _CATALOG_KNOWN_UNKNOWN_TARGETS:
+        entry = providers.get(lane) or {}
+        known = {_normalize_dots(str(entry.get("model") or ""))}
+        known.update(_normalize_dots(str(a)) for a in entry.get("aliases") or [])
+        still_unknown = (
+            _normalize_dots(literal) not in known and _normalize_dots(literal.rsplit("/", 1)[-1]) not in known
         )
-        + "\nEither point the literal at the catalog model/alias, migrate the model "
-        "into the catalog, or add it to _CATALOG_KNOWN_DIVERGENCES with a reason."
+        assert still_unknown, (
+            f"the pinned unknown target {lane} -> {literal!r} is now known to the "
+            "catalog; delete its entry from _CATALOG_KNOWN_UNKNOWN_TARGETS and "
+            "this docstring together — the list and reality must not drift apart."
+        )
+
+    # An entry whose value is neither a get_active_model_id(<str>) call nor a
+    # bare literal still reaches a live recommended_model; there is no way to
+    # vet it here, so it is a hard failure rather than a silent skip.
+    assert not malformed, (
+        "_CATALOG lane(s) have a value shape this guard cannot vet:\n  "
+        + "\n  ".join(f"{lane}: {raw} {why}" for lane, raw, why in malformed)
+        + '\nUse get_active_model_id("<family>/<lane>") or a bare string literal, '
+        "so the target can be checked against the catalog."
     )
-    assert not fixed, (
-        "these recommended_model divergences are listed as known but no longer "
-        f"diverge: {fixed}. Delete their entries from _CATALOG_KNOWN_DIVERGENCES "
-        "and this docstring together — the list and reality must not drift apart."
+
+    assert not stale, (
+        "_CATALOG lane(s) target no model the catalog knows:\n  "
+        + "\n  ".join(
+            f"{lane}: recommended_model={literal!r} is neither the catalog model "
+            f"{_catalog_model_of(providers, lane)!r} nor one of its aliases"
+            for lane, literal, _model in stale
+        )
+        + "\nEither point the lane at a catalog model/alias or migrate the model "
+        "into the catalog."
     )
 
 
@@ -1547,83 +1607,179 @@ _ROUTER_TARGETS = frozenset(
     }
 )
 
-# A local runner has no vendor-published model: the catalog records a
-# placeholder ("local-model", "llama3.2") and the embedded literal suggests a
-# concrete model for the operator to pull. Comparing the two would compare a
-# suggestion against a placeholder; both are honest, so both are accepted.
-_CATALOG_LOCAL_RUNNER_DIVERGENCES = frozenset(
+# Lane wiring targets the catalog does not know. PINNED, not accepted: this is a
+# pre-existing data defect surfaced by aiming the guard at the wiring. The old
+# fact-table guard skipped every derived (``get_active_model_id``) value, so this
+# was never checked before and is not a regression of this task.
+#
+# ``anthropic-haiku`` -> ``anthropic/haiku-4.5``: ``lane_registry`` has no
+# ``anthropic/haiku-4.5`` entry, so it falls back to the tail ``haiku-4.5``,
+# while the catalog spells the model ``claude-haiku-4-5``. Fixing it means
+# changing ``lane_registry._ACTIVE_MODEL_VERSIONS`` (or this lane's canonical
+# id), both outside tests/test_provider_catalog.py. Kept visible on purpose:
+# delete the entry once the wiring points at a catalog model.
+_CATALOG_KNOWN_UNKNOWN_TARGETS = frozenset(
     {
-        ("lmstudio", "lmstudio/minimax-m2.1-gs32"),
-        ("ollama", "ollama/llama3.3"),
-    }
-)
-
-# Real disagreements between the embedded literal and the catalog's own model.
-# NOT fixed here: choosing the winning model is a catalog-data decision, and
-# this session is scoped to the wiring. They are pinned so they cannot be
-# forgotten or quietly multiplied.
-_CATALOG_KNOWN_DIVERGENCES = frozenset(
-    {
-        ("zai", "glm-4.7"),  # catalog says glm-5
-        ("minimax", "minimax/MiniMax-M2.7"),  # catalog says MiniMax-M2.1
-        ("huggingface", "huggingface/deepseek-ai/DeepSeek-R1"),  # catalog: zephyr-7b-beta
-        ("moonshot", "moonshot/kimi-k2.5"),  # catalog says moonshot-v1-8k
-        ("cerebras", "qwen-3-235b-a22b-instruct-2507"),  # catalog says llama3.3-70b
+        ("anthropic-haiku", "haiku-4.5"),
     }
 )
 
 
-def test_recommended_model_literal_extractor_ignores_derived_values() -> None:
-    """ROT-PROOF: the extractor sees literals and leaves ``get_active_model_id`` alone."""
+def test_recommended_model_literal_extractor_reads_catalog_wiring() -> None:
+    """ROT-PROOF: the extractor reads ``_CATALOG`` call entries, not other tables."""
     source = (
         "_CATALOG = {\n"
-        '    "acme": {"recommended_model": get_active_model_id("x/y")},\n'
-        '    "beta": {"recommended_model": "glm-5"},\n'
+        '    "acme": get_active_model_id("acme/chat"),\n'
+        '    "beta": "glm-5",\n'
         "}\n"
+        '_OTHER = {"x": get_active_model_id("x/y")}\n'
     )
-    assert _recommended_model_literals(source) == [("beta", "glm-5")]
+    assert _catalog_wiring_assignments(source) == [("acme", "acme/chat")]
+
+
+def test_recommended_model_literal_extractor_keeps_bare_literals() -> None:
+    """ROT-PROOF: a bare string-valued lane is returned, not dropped.
+
+    ``_get_catalog_source`` installs any str as a lane's ``recommended_model``,
+    so a literal must reach the catalog check. An extractor that silently skips
+    literals would hide exactly the target the guard is meant to vet.
+    """
+    source = '_CATALOG = {"beta": "totally-made-up-model-xyz"}\n'
+    assert _catalog_wiring_entries(source) == [("beta", "totally-made-up-model-xyz", False, "")]
+
+
+def test_recommended_model_literal_extractor_flags_other_shapes() -> None:
+    """ROT-PROOF: a value that is neither call nor literal is flagged, not skipped.
+
+    ``_get_catalog_source`` installs *any* str/int/float as a lane's
+    ``recommended_model``, so an f-string, concatenation, ``str(...)`` call or
+    plain int reaches production unchecked. The extractor must surface those
+    entries with a reason so the guard can fail on them; silently skipping them
+    was the hole this test exists to prove closed.
+    """
+    source = '_CATALOG = {\n    "beta": f"{prefix}-model",\n    "gamma": "a" + "b",\n    "delta": 12345,\n}\n'
+    entries = _catalog_wiring_entries(source)
+    assert [lane for lane, _raw, _derived, _why in entries] == ["beta", "gamma", "delta"]
+    assert all(not reason for _lane, _raw, _derived, reason in entries) is False, "shapes were not flagged"
 
 
 def test_recommended_model_guard_catches_a_stale_literal() -> None:
-    """ROT-PROOF: a literal naming no catalog model is reported."""
+    """ROT-PROOF: a lane target naming no catalog model is reported."""
     import inspect
 
     import faigate.provider_catalog as pc
 
     providers = _resolved_catalog_without_env()["providers"]
-    victim = "zai"
+    victim = "deepseek-chat"
     assert victim in providers, "fixture provider vanished from the snapshot"
 
     real_source = inspect.getsource(pc)
     poisoned = real_source.replace(
-        '"recommended_model": "glm-4.7"',
-        '"recommended_model": "glm-9.9-not-real"',
+        'get_active_model_id("deepseek/chat")',
+        'get_active_model_id("deepseek/glm-9.9-not-real")',
         1,
     )
-    assert poisoned != real_source, "rot-proof no longer rewrites the zai literal"
+    assert poisoned != real_source, "rot-proof no longer rewrites the deepseek-chat lane"
 
-    literals = _recommended_model_literals(poisoned)
+    assignments = dict(_catalog_wiring_assignments(poisoned))
+    assert assignments.get(victim) == "deepseek/glm-9.9-not-real", (
+        f"the poisoned lane did not replace the {victim} wiring; got {assignments.get(victim)!r}"
+    )
+
+    literal = pc.get_active_model_id(assignments[victim])
     entry = providers[victim]
     known = {_normalize_dots(str(entry.get("model") or ""))}
     known.update(_normalize_dots(str(a)) for a in entry.get("aliases") or [])
 
-    poisoned_hits = [
-        literal for provider, literal in literals if provider == victim and _normalize_dots(literal) not in known
-    ]
-    assert poisoned_hits == ["glm-9.9-not-real"], (
-        f"the stale-literal check no longer flags a model absent from the catalog; extracted {literals!r}"
+    assert _normalize_dots(literal) not in known and _normalize_dots(literal.rsplit("/", 1)[-1]) not in known, (
+        "the stale-lane check no longer flags a model absent from the catalog; "
+        f"resolved {literal!r} is known as {sorted(known)!r}"
     )
 
-    # And the real source still reports exactly the pinned zai divergence.
-    clean_hits = [
-        literal
-        for provider, literal in _recommended_model_literals(real_source)
-        if provider == victim and _normalize_dots(literal) not in known
-    ]
-    assert clean_hits == ["glm-4.7"], (
-        "the zai divergence changed; update _CATALOG_KNOWN_DIVERGENCES and this "
-        f"rot-proof together (got {clean_hits!r})"
+    # And the real source still resolves the lane to a catalog model.
+    real_literal = pc.get_active_model_id(dict(_catalog_wiring_assignments(real_source))[victim])
+    assert _normalize_dots(real_literal) in known or _normalize_dots(real_literal.rsplit("/", 1)[-1]) in known, (
+        f"the {victim} lane now targets an unknown model; update this rot-proof together (resolved {real_literal!r})"
     )
+
+
+def test_recommended_model_guard_catches_a_bare_literal_lane() -> None:
+    """ROT-PROOF: a lane written as a bare literal naming no catalog model is reported.
+
+    The derived-call shape is guarded by
+    :func:`test_recommended_model_guard_catches_a_stale_literal`. This is the
+    sibling shape: ``_get_catalog_source`` accepts a plain str just the same, so
+    a hand-written literal must be vetted as a model name too — otherwise a lane
+    pointing at a model the catalog never heard of would be installed live and
+    slip past every guard.
+    """
+    import inspect
+
+    import faigate.provider_catalog as pc
+
+    providers = _resolved_catalog_without_env()["providers"]
+    victim = "deepseek-chat"
+    assert victim in providers, "fixture provider vanished from the snapshot"
+
+    real_source = inspect.getsource(pc)
+    poisoned = real_source.replace(
+        'get_active_model_id("deepseek/chat")',
+        '"totally-made-up-model-xyz"',
+        1,
+    )
+    assert poisoned != real_source, "rot-proof no longer rewrites the deepseek-chat lane"
+
+    entry = providers[victim]
+    known = {_normalize_dots(str(entry.get("model") or ""))}
+    known.update(_normalize_dots(str(a)) for a in entry.get("aliases") or [])
+
+    # The extractor keeps the literal, and the catalog check rejects it.
+    wiring = dict(
+        (lane, (target, why)) for lane, target, _is_derived, why in _catalog_wiring_entries(poisoned) if lane == victim
+    )
+    literal, why = wiring.get(victim, (None, None))
+    assert literal == "totally-made-up-model-xyz" and not why, (
+        f"the poisoned lane did not become a vettable bare literal; got {literal!r} ({why!r})"
+    )
+    assert _normalize_dots(literal) not in known and _normalize_dots(literal.rsplit("/", 1)[-1]) not in known, (
+        "the guard no longer flags a bare literal absent from the catalog; "
+        f"resolved {literal!r} is known as {sorted(known)!r}"
+    )
+
+
+def test_recommended_model_guard_catches_an_unvettable_lane() -> None:
+    """ROT-PROOF: a lane value of another shape is rejected, not skipped.
+
+    An f-string or concatenation still lands in ``recommended_model`` via
+    ``_get_catalog_source``, but its value cannot be read from source here. The
+    guard must therefore fail on the entry instead of ignoring it — ignoring it
+    is what let an unknown model install live and unguarded.
+    """
+    import ast
+
+    import faigate.provider_catalog as pc
+
+    real_source = getattr(pc, "__source__", None)
+    if real_source is None:
+        import inspect
+
+        real_source = inspect.getsource(pc)
+    poisoned = real_source.replace(
+        'get_active_model_id("deepseek/chat")',
+        'f"deepseek/{suffix}"',
+        1,
+    )
+    assert poisoned != real_source, "rot-proof no longer rewrites the deepseek-chat lane"
+
+    malformed = [(lane, raw, why) for lane, raw, _is_derived, why in _catalog_wiring_entries(poisoned) if why]
+    assert any(lane == "deepseek-chat" for lane, _raw, _why in malformed), (
+        f"an unvettable lane value was not flagged; entries were {malformed!r}"
+    )
+    lane, raw, why = next(item for item in malformed if item[0] == "deepseek-chat")
+    assert raw == ast.unparse(ast.parse('f"deepseek/{suffix}"').body[0].value), (
+        f"the flagged entry did not carry the offending source text; got {raw!r} for {lane!r}"
+    )
+    assert "recommended_model" in why  # the reason explains the live consequence
 
 
 # --------------------------------------------------------------------------- #
