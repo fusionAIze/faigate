@@ -1395,12 +1395,16 @@ def _model_caps_index() -> dict[str, int]:
     The ``model_caps`` block is model-keyed (unlike ``providers``, which is
     provider-keyed) — the input ceiling is a property of the concrete model, not
     of any single provider. Only caps that reach the ``enforceable`` view of
-    :func:`faigate.catalog_views.split_catalog_facts` are indexed: a
-    ``confirmed`` fact, or one with no recognisable ``evidence`` block. A
-    ``plausible`` cap is best-effort and an ``unconfirmed`` one is a
-    non-claim, so neither belongs in an index whose consumers treat a hit as a
-    hard boundary. The view split is the single definition of that boundary;
-    this accessor keeps no second copy of the rule.
+    :func:`faigate.catalog_views.split_catalog_facts` are indexed, and that is
+    exactly the ``confirmed`` ones. A ``plausible`` cap is best-effort and an
+    ``unconfirmed`` one is a non-claim, so neither belongs in an index whose
+    consumers treat a hit as a hard boundary. A cap with a missing or
+    unrecognised ``evidence`` block is unverified by construction and is
+    therefore excluded as well — a hand-written or freshly imported entry is
+    the shape that most often arrives without evidence, and it must not be
+    enforced merely because nobody wrote down where it came from. The view
+    split is the single definition of that boundary; this accessor keeps no
+    second copy of the rule.
 
     A missing or empty block contributes nothing; the caller receives ``None``
     for any model absent from the catalog or present only with a non-
