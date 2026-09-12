@@ -17,6 +17,7 @@ from faigate import metadata_catalog_sync as _metadata_catalog_sync
 from faigate.catalog_cache import CatalogCache
 from faigate.catalog_resolver import CatalogResolver, ResolverConfig
 from faigate.metadata_catalog_sync import (
+    BundledBaselineError,
     MetadataCatalogSync,
     SyncStatus,
 )
@@ -358,9 +359,66 @@ def test_sync_fails_closed_when_bundled_baseline_missing(real_bundled_baseline, 
     monkeypatch.setattr(importlib.resources, "files", _missing)
     fetcher = FakeFetcher([(200, {}, _body(_valid_payload()))])
     result = MetadataCatalogSync(fetcher=fetcher).fetch("https://example/c.json")
-    assert result.status == SyncStatus.INVALID
+    # Fail closed: never accept an unverifiable catalog, whatever the verdict.
     assert result.payload is None
     assert "baseline" in result.error
+
+
+def test_sync_fails_closed_classifies_baseline_fault_separately_from_remote():
+    """The packaging status is distinct from the remote-invalid verdict.
+
+    Pins the two verdicts apart so a future refactor cannot collapse the
+    local packaging fault back into ``INVALID``.
+    """
+    packaging = getattr(SyncStatus, "PACKAGING_FAILURE", None)
+    assert packaging is not None, "no distinct packaging verdict exists"
+    assert packaging != SyncStatus.INVALID
+    assert packaging.value == "packaging_failure"
+
+
+def test_sync_reports_missing_baseline_as_local_packaging_fault(real_bundled_baseline, monkeypatch: pytest.MonkeyPatch):
+    """A missing bundled asset is local, never a remote verdict.
+
+    Against the pre-fix tree a broken baseline surfaced as ``INVALID`` with
+    ``http_status=200``, indistinguishable from a bad remote payload. It must
+    instead be classified as a packaging failure and name the artefact.
+    """
+
+    def _missing(_package: str):
+        raise FileNotFoundError("catalog.v1.json gone")
+
+    monkeypatch.setattr(importlib.resources, "files", _missing)
+    fetcher = FakeFetcher([(200, {}, _body(_valid_payload()))])
+    result = MetadataCatalogSync(fetcher=fetcher).fetch("https://example/c.json")
+
+    # INVALID is the remote-fault verdict; a broken local asset must not use it.
+    assert result.status != SyncStatus.INVALID, result.status
+    assert result.payload is None
+    assert "catalog.v1.json" in result.error, result.error
+    assert "package is incomplete" in result.error, result.error
+
+
+def test_sync_reports_unreadable_baseline_json_as_local_packaging_fault(
+    real_bundled_baseline, monkeypatch: pytest.MonkeyPatch
+):
+    """A corrupted bundled asset is a local packaging fault, not invalid remote."""
+    real_json_load = json.load
+
+    def _corrupt(path, *args, **kwargs):
+        # Only the bundled asset read is corrupted; the request body parse
+        # goes through the same json.load, so key on the read mode.
+        if getattr(path, "read", None) is not None:
+            raise json.JSONDecodeError("truncated asset", "{}", 1)
+        return real_json_load(path, *args, **kwargs)
+
+    monkeypatch.setattr(_metadata_catalog_sync.json, "load", _corrupt)
+    fetcher = FakeFetcher([(200, {}, _body(_valid_payload()))])
+    result = MetadataCatalogSync(fetcher=fetcher).fetch("https://example/c.json")
+
+    assert result.status != SyncStatus.INVALID, result.status
+    assert result.payload is None
+    assert "catalog.v1.json" in result.error, result.error
+    assert "package is incomplete" in result.error, result.error
 
 
 def test_sync_propagates_unexpected_baseline_load_errors(real_bundled_baseline, monkeypatch: pytest.MonkeyPatch):
@@ -371,6 +429,32 @@ def test_sync_propagates_unexpected_baseline_load_errors(real_bundled_baseline, 
     fetcher = FakeFetcher([(200, {}, _body(_valid_payload()))])
     with pytest.raises(RuntimeError, match="cannot read package resources"):
         MetadataCatalogSync(fetcher=fetcher).fetch("https://example/c.json")
+
+
+def test_fail_closed_never_accepts_unverified_catalog(monkeypatch: pytest.MonkeyPatch):
+    """Acceptance criterion 4: an unverifiable catalog is never served as fresh.
+
+    The remote serves a perfectly valid, comfortably large catalog. With the
+    bundled baseline unreadable the guard cannot verify it, so ``fetch`` must
+    not return it as FRESH with a payload — the remote answer is discarded.
+    """
+    baseline = _catalog_payload(provider_count=100)
+    monkeypatch.setattr(_metadata_catalog_sync, "_load_bundled_baseline", lambda: baseline)
+    big_payload = _catalog_payload(provider_count=100)
+
+    # Sanity: with a working baseline this exact payload is accepted.
+    ok = MetadataCatalogSync(fetcher=FakeFetcher([(200, {}, _body(big_payload))])).fetch("https://example/c.json")
+    assert ok.status == SyncStatus.FRESH
+    assert ok.payload is not None
+
+    # Baseline now unreadable: the same payload must be rejected outright.
+    def _broken():
+        raise BundledBaselineError("bundled catalog baseline unavailable: catalog.v1.json gone")
+
+    monkeypatch.setattr(_metadata_catalog_sync, "_load_bundled_baseline", _broken)
+    rejected = MetadataCatalogSync(fetcher=FakeFetcher([(200, {}, _body(big_payload))])).fetch("https://example/c.json")
+    assert rejected.status != SyncStatus.FRESH
+    assert rejected.payload is None, "unverified catalog was accepted"
 
 
 # ── Real bundled asset wiring ─────────────────────────────────────────
