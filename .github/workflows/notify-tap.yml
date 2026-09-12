@@ -12,11 +12,18 @@ jobs:
     if: ${{ github.server_url == 'https://github.com' }}
     runs-on: ubuntu-latest
     steps:
+      # The title convention lives in .release-title-prefix so this gate and the
+      # Forgejo one cannot drift apart. Reading it needs the repo on disk.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
       - name: Validate release title convention
         # Required format: "fusionAIze Gate vX.Y.Z"  (no subtitle)
         run: |
           TITLE="${{ github.event.release.name }}"
-          if echo "$TITLE" | grep -qE '^fusionAIze Gate v[0-9]+\.[0-9]+\.[0-9]+$'; then
+          PREFIX="$(cat .release-title-prefix)"
+          if echo "$TITLE" | grep -qE "^${PREFIX} v[0-9]+\.[0-9]+\.[0-9]+$"; then
             echo "Release title OK: $TITLE"
           else
             echo "::error::Release title must be exactly 'fusionAIze Gate vX.Y.Z'. Got: $TITLE"

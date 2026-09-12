@@ -43,7 +43,7 @@ jobs:
           fetch-depth: 0
 
       # The release title is a gate, not an agreement. It must be exactly
-      # "SkillWeave vX.Y.Z"; a tag whose rendered title does not conform is
+      # "fusionAIze Gate vX.Y.Z"; a tag whose rendered title does not conform is
       # refused here, before any release object exists on either forge. Forge
       # default behaviour names a release after the bare tag — that is not the
       # convention, and v1.5.2's title had to be corrected by hand because of it.
@@ -53,19 +53,20 @@ jobs:
           TAG_NAME: "${{ github.event.inputs.tag_name || github.ref_name }}"
         run: |
           set -euo pipefail
-          RELEASE_NAME="SkillWeave ${TAG_NAME}"
-          python3 - "${RELEASE_NAME}" <<'TITLE_GATE_PY'
+          PREFIX="$(cat .release-title-prefix)"
+          RELEASE_NAME="${PREFIX} ${TAG_NAME}"
+          python3 - "${RELEASE_NAME}" "${PREFIX}" <<'TITLE_GATE_PY'
           import re
           import sys
 
+          name, prefix = sys.argv[1], sys.argv[2]
           NAME_RE = re.compile(
-              r"^SkillWeave v[0-9]+\.[0-9]+\.[0-9]+(?:-rc[0-9]+)?$"
+              r"^%s v[0-9]+\.[0-9]+\.[0-9]+(?:-rc[0-9]+)?$" % re.escape(prefix)
           )
-          name = sys.argv[1]
           if not NAME_RE.match(name):
               sys.stderr.write(
                   "ReleaseTitleError: release name %r does not match the required "
-                  "convention ^SkillWeave v[0-9]+\\.[0-9]+\\.[0-9]+$ or its "
+                  "convention ^fusionAIze Gate v[0-9]+\\.[0-9]+\\.[0-9]+$ or its "
                   "prerelease form ...-rc[0-9]+$. Refusing before any release "
                   "object exists on either forge.\n" % name
               )
@@ -239,7 +240,7 @@ jobs:
         env:
           TAG_NAME: "${{ github.event.inputs.tag_name || github.ref_name }}"
           NOTES: "${{ steps.notes.outputs.notes }}"
-          NAME_TEMPLATE: "SkillWeave {tag_name}"
+          NAME_TEMPLATE: "${{ steps.title.outputs.release_name_template }}"
           FORGEJO_REPOSITORY: "${{ github.repository }}"
           FORGEJO_BASE_URL: "${{ github.server_url }}"
           FORGEJO_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
