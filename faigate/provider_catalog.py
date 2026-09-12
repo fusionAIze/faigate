@@ -388,6 +388,17 @@ def _get_packages_for_provider(provider_name: str) -> list[dict[str, Any]]:
 # wiring that cannot be a catalog fact: which concrete model a canonical lane
 # prefers to serve today is decided by :func:`faigate.lane_registry.get_active_model_id`,
 # not by a data file.
+# The lane a provider routes through, for the providers that route through one.
+# Both values are wiring, not facts: they resolve against the lane registry at
+# import time and change when the registry changes, which is why they cannot
+# live in a published fact catalog.
+_LANE_LABELS: dict[str, str] = {
+    "deepseek-chat": "deepseek/chat",
+    "deepseek-reasoner": "deepseek/reasoner",
+    "gemini-flash": "google/gemini-flash",
+    "gemini-flash-lite": "google/gemini-flash-lite",
+}
+
 _CATALOG: dict[str, Any] = {
     "deepseek-chat": get_active_model_id("deepseek/chat"),
     "deepseek-reasoner": get_active_model_id("deepseek/reasoner"),
@@ -757,6 +768,14 @@ def _get_catalog_source() -> dict[str, dict[str, Any]]:
         merged = dict(catalog.get(name, {}))
         merged.update(entry)
         catalog[name] = merged
+
+    # The active lane's label is resolved at read time, not at import time, and
+    # it gets its own key. It used to be written into ``notes``, where it sat
+    # beside static prose under the same name — one field, two meanings,
+    # depending on which provider you looked at.
+    for name, lane in _LANE_LABELS.items():
+        if name in catalog:
+            catalog[name]["active_model_label"] = get_active_model_label(lane)
     return catalog
 
 
