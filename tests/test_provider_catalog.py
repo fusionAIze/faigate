@@ -1073,3 +1073,164 @@ def test_no_embedded_cap_table_in_provider_catalog() -> None:
         + ", ".join(offending)
         + ". Per-model input-token caps must live in the catalog only."
     )
+
+
+# --------------------------------------------------------------------------- #
+# Catalog loading chain: one implementation, one answer
+# --------------------------------------------------------------------------- #
+
+
+def _catalog_views(pc) -> dict[str, set[str]]:
+    """Provider-name sets as seen through every loader of the catalog chain.
+
+    ``_load_external_provider_catalog`` (the provider-name path),
+    ``_load_external_catalog`` (the legacy accessor) and the ``providers`` block
+    of ``_load_external_catalog_payload`` (the caps/identity path) all answer
+    the same question — "which provider entries does the catalog hold right
+    now?". Comparing names, not just counts, also catches a same-size but
+    different-set divergence. Before the chain was collapsed these disagreed by
+    which internal helper the caller happened to use.
+    """
+    return {
+        "_load_external_provider_catalog": set(pc._load_external_provider_catalog()),
+        "_load_external_catalog": set(pc._load_external_catalog()),
+        "_load_external_catalog_payload": set(pc._load_external_catalog_payload().get("providers", {})),
+    }
+
+
+def _reset_catalog_caches(pc) -> None:
+    from faigate.catalog_resolver import _invalidate_bundled_snapshot_cache
+
+    pc._EXTERNAL_CATALOG_CACHE = None
+    pc._EXTERNAL_CATALOG_MTIME = 0.0
+    pc._CATALOG_RESOLVER = None
+    _invalidate_bundled_snapshot_cache()
+
+
+def _write_catalog_file(path: Path, providers: dict) -> Path:
+    path.write_text(
+        json.dumps({"schema_version": "fusionaize-provider-catalog/v1.3", "providers": providers}),
+        encoding="utf-8",
+    )
+    return path
+
+
+@pytest.mark.parametrize(
+    ("state", "env_file", "env_dir"),
+    [
+        ("both_env_set", "file", "dir"),
+        ("only_file", "file", None),
+        ("only_dir", None, "dir"),
+        ("dir_set_file_missing", None, "empty_dir"),
+        ("nothing_set", None, None),
+    ],
+)
+def test_catalog_loaders_agree_in_every_on_disk_state(
+    tmp_path: Path, monkeypatch, state: str, env_file: str | None, env_dir: str | None
+) -> None:
+    """Every loader must see the same provider set for the same on-disk state.
+
+    The chain is ``env-override → metadata-dir → bundled snapshot``. A set but
+    empty or non-existent metadata directory must not block the fall back to the
+    bundled snapshot: the override is a location hint, not a commitment to a
+    catalog that is not there. The file override is link 1 and takes precedence;
+    the dir is link 2 and only consulted when no file override is set.
+    """
+    import faigate.provider_catalog as pc
+
+    # Distinct provider names per link make the answer decidable: a loader that
+    # reads a different link names a different provider.
+    file_catalog = tmp_path / "file-catalog.v1.json"
+    _write_catalog_file(file_catalog, {"file-only-provider": {"vendor": "file", "model": "one"}})
+
+    dir_root = tmp_path / "metadata-dir"
+    (dir_root / "providers").mkdir(parents=True)
+    _write_catalog_file(
+        dir_root / "providers" / "catalog.v1.json",
+        {"dir-only-provider": {"vendor": "dir", "model": "one"}},
+    )
+    empty_dir = tmp_path / "empty-metadata-dir"
+    empty_dir.mkdir()
+
+    if env_file == "file":
+        monkeypatch.setenv("FAIGATE_PROVIDER_METADATA_FILE", str(file_catalog))
+    else:
+        monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_FILE", raising=False)
+
+    if env_dir == "dir":
+        monkeypatch.setenv("FAIGATE_PROVIDER_METADATA_DIR", str(dir_root))
+    elif env_dir == "empty_dir":
+        monkeypatch.setenv("FAIGATE_PROVIDER_METADATA_DIR", str(empty_dir))
+    else:
+        monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_DIR", raising=False)
+
+    _reset_catalog_caches(pc)
+    views = _catalog_views(pc)
+
+    # Provider sets carried by each link: the bundled snapshot is read straight
+    # from the shipped asset so this test does not hardcode its membership.
+    from faigate.catalog_resolver import _load_bundled_snapshot
+
+    bundled = _load_bundled_snapshot() or {}
+    bundled_names = set(bundled.get("providers", {}))
+
+    # Link precedence is file → dir → bundled: a set file wins outright, a set
+    # dir wins over the bundled snapshot, and a dir that holds no catalog falls
+    # through to the bundled snapshot.
+    expected: set[str] = {
+        "both_env_set": {"file-only-provider"},
+        "only_file": {"file-only-provider"},
+        "only_dir": {"dir-only-provider"},
+        "dir_set_file_missing": bundled_names,
+        "nothing_set": bundled_names,
+    }[state]
+
+    assert expected, f"state={state!r}: fixture expectation must not be empty"
+
+    distinct = {frozenset(names) for names in views.values()}
+    assert len(distinct) == 1, (
+        f"state={state!r}: catalog loaders disagree on the provider set: "
+        f"{ {name: sorted(names) for name, names in views.items()} }. "
+        "All of them read the same chain (env-override → metadata-dir → bundled "
+        "snapshot) and must answer the same."
+    )
+    resolved = next(iter(distinct))
+    assert resolved == expected, (
+        f"state={state!r}: all loaders agree, but on the wrong set "
+        f"({sorted(resolved)}); expected {sorted(expected)}."
+    )
+
+    # Identities are a projection of the same providers block: every provider
+    # entry carrying vendor+model must yield exactly one identity dict.
+    payload = pc._load_external_catalog_payload()
+    with_identity = [
+        name
+        for name, entry in payload.get("providers", {}).items()
+        if isinstance(entry, dict) and entry.get("vendor") and entry.get("model")
+    ]
+    identity_count = len(pc.catalog_provider_identities())
+    assert identity_count == len(with_identity), (
+        f"state={state!r}: catalog_provider_identities sees {identity_count} "
+        f"identit(ies) but the resolved providers block has {len(with_identity)} "
+        "entries carrying vendor+model."
+    )
+
+
+def test_catalog_dir_set_but_file_missing_falls_back_to_bundled(monkeypatch, tmp_path: Path) -> None:
+    """A set-but-dead metadata dir must not disable the bundled fall back.
+
+    ``FAIGATE_PROVIDER_METADATA_DIR`` pointing at an empty or non-existent
+    directory is a broken pointer, not a claim that the catalog is empty. The
+    docstring's promise — "when neither override yields a catalog file, fall
+    back to the bundled snapshot" — has to hold here too.
+    """
+    import faigate.provider_catalog as pc
+
+    monkeypatch.setenv("FAIGATE_PROVIDER_METADATA_DIR", str(tmp_path / "does-not-exist"))
+    monkeypatch.delenv("FAIGATE_PROVIDER_METADATA_FILE", raising=False)
+    _reset_catalog_caches(pc)
+
+    assert len(pc._load_external_provider_catalog()) > 0
+    assert len(pc._load_external_catalog_payload().get("providers", {})) > 0
+    assert len(pc.catalog_provider_identities()) > 0
+    assert len(pc._load_external_model_caps()) > 0

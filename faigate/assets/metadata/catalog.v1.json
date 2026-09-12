@@ -82,7 +82,16 @@
       "vendor": "anthropic",
       "model": "claude-opus-4-7",
       "hop": [],
-      "variant": "claude"
+      "variant": "claude",
+      "context_window": 200000,
+      "limits": {
+        "max_input_tokens": 200000
+      },
+      "context_evidence": {
+        "level": "plausible",
+        "as_of": "2026-09-12",
+        "note": "Carried over unchanged from faigate's embedded provider table. The public sources disagree with it: LiteLLM azure_ai/claude-opus-4-6=1000000. The value is kept so this migration does not silently change routing headroom; the divergence is recorded here so the correction can be a deliberate step."
+      }
     },
     "anthropic-haiku": {
       "aliases": [
@@ -115,7 +124,15 @@
       },
       "vendor": "anthropic",
       "model": "claude-haiku-4-5",
-      "hop": []
+      "hop": [],
+      "context_window": 200000,
+      "limits": {
+        "max_input_tokens": 200000
+      },
+      "context_evidence": {
+        "level": "unconfirmed",
+        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'haiku-4.5', so the figure stays unverified."
+      }
     },
     "anthropic-sonnet": {
       "aliases": [
@@ -146,7 +163,16 @@
       },
       "vendor": "anthropic",
       "model": "claude-sonnet-4-6",
-      "hop": []
+      "hop": [],
+      "context_window": 200000,
+      "limits": {
+        "max_input_tokens": 200000
+      },
+      "context_evidence": {
+        "level": "plausible",
+        "as_of": "2026-09-12",
+        "note": "Carried over unchanged from faigate's embedded provider table. The public sources disagree with it: LiteLLM azure_ai/claude-sonnet-4-6=1000000. The value is kept so this migration does not silently change routing headroom; the divergence is recorded here so the correction can be a deliberate step."
+      }
     },
     "openai": {
       "aliases": [
@@ -221,7 +247,18 @@
       "vendor": "openai",
       "model": "gpt-4o",
       "hop": [],
-      "variant": "gpt4o"
+      "variant": "gpt4o",
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 128000
+      },
+      "context_evidence": {
+        "level": "confirmed",
+        "source_url": "https://openrouter.ai/api/v1/models",
+        "secondary_source_url": "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json",
+        "source_model_id": "openai/gpt-4o",
+        "as_of": "2026-09-12"
+      }
     },
     "openai-images": {
       "aliases": [
@@ -248,7 +285,15 @@
       },
       "vendor": "openai",
       "model": "gpt-image-1",
-      "hop": []
+      "hop": [],
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 128000
+      },
+      "context_evidence": {
+        "level": "unconfirmed",
+        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'gpt-image-1', so the figure stays unverified."
+      }
     },
     "google": {
       "aliases": [
@@ -323,7 +368,15 @@
       },
       "vendor": "google",
       "model": "gemini-3-flash",
-      "hop": []
+      "hop": [],
+      "context_window": 1048576,
+      "limits": {
+        "max_input_tokens": 1048576
+      },
+      "context_evidence": {
+        "level": "unconfirmed",
+        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'gemini-3-flash', so the figure stays unverified."
+      }
     },
     "gemini-flash-lite": {
       "aliases": [
@@ -354,7 +407,15 @@
       },
       "vendor": "google",
       "model": "gemini-3-flash-lite",
-      "hop": []
+      "hop": [],
+      "context_window": 1048576,
+      "limits": {
+        "max_input_tokens": 1048576
+      },
+      "context_evidence": {
+        "level": "unconfirmed",
+        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'gemini-3-flash-lite', so the figure stays unverified."
+      }
     },
     "gemini-pro-high": {
       "aliases": [
@@ -386,7 +447,16 @@
       "vendor": "google",
       "model": "gemini-3.1-pro",
       "hop": [],
-      "variant": "high"
+      "variant": "high",
+      "context_window": 1048576,
+      "limits": {
+        "max_input_tokens": 1048576
+      },
+      "context_evidence": {
+        "level": "plausible",
+        "as_of": "2026-09-12",
+        "note": "Carried over unchanged from faigate's embedded provider table. The public sources disagree with it: LiteLLM deepinfra/google/gemini-3.1-pro=1000000. The value is kept so this migration does not silently change routing headroom; the divergence is recorded here so the correction can be a deliberate step."
+      }
     },
     "gemini-pro-low": {
       "aliases": [
@@ -418,7 +488,16 @@
       "vendor": "google",
       "model": "gemini-3.1-pro",
       "hop": [],
-      "variant": "low"
+      "variant": "low",
+      "context_window": 1048576,
+      "limits": {
+        "max_input_tokens": 1048576
+      },
+      "context_evidence": {
+        "level": "plausible",
+        "as_of": "2026-09-12",
+        "note": "Carried over unchanged from faigate's embedded provider table. The public sources disagree with it: LiteLLM deepinfra/google/gemini-3.1-pro=1000000. The value is kept so this migration does not silently change routing headroom; the divergence is recorded here so the correction can be a deliberate step."
+      }
     },
     "deepseek-chat": {
       "aliases": [
@@ -453,7 +532,16 @@
       },
       "vendor": "deepseek",
       "model": "deepseek-v4-flash",
-      "hop": []
+      "hop": [],
+      "context_window": 1048576,
+      "limits": {
+        "max_input_tokens": 1048576
+      },
+      "context_evidence": {
+        "level": "plausible",
+        "as_of": "2026-09-12",
+        "note": "Carried over unchanged from faigate's embedded provider table. The public sources disagree with it: OpenRouter deepseek/deepseek-chat=163840; LiteLLM deepseek-chat=131072. The value is kept so this migration does not silently change routing headroom; the divergence is recorded here so the correction can be a deliberate step."
+      }
     },
     "deepseek-reasoner": {
       "aliases": [
@@ -487,7 +575,16 @@
       },
       "vendor": "deepseek",
       "model": "deepseek-v4-pro",
-      "hop": []
+      "hop": [],
+      "context_window": 1048576,
+      "limits": {
+        "max_input_tokens": 1048576
+      },
+      "context_evidence": {
+        "level": "plausible",
+        "as_of": "2026-09-12",
+        "note": "Carried over unchanged from faigate's embedded provider table. The public sources disagree with it: LiteLLM deepseek-reasoner=131072. The value is kept so this migration does not silently change routing headroom; the divergence is recorded here so the correction can be a deliberate step."
+      }
     },
     "deepseek-flash-vision-exp": {
       "aliases": [
@@ -596,7 +693,16 @@
       "model": "grok-code-fast-1",
       "hop": [
         "blackboxai"
-      ]
+      ],
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 128000
+      },
+      "context_evidence": {
+        "level": "plausible",
+        "as_of": "2026-09-12",
+        "note": "Carried over unchanged from faigate's embedded provider table. The public sources disagree with it: LiteLLM azure_ai/grok-code-fast-1=131072. The value is kept so this migration does not silently change routing headroom; the divergence is recorded here so the correction can be a deliberate step."
+      }
     },
     "kilocode": {
       "aliases": [
@@ -634,7 +740,16 @@
       "hop": [
         "kilo"
       ],
-      "variant": "free"
+      "variant": "free",
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 128000
+      },
+      "context_evidence": {
+        "level": "plausible",
+        "as_of": "2026-09-12",
+        "note": "Carried over unchanged from faigate's embedded provider table. The public sources disagree with it: OpenRouter z-ai/glm-5=204800; LiteLLM openrouter/z-ai/glm-5=202752. The value is kept so this migration does not silently change routing headroom; the divergence is recorded here so the correction can be a deliberate step."
+      }
     },
     "openrouter-fallback": {
       "aliases": [
@@ -666,7 +781,16 @@
       },
       "vendor": "openrouter",
       "model": "auto-router",
-      "hop": []
+      "hop": [],
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 128000
+      },
+      "context_evidence": {
+        "level": "plausible",
+        "as_of": "2026-09-12",
+        "note": "Carried over unchanged from faigate's embedded provider table. The public sources disagree with it: OpenRouter openrouter/auto=2000000; LiteLLM openrouter/openrouter/auto=2000000. The value is kept so this migration does not silently change routing headroom; the divergence is recorded here so the correction can be a deliberate step."
+      }
     },
     "openai-codex": {
       "aliases": [
@@ -701,7 +825,16 @@
       "vendor": "openai",
       "model": "gpt-5.5-codex",
       "hop": [],
-      "variant": "medium"
+      "variant": "medium",
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 128000
+      },
+      "context_evidence": {
+        "level": "plausible",
+        "as_of": "2026-09-12",
+        "note": "Carried over unchanged from faigate's embedded provider table. The public sources disagree with it: OpenRouter openai/gpt-5.3-codex=400000; LiteLLM azure/gpt-5.3-codex=272000. The value is kept so this migration does not silently change routing headroom; the divergence is recorded here so the correction can be a deliberate step."
+      }
     },
     "opencode": {
       "aliases": [
@@ -730,7 +863,16 @@
       "model": "claude-opus-4-6",
       "hop": [
         "opencode"
-      ]
+      ],
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 128000
+      },
+      "context_evidence": {
+        "level": "plausible",
+        "as_of": "2026-09-12",
+        "note": "Carried over unchanged from faigate's embedded provider table. The public sources disagree with it: LiteLLM azure_ai/claude-opus-4-6=1000000. The value is kept so this migration does not silently change routing headroom; the divergence is recorded here so the correction can be a deliberate step."
+      }
     },
     "google-vertex": {
       "aliases": [
@@ -796,7 +938,16 @@
       },
       "vendor": "z-ai",
       "model": "glm-5",
-      "hop": []
+      "hop": [],
+      "context_window": 131072,
+      "limits": {
+        "max_input_tokens": 131072
+      },
+      "context_evidence": {
+        "level": "plausible",
+        "as_of": "2026-09-12",
+        "note": "Carried over unchanged from faigate's embedded provider table. The public sources disagree with it: OpenRouter z-ai/glm-4.7=204800; LiteLLM openrouter/z-ai/glm-4.7=202752. The value is kept so this migration does not silently change routing headroom; the divergence is recorded here so the correction can be a deliberate step."
+      }
     },
     "groq": {
       "aliases": [
@@ -829,7 +980,17 @@
       "model": "llama-3.3-70b-versatile",
       "hop": [
         "groq"
-      ]
+      ],
+      "context_window": 131072,
+      "limits": {
+        "max_input_tokens": 131072
+      },
+      "context_evidence": {
+        "level": "confirmed",
+        "source_url": "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json",
+        "source_model_id": "groq/llama-3.3-70b-versatile",
+        "as_of": "2026-09-12"
+      }
     },
     "mistral": {
       "aliases": [
@@ -859,7 +1020,16 @@
       },
       "vendor": "mistral",
       "model": "mistral-large-latest",
-      "hop": []
+      "hop": [],
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 128000
+      },
+      "context_evidence": {
+        "level": "plausible",
+        "as_of": "2026-09-12",
+        "note": "Carried over unchanged from faigate's embedded provider table. The public sources disagree with it: LiteLLM azure/mistral-large-latest=32000. The value is kept so this migration does not silently change routing headroom; the divergence is recorded here so the correction can be a deliberate step."
+      }
     },
     "moonshot": {
       "aliases": [
@@ -888,7 +1058,16 @@
       },
       "vendor": "moonshot",
       "model": "moonshot-v1-8k",
-      "hop": []
+      "hop": [],
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 128000
+      },
+      "context_evidence": {
+        "level": "plausible",
+        "as_of": "2026-09-12",
+        "note": "Carried over unchanged from faigate's embedded provider table. The public sources disagree with it: OpenRouter moonshotai/kimi-k2.5=262144; LiteLLM azure_ai/kimi-k2.5=262144. The value is kept so this migration does not silently change routing headroom; the divergence is recorded here so the correction can be a deliberate step."
+      }
     },
     "ollama": {
       "aliases": [
@@ -919,7 +1098,15 @@
       "model": "llama3.2",
       "hop": [
         "ollama"
-      ]
+      ],
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 128000
+      },
+      "context_evidence": {
+        "level": "unconfirmed",
+        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'ollama/llama3.3', so the figure stays unverified."
+      }
     },
     "huggingface": {
       "aliases": [
@@ -947,7 +1134,16 @@
       },
       "vendor": "huggingface",
       "model": "zephyr-7b-beta",
-      "hop": []
+      "hop": [],
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 128000
+      },
+      "context_evidence": {
+        "level": "plausible",
+        "as_of": "2026-09-12",
+        "note": "Carried over unchanged from faigate's embedded provider table. The public sources disagree with it: LiteLLM deepinfra/deepseek-ai/DeepSeek-R1=163840. The value is kept so this migration does not silently change routing headroom; the divergence is recorded here so the correction can be a deliberate step."
+      }
     },
     "lmstudio": {
       "aliases": [
@@ -976,7 +1172,15 @@
       "model": "local-model",
       "hop": [
         "lmstudio"
-      ]
+      ],
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 128000
+      },
+      "context_evidence": {
+        "level": "unconfirmed",
+        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'lmstudio/minimax-m2.1-gs32', so the figure stays unverified."
+      }
     },
     "vllm": {
       "aliases": [
@@ -1005,7 +1209,15 @@
       "model": "local-model",
       "hop": [
         "vllm"
-      ]
+      ],
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 128000
+      },
+      "context_evidence": {
+        "level": "unconfirmed",
+        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'vllm/your-model-id', so the figure stays unverified."
+      }
     },
     "litellm": {
       "aliases": [
@@ -1035,7 +1247,15 @@
       "model": "gpt-3.5-turbo",
       "hop": [
         "litellm"
-      ]
+      ],
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 128000
+      },
+      "context_evidence": {
+        "level": "unconfirmed",
+        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'litellm/your-model-id', so the figure stays unverified."
+      }
     },
     "byteplus": {
       "aliases": [
@@ -1064,7 +1284,15 @@
       "model": "seed-1-8-251228",
       "hop": [
         "byteplus"
-      ]
+      ],
+      "context_window": 245760,
+      "limits": {
+        "max_input_tokens": 245760
+      },
+      "context_evidence": {
+        "level": "unconfirmed",
+        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'byteplus/seed-1-8-251228', so the figure stays unverified."
+      }
     },
     "byteplus-plan": {
       "aliases": [
@@ -1135,7 +1363,15 @@
       "model": "llama3.3-70b",
       "hop": [
         "cerebras"
-      ]
+      ],
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 128000
+      },
+      "context_evidence": {
+        "level": "unconfirmed",
+        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'qwen-3-235b-a22b-instruct-2507', so the figure stays unverified."
+      }
     },
     "github-copilot": {
       "aliases": [
@@ -1165,7 +1401,18 @@
       "model": "gpt-4o",
       "hop": [
         "github-copilot"
-      ]
+      ],
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 128000
+      },
+      "context_evidence": {
+        "level": "confirmed",
+        "source_url": "https://openrouter.ai/api/v1/models",
+        "secondary_source_url": "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json",
+        "source_model_id": "openai/gpt-4o",
+        "as_of": "2026-09-12"
+      }
     },
     "kimi-coding": {
       "aliases": [
@@ -1192,7 +1439,15 @@
       },
       "vendor": "moonshot",
       "model": "k2p5",
-      "hop": []
+      "hop": [],
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 128000
+      },
+      "context_evidence": {
+        "level": "unconfirmed",
+        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'kimi-coding/k2p5', so the figure stays unverified."
+      }
     },
     "minimax": {
       "aliases": [
@@ -1219,7 +1474,16 @@
       },
       "vendor": "minimax",
       "model": "MiniMax-M2.1",
-      "hop": []
+      "hop": [],
+      "context_window": 245760,
+      "limits": {
+        "max_input_tokens": 245760
+      },
+      "context_evidence": {
+        "level": "plausible",
+        "as_of": "2026-09-12",
+        "note": "Carried over unchanged from faigate's embedded provider table. The public sources disagree with it: LiteLLM sambanova/MiniMax-M2.7=196608. The value is kept so this migration does not silently change routing headroom; the divergence is recorded here so the correction can be a deliberate step."
+      }
     },
     "qwen-portal": {
       "aliases": [
@@ -1246,7 +1510,15 @@
       },
       "vendor": "qwen",
       "model": "coder-model",
-      "hop": []
+      "hop": [],
+      "context_window": 131072,
+      "limits": {
+        "max_input_tokens": 131072
+      },
+      "context_evidence": {
+        "level": "unconfirmed",
+        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'coder-model', so the figure stays unverified."
+      }
     },
     "synthetic": {
       "aliases": [
@@ -1275,7 +1547,16 @@
       "model": "MiniMax-M2.1",
       "hop": [
         "synthetic"
-      ]
+      ],
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 128000
+      },
+      "context_evidence": {
+        "level": "plausible",
+        "as_of": "2026-09-12",
+        "note": "Carried over unchanged from faigate's embedded provider table. The public sources disagree with it: LiteLLM gmi/MiniMaxAI/MiniMax-M2.1=196608. The value is kept so this migration does not silently change routing headroom; the divergence is recorded here so the correction can be a deliberate step."
+      }
     },
     "vercel-ai-gateway": {
       "aliases": [
@@ -1304,7 +1585,16 @@
       "model": "claude-opus-4.6",
       "hop": [
         "vercel-ai-gateway"
-      ]
+      ],
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 128000
+      },
+      "context_evidence": {
+        "level": "plausible",
+        "as_of": "2026-09-12",
+        "note": "Carried over unchanged from faigate's embedded provider table. The public sources disagree with it: OpenRouter anthropic/claude-opus-4.6=1000000; LiteLLM openrouter/anthropic/claude-opus-4.6=1000000. The value is kept so this migration does not silently change routing headroom; the divergence is recorded here so the correction can be a deliberate step."
+      }
     },
     "volcengine": {
       "aliases": [
@@ -1331,7 +1621,15 @@
       },
       "vendor": "volcengine",
       "model": "doubao-seed-1-8-251228",
-      "hop": []
+      "hop": [],
+      "context_window": 245760,
+      "limits": {
+        "max_input_tokens": 245760
+      },
+      "context_evidence": {
+        "level": "unconfirmed",
+        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'volcengine/doubao-seed-1-8-251228', so the figure stays unverified."
+      }
     },
     "volcengine-plan": {
       "aliases": [
@@ -1398,7 +1696,17 @@
       },
       "vendor": "x-ai",
       "model": "grok-3",
-      "hop": []
+      "hop": [],
+      "context_window": 131072,
+      "limits": {
+        "max_input_tokens": 131072
+      },
+      "context_evidence": {
+        "level": "confirmed",
+        "source_url": "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json",
+        "source_model_id": "azure_ai/global/grok-3",
+        "as_of": "2026-09-12"
+      }
     },
     "amazon-bedrock": {
       "aliases": [
@@ -1434,7 +1742,18 @@
       },
       "vendor": "amazon",
       "model": "nova-pro-v1",
-      "hop": []
+      "hop": [],
+      "context_window": 300000,
+      "limits": {
+        "max_input_tokens": 300000
+      },
+      "context_evidence": {
+        "level": "confirmed",
+        "source_url": "https://openrouter.ai/api/v1/models",
+        "secondary_source_url": "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json",
+        "source_model_id": "amazon/nova-pro-v1",
+        "as_of": "2026-09-12"
+      }
     },
     "microsoft-phi": {
       "aliases": [
@@ -1467,7 +1786,18 @@
       },
       "vendor": "microsoft",
       "model": "phi-4",
-      "hop": []
+      "hop": [],
+      "context_window": 16384,
+      "limits": {
+        "max_input_tokens": 16384
+      },
+      "context_evidence": {
+        "level": "confirmed",
+        "source_url": "https://openrouter.ai/api/v1/models",
+        "secondary_source_url": "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json",
+        "source_model_id": "microsoft/phi-4",
+        "as_of": "2026-09-12"
+      }
     },
     "baidu-ernie": {
       "aliases": [
@@ -1500,7 +1830,18 @@
       },
       "vendor": "baidu",
       "model": "ernie-4.5-vl-424b-a47b",
-      "hop": []
+      "hop": [],
+      "context_window": 123000,
+      "limits": {
+        "max_input_tokens": 123000
+      },
+      "context_evidence": {
+        "level": "confirmed",
+        "source_url": "https://openrouter.ai/api/v1/models",
+        "secondary_source_url": "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json",
+        "source_model_id": "baidu/ernie-4.5-vl-424b-a47b",
+        "as_of": "2026-09-12"
+      }
     },
     "tencent-hunyuan": {
       "aliases": [
@@ -1533,7 +1874,16 @@
       },
       "vendor": "tencent",
       "model": "hunyuan-3",
-      "hop": []
+      "hop": [],
+      "context_window": 262144,
+      "limits": {
+        "max_input_tokens": 262144
+      },
+      "context_evidence": {
+        "level": "plausible",
+        "as_of": "2026-09-12",
+        "note": "No public listing found for 'hunyuan-3' in OpenRouter or LiteLLM. The entry's own notes cite the OpenRouter entry tencent/hy3 at 262144 input tokens; that figure is carried here as an orientation, not as a verified fact for hunyuan-3 itself."
+      }
     },
     "google-gemini-3-6-flash": {
       "aliases": [
@@ -1573,7 +1923,18 @@
       ],
       "vendor": "google",
       "model": "gemini-3.6-flash",
-      "hop": []
+      "hop": [],
+      "context_window": 1048576,
+      "limits": {
+        "max_input_tokens": 1048576
+      },
+      "context_evidence": {
+        "level": "confirmed",
+        "source_url": "https://openrouter.ai/api/v1/models",
+        "secondary_source_url": "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json",
+        "source_model_id": "google/gemini-3.6-flash",
+        "as_of": "2026-09-12"
+      }
     },
     "google-gemini-3-7-flash": {
       "aliases": [
@@ -1613,7 +1974,18 @@
       ],
       "vendor": "google",
       "model": "gemini-3.7-flash",
-      "hop": []
+      "hop": [],
+      "context_window": 1048576,
+      "limits": {
+        "max_input_tokens": 1048576
+      },
+      "context_evidence": {
+        "level": "confirmed",
+        "source_url": "https://openrouter.ai/api/v1/models",
+        "secondary_source_url": "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json",
+        "source_model_id": "google/gemini-3.7-flash",
+        "as_of": "2026-09-12"
+      }
     },
     "google-gemini-3-8-flash": {
       "aliases": [
@@ -1653,7 +2025,18 @@
       ],
       "vendor": "google",
       "model": "gemini-3.8-flash",
-      "hop": []
+      "hop": [],
+      "context_window": 1048576,
+      "limits": {
+        "max_input_tokens": 1048576
+      },
+      "context_evidence": {
+        "level": "confirmed",
+        "source_url": "https://openrouter.ai/api/v1/models",
+        "secondary_source_url": "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json",
+        "source_model_id": "google/gemini-3.8-flash",
+        "as_of": "2026-09-12"
+      }
     },
     "openai-gpt-oss-120b": {
       "aliases": [
@@ -1691,6 +2074,473 @@
       ],
       "vendor": "openai",
       "model": "gpt-oss-120b",
+      "hop": [],
+      "context_window": 131072,
+      "limits": {
+        "max_input_tokens": 131072
+      },
+      "context_evidence": {
+        "level": "confirmed",
+        "source_url": "https://openrouter.ai/api/v1/models",
+        "secondary_source_url": "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json",
+        "source_model_id": "openai/gpt-oss-120b",
+        "as_of": "2026-09-12"
+      }
+    },
+    "claude-code": {
+      "aliases": [
+        "claude-code"
+      ],
+      "track": "stable",
+      "offer_track": "oauth",
+      "provider_type": "oauth",
+      "auth_modes": [
+        "oauth"
+      ],
+      "volatility": "low",
+      "notes": "Claude Code \u2013 special coding model via Anthropic OAuth",
+      "entry_type": "model",
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 128000
+      },
+      "context_evidence": {
+        "level": "unconfirmed",
+        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'claude-code', so the figure stays unverified."
+      },
+      "vendor": "anthropic",
+      "model": "claude-code",
+      "hop": []
+    },
+    "clawrouter": {
+      "aliases": [
+        "clawrouter"
+      ],
+      "track": "stable",
+      "offer_track": "marketplace",
+      "provider_type": "wallet-router",
+      "auth_modes": [
+        "wallet_x402"
+      ],
+      "volatility": "medium",
+      "notes": "BlockRun ClawRouter uses wallet/x402 routing modes rather than a classic API key",
+      "entry_type": "model",
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 128000
+      },
+      "context_evidence": {
+        "level": "plausible",
+        "as_of": "2026-09-12",
+        "note": "Carried over unchanged from faigate's embedded provider table. The public sources disagree with it: OpenRouter openrouter/auto=2000000; LiteLLM openrouter/openrouter/auto=2000000. The value is kept so this migration does not silently change routing headroom; the divergence is recorded here so the correction can be a deliberate step."
+      },
+      "vendor": "clawrouter",
+      "model": "auto-router",
+      "hop": []
+    },
+    "cohere": {
+      "aliases": [
+        "cohere",
+        "command-a",
+        "command-r"
+      ],
+      "track": "stable",
+      "offer_track": "direct",
+      "provider_type": "direct",
+      "auth_modes": [
+        "api_key"
+      ],
+      "volatility": "low",
+      "notes": "Cohere Command A/R \u2014 enterprise-grade LLM with tool use",
+      "entry_type": "model",
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 128000
+      },
+      "context_evidence": {
+        "level": "plausible",
+        "as_of": "2026-09-12",
+        "note": "Carried over unchanged from faigate's embedded provider table. The public sources disagree with it: LiteLLM command-a-03-2025=256000. The value is kept so this migration does not silently change routing headroom; the divergence is recorded here so the correction can be a deliberate step."
+      },
+      "vendor": "cohere",
+      "model": "command-a-03-2025",
+      "hop": []
+    },
+    "google-antigravity": {
+      "aliases": [
+        "google-antigravity",
+        "antigravity",
+        "agy"
+      ],
+      "track": "stable",
+      "offer_track": "oauth",
+      "provider_type": "oauth",
+      "auth_modes": [
+        "oauth"
+      ],
+      "volatility": "low",
+      "notes": "Google Antigravity (VS Code AI fork) \u2013 Google OAuth via Authorization Code + PKCE. client_id: 1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com. Token: ~/.gemini/oauth_creds.json. Antigravity's local interface is a gRPC language server (127.0.0.1:<ephemeral-port>/exa.language_server_pb.LanguageServerService/\u2026) \u2013 faigate bypasses it and calls the Google Generative Language API (generativelanguage.googleapis.com/v1beta/openai) directly with the OAuth token. Auth: faigate-auth google-antigravity  or sign in to Antigravity IDE.",
+      "entry_type": "model",
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 128000
+      },
+      "context_evidence": {
+        "level": "plausible",
+        "as_of": "2026-09-12",
+        "note": "Carried over unchanged from faigate's embedded provider table. The public sources disagree with it: OpenRouter google/gemini-2.5-pro=1048576; LiteLLM deepinfra/google/gemini-2.5-pro=1000000. The value is kept so this migration does not silently change routing headroom; the divergence is recorded here so the correction can be a deliberate step."
+      },
+      "vendor": "google",
+      "model": "gemini-2.5-pro",
+      "hop": [
+        "antigravity"
+      ]
+    },
+    "google-gemini-cli": {
+      "aliases": [
+        "google-gemini-cli",
+        "google-vertex"
+      ],
+      "track": "stable",
+      "offer_track": "oauth",
+      "provider_type": "oauth",
+      "auth_modes": [
+        "oauth"
+      ],
+      "volatility": "low",
+      "notes": "Google Gemini via Vertex AI \u2013 uses gcloud ADC; requires: gcloud auth login",
+      "entry_type": "model",
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 128000
+      },
+      "context_evidence": {
+        "level": "plausible",
+        "as_of": "2026-09-12",
+        "note": "Carried over unchanged from faigate's embedded provider table. The public sources disagree with it: OpenRouter google/gemini-2.5-pro=1048576; LiteLLM deepinfra/google/gemini-2.5-pro=1000000. The value is kept so this migration does not silently change routing headroom; the divergence is recorded here so the correction can be a deliberate step."
+      },
+      "vendor": "google",
+      "model": "gemini-2.5-pro",
+      "hop": [
+        "gemini-cli"
+      ]
+    },
+    "kilo-auto-balanced": {
+      "aliases": [
+        "kilo-auto/balanced",
+        "kilo-balanced"
+      ],
+      "track": "stable",
+      "offer_track": "gateway-paid",
+      "provider_type": "aggregator",
+      "auth_modes": [
+        "api_key",
+        "byok"
+      ],
+      "volatility": "medium",
+      "notes": "Kilo Auto Balanced lane \u2013 balanced routing through Kilo gateway",
+      "entry_type": "model",
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 128000
+      },
+      "context_evidence": {
+        "level": "unconfirmed",
+        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'kilo-auto/balanced', so the figure stays unverified."
+      },
+      "vendor": "kilo",
+      "model": "tier-balanced",
+      "hop": [
+        "kilo-auto"
+      ]
+    },
+    "kilo-auto-free": {
+      "aliases": [
+        "kilo-auto/free",
+        "kilo-free"
+      ],
+      "track": "free",
+      "offer_track": "free",
+      "provider_type": "aggregator",
+      "auth_modes": [
+        "api_key",
+        "byok"
+      ],
+      "volatility": "high",
+      "notes": "Kilo Auto Free lane \u2013 free-tier routing through Kilo gateway",
+      "entry_type": "model",
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 128000
+      },
+      "context_evidence": {
+        "level": "plausible",
+        "as_of": "2026-09-12",
+        "note": "Carried over unchanged from faigate's embedded provider table. The public sources disagree with it: OpenRouter openrouter/free=200000; LiteLLM openrouter/openrouter/free=200000. The value is kept so this migration does not silently change routing headroom; the divergence is recorded here so the correction can be a deliberate step."
+      },
+      "vendor": "kilo",
+      "model": "tier-free",
+      "hop": [
+        "kilo-auto"
+      ]
+    },
+    "kilo-auto-frontier": {
+      "aliases": [
+        "kilo-auto/frontier",
+        "kilo-frontier"
+      ],
+      "track": "stable",
+      "offer_track": "gateway-paid",
+      "provider_type": "aggregator",
+      "auth_modes": [
+        "api_key",
+        "byok"
+      ],
+      "volatility": "medium",
+      "notes": "Kilo Auto Frontier lane \u2013 premium routing through Kilo gateway",
+      "entry_type": "model",
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 128000
+      },
+      "context_evidence": {
+        "level": "unconfirmed",
+        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'kilo-auto/frontier', so the figure stays unverified."
+      },
+      "vendor": "kilo",
+      "model": "tier-frontier",
+      "hop": [
+        "kilo-auto"
+      ]
+    },
+    "kilo-opus": {
+      "aliases": [
+        "anthropic/claude-opus-4.6",
+        "kilo-auto/frontier"
+      ],
+      "track": "stable",
+      "offer_track": "gateway-paid",
+      "provider_type": "aggregator",
+      "auth_modes": [
+        "api_key",
+        "byok"
+      ],
+      "volatility": "medium",
+      "notes": "Kilo paid Opus lane; useful when expiring Kilo credits should absorb premium reasoning traffic",
+      "entry_type": "model",
+      "context_window": 200000,
+      "limits": {
+        "max_input_tokens": 200000
+      },
+      "context_evidence": {
+        "level": "plausible",
+        "as_of": "2026-09-12",
+        "note": "Carried over unchanged from faigate's embedded provider table. The public sources disagree with it: OpenRouter anthropic/claude-opus-4.6=1000000; LiteLLM openrouter/anthropic/claude-opus-4.6=1000000. The value is kept so this migration does not silently change routing headroom; the divergence is recorded here so the correction can be a deliberate step."
+      },
+      "vendor": "anthropic",
+      "model": "claude-opus-4-6",
+      "hop": [
+        "kilo"
+      ]
+    },
+    "kilo-sonnet": {
+      "aliases": [
+        "anthropic/claude-sonnet-4.6",
+        "kilo-auto/frontier",
+        "kilo-auto/balanced"
+      ],
+      "track": "stable",
+      "offer_track": "gateway-paid",
+      "provider_type": "aggregator",
+      "auth_modes": [
+        "api_key",
+        "byok"
+      ],
+      "volatility": "medium",
+      "notes": "Kilo paid Sonnet lane; useful as the workhorse path when you want Kilo credits to absorb balanced coding traffic",
+      "entry_type": "model",
+      "context_window": 200000,
+      "limits": {
+        "max_input_tokens": 200000
+      },
+      "context_evidence": {
+        "level": "plausible",
+        "as_of": "2026-09-12",
+        "note": "Carried over unchanged from faigate's embedded provider table. The public sources disagree with it: OpenRouter anthropic/claude-sonnet-4.6=1000000; LiteLLM openrouter/anthropic/claude-sonnet-4.6=1000000. The value is kept so this migration does not silently change routing headroom; the divergence is recorded here so the correction can be a deliberate step."
+      },
+      "vendor": "anthropic",
+      "model": "claude-sonnet-4-6",
+      "hop": [
+        "kilo"
+      ]
+    },
+    "kiro": {
+      "aliases": [
+        "kiro",
+        "kr",
+        "kiro/claude-sonnet"
+      ],
+      "track": "free",
+      "offer_track": "free",
+      "provider_type": "aggregator",
+      "auth_modes": [
+        "oauth"
+      ],
+      "volatility": "high",
+      "notes": "Kiro free via AWS Builder ID OAuth \u2014 Claude Sonnet 4.5 unlimited",
+      "entry_type": "model",
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 128000
+      },
+      "context_evidence": {
+        "level": "unconfirmed",
+        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'kiro/claude-sonnet', so the figure stays unverified."
+      },
+      "vendor": "anthropic",
+      "model": "claude-sonnet",
+      "hop": [
+        "kiro"
+      ]
+    },
+    "longcat": {
+      "aliases": [
+        "longcat",
+        "lc",
+        "longcat/flash-lite"
+      ],
+      "track": "free",
+      "offer_track": "free",
+      "provider_type": "direct",
+      "auth_modes": [
+        "api_key"
+      ],
+      "volatility": "high",
+      "notes": "LongCat AI free tier: Flash-Lite, 50M tokens/day",
+      "entry_type": "model",
+      "context_window": 131072,
+      "limits": {
+        "max_input_tokens": 131072
+      },
+      "context_evidence": {
+        "level": "unconfirmed",
+        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'longcat/flash-lite', so the figure stays unverified."
+      },
+      "vendor": "longcat",
+      "model": "flash-lite",
+      "hop": []
+    },
+    "nvidia-nim": {
+      "aliases": [
+        "nvidia-nim",
+        "nvidia",
+        "nim"
+      ],
+      "track": "free",
+      "offer_track": "free",
+      "provider_type": "direct",
+      "auth_modes": [
+        "api_key"
+      ],
+      "volatility": "medium",
+      "notes": "NVIDIA NIM free: 129 models, 40 RPM. DeepSeek-R1, Llama 405B, Qwen3 Coder 480B",
+      "entry_type": "model",
+      "context_window": 131072,
+      "limits": {
+        "max_input_tokens": 131072
+      },
+      "context_evidence": {
+        "level": "unconfirmed",
+        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'nvidia/nemotron', so the figure stays unverified."
+      },
+      "vendor": "nvidia",
+      "model": "nemotron",
+      "hop": []
+    },
+    "pollinations": {
+      "aliases": [
+        "pollinations",
+        "pol",
+        "pollinations/openai"
+      ],
+      "track": "free",
+      "offer_track": "free",
+      "provider_type": "aggregator",
+      "auth_modes": [
+        "none"
+      ],
+      "volatility": "high",
+      "notes": "Pollinations free text+image+video+audio \u2014 no API key required",
+      "entry_type": "model",
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 128000
+      },
+      "context_evidence": {
+        "level": "unconfirmed",
+        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'pollinations/openai', so the figure stays unverified."
+      },
+      "vendor": "openai",
+      "model": "gpt-4o",
+      "hop": [
+        "pollinations"
+      ]
+    },
+    "qoder": {
+      "aliases": [
+        "qoder",
+        "qd",
+        "qoder/kimi-k2"
+      ],
+      "track": "free",
+      "offer_track": "free",
+      "provider_type": "aggregator",
+      "auth_modes": [
+        "oauth"
+      ],
+      "volatility": "high",
+      "notes": "Qoder free via Google OAuth \u2014 kimi-k2-thinking unlimited",
+      "entry_type": "model",
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 128000
+      },
+      "context_evidence": {
+        "level": "plausible",
+        "as_of": "2026-09-12",
+        "note": "Carried over unchanged from faigate's embedded provider table. The public sources disagree with it: OpenRouter moonshotai/kimi-k2=131072; LiteLLM vercel_ai_gateway/moonshotai/kimi-k2=131072. The value is kept so this migration does not silently change routing headroom; the divergence is recorded here so the correction can be a deliberate step."
+      },
+      "vendor": "moonshotai",
+      "model": "kimi-k2",
+      "hop": [
+        "qoder"
+      ]
+    },
+    "qwen": {
+      "aliases": [
+        "qwen",
+        "qwen3.6-plus"
+      ],
+      "track": "stable",
+      "offer_track": "direct",
+      "provider_type": "direct",
+      "auth_modes": [
+        "api_key"
+      ],
+      "volatility": "medium",
+      "notes": "Qwen models via Alibaba Cloud",
+      "entry_type": "model",
+      "context_window": 131072,
+      "limits": {
+        "max_input_tokens": 131072
+      },
+      "context_evidence": {
+        "level": "plausible",
+        "as_of": "2026-09-12",
+        "note": "Carried over unchanged from faigate's embedded provider table. The public sources disagree with it: OpenRouter qwen/qwen3.6-plus=1000000; LiteLLM openrouter/qwen/qwen3.6-plus=1000000. The value is kept so this migration does not silently change routing headroom; the divergence is recorded here so the correction can be a deliberate step."
+      },
+      "vendor": "qwen",
+      "model": "qwen3-6-plus",
       "hop": []
     }
   },

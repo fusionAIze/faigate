@@ -121,56 +121,39 @@ _CATALOG_RESOLVER: Any = None
 
 
 def _resolve_catalog_via_chain() -> dict[str, Any]:
-    """Fallback to the remote sync chain (private→public→bundled).
+    """Return the provider entries of the single catalog chain.
 
-    Used when neither FAIGATE_PROVIDER_METADATA_FILE nor a populated
-    FAIGATE_PROVIDER_METADATA_DIR yields a catalog file on disk.
+    Kept as a thin alias so callers written against the earlier name keep
+    working; it no longer runs a second, remote-first resolver chain (that chain
+    made the same on-disk state resolve differently depending on the entry
+    point). See :func:`_resolve_catalog_payload`.
     """
-    global _CATALOG_RESOLVER
-    try:
-        from .catalog_resolver import CatalogResolver
-    except Exception:
-        return {}
-
-    if _CATALOG_RESOLVER is None:
-        _CATALOG_RESOLVER = CatalogResolver()
-    try:
-        resolved = _CATALOG_RESOLVER.resolve()
-    except Exception as exc:
-        logger.debug("catalog resolver fallback failed: %s", exc)
-        return {}
-    return resolved.payload.get("providers", {})
+    return _resolve_catalog_payload().get("providers", {})
 
 
 def _load_external_catalog() -> dict[str, Any]:
-    """Load external catalog.v1.json if available."""
+    """Return the resolved catalog's provider entries.
+
+    Delegates to the single chain (:func:`_resolve_catalog_payload`). The
+    mtime cache only memoises the cheap ``stat`` on the override file; the
+    bundled snapshot has its own in-process cache in ``catalog_resolver``.
+    """
     global _EXTERNAL_CATALOG_CACHE, _EXTERNAL_CATALOG_MTIME
 
     catalog_path = _get_external_catalog_path()
 
-    # Check if cache is still valid
+    # Fast path: memoise the file read while it exists and is unchanged.
     if _EXTERNAL_CATALOG_CACHE is not None and catalog_path.exists():
         current_mtime = catalog_path.stat().st_mtime
         if current_mtime <= _EXTERNAL_CATALOG_MTIME:
             return _EXTERNAL_CATALOG_CACHE
-        # File has changed, invalidate cache
         _EXTERNAL_CATALOG_CACHE = None
 
-    if not catalog_path.exists():
-        # No file on disk: try the remote sync chain (private→public→bundled).
-        # CatalogResolver has its own caching, so we don't memoize here.
-        return _resolve_catalog_via_chain()
-
-    try:
-        with open(catalog_path, encoding="utf-8") as f:
-            data = json.load(f)
-        _EXTERNAL_CATALOG_CACHE = data.get("providers", {})
+    providers = _resolve_catalog_via_chain()
+    if catalog_path.exists():
+        _EXTERNAL_CATALOG_CACHE = providers
         _EXTERNAL_CATALOG_MTIME = catalog_path.stat().st_mtime
-    except Exception:
-        _EXTERNAL_CATALOG_CACHE = {}
-        _EXTERNAL_CATALOG_MTIME = 0.0
-
-    return _EXTERNAL_CATALOG_CACHE
+    return providers
 
 
 def _load_external_overlay() -> dict[str, Any]:
@@ -1341,33 +1324,56 @@ def _model_lookup_keys(candidate: str) -> list[str]:
     return keys
 
 
-def _load_external_catalog_payload() -> dict[str, Any]:
-    """Return the full external catalog payload (not just ``providers``).
+def _resolve_catalog_payload() -> dict[str, Any]:
+    """Resolve the catalog payload through the one and only chain.
 
-    ``providers`` is only one top-level block of ``catalog.v1.json``. The model
-    knowledge cut migrates input-token ceilings into a sibling top-level block,
-    ``model_caps``, which a provider-only reader drops. This accessor preserves
-    the whole payload so those sibling blocks stay reachable through the same
-    env-override → metadata-dir chain the provider catalog already uses. When
-    neither override is set, it falls back to the bundled snapshot shipped in
-    ``faigate/assets/metadata/catalog.v1.json`` so the migrated ``model_caps``
-    block is reachable even before an external catalog is synced.
+    ``env-override (FAIGATE_PROVIDER_METADATA_FILE) → metadata-dir
+    (FAIGATE_PROVIDER_METADATA_DIR) → bundled snapshot``.
+
+    This is the single implementation every catalog reader goes through. The
+    previous shape had two competing chains for the same data — a provider-only
+    loader that returned ``{}`` on a dead override, and a payload loader that
+    read the bundled asset — so the same on-disk state produced different
+    answers depending on which helper a caller used.
+
+    A set-but-empty or non-existent override is a broken pointer, not a claim
+    that the catalog is empty. Each link contributes only if it actually yields
+    a payload; otherwise resolution continues to the next link, ending at the
+    bundled snapshot shipped in ``faigate/assets/metadata/catalog.v1.json``. The
+    chain therefore never returns ``{}`` unless even the bundled asset is
+    unreadable (a packaging failure, not a missing configuration).
     """
     metadata_path = str(os.environ.get(_EXTERNAL_CATALOG_ENV, "") or "").strip()
     if metadata_path:
-        return _load_catalog_payload(metadata_path)
+        payload = _load_catalog_payload(metadata_path)
+        if payload:
+            return payload
 
     metadata_dir = str(os.environ.get(_EXTERNAL_CATALOG_DIR_ENV, "") or "").strip()
     if metadata_dir:
         root = Path(metadata_dir).expanduser()
-        return _load_catalog_payload(root / _METADATA_CATALOG_RELATIVE_PATH)
+        payload = _load_catalog_payload(root / _METADATA_CATALOG_RELATIVE_PATH)
+        if payload:
+            return payload
 
     try:
         from .catalog_resolver import _load_bundled_snapshot
     except Exception:  # pragma: no cover - defensive
         return {}
     bundled = _load_bundled_snapshot()
-    return bundled if bundled is not None else {}
+    return bundled if isinstance(bundled, dict) else {}
+
+
+def _load_external_catalog_payload() -> dict[str, Any]:
+    """Return the full resolved catalog payload (not just ``providers``).
+
+    ``providers`` is only one top-level block of ``catalog.v1.json``. The model
+    knowledge cut migrates input-token ceilings into a sibling top-level block,
+    ``model_caps``, which a provider-only reader drops. This accessor preserves
+    the whole payload so those sibling blocks stay reachable through the same
+    chain every other catalog reader uses, without a second chain.
+    """
+    return _resolve_catalog_payload()
 
 
 def _load_external_model_caps() -> dict[str, Any]:
@@ -1578,16 +1584,26 @@ def materialize_provider_metadata_snapshot(
 
 
 def _load_external_provider_catalog() -> dict[str, dict[str, Any]]:
-    metadata_path = str(os.environ.get(_EXTERNAL_CATALOG_ENV, "") or "").strip()
-    if metadata_path:
-        payload = _load_catalog_payload(metadata_path)
-        return _normalize_catalog_payload(payload)
+    """Return the provider entries of the resolved catalog.
 
+    Same chain as every other catalog reader (:func:`_resolve_catalog_payload`);
+    this accessor only projects the ``providers`` block. It used to have its own
+    env-only chain that never consulted the bundled snapshot and returned ``{}``
+    when the override pointed at nothing — see the chain tests.
+    """
     metadata_dir = str(os.environ.get(_EXTERNAL_CATALOG_DIR_ENV, "") or "").strip()
-    if not metadata_dir:
-        return {}
-    product = str(os.environ.get(_EXTERNAL_CATALOG_PRODUCT_ENV, _DEFAULT_METADATA_PRODUCT) or "")
-    return _normalize_catalog_payload(build_provider_metadata_snapshot(metadata_dir, product=product))
+    if metadata_dir and not str(os.environ.get(_EXTERNAL_CATALOG_ENV, "") or "").strip():
+        # A metadata directory is a repository, not a bare catalog: apply the
+        # product overlay the same way the sync/materializer path does. A dir
+        # without a catalog file yields nothing here and falls through to the
+        # bundled snapshot, exactly like the shared chain does.
+        product = str(os.environ.get(_EXTERNAL_CATALOG_PRODUCT_ENV, _DEFAULT_METADATA_PRODUCT) or "")
+        catalog = _normalize_catalog_payload(
+            build_provider_metadata_snapshot(metadata_dir, product=product)
+        )
+        if catalog:
+            return catalog
+    return _normalize_catalog_payload(_resolve_catalog_payload())
 
 
 def _get_catalog_source() -> dict[str, dict[str, Any]]:
