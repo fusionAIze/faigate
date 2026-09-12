@@ -1,5 +1,35 @@
 # fusionAIze Gate Changelog
 
+## v2.9.0 - 2026-09-12
+
+### Changed
+
+- **Model knowledge no longer lives in the code.** `provider_catalog.py` held a
+  907-line provider table and a 23-entry cap table; both are gone. What remains
+  is eight lane lookups that resolve against the lane registry at runtime —
+  wiring, not facts, which is why it cannot live in a published catalog. The 66
+  providers, their context windows, and their discovery and freshness fields all
+  come from the catalog now, and `context_window` appears in the module zero
+  times. Two AST checks fail if either table reappears.
+- **A provider entry may have no `recommended_model`.** It is wiring, so only the
+  eight lane-routed providers carry one and the other 58 correctly do not.
+  Consumers describe the absence instead of crashing on it — and instead of
+  filling it with a placeholder, which would claim the provider has no
+  recommendation rather than that this catalog does not record one.
+
+### Fixed
+
+- **`anthropic-haiku` resolved to a name the catalog does not carry.** The lane
+  registry named `anthropic/opus-4.6` and `anthropic/sonnet-4.6` but not
+  `anthropic/haiku-4.5`, so resolution fell back to the tail and produced
+  `haiku-4.5` while the catalog records `claude-haiku-4-5`. The old structural
+  guard excluded derived values, so the entry had never been checked since it was
+  written; the sharpened guard found it.
+- **An allowance that could not expire.** The guard's exception list compared the
+  pinned spelling against the catalog. That string stays unknown forever, so the
+  allowance would have outlived its reason even after the wiring was repaired. It
+  now resolves the lane the way the check above it does, and the list is empty.
+
 ## v2.8.2 - 2026-09-12
 
 ### Added
