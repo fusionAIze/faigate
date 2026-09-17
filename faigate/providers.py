@@ -162,6 +162,11 @@ class ProviderBackend:
         self.tier = cfg.get("tier", "default")
         self.capabilities = dict(cfg.get("capabilities", {}))
         self.context_window = cfg.get("context_window")
+        # The catalog's evidence block for self.context_window, copied verbatim
+        # (see _enrich_window_and_limits_from_catalog). None when the window came
+        # from the operator config or when the catalog tagged it with no
+        # recognised level — both mean "the catalog does not vouch for this".
+        self.context_window_evidence: dict[str, Any] | None = None
         self.limits = dict(cfg.get("limits", {}))
         self._enrich_window_and_limits_from_catalog()
         self.cache = dict(cfg.get("cache", {}))
@@ -198,12 +203,25 @@ class ProviderBackend:
         object without touching provider_catalog.py or catalog.v1.json.
 
         Operator-declared values win; the catalog only fills gaps.
+
+        The catalog tags each window with a ``context_evidence`` block whose
+        ``level`` says how well the number is known (``confirmed`` /
+        ``plausible`` / ``unconfirmed``). This method carries that level onto
+        :attr:`context_window_evidence` so the display surfaces can say whether
+        the number they print is a fact or an operating assumption. The level is
+        copied, never re-derived: the catalog is the only judge of its own
+        facts, and a second judgement here would be a second truth.
+
+        ``context_window_evidence`` describes the *catalog* value. It stays
+        ``None`` when the operator declared the window (the catalog was not
+        consulted, so it has no opinion) and when the entry carries no
+        recognised level (an untagged fact is unverified, never confirmed).
         """
         try:
             from .provider_catalog import get_provider_catalog_entry
 
             entry = get_provider_catalog_entry(self.name)
-        except Exception as exc:  # pragma: no cover - defensive import guard
+        except ImportError as exc:  # pragma: no cover - defensive import guard
             logger.debug("catalog window/limits enrich skipped for %s: %s", self.name, exc)
             return
 
@@ -213,6 +231,9 @@ class ProviderBackend:
         native_ctx = entry.get("context_window")
         if native_ctx is not None and not self.context_window:
             self.context_window = int(native_ctx)
+            evidence = entry.get("context_evidence")
+            if isinstance(evidence, dict) and evidence:
+                self.context_window_evidence = dict(evidence)
 
         cat_limits = entry.get("limits") or {}
         cap = cat_limits.get("max_input_tokens")

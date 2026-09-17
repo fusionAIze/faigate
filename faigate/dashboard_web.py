@@ -2695,6 +2695,21 @@ function derivePriority(bundle) {
   return {state, path, why, list, ribbon: path};
 }
 
+// The provider window is a catalog claim, not a measurement. Show its evidence
+// level next to the number so the operator can read an unverified figure as an
+// operating assumption instead of a fact. The level is relayed from
+// /api/providers; this view never judges the number itself.
+function formatContextWindow(row) {
+  if (!row || row.context_window == null) return '—';
+  const value = fmtTok(row.context_window);
+  const evidence = row.context_window_evidence || {};
+  const level = evidence.level;
+  if (!level) return `<span class="mono">${value}</span>`;
+  const tone = level === 'confirmed' ? 'cost' : 'err';
+  const hint = evidence.note || ('catalog evidence: ' + level);
+  return `<span class="mono">${value} <span class="pill ${tone}" title="${esc(hint)}">${esc(level)}</span></span>`;
+}
+
 function providerRow(row, metricsLookup) {
   const lane = row.lane || {};
   const transport = row.transport || {};
@@ -2711,6 +2726,7 @@ function providerRow(row, metricsLookup) {
       <td>
         <strong>${esc(row.name)}</strong>
         <div class="tiny mono">${esc(row.model || 'n/a')} · ${esc(row.backend || 'n/a')}</div>
+        <div class="tiny">window ${formatContextWindow(row)}</div>
       </td>
       <td>${pill(readinessLabel, readinessKind(readinessLabel))}</td>
       <td>
