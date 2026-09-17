@@ -1,5 +1,72 @@
 # fusionAIze Gate Changelog
 
+## v2.9.0 - 2026-09-12
+
+### Changed
+
+- **Model knowledge no longer lives in the code.** `provider_catalog.py` held a
+  907-line provider table and a 23-entry cap table; both are gone. What remains
+  is eight lane lookups that resolve against the lane registry at runtime —
+  wiring, not facts, which is why it cannot live in a published catalog. The 66
+  providers, their context windows, and their discovery and freshness fields all
+  come from the catalog now, and `context_window` appears in the module zero
+  times. Two AST checks fail if either table reappears.
+- **A provider entry may have no `recommended_model`.** It is wiring, so only the
+  eight lane-routed providers carry one and the other 58 correctly do not.
+  Consumers describe the absence instead of crashing on it — and instead of
+  filling it with a placeholder, which would claim the provider has no
+  recommendation rather than that this catalog does not record one.
+
+### Fixed
+
+- **`anthropic-haiku` resolved to a name the catalog does not carry.** The lane
+  registry named `anthropic/opus-4.6` and `anthropic/sonnet-4.6` but not
+  `anthropic/haiku-4.5`, so resolution fell back to the tail and produced
+  `haiku-4.5` while the catalog records `claude-haiku-4-5`. The old structural
+  guard excluded derived values, so the entry had never been checked since it was
+  written; the sharpened guard found it.
+- **An allowance that could not expire.** The guard's exception list compared the
+  pinned spelling against the catalog. That string stays unknown forever, so the
+  allowance would have outlived its reason even after the wiring was repaired. It
+  now resolves the lane the way the check above it does, and the list is empty.
+
+## v2.8.2 - 2026-09-12
+
+### Added
+
+- **`/health` names the running version.** The endpoint is the only live
+  indicator an installation has, and it did not say which build was answering —
+  so the 2.8.1 launch could not verify that the restart had taken effect, which
+  is the one question the launch check exists to answer.
+
+### Fixed
+
+- **A broken bundled catalog reported as a remote fault.** `BundledBaselineError`
+  inherited from `SyncError`, so a missing or truncated packaged asset surfaced
+  as `INVALID` with `http_status 200` and the resolver named the remote server as
+  the cause. The security property always held — an unverified catalog is never
+  accepted — but the diagnosis pointed away from the actual fault, which is a
+  local packaging problem.
+- **The wizard read provider keys out of the operator's shell.**
+  `_load_env_values` took `os.environ` as its first source and only then overlaid
+  the `.env` file, so a provider whose key happened to be exported was reported
+  as ready to use regardless of what was configured. Six tests changed verdict
+  depending on whose shell ran them.
+- **Tests staged "no catalog" on one link of three.** The resolution chain is
+  env-override, metadata directory, bundled snapshot; suppressing only the
+  bundled link left an exported override answering from the first one. The suite
+  is now identical with and without the `FAIGATE_*` variables set — a suite that
+  is green only under a scrubbed environment has hidden its dependency, not
+  removed it.
+
+### Changed
+
+- **The 27 contested context windows are decided.** Each provider window that a
+  public source contradicted carried both figures since the move out of code;
+  each has now been resolved individually, with the reasoning recorded in the
+  entry. Sourced windows rose to `confirmed` (12 to 24); nothing without a source
+  was promoted — `unconfirmed` is unchanged at 20.
+
 ## v2.8.1 - 2026-09-12
 
 ### Fixed
