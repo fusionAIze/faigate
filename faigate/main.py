@@ -1631,6 +1631,34 @@ def _decorate_direct_decision(decision: RoutingDecision) -> RoutingDecision:
     return decision
 
 
+def _context_window_evidence(provider: Any) -> dict[str, Any] | None:
+    """Return the catalog evidence block for a provider's context window, or ``None``.
+
+    The window a display surface prints comes from the catalog, which tags every
+    fact with an ``evidence.level``: ``confirmed`` is a sourced fact, while
+    ``plausible`` and ``unconfirmed`` are operating assumptions. The backend
+    carries that block verbatim from the catalog (``providers.py``); this helper
+    relays it unchanged.
+
+    The level is deliberately *not* re-judged here. The catalog owns the facts
+    and the evidence scale, and ``catalog_views`` owns the mapping from a level
+    to what a consumer may do with it. A second verdict in the display code
+    would be a second truth, free to drift from the first.
+
+    The number stays visible next to the tag. Hiding a window because it is
+    unverified would leave the operator unable to tell what the gateway is
+    actually computing with — the worse failure.
+
+    ``None`` means the catalog never judged this window: either the catalog does
+    not stock the provider, or the operator declared the value outright. An
+    absent tag carries that meaning and is not the same as ``unconfirmed``.
+    """
+    evidence = getattr(provider, "context_window_evidence", None)
+    if not isinstance(evidence, dict) or not evidence:
+        return None
+    return dict(evidence)
+
+
 def _serialize_provider(name: str) -> dict[str, Any] | None:
     """Return one provider snapshot for API responses."""
     provider = _providers.get(name)
@@ -1646,6 +1674,7 @@ def _serialize_provider(name: str) -> dict[str, Any] | None:
         "healthy": provider.health.healthy,
         "capabilities": provider.capabilities,
         "context_window": provider.context_window,
+        "context_window_evidence": _context_window_evidence(provider),
         "limits": provider.limits,
         "cache": provider.cache,
         "image": getattr(provider, "image", {}),
@@ -1681,6 +1710,7 @@ def _build_provider_inventory(
                 "healthy": provider.health.healthy,
                 "capabilities": provider.capabilities,
                 "context_window": provider.context_window,
+                "context_window_evidence": _context_window_evidence(provider),
                 "limits": provider.limits,
                 "cache": provider.cache,
                 "image": getattr(provider, "image", {}),
@@ -2761,6 +2791,7 @@ async def health():
             "tier": p.tier,
             "capabilities": p.capabilities,
             "context_window": p.context_window,
+            "context_window_evidence": _context_window_evidence(p),
             "limits": p.limits,
             "cache": p.cache,
             "image": getattr(p, "image", {}),
@@ -3073,6 +3104,7 @@ def _routable_model_entries(
             "capabilities": provider.capabilities,
             "modalities": _provider_modalities(provider.capabilities or {}),
             "context_window": provider.context_window,
+            "context_window_evidence": _context_window_evidence(provider),
             "limits": provider.limits,
             "cache": provider.cache,
         }
