@@ -1,5 +1,22 @@
 # fusionAIze Gate Changelog
 
+## v2.9.1 - 2026-09-17
+
+### Changed
+
+- **The display says how well a provider's context window is known.** The
+  catalog tags every window with an evidence level; the backend copied the
+  number onto itself and dropped the tag, so `/v1/models`, `/health`, the
+  inventory and the dashboard showed a bare figure. Twenty providers carry an
+  unconfirmed window and two of those are demonstrably wrong — ollama records
+  128000 where the model it names carries 8192 — and an operator could not tell
+  a measured window from an assumed one. The figure stays visible, because
+  hiding it would leave the operator unable to see what the gateway is working
+  with; the level travels with it, passed through from the catalog rather than
+  judged a second time in the display.
+- The error path is untouched: it does not name the provider window today and
+  does not start to. It is one of the three surfaces `catalog_views` excludes.
+
 ## v2.9.0 - 2026-09-12
 
 ### Changed
