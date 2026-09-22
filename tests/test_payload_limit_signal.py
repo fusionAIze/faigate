@@ -156,9 +156,7 @@ def test_absent_cap_returns_none_not_invented() -> None:
     """
     sentinel = "__test_sentinel_no_catalog_entry__"
     fact = provider_catalog.get_model_input_cap_fact(sentinel)
-    assert fact is None, (
-        f"expected None for absent model, got {fact!r}"
-    )
+    assert fact is None, f"expected None for absent model, got {fact!r}"
 
 
 def test_catalog_sourced_cap_is_confirmed(monkeypatch) -> None:

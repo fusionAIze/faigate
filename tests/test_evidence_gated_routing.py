@@ -140,8 +140,7 @@ def test_every_unconfirmed_cap_is_invisible_to_the_cap_lookup() -> None:
 
     assert not offenders, (
         "the router-facing cap lookup enforced caps the catalog marks "
-        "unconfirmed, contradicting catalog_views.split_catalog_facts:\n  "
-        + "\n  ".join(offenders)
+        "unconfirmed, contradicting catalog_views.split_catalog_facts:\n  " + "\n  ".join(offenders)
     )
 
 

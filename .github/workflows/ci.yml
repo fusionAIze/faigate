@@ -63,7 +63,23 @@ jobs:
       - run: pip install ruff==0.16.4 pre-commit
       - run: ruff check .
       - run: ruff format --check .
-      - run: bash -n scripts/*
+      # `bash -n scripts/*` reads only its FIRST argument as a script; every
+      # other path becomes a positional parameter and is never parsed. It
+      # therefore syntax-checked one file out of forty and reported success for
+      # the rest. Shell scripts are selected by shebang, because scripts/ also
+      # holds Python.
+      - name: Syntax-check every shell script
+        run: |
+          set -euo pipefail
+          checked=0
+          for script in scripts/*; do
+            [ -f "$script" ] || continue
+            head -1 "$script" | grep -qE '^#!.*\b(bash|sh)\b' || continue
+            bash -n "$script"
+            checked=$((checked + 1))
+          done
+          echo "syntax-checked $checked shell scripts"
+          [ "$checked" -gt 0 ]
       - name: Validate pre-commit config
         run: pre-commit validate-config .pre-commit-config.yaml
       - run: pre-commit run --all-files --show-diff-on-failure

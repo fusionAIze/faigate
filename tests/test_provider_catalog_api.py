@@ -226,12 +226,8 @@ def test_all_provider_surfaces_agree_on_the_evidence_level(provider_window_state
         from_inventory = inventory[name]["context_window_evidence"]["level"]
         from_snapshot = main_module._serialize_provider(name)["context_window_evidence"]["level"]
 
-        assert from_inventory == expected, (
-            f"inventory for {name!r} says {from_inventory!r}, catalog says {expected!r}"
-        )
-        assert from_snapshot == expected, (
-            f"snapshot for {name!r} says {from_snapshot!r}, catalog says {expected!r}"
-        )
+        assert from_inventory == expected, f"inventory for {name!r} says {from_inventory!r}, catalog says {expected!r}"
+        assert from_snapshot == expected, f"snapshot for {name!r} says {from_snapshot!r}, catalog says {expected!r}"
 
     assert inventory[unconfirmed]["context_window_evidence"]["level"] == "unconfirmed"
     assert inventory[confirmed]["context_window_evidence"]["level"] == "confirmed", (
@@ -335,8 +331,7 @@ def test_served_dashboard_marks_the_window_it_renders():
         "as a bare number"
     )
     assert "function formatContextWindow" in served, (
-        "the served dashboard has no window formatter, so the evidence level "
-        "cannot be shown next to the number"
+        "the served dashboard has no window formatter, so the evidence level cannot be shown next to the number"
     )
     provider_row = served.split("function providerRow", 1)[1].split("function ", 1)[0]
     assert "formatContextWindow(row)" in provider_row, (

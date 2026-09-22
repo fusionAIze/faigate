@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# Run exactly what CI's lint job runs, in the same order, before pushing.
+#
+# Why this exists: the release gate used to run `ruff check .` and report "ruff
+# clean", while CI also runs `ruff format --check .`. Three releases went out
+# green by that measure and the fourth arrived red on GitHub with five
+# unformatted files. A gate that checks less than the gate downstream is not a
+# gate; it is a second, weaker opinion that reads like the first one.
+#
+# Keep this in step with .github/workflows/ci.yml — the test at the end of this
+# file fails if the workflow grows a lint step this script does not run.
+set -euo pipefail
+
+echo "1/5 ruff check"
+python3 -m ruff check .
+
+echo "2/5 ruff format --check"
+python3 -m ruff format --check .
+
+echo "3/5 bash -n scripts/*"
+# CI runs `bash -n scripts/*` on a fresh checkout, where every entry is a file.
+# A local tree also holds scripts/__pycache__, which that glob would hand to
+# bash as a directory. Checking only the files keeps this equivalent to CI
+# rather than stricter or weaker than it.
+checked=0
+for script in scripts/*; do
+  [ -f "$script" ] || continue
+  head -1 "$script" | grep -qE '^#!.*\b(bash|sh)\b' || continue
+  bash -n "$script"
+  checked=$((checked + 1))
+done
+echo "    $checked shell scripts"
+[ "$checked" -gt 0 ]
+
+echo "4/5 pre-commit"
+if command -v pre-commit >/dev/null 2>&1; then
+  pre-commit validate-config .pre-commit-config.yaml
+  pre-commit run --all-files --show-diff-on-failure
+else
+  echo "    pre-commit not installed locally — CI still runs it, so this is a gap, not a pass"
+fi
+
+echo "5/5 version consistency"
+python3 - <<'PY'
+import re
+import sys
+from pathlib import Path
+
+pyproject = re.search(r'^version = "([^"]+)"$', Path("pyproject.toml").read_text(), re.MULTILINE)
+package = re.search(r'^__version__ = "([^"]+)"$', Path("faigate/__init__.py").read_text(), re.MULTILINE)
+if not pyproject or not package:
+    sys.exit("ERROR: version not found in pyproject.toml or faigate/__init__.py")
+if pyproject.group(1) != package.group(1):
+    sys.exit(f"ERROR: {pyproject.group(1)} != {package.group(1)}")
+print(f"    {pyproject.group(1)}")
+PY
+
+echo "local CI gate passed"

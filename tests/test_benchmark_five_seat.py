@@ -113,8 +113,7 @@ def test_catalog_limits_are_read_programmatically():
             )
         else:
             assert advertised is None, (
-                f"413 for {seat} advertised {advertised} from an {level!r} fact; "
-                "no hard cap may be invented"
+                f"413 for {seat} advertised {advertised} from an {level!r} fact; no hard cap may be invented"
             )
 
 

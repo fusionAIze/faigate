@@ -743,9 +743,7 @@ def _load_external_provider_catalog() -> dict[str, dict[str, Any]]:
         # without a catalog file yields nothing here and falls through to the
         # bundled snapshot, exactly like the shared chain does.
         product = str(os.environ.get(_EXTERNAL_CATALOG_PRODUCT_ENV, _DEFAULT_METADATA_PRODUCT) or "")
-        catalog = _normalize_catalog_payload(
-            build_provider_metadata_snapshot(metadata_dir, product=product)
-        )
+        catalog = _normalize_catalog_payload(build_provider_metadata_snapshot(metadata_dir, product=product))
         if catalog:
             return catalog
     return _normalize_catalog_payload(_resolve_catalog_payload())
@@ -1081,9 +1079,7 @@ def _tracked_item(
         "last_reviewed": catalog_entry["last_reviewed"],
         "catalog_age_days": age_days,
         "model_matches_recommendation": (
-            None
-            if recommended_model is None
-            else (model == recommended_model or model in aliases)
+            None if recommended_model is None else (model == recommended_model or model in aliases)
         ),
         "canonical_model": lane.get("canonical_model", ""),
         "lane_family": lane.get("family", ""),
@@ -1270,10 +1266,7 @@ def build_provider_catalog_report(config: Config) -> dict[str, Any]:
             "item_count": sum(
                 1
                 for item in items
-                if (
-                    item.get("status") == "tracked"
-                    and item.get("model_matches_recommendation") is False
-                )
+                if (item.get("status") == "tracked" and item.get("model_matches_recommendation") is False)
             ),
             "total_items": tracked,
         },
