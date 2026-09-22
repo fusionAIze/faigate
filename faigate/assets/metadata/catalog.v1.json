@@ -130,8 +130,12 @@
         "max_input_tokens": 200000
       },
       "context_evidence": {
-        "level": "unconfirmed",
-        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'haiku-4.5', so the figure stays unverified."
+        "level": "plausible",
+        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'haiku-4.5', so the figure stays unverified.",
+        "unknown_kind": "derivable",
+        "unknown_reason": "the entry names 'claude-haiku-4-5', whose cap this catalog already records",
+        "derived_from": "model_caps[\"claude-haiku-4-5\"]",
+        "derived_from_value": 200000
       }
     },
     "anthropic-sonnet": {
@@ -292,7 +296,9 @@
       },
       "context_evidence": {
         "level": "unconfirmed",
-        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'gpt-image-1', so the figure stays unverified."
+        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'gpt-image-1', so the figure stays unverified.",
+        "unknown_kind": "not_applicable",
+        "unknown_reason": "image generation \u2014 there is no text context window"
       }
     },
     "google": {
@@ -374,8 +380,12 @@
         "max_input_tokens": 1048576
       },
       "context_evidence": {
-        "level": "unconfirmed",
-        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'gemini-3-flash', so the figure stays unverified."
+        "level": "plausible",
+        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'gemini-3-flash', so the figure stays unverified.",
+        "unknown_kind": "derivable",
+        "unknown_reason": "the entry names 'gemini-2.5-flash', whose cap this catalog already records",
+        "derived_from": "model_caps[\"gemini-2.5-flash\"]",
+        "derived_from_value": 1048576
       }
     },
     "gemini-flash-lite": {
@@ -414,7 +424,11 @@
       },
       "context_evidence": {
         "level": "unconfirmed",
-        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'gemini-3-flash-lite', so the figure stays unverified."
+        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'gemini-3-flash-lite', so the figure stays unverified.",
+        "unknown_kind": "derivable",
+        "unknown_reason": "the entry names 'gemini-3-flash-lite', whose cap this catalog already records",
+        "derived_from": "model_caps[\"gemini-3-flash-lite\"]",
+        "derived_from_value": 1048576
       }
     },
     "gemini-pro-high": {
@@ -1099,13 +1113,19 @@
       "hop": [
         "ollama"
       ],
-      "context_window": 128000,
+      "context_window": 4096,
       "limits": {
-        "max_input_tokens": 128000
+        "max_input_tokens": 4096
       },
       "context_evidence": {
-        "level": "unconfirmed",
-        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'ollama/llama3.3', so the figure stays unverified."
+        "level": "plausible",
+        "unknown_kind": "runtime_dependent",
+        "unknown_reason": "local runner \u2014 the window is whatever model the operator pulled",
+        "source": "Ollama documentation, docs/context-length.mdx",
+        "source_url": "https://github.com/ollama/ollama/blob/main/docs/context-length.mdx",
+        "as_of": "2026-09-22",
+        "superseded_value": 128000,
+        "note": "Ollama sets its own default from available VRAM: '< 24 GiB VRAM: 4k context', '24-48 GiB: 32k', '>= 48 GiB: 256k'. 4096 is the lowest documented tier, so it is a floor in the strict sense: an operator with more VRAM, a Modelfile, or OLLAMA_CONTEXT_LENGTH gets more, never less. It describes the runner's default and not the window of whatever model is loaded, which is why it stays plausible. The 128000 it replaces came from faigate's embedded table and had no source at all."
       }
     },
     "huggingface": {
@@ -1179,7 +1199,9 @@
       },
       "context_evidence": {
         "level": "unconfirmed",
-        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'lmstudio/minimax-m2.1-gs32', so the figure stays unverified."
+        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'lmstudio/minimax-m2.1-gs32', so the figure stays unverified.",
+        "unknown_kind": "runtime_dependent",
+        "unknown_reason": "local runner \u2014 the window is whatever model the operator loaded"
       }
     },
     "vllm": {
@@ -1216,7 +1238,9 @@
       },
       "context_evidence": {
         "level": "unconfirmed",
-        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'vllm/your-model-id', so the figure stays unverified."
+        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'vllm/your-model-id', so the figure stays unverified.",
+        "unknown_kind": "runtime_dependent",
+        "unknown_reason": "local runner \u2014 the window is whatever model the operator loaded"
       }
     },
     "litellm": {
@@ -1248,13 +1272,20 @@
       "hop": [
         "litellm"
       ],
-      "context_window": 128000,
+      "context_window": 16385,
       "limits": {
-        "max_input_tokens": 128000
+        "max_input_tokens": 16385
       },
       "context_evidence": {
-        "level": "unconfirmed",
-        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'litellm/your-model-id', so the figure stays unverified."
+        "level": "plausible",
+        "unknown_kind": "runtime_dependent",
+        "unknown_reason": "proxy \u2014 the window belongs to the model it is pointed at",
+        "source": "LiteLLM model map",
+        "source_url": "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json",
+        "source_model_id": "gpt-3.5-turbo",
+        "as_of": "2026-09-22",
+        "superseded_value": 128000,
+        "note": "LiteLLM publishes no default window for a model it does not know: it is a proxy, and the window belongs to the target. The figure is therefore taken from the model this entry itself names, gpt-3.5-turbo, which LiteLLM's own map and OpenRouter both put at 16385. It stays plausible because it describes that named model rather than whatever an operator actually points the proxy at. The 128000 it replaces had no source."
       }
     },
     "byteplus": {
@@ -1291,7 +1322,9 @@
       },
       "context_evidence": {
         "level": "unconfirmed",
-        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'byteplus/seed-1-8-251228', so the figure stays unverified."
+        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'byteplus/seed-1-8-251228', so the figure stays unverified.",
+        "unknown_kind": "unlisted",
+        "unknown_reason": "no consulted source publishes a window for this model"
       }
     },
     "byteplus-plan": {
@@ -1370,7 +1403,9 @@
       },
       "context_evidence": {
         "level": "unconfirmed",
-        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'qwen-3-235b-a22b-instruct-2507', so the figure stays unverified."
+        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'qwen-3-235b-a22b-instruct-2507', so the figure stays unverified.",
+        "unknown_kind": "unlisted",
+        "unknown_reason": "no consulted source publishes a window for this model"
       }
     },
     "github-copilot": {
@@ -1446,7 +1481,9 @@
       },
       "context_evidence": {
         "level": "unconfirmed",
-        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'kimi-coding/k2p5', so the figure stays unverified."
+        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'kimi-coding/k2p5', so the figure stays unverified.",
+        "unknown_kind": "unlisted",
+        "unknown_reason": "no consulted source publishes a window for this model"
       }
     },
     "minimax": {
@@ -1517,7 +1554,9 @@
       },
       "context_evidence": {
         "level": "unconfirmed",
-        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'coder-model', so the figure stays unverified."
+        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'coder-model', so the figure stays unverified.",
+        "unknown_kind": "unlisted",
+        "unknown_reason": "no consulted source publishes a window for this model"
       }
     },
     "synthetic": {
@@ -1628,7 +1667,9 @@
       },
       "context_evidence": {
         "level": "unconfirmed",
-        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'volcengine/doubao-seed-1-8-251228', so the figure stays unverified."
+        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'volcengine/doubao-seed-1-8-251228', so the figure stays unverified.",
+        "unknown_kind": "unlisted",
+        "unknown_reason": "no consulted source publishes a window for this model"
       }
     },
     "volcengine-plan": {
@@ -2106,7 +2147,9 @@
       },
       "context_evidence": {
         "level": "unconfirmed",
-        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'claude-code', so the figure stays unverified."
+        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'claude-code', so the figure stays unverified.",
+        "unknown_kind": "runtime_dependent",
+        "unknown_reason": "oauth harness, not a model endpoint"
       },
       "vendor": "anthropic",
       "model": "claude-code",
@@ -2272,7 +2315,9 @@
       },
       "context_evidence": {
         "level": "unconfirmed",
-        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'kilo-auto/balanced', so the figure stays unverified."
+        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'kilo-auto/balanced', so the figure stays unverified.",
+        "unknown_kind": "runtime_dependent",
+        "unknown_reason": "router tier \u2014 the window belongs to the model picked per request"
       },
       "vendor": "kilo",
       "model": "tier-balanced",
@@ -2346,7 +2391,9 @@
       },
       "context_evidence": {
         "level": "unconfirmed",
-        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'kilo-auto/frontier', so the figure stays unverified."
+        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'kilo-auto/frontier', so the figure stays unverified.",
+        "unknown_kind": "runtime_dependent",
+        "unknown_reason": "router tier \u2014 the window belongs to the model picked per request"
       },
       "vendor": "kilo",
       "model": "tier-frontier",
@@ -2451,7 +2498,9 @@
       },
       "context_evidence": {
         "level": "unconfirmed",
-        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'kiro/claude-sonnet', so the figure stays unverified."
+        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'kiro/claude-sonnet', so the figure stays unverified.",
+        "unknown_kind": "runtime_dependent",
+        "unknown_reason": "aggregator \u2014 the window belongs to the model picked per request"
       },
       "vendor": "anthropic",
       "model": "claude-sonnet",
@@ -2490,7 +2539,9 @@
       },
       "context_evidence": {
         "level": "unconfirmed",
-        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'longcat/flash-lite', so the figure stays unverified."
+        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'longcat/flash-lite', so the figure stays unverified.",
+        "unknown_kind": "unlisted",
+        "unknown_reason": "no consulted source publishes a window for this model"
       },
       "vendor": "longcat",
       "model": "flash-lite",
@@ -2527,7 +2578,9 @@
       },
       "context_evidence": {
         "level": "unconfirmed",
-        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'nvidia/nemotron', so the figure stays unverified."
+        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'nvidia/nemotron', so the figure stays unverified.",
+        "unknown_kind": "unlisted",
+        "unknown_reason": "no consulted source publishes a window for this model"
       },
       "vendor": "nvidia",
       "model": "nemotron",
@@ -2558,8 +2611,12 @@
         "max_input_tokens": 128000
       },
       "context_evidence": {
-        "level": "unconfirmed",
-        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'pollinations/openai', so the figure stays unverified."
+        "level": "plausible",
+        "note": "Carried over unchanged from faigate's embedded provider table, which recorded no source. Neither OpenRouter nor LiteLLM lists 'pollinations/openai', so the figure stays unverified.",
+        "unknown_kind": "derivable",
+        "unknown_reason": "the entry names 'gpt-4o', whose cap this catalog already records",
+        "derived_from": "model_caps[\"gpt-4o\"]",
+        "derived_from_value": 128000
       },
       "vendor": "openai",
       "model": "gpt-4o",

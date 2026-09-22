@@ -1,5 +1,25 @@
 # fusionAIze Gate Changelog
 
+## v2.9.2 - 2026-09-22
+
+### Changed
+
+- **The two proxy entries have a sourced floor.** `ollama` and `litellm` each
+  recorded 128000, carried over from the embedded table with nothing behind it.
+  Both are runtime-dependent — the window belongs to whatever model is loaded or
+  targeted — so no catalog value can be right, but an unsourced figure is worse
+  than a documented one. `ollama` takes 4096, the lowest tier Ollama documents
+  for its own VRAM-derived default, which makes it a floor in the strict sense:
+  more VRAM, a Modelfile or `OLLAMA_CONTEXT_LENGTH` raises it and nothing lowers
+  it. `litellm` takes 16385 from the model the entry itself names, since LiteLLM
+  publishes no default for a model it does not know. Both stay `plausible`, and
+  both keep the figure they replace under `superseded_value`.
+- **Every unconfirmed window now says which kind of unknown it is** —
+  `derivable`, `runtime_dependent`, `not_applicable` or `unlisted`. One word for
+  four situations let a gap that will close read the same as one that never
+  will, and a number attached to the second kind reads as knowledge rather than
+  as a placeholder. Catalog schema v1.6, additive.
+
 ## v2.9.1 - 2026-09-17
 
 ### Changed
