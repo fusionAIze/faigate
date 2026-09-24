@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import re
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any
@@ -585,6 +586,44 @@ def _score_image_fit_ratio(ratio: float) -> int:
     if ratio >= 0.25:
         return 4
     return 2
+
+
+def report_substring_only_matches(
+    static_rules: dict[str, Any],
+    provider_names: Iterable[str],
+) -> list[tuple[str, str, str]]:
+    """Name every address that used to resolve only because of substring matching.
+
+    ``model_requested`` matched with ``p in requested`` until 2026-09-24, so a
+    rule carrying the abbreviation ``flash`` also claimed ``deepseek-v4-flash``
+    and ``gemini-flash``. Exact matching drops those claims, and dropping them
+    silently is the failure this whole change exists to remove: a route that
+    disappears without a word.
+
+    Returns ``(address, rule_name, token)`` for every configured provider name
+    that a rule would have claimed by substring but no longer claims by
+    equality. An empty list means the switch changes nothing.
+    """
+    findings: list[tuple[str, str, str]] = []
+    rules = static_rules.get("rules", []) if isinstance(static_rules, dict) else []
+    for name in sorted(provider_names):
+        lowered = str(name).strip().lower()
+        for rule in rules:
+            match = rule.get("match", {}) if isinstance(rule, dict) else {}
+            tokens: list[str] = []
+            for block in [match, *(match.get("any", []) or [])]:
+                if not isinstance(block, dict):
+                    continue
+                raw = block.get("model_requested") or []
+                tokens.extend([raw] if isinstance(raw, str) else list(raw))
+            exact = {str(t).strip().lower() for t in tokens}
+            if lowered in exact:
+                break  # still claimed by equality — nothing changed for this name
+            hit = next((t for t in tokens if str(t).strip().lower() in lowered), None)
+            if hit is not None:
+                findings.append((str(name), str(rule.get("name", "?")), str(hit)))
+                break
+    return findings
 
 
 def _static_match_keys(match: dict[str, Any]) -> set[str]:
@@ -1173,7 +1212,8 @@ class Router:
         ctx = _context_for_model_requested(self.config.providers, model_requested)
         for rule in cfg.get("rules", []):
             match = rule.get("match", {})
-            if "model_requested" not in _static_match_keys(match):
+            keys = _static_match_keys(match)
+            if "model_requested" not in keys and "model_requested_contains" not in keys:
                 continue
             if self._match_static(match, ctx):
                 return rule
@@ -2457,13 +2497,28 @@ class Router:
 
         matched_any = False
 
-        # model_requested
+        # model_requested — exact, after normalization. Substring matching made
+        # every rule order-dependent: the bare token "flash" claimed
+        # deepseek-v4-flash, and "deepseek-v4-pro" claimed
+        # kilo-deepseek/deepseek-v4-pro. A rule that wants a prefix or fragment
+        # says so with model_requested_contains.
         if "model_requested" in match:
             matched_any = True
             patterns = match["model_requested"]
             if isinstance(patterns, str):
                 patterns = [patterns]
-            if not any(p in ctx.model_requested for p in patterns):
+            if not any(ctx.model_requested == p for p in patterns):
+                return False
+
+        # model_requested_contains — the opt-in for the old behaviour. Kept as a
+        # separate key so a substring claim is always visible in the config
+        # rather than being an accident of how a token happens to be spelled.
+        if "model_requested_contains" in match:
+            matched_any = True
+            fragments = match["model_requested_contains"]
+            if isinstance(fragments, str):
+                fragments = [fragments]
+            if not any(str(f) in ctx.model_requested for f in fragments):
                 return False
 
         # system_prompt_contains
