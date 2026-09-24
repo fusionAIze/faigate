@@ -18,8 +18,6 @@ reachability invariant this module guards.
 
 from __future__ import annotations
 
-import pytest
-
 from faigate.provider_catalog import get_provider_catalog
 from faigate.reachability import model_is_concrete, reachability_model_matches
 
@@ -27,8 +25,7 @@ from faigate.reachability import model_is_concrete, reachability_model_matches
 def _catalog_entries():
     """Yield (provider_id, entry) for every catalog entry."""
     catalog = get_provider_catalog()
-    for provider_id, entry in sorted(catalog.items()):
-        yield provider_id, entry
+    yield from sorted(catalog.items())
 
 
 def test_catalog_is_not_empty():
@@ -55,6 +52,7 @@ def test_catalog_is_not_empty():
 #                    not a rename.
 KNOWN_ALIAS_CLAIMS = {"volcengine-plan", "mistral"}
 
+
 def test_catalog_entry_models_are_concrete():
     """No catalog entry may claim a provider-resolved alias as its model."""
     failures: list[tuple[str, str]] = []
@@ -67,9 +65,8 @@ def test_catalog_entry_models_are_concrete():
                 continue
             failures.append((provider_id, model))
 
-    assert not failures, (
-        "catalog entries with provider-resolved alias models are unreachable:\n"
-        + "\n".join(f"  {pid}: model={model!r}" for pid, model in failures)
+    assert not failures, "catalog entries with provider-resolved alias models are unreachable:\n" + "\n".join(
+        f"  {pid}: model={model!r}" for pid, model in failures
     )
 
 
