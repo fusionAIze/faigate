@@ -186,6 +186,7 @@ class ProviderBackend:
         self._last_probe_strategy = ""
         self._last_probe_payload = ""
         self._last_probe_verified = False
+        self._last_probe_model = ""
 
         self._client = httpx.AsyncClient(
             timeout=httpx.Timeout(120.0, connect=10.0),
@@ -739,7 +740,48 @@ class ProviderBackend:
             return "deprioritize this route until quota or rate pressure recovers"
         if normalized == "transport-error":
             return "treat this route as degraded until connectivity recovers"
+        if normalized == "addressability-mismatch":
+            return "the endpoint answered, but the responding model does not match the catalog entry"
         return "inspect the last route error before relying on this provider"
+
+    def _check_addressability(self) -> dict[str, Any] | None:
+        """Check that the probe response model matches the catalog claim.
+
+        Returns a readiness-style dict when the model mismatch means the catalog
+        entry is not addressable at this endpoint. Returns None when the check
+        passes, the catalog has no model claim, or there is no probe model to
+        compare against.
+        """
+        observed = self._last_probe_model
+        if not observed:
+            return None
+
+        try:
+            from .provider_catalog import get_provider_catalog_entry
+            from .reachability import model_is_concrete, reachability_model_matches
+
+            entry = get_provider_catalog_entry(self.name)
+        except ImportError:
+            return None
+
+        if not entry:
+            return None
+
+        claimed = str(entry.get("model") or "").strip()
+        if not claimed or not model_is_concrete(claimed):
+            return None
+
+        if reachability_model_matches(entry, observed):
+            return None
+
+        return {
+            "ready": False,
+            "status": "addressability-mismatch",
+            "reason": (
+                f"the endpoint answered with model '{observed}', "
+                f"but the catalog entry for '{self.name}' claims model '{claimed}'"
+            ),
+        }
 
     def _probe_payload_preview(self) -> str:
         payload_kind = str(self.transport.get("probe_payload_kind", "default") or "default")
@@ -748,10 +790,11 @@ class ProviderBackend:
         text_preview = payload_text if len(payload_text) <= 24 else payload_text[:21] + "..."
         return f"{payload_kind} | user='{text_preview}' | max_tokens={payload_max_tokens}"
 
-    def _mark_probe_success(self, strategy: str, latency_ms: float) -> None:
+    def _mark_probe_success(self, strategy: str, latency_ms: float, *, model: str = "") -> None:
         self._last_probe_strategy = strategy
         self._last_probe_payload = self._probe_payload_preview()
         self._last_probe_verified = True
+        self._last_probe_model = str(model or "").strip()
         self.health.record_success(latency_ms)
 
     def _mark_probe_failure(self, detail: str) -> None:
@@ -787,7 +830,14 @@ class ProviderBackend:
         latency = (time.time() - t0) * 1000
         if resp.status_code >= 400:
             raise ProviderError(self.name, resp.status_code, resp.text[:500])
-        self._mark_probe_success("chat", latency)
+        observed_model = ""
+        try:
+            payload = resp.json()
+            if isinstance(payload, dict):
+                observed_model = str(payload.get("model") or "").strip()
+        except (ValueError, TypeError, AttributeError):
+            pass
+        self._mark_probe_success("chat", latency, model=observed_model)
         return True
 
     def request_readiness(self) -> dict[str, Any]:
@@ -862,6 +912,22 @@ class ProviderBackend:
                 "operator_hint": self._request_readiness_action(final_status),
             }
         if self._last_probe_verified:
+            addressability = self._check_addressability()
+            if addressability:
+                return {
+                    **addressability,
+                    "probe_strategy": probe_strategy,
+                    "compatibility": compatibility,
+                    "profile": profile,
+                    "billing_mode": billing_mode,
+                    "probe_confidence": "high",
+                    "quota_group": quota_group,
+                    "quota_isolated": quota_isolated,
+                    "notes": notes,
+                    "probe_payload": probe_payload,
+                    "verified_via": verified_via or probe_strategy,
+                    "operator_hint": self._request_readiness_action("addressability-mismatch"),
+                }
             status = "ready-verified"
             return {
                 "ready": True,
