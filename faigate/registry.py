@@ -444,16 +444,18 @@ CUSTOM: dict[str, ProviderDef] = {
     # ── Volcano Engine plan (coding models) ───────────────────────────────
     "volcengine-plan": ProviderDef(
         backend="openai-compat",
-        base_url="https://ark.cn-beijing.volces.com/api/v3",
-        base_url_env="VOLCANO_ENGINE_BASE_URL",
+        base_url="https://ark.cn-beijing.volces.com/api/coding/v3",
+        base_url_env="VOLCANO_ENGINE_CODING_BASE_URL",
         api_key_env="VOLCANO_ENGINE_API_KEY",
         tier="default",
-        example_model="volcengine-plan/ark-code-latest",
+        example_model="volcengine-plan/doubao-seed-code",
         vendor="volcengine",
-        model="ark-code-latest",
+        model="doubao-seed-code",
         pricing={"input": 0.0, "output": 0.0},
         notes=(
-            "Volcano Engine – coding models (ark-code-latest, doubao-seed-code, kimi-k2.5, kimi-k2-thinking, glm-4.7)"
+            "Volcano Engine – coding plan (/api/coding/v3); "
+            "covers doubao-seed-code, kimi-k2.5, kimi-k2-thinking, glm-4.7 "
+            "and refuses every other model with UnsupportedModel"
         ),
     ),
     # ── BytePlus (international equivalent of Volcano Engine) ─────────────

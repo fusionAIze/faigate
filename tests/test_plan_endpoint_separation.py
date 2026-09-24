@@ -25,7 +25,7 @@ from faigate.registry import ALL as PROVIDERS
 # Volcano Engine carries the same structural defect, but no account was
 # available to measure its plan endpoint, and inventing a path would be exactly
 # the guess this test exists to prevent. Remove the entry once measured.
-UNMEASURED = {"volcengine-plan"}
+UNMEASURED = set()
 
 PLAN_SUFFIX = "-plan"
 
