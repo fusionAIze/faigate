@@ -17,6 +17,14 @@ resolved alias, so the vendor claim was empty rather than wrong. Replacing the
 alias with the real model ``deepseek-v4-flash`` on 2026-09-23 turned that empty
 claim into a false one: ``byteplus/volcengine/deepseek-v4-flash`` asserts that
 Volcano Engine built DeepSeek V4. Nothing caught it.
+
+Runtime-resolved aliases
+~~~~~~~~~~~~~~~~~~~~~~~~~
+An entry whose ``model`` is a runtime-resolved alias (e.g. ``ark-code-latest``
+on ``volcengine-plan``) must not carry a concrete ``vendor``, because the
+resolved model's manufacturer is unknown at registry-write time.  See
+``test_runtime_resolved_alias.py`` for that guard.  Such entries are skipped
+here because the alias name does not match any model family.
 """
 
 import pytest
