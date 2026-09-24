@@ -459,13 +459,13 @@ CUSTOM: dict[str, ProviderDef] = {
     # ── BytePlus (international equivalent of Volcano Engine) ─────────────
     "byteplus": ProviderDef(
         backend="openai-compat",
-        base_url="https://api.byteplus.com/api/v3",
+        base_url="https://ark.ap-southeast.bytepluses.com/api/v3",
         base_url_env="BYTEPLUS_BASE_URL",
         api_key_env="BYTEPLUS_API_KEY",
         tier="default",
-        example_model="byteplus/seed-1-8-251228",
+        example_model="byteplus/seed-2-0-pro",
         vendor="volcengine",
-        model="seed-1-8-251228",
+        model="seed-2-0-pro",
         hop=["byteplus"],
         pricing={"input": 0.0, "output": 0.0},
         notes="BytePlus ARK – international access to Volcano Engine models",
@@ -473,17 +473,20 @@ CUSTOM: dict[str, ProviderDef] = {
     # ── BytePlus plan (coding models) ─────────────────────────────────────
     "byteplus-plan": ProviderDef(
         backend="openai-compat",
-        base_url="https://api.byteplus.com/api/v3",
-        base_url_env="BYTEPLUS_BASE_URL",
+        base_url="https://ark.ap-southeast.bytepluses.com/api/coding/v3",
+        base_url_env="BYTEPLUS_CODING_BASE_URL",
         api_key_env="BYTEPLUS_API_KEY",
         tier="default",
-        example_model="byteplus-plan/ark-code-latest",
-        vendor="volcengine",
-        model="ark-code-latest",
+        example_model="byteplus-plan/deepseek-v4-flash",
+        vendor="deepseek",
+        model="deepseek-v4-flash",
         hop=["byteplus"],
         pricing={"input": 0.0, "output": 0.0},
         notes=(
-            "BytePlus ARK – coding models (ark-code-latest, doubao-seed-code, kimi-k2.5, kimi-k2-thinking, glm-4.7)"
+            "BytePlus ARK coding plan – separate billing path (/api/coding/v3); "
+            "covers deepseek-v4-pro, deepseek-v4-flash, deepseek-v4-1-flash, "
+            "glm-5-2, glm-5-3-flash, seed-2-0-pro, seed-2-0-code, seed-2-0-lite "
+            "and refuses every other model with UnsupportedModel"
         ),
     ),
     # ── Synthetic ─────────────────────────────────────────────────────────
