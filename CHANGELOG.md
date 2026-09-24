@@ -1,5 +1,67 @@
 # fusionAIze Gate Changelog
 
+## v2.9.3 - 2026-09-24
+
+### Fixed
+
+- **A streaming request left no trace in the metrics at all.** The metrics block
+  in the chat path was guarded by `isinstance(result, dict)`, and a streaming
+  completion is an async iterator, so the whole block was skipped. Measured
+  against 2.9.2: the same endpoint, model and client, differing only in the
+  `stream` flag, produced one row for `stream: false` and none for
+  `stream: true`. Agentic clients stream almost always, so the metric was
+  missing exactly the load that matters and keeping the load that does not —
+  a gap with a sign, not with noise. Three dispatched agent lanes with 199 model
+  calls between them left zero rows while the provider's own console showed
+  63.82 percent of its five-hour quota consumed. Every provider comparison and
+  cost figure built on these rows was a selection that did not announce itself
+  as one. The streaming branch now assembles the same field set at dispatch time
+  and hands it to the single SSE choke point, which reads usage off the frames
+  and records once on completion — covering a clean finish, an upstream failure
+  after the first token, and a client disconnect alike. Usage that never arrives
+  is recorded as unknown, never as zero, because a missing measurement must not
+  look like a measured one. Both surfaces are covered, the OpenAI-compatible
+  endpoint and the Anthropic bridge.
+
+- **The catalog and the registry disagreed about the same entry.** The bundled
+  catalog carries its own `model`, `vendor` and `hop` for every provider, so the
+  BytePlus fixes in 2.9.2's successor commits left a second, stale copy behind:
+  the registry said `deepseek-v4-flash` while the catalog still said
+  `ark-code-latest`. `/v1/models` reads the catalog, which is why it went on
+  advertising a model the registry no longer named — and a request for that
+  advertised name returned HTTP 200 from a different vendor entirely. Both
+  BytePlus entries now agree with their registry counterpart.
+
+- **The BytePlus coding plan shared one endpoint with its pay-per-token
+  sibling.** Both entries shipped `https://api.byteplus.com/api/v3`, which
+  answers 302 into a documentation page. Sharing one `base_url` made the plan
+  unreachable; sharing one override variable meant redirecting either entry
+  silently moved both onto the billed path. The plan now carries its own
+  endpoint and its own override variable. Its model was `ark-code-latest`, an
+  alias the provider resolves at its own discretion, which resolves nowhere and
+  could not carry stable facts in any case.
+
+- **`vendor` named the platform instead of the maker.** `hop` already carries
+  the intermediary, so naming the platform again spent the one field that says
+  who built the model. Exactly one entry of 41 disagreed with the rest.
+
+### Added
+
+- **A reachability invariant.** A catalog entry may not claim a model the
+  provider resolves at its own discretion. Two entries still do and are listed
+  by name with the decision each is waiting for, guarded by a second test so the
+  allowance cannot outlive the problem it documents.
+
+- **A per-provider capability probe.** Reads the context window from a
+  provider's own `/models` endpoint through a field path declared in the
+  catalog rather than hardcoded. Four of five reachable providers publish it
+  under four different field names; one publishes none, which the probe reports
+  instead of guessing. Hermetic — five recorded responses as fixtures, no
+  network in the test.
+
+- **An endpoint-separation invariant** for every `<name>` / `<name>-plan` pair,
+  with a named allowance list for pairs nobody could measure.
+
 ## v2.9.2 - 2026-09-22
 
 ### Changed
