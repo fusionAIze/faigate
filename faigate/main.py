@@ -19,7 +19,7 @@ import re
 import time
 import uuid
 from base64 import b64encode
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager, suppress
 from dataclasses import asdict, dataclass
 from hashlib import sha256
@@ -156,6 +156,11 @@ class _ChatExecutionSuccess:
     hook_state: AppliedHooks
     trace_id: str | None
     stream: bool
+    # Streaming only: called once the stream has finished, with the usage seen
+    # on the wire. A streaming completion is an async iterator, so the metrics
+    # block in _execute_chat cannot run at dispatch time — success is not known
+    # yet and neither are the tokens.
+    record_on_finish: Callable[[dict[str, Any] | None, bool, str], None] | None = None
 
 
 @dataclass
@@ -186,18 +191,50 @@ def _openai_sse_data(payload: dict[str, Any]) -> bytes:
     return f"data: {json.dumps(payload, separators=(',', ':'))}\n\n".encode()
 
 
+def _usage_from_sse_chunk(chunk: bytes) -> dict[str, Any] | None:
+    """Return the usage object of one SSE frame, if it carries one.
+
+    Providers put usage on the final frame, and not every provider sends it at
+    all. A frame without usage is not a frame with zero usage, so this returns
+    ``None`` rather than an empty dict.
+    """
+    for line in chunk.split(b"\n"):
+        if not line.startswith(b"data:"):
+            continue
+        payload = line[5:].strip()
+        if not payload or payload == b"[DONE]":
+            continue
+        try:
+            parsed = json.loads(payload)
+        except (ValueError, UnicodeDecodeError):
+            continue
+        usage = parsed.get("usage") if isinstance(parsed, dict) else None
+        if isinstance(usage, dict) and usage:
+            return usage
+    return None
+
+
 async def _safe_openai_sse_stream(
     stream: AsyncIterator[bytes],
     *,
     provider_name: str,
     trace_id: str | None,
+    record_on_finish: Callable[[dict[str, Any] | None, bool, str], None] | None = None,
 ) -> AsyncIterator[bytes]:
     """Keep streaming responses well-formed when the upstream fails mid-turn."""
 
+    usage: dict[str, Any] | None = None
+    success = True
+    error = ""
     try:
         async for chunk in stream:
+            seen = _usage_from_sse_chunk(chunk)
+            if seen is not None:
+                usage = seen
             yield chunk
     except ProviderError as exc:
+        success = False
+        error = str(exc.detail or "")[:500]
         logger.warning(
             "Streaming response from %s failed after stream start: %s",
             provider_name,
@@ -214,7 +251,9 @@ async def _safe_openai_sse_stream(
             }
         )
         yield b"data: [DONE]\n\n"
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 - the branch below re-reports it
+        success = False
+        error = f"{type(exc).__name__}: {exc}"[:500]
         logger.exception(
             "Streaming response from %s failed unexpectedly after stream start",
             provider_name,
@@ -230,6 +269,15 @@ async def _safe_openai_sse_stream(
             }
         )
         yield b"data: [DONE]\n\n"
+    finally:
+        # Runs on a clean finish, on an upstream failure, and on a client
+        # disconnect (GeneratorExit). A stream that produced nothing is still a
+        # request that happened.
+        if record_on_finish is not None:
+            try:
+                record_on_finish(usage, success, error)
+            except Exception:  # noqa: BLE001 - accounting must not break the response
+                logger.exception("Recording the finished stream for %s failed", provider_name)
 
 
 def _request_hook_error_response(exc: Exception) -> JSONResponse:
@@ -2106,6 +2154,53 @@ async def _execute_chat_completion_body(
             )
 
             trace_id: str | None = None
+            record_on_finish: Callable[[dict[str, Any] | None, bool, str], None] | None = None
+            if _config.metrics.get("enabled") and not isinstance(result, dict):
+                # A streaming completion carries no usage yet and no outcome yet, so the
+                # block below cannot run. Defer the row to the end of the stream instead
+                # of dropping the request from the metrics entirely.
+                _provider_cfg = _config.provider(provider_name)
+                _pricing = _provider_cfg.get("pricing", {}) if _provider_cfg else {}
+                _fields = dict(
+                    provider=provider_name,
+                    model=provider.model,
+                    layer=decision.layer,
+                    rule_name=decision.rule_name,
+                    requested_model=model_requested,
+                    modality="chat",
+                    client_profile=client_profile,
+                    client_tag=client_tag,
+                    decision_reason=decision.reason,
+                    confidence=decision.confidence,
+                    **_attempt_metric_fields(decision, provider_name, attempt_order=attempt_order),
+                    attempt_order=attempt_order,
+                    route_summary=_build_route_summary(decision),
+                )
+                trace_id = str(uuid.uuid4())
+
+                def record_on_finish(
+                    usage: dict[str, Any] | None,
+                    ok: bool,
+                    error: str,
+                    _fields: dict[str, Any] = _fields,
+                    _pricing: dict[str, Any] = _pricing,
+                ) -> None:
+                    # No usage on the wire means unknown, not zero. Writing 0 would make
+                    # a missing measurement look like a measured one.
+                    if usage is None:
+                        _metrics.log_request(success=ok, error=error, **_fields)
+                        return
+                    pt = usage.get("prompt_tokens", 0)
+                    ct = usage.get("completion_tokens", 0)
+                    _metrics.log_request(
+                        prompt_tokens=pt,
+                        completion_tokens=ct,
+                        cost_usd=calc_cost(pt, ct, _pricing),
+                        success=ok,
+                        error=error,
+                        **_fields,
+                    )
+
             if _config.metrics.get("enabled") and isinstance(result, dict):
                 usage = result.get("usage", {})
                 cg = result.get("_faigate", {})
@@ -2155,6 +2250,7 @@ async def _execute_chat_completion_body(
                 hook_state=hook_state,
                 trace_id=trace_id,
                 stream=bool(stream),
+                record_on_finish=record_on_finish,
             )
         except ProviderError as e:
             _adaptive_state.record_failure(provider_name, error=e.detail[:500])
@@ -5452,6 +5548,7 @@ async def chat_completions(request: Request):
                 execution.result,
                 provider_name=execution.provider_name,
                 trace_id=execution.trace_id,
+                record_on_finish=execution.record_on_finish,
             ),
             media_type="text/event-stream",
             headers={
@@ -5550,6 +5647,7 @@ async def anthropic_messages(request: Request):
                     execution.result,
                     provider_name=execution.provider_name,
                     trace_id=execution.trace_id,
+                    record_on_finish=execution.record_on_finish,
                 ),
                 requested_model=str(canonical_request.metadata.get("requested_model_original") or wire_request.model),
                 resolved_model=str(canonical_request.requested_model or wire_request.model),
