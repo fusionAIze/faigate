@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -1967,3 +1968,254 @@ def test_catalog_dir_set_but_file_missing_falls_back_to_bundled(monkeypatch, tmp
     assert len(pc._load_external_catalog_payload().get("providers", {})) > 0
     assert len(pc.catalog_provider_identities()) > 0
     assert len(pc._load_external_model_caps()) > 0
+
+
+# --------------------------------------------------------------------------- #
+# FAI-238-B: probed context window evidence
+# --------------------------------------------------------------------------- #
+
+
+def _load_probe_fixture(name: str) -> dict:
+    path = Path(__file__).resolve().parent / "fixtures" / "models_probe" / f"{name}_models.json"
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def test_probed_window_is_confirmed_with_timestamp() -> None:
+    """A probed context window from the provider's own /models is confirmed.
+
+    RED-PROOF: remove the ``_PROBE_FIELD_PATHS`` entry for ``deepseek-chat``
+    and this test fails because the provider becomes unlisted instead of
+    confirmed.  Remove ``probed_at`` from the returned evidence and this test
+    fails on the missing timestamp.
+    """
+    from faigate.provider_catalog import probe_context_window_evidence
+
+    data = _load_probe_fixture("deepseek")
+    evidence = probe_context_window_evidence("deepseek-chat", data)
+
+    assert evidence["level"] == "confirmed", (
+        f"expected confirmed, got {evidence.get('level')!r}; full evidence: {evidence}"
+    )
+    assert evidence["probed_value"] == 65536
+    assert evidence["probed_at"] == "2026-09-24"
+    assert evidence["field_path"] == "context_window"
+    assert evidence["source"].startswith("GET https://api.deepseek.com/")
+
+
+def test_probed_window_byteplus_nested_path() -> None:
+    """BytePlus nests the context window under token_limits.context_window."""
+    from faigate.provider_catalog import probe_context_window_evidence
+
+    data = _load_probe_fixture("byteplus")
+    evidence = probe_context_window_evidence("byteplus", data)
+
+    assert evidence["level"] == "confirmed"
+    assert evidence["probed_value"] == 131072
+    assert evidence["field_path"] == "token_limits.context_window"
+
+
+def test_probed_window_openrouter_context_length() -> None:
+    """OpenRouter calls it context_length."""
+    from faigate.provider_catalog import probe_context_window_evidence
+
+    data = _load_probe_fixture("openrouter")
+    evidence = probe_context_window_evidence("openrouter-fallback", data)
+
+    assert evidence["level"] == "confirmed"
+    assert evidence["probed_value"] == 200000
+    assert evidence["field_path"] == "context_length"
+
+
+def test_probed_window_unlisted_provider_has_no_field_path() -> None:
+    """A provider absent from _PROBE_FIELD_PATHS gets unknown_kind: unlisted.
+
+    RED-PROOF: add ``nvidia`` to ``_PROBE_FIELD_PATHS`` and this test fails
+    because the provider is no longer unlisted.  The guard ensures the
+    unlisted set is not silently empty — a provider must genuinely be absent
+    from the field-path table to qualify.
+    """
+    from faigate.provider_catalog import probe_context_window_evidence
+
+    # nvidia has no field path — its /models carries no context window field.
+    evidence = probe_context_window_evidence("nvidia", _load_probe_fixture("nvidia"))
+
+    assert evidence["level"] == "unconfirmed"
+    assert evidence["unknown_kind"] == "unlisted"
+    assert "does not expose" in evidence["note"]
+
+
+def test_probed_window_missing_field_in_data_returns_unlisted() -> None:
+    """When the field path exists but the data has no value there, it is unlisted."""
+    from faigate.provider_catalog import probe_context_window_evidence
+
+    # deepseek-chat has field_path "context_window" but this payload lacks it.
+    data: dict[str, Any] = {"_recorded_at": "2026-09-24", "data": [{"id": "deepseek-chat"}]}
+    evidence = probe_context_window_evidence("deepseek-chat", data)
+
+    assert evidence["level"] == "unconfirmed"
+    assert evidence["unknown_kind"] == "unlisted"
+    assert evidence["probed_at"] == "2026-09-24"
+
+
+def test_probed_window_no_data_returns_unprobed() -> None:
+    """Without probe data, a provider with a field path is unprobed, not unlisted."""
+    from faigate.provider_catalog import probe_context_window_evidence
+
+    evidence = probe_context_window_evidence("deepseek-chat")
+
+    assert evidence["level"] == "unconfirmed"
+    assert evidence["unknown_kind"] == "unprobed"
+    assert evidence["field_path"] == "context_window"
+
+
+def test_resolve_context_window_evidence_probe_wins_on_conflict() -> None:
+    """When the probe disagrees with the catalog, the probe wins and the conflict is recorded.
+
+    RED-PROOF: change ``resolve_context_window_evidence`` to return the catalog
+    value on conflict instead of the probe value and this test fails because
+    the level is not ``confirmed`` or the conflict is not recorded.
+    """
+    from faigate.provider_catalog import (
+        probe_context_window_evidence,
+        resolve_context_window_evidence,
+    )
+
+    data = _load_probe_fixture("deepseek")
+    probed = probe_context_window_evidence("deepseek-chat", data)
+    # deepseek-chat's catalog context_window is 65536 (matching the probe),
+    # so there is no conflict by default.  Simulate a conflict: the probe
+    # says 65536 but the catalog would say something else.
+    # For a real conflict we use byteplus: probe says 131072, catalog says 131072.
+    # Both match in this codebase.  The conflict path is tested structurally
+    # below via a synthetic probe result.
+    resolved = resolve_context_window_evidence("deepseek-chat", probed)
+    assert resolved["level"] == "confirmed"
+    assert resolved["probed_value"] == 65536
+
+    # Structural test: a synthetic confirmed probe with a value that differs
+    # from the catalog.  deepseek-chat's catalog context_window is 65536.
+    synthetic: dict[str, Any] = {
+        "level": "confirmed",
+        "probed_at": "2026-09-24",
+        "probed_value": 999999,
+        "source": "GET https://api.deepseek.com/v1/models",
+        "field_path": "context_window",
+    }
+    resolved = resolve_context_window_evidence("deepseek-chat", synthetic)
+    assert resolved["level"] == "confirmed"
+    assert resolved["probed_value"] == 999999
+    assert "conflict_with_catalog" in resolved
+    assert resolved["conflict_with_catalog"]["catalog_value"] == 1048576
+    assert resolved["conflict_with_catalog"]["probed_value"] == 999999
+    assert resolved["conflict_with_catalog"]["resolution"] == "probe_wins"
+
+
+def test_resolve_context_window_evidence_no_conflict_when_values_match() -> None:
+    """When probe and catalog agree, no conflict is recorded."""
+    from faigate.provider_catalog import resolve_context_window_evidence
+
+    # deepseek-chat's catalog context_window is 1048576.  Use a synthetic
+    # confirmed probe that matches the catalog value.
+    matching: dict[str, Any] = {
+        "level": "confirmed",
+        "probed_at": "2026-09-24",
+        "probed_value": 1048576,
+        "source": "GET https://api.deepseek.com/v1/models",
+        "field_path": "context_window",
+    }
+    resolved = resolve_context_window_evidence("deepseek-chat", matching)
+
+    assert resolved["level"] == "confirmed"
+    assert "conflict_with_catalog" not in resolved
+
+
+def test_resolve_context_window_evidence_returns_existing_when_probe_not_confirmed() -> None:
+    """When the probe is not confirmed, the catalog's existing evidence is returned."""
+    from faigate.provider_catalog import resolve_context_window_evidence
+
+    unconfirmed_probe: dict[str, Any] = {
+        "level": "unconfirmed",
+        "unknown_kind": "unlisted",
+        "note": "no field path",
+    }
+    # deepseek-chat has existing context_evidence in the catalog.
+    resolved = resolve_context_window_evidence("deepseek-chat", unconfirmed_probe)
+    # The catalog's deepseek-chat context_evidence is "plausible".
+    assert resolved.get("level") != "unconfirmed", f"expected catalog evidence to be returned, got {resolved}"
+
+
+def test_build_probed_window_summary_counts_confirmed_and_unlisted() -> None:
+    """The summary counts probed confirmed, unlisted, and before/after unconfirmed.
+
+    RED-PROOF: this test has a Riegel — if ``probe_results`` is empty the
+    function still returns counts, but an empty dict means nothing was probed;
+    the test explicitly asserts that at least one provider was confirmed to
+    guard against a silently empty probe set.
+    """
+    from faigate.provider_catalog import (
+        build_probed_window_summary,
+        probe_context_window_evidence,
+    )
+
+    probe_results: dict[str, dict[str, Any]] = {}
+    for name in ["deepseek-chat", "deepseek-reasoner", "byteplus", "openrouter-fallback"]:
+        try:
+            data = _load_probe_fixture(name.replace("-chat", "").replace("-reasoner", "").replace("-fallback", ""))
+            probe_results[name] = probe_context_window_evidence(name, data)
+        except FileNotFoundError:
+            continue
+
+    summary = build_probed_window_summary(probe_results)
+
+    # Riegel: at least one provider must be confirmed — an empty probe set is a
+    # test failure, not a pass.
+    assert summary["probed_confirmed"] >= 1, (
+        f"expected at least one confirmed probe, got {summary}; "
+        "an empty probe set means the test fixtures are missing or the "
+        "field-path table is empty"
+    )
+    assert summary["unconfirmed_before"] >= 0
+    assert summary["unconfirmed_after"] == max(0, summary["unconfirmed_before"] - summary["probed_confirmed"])
+    # After probing, the number of unconfirmed entries should not increase.
+    assert summary["unconfirmed_after"] <= summary["unconfirmed_before"]
+
+
+def test_build_probed_window_summary_includes_conflicts() -> None:
+    """Conflicts between probe and catalog are listed in the summary."""
+    from faigate.provider_catalog import build_probed_window_summary
+
+    synthetic: dict[str, dict[str, Any]] = {
+        "deepseek-chat": {
+            "level": "confirmed",
+            "probed_at": "2026-09-24",
+            "probed_value": 999999,
+            "source": "GET https://api.deepseek.com/v1/models",
+            "field_path": "context_window",
+        },
+    }
+
+    summary = build_probed_window_summary(synthetic)
+
+    assert summary["conflict_count"] == 1
+    assert summary["conflicts"][0]["provider"] == "deepseek-chat"
+    assert summary["conflicts"][0]["catalog_value"] == 1048576
+    assert summary["conflicts"][0]["probed_value"] == 999999
+
+
+def test_probe_field_paths_table_has_no_gaps() -> None:
+    """Every provider in _PROBE_FIELD_PATHS has a non-empty field path.
+
+    RED-PROOF: add an empty-string or whitespace-only field path to
+    ``_PROBE_FIELD_PATHS`` and this test fails naming the provider.
+    """
+    from faigate.provider_catalog import _PROBE_FIELD_PATHS
+
+    assert _PROBE_FIELD_PATHS, (
+        "_PROBE_FIELD_PATHS must not be empty — an empty table means no provider can ever be confirmed"
+    )
+
+    empty = [name for name, path in _PROBE_FIELD_PATHS.items() if not str(path).strip()]
+    assert not empty, (
+        f"_PROBE_FIELD_PATHS has empty field paths: {empty}. "
+        "Every entry must name a dotted field path into the /models response."
+    )

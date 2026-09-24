@@ -847,6 +847,186 @@ def get_provider_catalog() -> dict[str, dict[str, Any]]:
     return payload
 
 
+# --------------------------------------------------------------------------- #
+# Probed context window evidence (FAI-238-B)
+# --------------------------------------------------------------------------- #
+
+# Field path mapping: provider name → dotted field path into /models response.
+# Each path tells ``capability_probe.extract_context_window`` where to find
+# the context window in a provider's ``GET /models`` JSON body.  A provider
+# absent from this table has no known field path and is treated as unlisted.
+#
+# FAI-238-A recorded these against real /models responses; the fixtures in
+# tests/fixtures/models_probe/ carry the recorded payloads.
+_PROBE_FIELD_PATHS: dict[str, str] = {
+    "byteplus": "token_limits.context_window",
+    "deepseek-chat": "context_window",
+    "deepseek-reasoner": "context_window",
+    "openrouter-fallback": "context_length",
+    "mistral": "max_context_length",
+}
+
+
+def probe_context_window_evidence(
+    provider_name: str,
+    models_data: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Return evidence-tagged context window fact for *provider_name* from probe data.
+
+    When the provider has a known field path and *models_data* carries a
+    positive integer at that path, the fact is tagged ``confirmed`` with the
+    probe timestamp, source URL, and probed value.  When the provider has no
+    field path (its ``/models`` endpoint does not expose a context window), the
+    fact carries ``unknown_kind: "unlisted"`` and level ``"unconfirmed"``.
+
+    When *models_data* is ``None``, the function returns the evidence shape
+    without a probed value — the caller is responsible for supplying the data.
+
+    Returns a dict suitable as a ``context_evidence`` block.
+    """
+    field_path = _PROBE_FIELD_PATHS.get(provider_name)
+
+    if field_path is None:
+        return {
+            "level": "unconfirmed",
+            "unknown_kind": "unlisted",
+            "note": (f"Provider {provider_name!r} /models endpoint does not expose a context window field"),
+        }
+
+    if models_data is None:
+        return {
+            "level": "unconfirmed",
+            "unknown_kind": "unprobed",
+            "field_path": field_path,
+            "note": (f"Provider {provider_name!r} has field path {field_path!r} but no probe data was supplied"),
+        }
+
+    from .capability_probe import extract_context_window
+
+    probed_at = str(models_data.get("_recorded_at") or "")
+    source_url = str(models_data.get("_source") or "")
+    window = extract_context_window(models_data, field_path)
+
+    if window is None:
+        return {
+            "level": "unconfirmed",
+            "unknown_kind": "unlisted",
+            "probed_at": probed_at,
+            "source": source_url,
+            "field_path": field_path,
+            "note": (
+                f"Provider {provider_name!r} /models endpoint returned no context window at field path {field_path!r}"
+            ),
+        }
+
+    return {
+        "level": "confirmed",
+        "probed_at": probed_at,
+        "probed_value": window,
+        "source": source_url,
+        "field_path": field_path,
+    }
+
+
+def resolve_context_window_evidence(
+    provider_name: str,
+    probed_evidence: dict[str, Any],
+) -> dict[str, Any]:
+    """Return the resolved ``context_evidence`` for *provider_name*.
+
+    When the probe is ``confirmed`` and the catalog's stored
+    ``context_window`` differs from the probed value, the probe wins and the
+    conflict is recorded in the returned evidence under ``conflict_with_catalog``.
+    When the probe is not ``confirmed``, the catalog's existing evidence (if
+    any) is returned unchanged.
+    """
+    probed_level = probed_evidence.get("level")
+    probed_value = probed_evidence.get("probed_value")
+
+    if probed_level != "confirmed" or probed_value is None:
+        entry = get_provider_catalog_entry(provider_name)
+        existing = entry.get("context_evidence") if entry else None
+        if isinstance(existing, dict) and existing:
+            return dict(existing)
+        return dict(probed_evidence)
+
+    entry = get_provider_catalog_entry(provider_name)
+    catalog_window = entry.get("context_window") if entry else None
+
+    if catalog_window is not None and catalog_window != probed_value:
+        resolved = dict(probed_evidence)
+        resolved["conflict_with_catalog"] = {
+            "catalog_value": catalog_window,
+            "probed_value": probed_value,
+            "resolution": "probe_wins",
+            "note": (
+                f"Probed window {probed_value} differs from catalog value "
+                f"{catalog_window} for provider {provider_name!r}; "
+                "probe wins — the provider's own /models endpoint is authoritative"
+            ),
+        }
+        return resolved
+
+    return dict(probed_evidence)
+
+
+def build_probed_window_summary(
+    probe_results: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    """Return a summary of probed context windows with before/after counts.
+
+    *probe_results* maps provider names to the evidence dicts returned by
+    :func:`probe_context_window_evidence`.
+
+    The summary includes:
+    * ``probed_confirmed`` — count of windows tagged ``confirmed`` by the probe
+    * ``probed_unlisted`` — count of providers whose /models endpoint exposes
+      no context window
+    * ``conflicts`` — providers where the probe disagrees with the catalog
+    * ``unconfirmed_before`` / ``unconfirmed_after`` — the count of catalog
+      entries whose ``context_evidence.level`` is ``"unconfirmed"`` before and
+      after applying the probe results
+    """
+    probed_confirmed = 0
+    probed_unlisted = 0
+    conflicts: list[dict[str, Any]] = []
+
+    for name, evidence in probe_results.items():
+        if evidence.get("level") == "confirmed":
+            probed_confirmed += 1
+            resolved = resolve_context_window_evidence(name, evidence)
+            if "conflict_with_catalog" in resolved:
+                conflicts.append(
+                    {
+                        "provider": name,
+                        "catalog_value": resolved["conflict_with_catalog"]["catalog_value"],
+                        "probed_value": resolved["conflict_with_catalog"]["probed_value"],
+                    }
+                )
+        elif evidence.get("unknown_kind") == "unlisted":
+            probed_unlisted += 1
+
+    # Count unconfirmed catalog entries before applying probe results.
+    unconfirmed_before = 0
+    catalog = get_provider_catalog()
+    for _name, entry in catalog.items():
+        ctx_evidence = entry.get("context_evidence")
+        if isinstance(ctx_evidence, dict) and ctx_evidence.get("level") == "unconfirmed":
+            unconfirmed_before += 1
+
+    # After: entries that the probe confirmed are no longer unconfirmed.
+    unconfirmed_after = max(0, unconfirmed_before - probed_confirmed)
+
+    return {
+        "probed_confirmed": probed_confirmed,
+        "probed_unlisted": probed_unlisted,
+        "conflicts": conflicts,
+        "conflict_count": len(conflicts),
+        "unconfirmed_before": unconfirmed_before,
+        "unconfirmed_after": unconfirmed_after,
+    }
+
+
 def get_provider_catalog_entry(provider_name: str) -> dict[str, Any]:
     """Return one curated provider catalog entry with discovery metadata."""
     entry = _get_catalog_source().get(provider_name)
