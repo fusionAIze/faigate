@@ -1,0 +1,13 @@
+{
+  "_recorded_at": "2026-09-24",
+  "_source": "GET https://api.mistral.ai/v1/models",
+  "object": "list",
+  "data": [
+    {
+      "id": "mistral-large-latest",
+      "object": "model",
+      "owned_by": "mistral",
+      "max_context_length": 131072
+    }
+  ]
+}
