@@ -318,6 +318,56 @@ class TestProviderHealthProbes:
         assert readiness["operator_hint"] == "route can carry live traffic"
 
     @pytest.mark.asyncio
+    async def test_chat_probe_mismatched_model_flags_addressability_in_readiness(self):
+        """A verified chat probe whose response model disagrees with the catalog
+        entry must report ``addressability-mismatch``, not ``ready-verified``."""
+        backend = ProviderBackend(
+            "deepseek-chat",
+            {
+                "backend": "openai-compat",
+                "base_url": "https://api.deepseek.com/v1",
+                "api_key": "secret",
+                "model": "deepseek-chat",
+                "transport": {
+                    "compatibility": "native",
+                    "probe_confidence": "medium",
+                    "auth_mode": "bearer",
+                    "probe_strategy": "chat",
+                    "probe_payload_kind": "deepseek-chat-minimal",
+                    "probe_payload_text": "ping",
+                    "probe_payload_max_tokens": 1,
+                    "models_path": "/models",
+                    "chat_path": "/chat/completions",
+                    "image_generation_path": "/images/generations",
+                    "image_edit_path": "/images/edits",
+                    "requires_api_key": True,
+                    "supports_models_probe": True,
+                },
+            },
+        )
+
+        class _FakeResp:
+            status_code = 200
+            text = ""
+
+            def json(self):
+                return {"model": "deepseek-v3", "choices": [], "usage": {}}
+
+        async def _fake_post(url, json=None, headers=None, timeout=None, **_kw):
+            return _FakeResp()
+
+        backend._client.post = _fake_post  # type: ignore[attr-defined]
+
+        ok = await backend.probe_health(timeout_seconds=2.0)
+        readiness = backend.request_readiness()
+
+        assert ok is True
+        assert readiness["status"] == "addressability-mismatch"
+        assert readiness["ready"] is False
+        assert "deepseek-v3" in readiness["reason"]
+        assert "deepseek-v4-flash" in readiness["reason"]
+
+    @pytest.mark.asyncio
     async def test_assistant_none_content_converted_to_empty_string(self):
         """assistant message with content=None (tool-call turn) must produce text=''."""
         backend = _make_google_backend()
