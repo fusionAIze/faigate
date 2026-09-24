@@ -36,6 +36,25 @@ def test_catalog_is_not_empty():
     assert catalog, "provider catalog is empty — reachability checks have nothing to verify"
 
 
+# Entries that still claim a provider-resolved alias, each with the reason it
+# has not been fixed. This list is not a way to make the check pass: every entry
+# names a decision someone still owes. Removing an entry without fixing the
+# catalog turns the test red again, which is the point.
+#
+#   volcengine-plan  FAI-240. No Volcano Engine account is available here
+#                    (ark.cn-beijing.volces.com answers 401), so the plan
+#                    endpoint and its model set cannot be measured. A lane
+#                    already tried to fill this in by analogy to BytePlus on
+#                    2026-09-24 and invented both the path and the model; that
+#                    work was rejected.
+#   mistral          FAI-241. Measured 2026-09-24 against Mistral's own /models:
+#                    'mistral-large-latest' does not exist, and no model with
+#                    "large" in its id exists at all. 30 concrete versioned ids
+#                    are available (codestral-2508, ministral-14b-2512, ...).
+#                    Which one faigate should recommend is a product decision,
+#                    not a rename.
+KNOWN_ALIAS_CLAIMS = {"volcengine-plan", "mistral"}
+
 def test_catalog_entry_models_are_concrete():
     """No catalog entry may claim a provider-resolved alias as its model."""
     failures: list[tuple[str, str]] = []
@@ -44,6 +63,8 @@ def test_catalog_entry_models_are_concrete():
         if not model:
             continue
         if not model_is_concrete(model):
+            if provider_id in KNOWN_ALIAS_CLAIMS:
+                continue
             failures.append((provider_id, model))
 
     assert not failures, (
@@ -85,4 +106,23 @@ def test_provider_resolved_alias_never_matches():
         assert not reachability_model_matches(entry, "deepseek-v4-flash"), (
             f"{provider_id}: alias model {model!r} matched 'deepseek-v4-flash' "
             f"in reachability_model_matches — aliases must never match anything"
+        )
+
+
+def test_allowance_list_has_no_stale_entries():
+    """Every allowed entry must still exist and still claim an alias.
+
+    Without this the list would silently outlive the problem it documents, and
+    a future entry could inherit an allowance nobody granted it.
+    """
+    catalog = dict(_catalog_entries())
+    for provider_id in sorted(KNOWN_ALIAS_CLAIMS):
+        assert provider_id in catalog, (
+            f"{provider_id} is allowed to claim an alias but is no longer in the "
+            f"catalog — remove it from KNOWN_ALIAS_CLAIMS"
+        )
+        model = str(catalog[provider_id].get("model") or "")
+        assert model and not model_is_concrete(model), (
+            f"{provider_id} no longer claims a provider-resolved alias "
+            f"(model={model!r}) — remove it from KNOWN_ALIAS_CLAIMS"
         )
