@@ -1,0 +1,12 @@
+{
+  "_recorded_at": "2026-09-24",
+  "_source": "GET https://integrate.api.nvidia.com/v1/models",
+  "object": "list",
+  "data": [
+    {
+      "id": "deepseek-ai/deepseek-r1",
+      "object": "model",
+      "owned_by": "nvidia"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "_recorded_at": "2026-09-24",
+  "_source": "GET https://ark.ap-southeast.bytepluses.com/api/v3/models",
+  "object": "list",
+  "data": [
+    {
+      "id": "deepseek-v4-flash",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    }
+  ]
+}

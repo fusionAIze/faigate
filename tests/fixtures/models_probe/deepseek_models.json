@@ -1,0 +1,13 @@
+{
+  "_recorded_at": "2026-09-24",
+  "_source": "GET https://api.deepseek.com/v1/models",
+  "object": "list",
+  "data": [
+    {
+      "id": "deepseek-chat",
+      "object": "model",
+      "owned_by": "deepseek",
+      "context_window": 65536
+    }
+  ]
+}
