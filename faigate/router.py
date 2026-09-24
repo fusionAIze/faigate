@@ -2463,7 +2463,7 @@ class Router:
             patterns = match["model_requested"]
             if isinstance(patterns, str):
                 patterns = [patterns]
-            if not any(p in ctx.model_requested for p in patterns):
+            if not any(ctx.model_requested == p for p in patterns):
                 return False
 
         # system_prompt_contains
