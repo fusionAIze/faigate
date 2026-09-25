@@ -19,6 +19,7 @@ set via FAIGATE_DB_PATH in the service environment.
 from __future__ import annotations
 
 import ipaddress
+import logging
 import os
 import re
 from pathlib import Path
@@ -182,6 +183,9 @@ _CLIENT_PROFILE_PRESET_SPECS: dict[str, dict[str, Any]] = {
 
 class ConfigError(ValueError):
     """Raised when config.yaml contains an invalid runtime configuration."""
+
+
+logger = logging.getLogger("faigate.config")
 
 
 def _expand_env(value: str) -> str:
@@ -1466,6 +1470,123 @@ def _validate_routing_mode_references(data: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
+def _model_match_keys(match: dict[str, Any]) -> set[str]:
+    """Return the set of model-related match keys across nested ``any`` blocks.
+
+    Recurses into ``any`` sub-blocks so a rule whose match block only appears
+    inside ``any`` is not invisible to ambiguity detection.
+    """
+    keys: set[str] = set()
+    stack = [match]
+    while stack:
+        node = stack.pop()
+        if "any" in node and isinstance(node["any"], list):
+            stack.extend(node["any"])
+        for k in ("model_requested", "model_requested_contains"):
+            if k in node:
+                keys.add(k)
+    return keys
+
+
+def _model_values(match: dict[str, Any], key: str) -> list[str]:
+    """Collect all string values for *key* across nested ``any`` blocks."""
+    values: list[str] = []
+    stack = [match]
+    while stack:
+        node = stack.pop()
+        if "any" in node and isinstance(node["any"], list):
+            stack.extend(node["any"])
+        raw = node.get(key)
+        if raw is None:
+            continue
+        if isinstance(raw, str):
+            values.append(raw)
+        elif isinstance(raw, list):
+            values.extend(v for v in raw if isinstance(v, str))
+    return values
+
+
+def _rules_are_ambiguous(r1: dict, r2: dict) -> bool:
+    """Return True if two static rules could match the same model_requested.
+
+    Checks every combination of ``model_requested`` and
+    ``model_requested_contains`` across both rules, recursing into ``any``
+    blocks.  A pair is ambiguous when:
+
+    * they share an exact ``model_requested`` token, or
+    * one rule's ``model_requested`` token appears inside the other rule's
+      ``model_requested_contains`` fragment, or
+    * they share a ``model_requested_contains`` fragment.
+    """
+    m1 = r1.get("match", {})
+    m2 = r2.get("match", {})
+
+    k1 = _model_match_keys(m1)
+    k2 = _model_match_keys(m2)
+
+    if not k1 or not k2:
+        return False  # at least one rule doesn't key on model at all
+
+    exact1 = _model_values(m1, "model_requested")
+    exact2 = _model_values(m2, "model_requested")
+    contains1 = _model_values(m1, "model_requested_contains")
+    contains2 = _model_values(m2, "model_requested_contains")
+
+    # shared exact token
+    if set(exact1) & set(exact2):
+        return True
+
+    # one rule's exact token falls inside the other's contains fragment
+    for e in exact1:
+        for f in contains2:
+            if f in e:
+                return True
+    for e in exact2:
+        for f in contains1:
+            if f in e:
+                return True
+
+    # shared contains fragment
+    for f1 in contains1:
+        for f2 in contains2:
+            if f1 == f2 or f1 in f2 or f2 in f1:
+                return True
+
+    return False
+
+
+def _normalize_static_rules(data: dict[str, Any]) -> dict[str, Any]:
+    """Log warnings for ambiguous static rule pairs.
+
+    Two static rules are ambiguous when they could both match the same
+    ``model_requested`` value.  The router picks the first match in config-file
+    order, so the ambiguity is invisible to the operator unless we flag it.
+    """
+    raw = data.get("static_rules", {})
+    if not isinstance(raw, dict):
+        return data
+    rules = raw.get("rules", [])
+    if not isinstance(rules, list) or len(rules) < 2:
+        return data
+
+    for i in range(len(rules)):
+        for j in range(i + 1, len(rules)):
+            r1, r2 = rules[i], rules[j]
+            if not isinstance(r1, dict) or not isinstance(r2, dict):
+                continue
+            if "name" not in r1 or "name" not in r2:
+                continue
+            if _rules_are_ambiguous(r1, r2):
+                logger.warning(
+                    "Ambiguous static rules: '%s' (line %d) and '%s' (line %d) "
+                    "can match the same model_requested — first in file wins",
+                    r1["name"], i,
+                    r2["name"], j,
+                )
+
+    return data
+
+
 def _normalize_fallback_chain(data: dict[str, Any]) -> dict[str, Any]:
     """Validate fallback_chain against configured providers."""
 
@@ -2233,8 +2354,10 @@ def load_config(path: str | Path | None = None) -> Config:
                                                 _normalize_routing_modes(
                                                     _normalize_client_profiles(
                                                         _normalize_routing_policies(
-                                                            _normalize_fallback_chain(
-                                                                _normalize_providers(_walk_expand(raw))
+                                                            _normalize_static_rules(
+                                                                _normalize_fallback_chain(
+                                                                    _normalize_providers(_walk_expand(raw))
+                                                                )
                                                             )
                                                         )
                                                     )
