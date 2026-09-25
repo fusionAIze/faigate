@@ -178,6 +178,48 @@ def _invalidate_bundled_snapshot_cache() -> None:
     _BUNDLED_SNAPSHOT_CACHE.pop(_BUNDLED_SNAPSHOT_CACHE_KEY, None)
 
 
+def _compute_catalog_changes(
+    before: dict[str, Any] | None,
+    after: dict[str, Any],
+) -> dict[str, Any]:
+    """Compare two catalog payloads and return a change summary.
+
+    Returns a dict with ``kind`` (``"no_change"`` or ``"changed"``) and
+    optional ``added``, ``removed``, ``changed`` lists of provider IDs.
+    When *before* is ``None`` the result is ``kind: "changed"`` with no
+    diff lists (first sync).
+    """
+    if before is None:
+        return {"kind": "changed"}
+
+    before_providers = set((before.get("providers") or {}).keys())
+    after_providers = set((after.get("providers") or {}).keys())
+
+    added = sorted(after_providers - before_providers)
+    removed = sorted(before_providers - after_providers)
+
+    # Providers present in both with different payloads
+    both = before_providers & after_providers
+    changed_ids: list[str] = []
+    bp = before.get("providers") or {}
+    ap = after.get("providers") or {}
+    for pid in sorted(both):
+        if bp.get(pid) != ap.get(pid):
+            changed_ids.append(pid)
+
+    if not added and not removed and not changed_ids:
+        return {"kind": "no_change"}
+
+    result: dict[str, Any] = {"kind": "changed"}
+    if added:
+        result["added"] = added
+    if removed:
+        result["removed"] = removed
+    if changed_ids:
+        result["changed"] = changed_ids
+    return result
+
+
 class CatalogResolver:
     """Run the private→public→bundled chain with cache + sync."""
 
@@ -348,6 +390,61 @@ class CatalogResolver:
                 reason,
             )
         return None
+
+    def trigger_sync(self) -> dict[str, Any]:
+        """Force a remote sync and report what changed.
+
+        Captures the cached catalog *before* the sync, then forces a full
+        remote refresh. The result includes a diff of provider IDs so the
+        caller can see exactly what was added, removed, or changed rather
+        than only "sync ran OK".
+
+        Returns a dict with:
+
+        * ``source`` — resolved catalog source (``"public"``, ``"private"``,
+          ``"public-cache"``, ``"private-cache"``, ``"bundled"``, ``"empty"``)
+        * ``providers_before`` — provider count before the sync
+        * ``providers_after`` — provider count after the sync
+        * ``etag`` — new ETag (if any)
+        * ``changes`` — diff detail (``kind``: ``"no_change"`` or
+          ``"changed"``; optional ``added``, ``removed``, ``changed`` lists)
+        * ``notes`` — resolution notes
+        * ``last_success_at`` — epoch of most recent successful sync across
+          all tiers, or ``None``
+        """
+        # Capture "before" state from whichever tier has a cache
+        before: dict[str, Any] | None = None
+        for tier in ("private", "public"):
+            cached = self._cache.load(tier)
+            if cached is not None:
+                before = cached.payload
+                break
+
+        before_providers_count = len((before or {"providers": {}}).get("providers", {}))
+
+        # Force a full remote refresh
+        resolved = self.resolve(force_refresh=True)
+
+        # Detect changes between before and after
+        changes = _compute_catalog_changes(before, resolved.payload)
+
+        # Latest successful sync across all tiers
+        last_success_at: float | None = None
+        for tier in ("private", "public"):
+            state = self._cache.load_state(tier)
+            if state is not None and state.last_success_at is not None:
+                if last_success_at is None or state.last_success_at > last_success_at:
+                    last_success_at = state.last_success_at
+
+        return {
+            "source": resolved.source,
+            "providers_before": before_providers_count,
+            "providers_after": len(resolved.payload.get("providers", {})),
+            "etag": resolved.etag,
+            "changes": changes,
+            "notes": resolved.notes,
+            "last_success_at": last_success_at,
+        }
 
     def status(self) -> dict[str, Any]:
         """Surface cache state for `faigate models status` and dashboards.

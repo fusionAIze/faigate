@@ -654,7 +654,11 @@ def _metadata_resolver_config() -> ResolverConfig:
 
 
 async def _refresh_metadata_catalog(*, force: bool = False) -> dict[str, Any]:
-    """Refresh the curated metadata catalog cache outside the request path."""
+    """Refresh the curated metadata catalog cache outside the request path.
+
+    When *force* is ``True`` the result includes a before/after change
+    comparison produced by :meth:`CatalogResolver.trigger_sync`.
+    """
     metadata_cfg = _config.metadata
     if not metadata_cfg.get("enabled", True):
         return {"skipped": True, "reason": "disabled"}
@@ -663,19 +667,32 @@ async def _refresh_metadata_catalog(*, force: bool = False) -> dict[str, Any]:
         return {"skipped": True, "reason": "refresh disabled"}
 
     resolver = CatalogResolver(config=_metadata_resolver_config())
-    resolved = await asyncio.to_thread(resolver.resolve, force_refresh=force)
-    provider_count = len(resolved.payload.get("providers", {}))
+    result = await asyncio.to_thread(
+        resolver.trigger_sync if force else resolver.resolve,
+    )
+    if force:
+        # trigger_sync returns the rich dict directly
+        provider_count = result["providers_after"]
+        logger.info(
+            "Metadata catalog refresh completed: source=%s providers=%s changes=%s",
+            result["source"],
+            provider_count,
+            result["changes"]["kind"],
+        )
+        return result
+    # resolve() returns a ResolvedCatalog
+    provider_count = len(result.payload.get("providers", {}))
     logger.info(
         "Metadata catalog refresh completed: source=%s providers=%s%s",
-        resolved.source,
+        result.source,
         provider_count,
         " force" if force else "",
     )
     return {
-        "source": resolved.source,
+        "source": result.source,
         "providers": provider_count,
-        "etag": resolved.etag,
-        "notes": resolved.notes,
+        "etag": result.etag,
+        "notes": result.notes,
     }
 
 
@@ -2964,6 +2981,42 @@ async def provider_catalog():
         "source_alerts": list(source_catalog.get("alerts") or []),
         "source_alert_summary": dict(source_catalog.get("alert_summary") or {}),
     }
+
+
+@app.post("/api/provider-catalog/sync")
+async def provider_catalog_sync(request: Request):
+    """Trigger an immediate metadata catalog sync and report what changed.
+
+    This endpoint is deliberately restricted to loopback-only (127.0.0.1
+    and ::1) as the only practical defence against accidental or external
+    invocation in the current absence of an authentication layer. The
+    gateway has no auth system today (assessment F03), so a non-loopback
+    guard was chosen over an API key or bearer token because:
+
+    * No key to configure, rotate, or leak.
+    * No token to embed in monitoring or automation tooling.
+    * Loopback-only is the strongest available isolation for an endpoint
+      whose purpose is to trigger outbound HTTP traffic: it can only be
+      reached from the host the gateway runs on, and an operator who has
+      shell access to that host is already trusted with the gateway
+      process.
+
+    The cost is that monitoring agents, health checks, or automation that
+    live on other hosts cannot reach this endpoint directly — they must
+    invoke it via a local sidecar or ``localhost`` proxy.
+
+    Returns 200 with the sync result or 403 if called from a non-loopback
+    address.
+    """
+    client_host = request.client.host if request.client else ""
+    if client_host not in ("127.0.0.1", "::1"):
+        logger.warning("catalog sync rejected: non-loopback client %s", client_host)
+        return JSONResponse(
+            {"error": "sync endpoint is restricted to loopback"},
+            status_code=403,
+        )
+    result = await _refresh_metadata_catalog(force=True)
+    return result
 
 
 @app.get("/api/provider-discovery")
