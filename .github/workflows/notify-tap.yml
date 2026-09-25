@@ -6,6 +6,21 @@ on:
     # title-convention check after a `published` event failed validation,
     # without needing to delete and recreate the release.
     types: [published, edited]
+  # `edited` already lets a retroactive title fix re-fire the workflow, but only
+  # when something on the release CHANGES. It cannot re-run an untouched release
+  # whose dispatch failed for a reason OUTSIDE the release - an expired
+  # TAP_GITHUB_TOKEN being the case that prompted this, which left three faigrid
+  # releases unannounced with no way to catch up short of cutting another one.
+  #
+  # The release-object rule is not weakened: a manual run resolves the given tag
+  # as a release and refuses a tag that has none, so a tag the gate refused stays
+  # undispatchable by hand exactly as it is automatically.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag of an ALREADY PUBLISHED release to re-notify, e.g. v2.9.3"
+        required: true
+        type: string
 
 jobs:
   notify:
@@ -18,23 +33,49 @@ jobs:
         with:
           ref: ${{ github.event.release.tag_name }}
 
+      # Resolve BEFORE validating. The title check below reads the release
+      # object, and on a workflow_dispatch `github.event.release` is empty - so
+      # validating first would fail every manual run with an empty title rather
+      # than checking anything.
+      - name: Resolve the released tag
+        id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${{ github.event.release.tag_name }}"
+          fi
+          # A manual run must not be able to invent a version: the tag is looked
+          # up as a release, and a tag with no release object fails here by name.
+          NAME="$(gh release view "$TAG" --repo "${{ github.repository }}" --json name -q .name 2>/dev/null)" || {
+            echo "::error::No published release exists for tag ${TAG} - nothing to re-notify."
+            exit 1
+          }
+          echo "tag=${TAG}"   >> "$GITHUB_OUTPUT"
+          echo "name=${NAME}" >> "$GITHUB_OUTPUT"
+
       - name: Validate release title convention
         # Required format: "fusionAIze Gate vX.Y.Z"  (no subtitle)
+        # Read from the resolved release object, so the gate is real on BOTH the
+        # automatic and the manual path.
         run: |
-          TITLE="${{ github.event.release.name }}"
+          TITLE="${{ steps.tag.outputs.name }}"
           PREFIX="$(cat .release-title-prefix)"
           if echo "$TITLE" | grep -qE "^${PREFIX} v[0-9]+\.[0-9]+\.[0-9]+$"; then
             echo "Release title OK: $TITLE"
           else
             echo "::error::Release title must be exactly 'fusionAIze Gate vX.Y.Z'. Got: $TITLE"
-            echo "::error::Fix: gh release edit ${{ github.event.release.tag_name }} --repo fusionAIze/faigate --title 'fusionAIze Gate ${{ github.event.release.tag_name }}'"
+            echo "::error::Fix: gh release edit ${{ steps.tag.outputs.tag }} --repo fusionAIze/faigate --title 'fusionAIze Gate ${{ steps.tag.outputs.tag }}'"
             exit 1
           fi
 
       - name: Compute SHA256
         id: sha
         run: |
-          VERSION="${{ github.event.release.tag_name }}"
+          VERSION="${{ steps.tag.outputs.tag }}"
           VERSION="${VERSION#v}"
           URL="https://github.com/fusionAIze/faigate/archive/refs/tags/v${VERSION}.tar.gz"
           SHA=$(curl -sL "$URL" | sha256sum | awk '{print $1}')
