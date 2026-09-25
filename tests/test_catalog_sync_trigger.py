@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import time
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -473,8 +472,7 @@ class TestRouteAbsenceRedProof:
         main_module = self._get_main_module()
         paths = [r.path for r in main_module.app.routes if hasattr(r, "path")]
         assert "/api/provider-catalog/sync" in paths, (
-            "RED PROOF: sync route not found in app.routes — "
-            "this assertion must FAIL against base 334b316"
+            "RED PROOF: sync route not found in app.routes — this assertion must FAIL against base 334b316"
         )
 
     def test_sync_route_rejects_testclient_with_403(self) -> None:
@@ -490,8 +488,7 @@ class TestRouteAbsenceRedProof:
         with TestClient(main_module.app) as client:
             response = client.post("/api/provider-catalog/sync")
             assert response.status_code == 403, (
-                "RED PROOF: expected 403 against the feature branch or "
-                f"404 against base — got {response.status_code}"
+                f"RED PROOF: expected 403 against the feature branch or 404 against base — got {response.status_code}"
             )
 
 
