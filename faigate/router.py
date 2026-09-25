@@ -1363,6 +1363,12 @@ class Router:
             decision.elapsed_ms = (time.time() - t0) * 1000
             return self._validate_health(decision, ctx)
 
+        # Layer 1b: Named provider — the requested name IS a configured provider
+        decision = self._layer_named_provider(ctx)
+        if decision:
+            decision.elapsed_ms = (time.time() - t0) * 1000
+            return self._validate_health(decision, ctx)
+
         # Layer 2: Heuristic rules
         decision = self._layer_heuristic(ctx)
         if decision:
@@ -2507,6 +2513,32 @@ class Router:
             confidence=1.0,
             reason=reason,
         )
+
+    # ── Layer 1b: Named Provider ──────────────────────────────────
+
+    def _layer_named_provider(self, ctx: _RoutingContext) -> RoutingDecision | None:
+        """Route to a provider when the requested model name is its configured key.
+
+        This catches the case where a client names a configured provider directly
+        but no static rule keys on that name.  Without this layer the request
+        falls through to heuristics, which may route to a completely different
+        provider — the name the client chose is silently ignored.
+
+        ``auto`` and the empty string are intentionally excluded: they mean "let
+        the routing decide", not "I name this specific provider".
+        """
+        name = ctx.model_requested
+        if not name or name == "auto":
+            return None
+        if name in ctx.providers:
+            return RoutingDecision(
+                provider_name=name,
+                layer="named-provider",
+                rule_name="exact",
+                confidence=0.9,
+                reason=f"Requested model '{name}' is a configured provider name",
+            )
+        return None
 
     def _match_static(self, match: dict, ctx: _RoutingContext) -> bool:
         """Evaluate a static match block."""
