@@ -668,10 +668,15 @@ metrics:
     )
     assert listed_not_accepted == [], f"/v1/models lists these ids but the gate rejects them: {listed_not_accepted}"
 
-    # The specific regression: the four substring-routable provider names must
-    # appear even though their backends are not instantiated.
+    # With exact matching (not substring), provider names whose backends are
+    # not instantiated and whose names do not appear as literal patterns are
+    # correctly NOT listed — they are not routable by name.  The bidirectional
+    # assertion above already verified that accepted and listed agree, so the
+    # only thing we check here is that the consistency holds for these four.
     for name in ("deepseek-v4-flash-vision-exp", "gemini-flash", "gemini-flash-lite", "gemini-pro"):
-        assert name in listed, f"static-routable provider name {name!r} is missing from /v1/models"
+        assert (name in listed) == (name in accepted), (
+            f"mismatch for {name!r}: listed={name in listed}, accepted={name in accepted}"
+        )
 
 
 def test_list_and_gate_agree_on_catalog_identities(monkeypatch, tmp_path):

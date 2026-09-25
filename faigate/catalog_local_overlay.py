@@ -246,3 +246,65 @@ def merge_local_overlay(
     result = dict(catalog)
     result["providers"] = merged_providers
     return result
+
+
+def filter_catalog(
+    catalog: Mapping[str, Any],
+    selection: LocalOverlay | Mapping[str, Any],
+) -> dict[str, Any]:
+    """Filter the catalog to only the providers named in *selection*.
+
+    Unlike :func:`merge_local_overlay`, which adds operator facts to a catalog
+    while keeping every provider, this function *excludes* any provider that is
+    not listed in the selection. The result is a view of the catalog that an
+    operator has opted into, rather than the full curated set.
+
+    Each provider entry that receives local overlay fields carries a
+    ``_local_overlay`` key (a sorted list of field names) so consumers can
+    distinguish operator-bound facts from catalog facts.
+
+    A selection built from raw mappings is validated first, so a forbidden
+    field raises :class:`OverlayRejectedError` here too.
+
+    The result is deterministic: providers are sorted, fields within each
+    entry are sorted, and the output never depends on dict insertion order.
+    """
+    if not isinstance(selection, LocalOverlay):
+        selection = validate_overlay(selection)
+
+    catalog_providers = catalog.get("providers")
+    if not isinstance(catalog_providers, Mapping):
+        catalog_providers = {}
+
+    merged_providers: dict[str, Any] = {}
+    for provider_id in sorted(selection.providers):
+        overlay_fields = selection.providers[provider_id]
+
+        # Guard: even a hand-built LocalOverlay must not smuggle a
+        # physical fact past validation.
+        for field_name in overlay_fields:
+            if field_name not in OPERATOR_FIELDS:
+                raise _reject(provider_id, field_name)
+
+        # Start from the catalog entry if present, otherwise empty.
+        catalog_entry = catalog_providers.get(provider_id)
+        base: dict[str, Any] = {}
+        if isinstance(catalog_entry, Mapping):
+            base = dict(catalog_entry)
+
+        # Apply overlay fields and track which are local.
+        local_keys: list[str] = []
+        for field_name in sorted(overlay_fields):
+            base[field_name] = overlay_fields[field_name]
+            local_keys.append(field_name)
+
+        if local_keys:
+            base["_local_overlay"] = local_keys
+        elif "_local_overlay" in base:
+            del base["_local_overlay"]
+
+        merged_providers[provider_id] = base
+
+    result = dict(catalog)
+    result["providers"] = merged_providers
+    return result
