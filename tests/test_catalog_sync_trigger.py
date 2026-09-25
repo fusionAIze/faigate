@@ -371,6 +371,184 @@ class TestSelfHostedSurvivesSync:
         assert "my-grid-worker" in stale.payload.get("providers", {})
 
 
+# ── Self-hosted via env var (AC-5, Befund 1) ────────────────────
+
+
+def _payload_with_curated(*names: str) -> dict[str, Any]:
+    """Catalog payload containing the named curated providers plus fillers
+    to meet the shrink-guard minimum (10 entries)."""
+    providers = {n: {"recommended_model": f"{n}/v1"} for n in names}
+    # Pad to at least 10 entries so the shrink guard does not reject
+    for i in range(max(0, 10 - len(providers))):
+        providers[f"_filler_{i}"] = {"recommended_model": f"filler/{i}"}
+    return {
+        "schema_version": "fusionaize-provider-catalog/v1.1",
+        "providers": providers,
+    }
+
+
+class TestSelfHostedViaEnv:
+    """AC-5: self-hosted entries loaded from env, not from overlay argument.
+
+    The resolver must auto-load the overlay from FAIGATE_CATALOG_LOCAL_OVERLAY
+    when no overlay argument is passed at construction.  The test sets the env
+    var and verifies the entry is present — it does NOT pass overlay directly.
+    """
+
+    _SELF_HOSTED_OVERLAY = {
+        "schema_version": "fusionaize-provider-catalog/v1.2",
+        "providers": {
+            "my-grid-worker": {
+                "proof_level": PROOF_LEVEL_SELF_HOSTED,
+                "recommended_model": "grid/worker-v1",
+                "context_window": 32000,
+                "modalities": ["text"],
+                "pricing": {"input_cost_per_1m": 0.0, "output_cost_per_1m": 0.0},
+            }
+        },
+    }
+
+    def test_self_hosted_from_env_survives_resolve(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """AC-5 via env: self-hosted entry loaded from env var is present."""
+        overlay_file = tmp_path / "overlay.json"
+        overlay_file.write_text(json.dumps(self._SELF_HOSTED_OVERLAY))
+        monkeypatch.setenv("FAIGATE_CATALOG_LOCAL_OVERLAY", str(overlay_file))
+
+        resolver, _ = _make_resolver(
+            tmp_path,
+            plan=[(200, {"etag": '"v1"'}, _body())],
+        )
+        seeded = resolver.resolve()
+        providers = seeded.payload.get("providers", {})
+        assert "my-grid-worker" in providers
+        assert providers["my-grid-worker"]["recommended_model"] == "grid/worker-v1"
+
+    def test_self_hosted_from_env_survives_trigger_sync(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """AC-5 via env: self-hosted entry survives trigger_sync."""
+        overlay_file = tmp_path / "overlay.json"
+        overlay_file.write_text(json.dumps(self._SELF_HOSTED_OVERLAY))
+        monkeypatch.setenv("FAIGATE_CATALOG_LOCAL_OVERLAY", str(overlay_file))
+
+        resolver, _ = _make_resolver(
+            tmp_path,
+            plan=[
+                (200, {"etag": '"v1"'}, _body()),
+                (304, {"etag": '"v1"'}, b""),
+            ],
+        )
+        resolver.resolve()  # seed cache
+        resolver.trigger_sync()
+        after = resolver.resolve()
+        assert "my-grid-worker" in after.payload.get("providers", {})
+
+
+# ── Local overlay guardrails ────────────────────────────────────
+
+
+class TestLocalOverlayGuardrails:
+    """Guardrails for the auto-loaded local overlay.
+
+    a) A missing overlay file is the normal case — no error, catalog
+       unchanged.
+    b) A broken overlay file must not empty the catalog — warning in
+       notes, catalog unchanged.
+    c) A self-hosted entry colliding with a curated provider must not
+       bring down the catalog — warning in notes, catalog unchanged.
+
+    RED PROOF: every test asserts against a concretely named provider.
+    A test that passes on an empty catalog is a false positive.
+    """
+
+    def test_missing_overlay_file_is_not_an_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Guardrail a): missing overlay file produces no error, catalog unchanged."""
+        missing = tmp_path / "does-not-exist.json"
+        monkeypatch.setenv("FAIGATE_CATALOG_LOCAL_OVERLAY", str(missing))
+
+        resolver, _ = _make_resolver(
+            tmp_path,
+            plan=[(200, {"etag": '"v1"'}, _body(_payload_with_curated("my-provider")))],
+        )
+        result = resolver.resolve()
+        providers = result.payload.get("providers", {})
+        assert "my-provider" in providers
+
+    def test_broken_overlay_file_does_not_empty_catalog(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Guardrail b): broken overlay file produces warning, not empty catalog."""
+        overlay_file = tmp_path / "broken.json"
+        overlay_file.write_text("not valid json")
+        monkeypatch.setenv("FAIGATE_CATALOG_LOCAL_OVERLAY", str(overlay_file))
+
+        resolver, _ = _make_resolver(
+            tmp_path,
+            plan=[(200, {"etag": '"v1"'}, _body(_payload_with_curated("my-provider")))],
+        )
+        result = resolver.resolve()
+        providers = result.payload.get("providers", {})
+        assert "my-provider" in providers
+        assert any("overlay" in note.lower() for note in result.notes)
+
+    def test_collision_with_curated_provider_does_not_empty_catalog(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Guardrail c): collision produces warning, curated catalog unchanged."""
+        colliding = {
+            "schema_version": "fusionaize-provider-catalog/v1.2",
+            "providers": {
+                "my-provider": {
+                    "proof_level": PROOF_LEVEL_SELF_HOSTED,
+                    "recommended_model": "self/v1",
+                }
+            },
+        }
+        overlay_file = tmp_path / "collide.json"
+        overlay_file.write_text(json.dumps(colliding))
+        monkeypatch.setenv("FAIGATE_CATALOG_LOCAL_OVERLAY", str(overlay_file))
+
+        resolver, _ = _make_resolver(
+            tmp_path,
+            plan=[(200, {"etag": '"v1"'}, _body(_payload_with_curated("my-provider")))],
+        )
+        result = resolver.resolve()
+        providers = result.payload.get("providers", {})
+        assert "my-provider" in providers
+        # Curated entry survives — overlay was rejected
+        assert providers["my-provider"]["recommended_model"] == "my-provider/v1"
+        assert any("overlay" in note.lower() for note in result.notes)
+
+    def test_collision_via_trigger_sync_does_not_empty_catalog(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Guardrail c) via trigger_sync: collision produces warning."""
+        colliding = {
+            "schema_version": "fusionaize-provider-catalog/v1.2",
+            "providers": {
+                "my-provider": {
+                    "proof_level": PROOF_LEVEL_SELF_HOSTED,
+                    "recommended_model": "self/v1",
+                }
+            },
+        }
+        overlay_file = tmp_path / "collide.json"
+        overlay_file.write_text(json.dumps(colliding))
+        monkeypatch.setenv("FAIGATE_CATALOG_LOCAL_OVERLAY", str(overlay_file))
+
+        resolver, _ = _make_resolver(
+            tmp_path,
+            plan=[
+                (200, {"etag": '"v1"'}, _body(_payload_with_curated("my-provider"))),
+                (304, {"etag": '"v1"'}, b""),
+            ],
+        )
+        resolver.resolve()  # seed cache
+        sync_result = resolver.trigger_sync()
+        # Catalog remains usable after collision
+        after = resolver.resolve()
+        providers = after.payload.get("providers", {})
+        assert "my-provider" in providers
+        assert providers["my-provider"]["recommended_model"] == "my-provider/v1"
+        assert any("overlay" in note.lower() for note in sync_result.get("notes", []))
+
+
 # ── Loopback guard (AC-2) ───────────────────────────────────────
 
 

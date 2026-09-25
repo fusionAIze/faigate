@@ -22,7 +22,7 @@ from importlib import resources
 from typing import Any
 
 from .catalog_cache import CatalogCache
-from .catalog_local_overlay import merge_local_overlay
+from .catalog_local_overlay import OverlayError, load_overlay, merge_local_overlay
 from .metadata_catalog_sync import (
     DEFAULT_TIMEOUT_SECONDS,
     MetadataCatalogSync,
@@ -235,7 +235,18 @@ class CatalogResolver:
         self._config = config or ResolverConfig.from_env()
         self._cache = cache or CatalogCache()
         self._sync = sync or MetadataCatalogSync()
-        self._overlay = overlay or {}
+        self._overlay_warning: str | None = None
+        if overlay is not None:
+            self._overlay = overlay
+        else:
+            self._overlay = {}
+            try:
+                loaded = load_overlay()
+                if not loaded.is_empty():
+                    self._overlay = loaded
+            except OverlayError as exc:
+                self._overlay_warning = f"local overlay not applied: {exc}"
+                logger.warning("catalog_resolver: %s", self._overlay_warning)
 
     @property
     def config(self) -> ResolverConfig:
@@ -244,9 +255,17 @@ class CatalogResolver:
     def resolve(self, *, force_refresh: bool = False) -> ResolvedCatalog:
         """Return the best-available catalog right now."""
         result = self._resolve_raw(force_refresh=force_refresh)
+        # Record overlay-load warning if one was set at construction
+        if self._overlay_warning:
+            result.notes.append(self._overlay_warning)
         # Apply local overlay on top of whatever the resolution produced
         if self._overlay:
-            result.payload = merge_local_overlay(result.payload, self._overlay)
+            try:
+                result.payload = merge_local_overlay(result.payload, self._overlay)
+            except OverlayError as exc:
+                msg = f"local overlay merge failed: {exc}"
+                logger.warning("catalog_resolver.resolve: %s", msg)
+                result.notes.append(msg)
         return result
 
     def _resolve_raw(self, *, force_refresh: bool = False) -> ResolvedCatalog:
@@ -445,12 +464,22 @@ class CatalogResolver:
         # Apply overlay on the resolved result for consumers
         resolved = raw
         if self._overlay:
+            notes = list(raw.notes)
+            if self._overlay_warning:
+                notes.append(self._overlay_warning)
+            try:
+                payload = merge_local_overlay(raw.payload, self._overlay)
+            except OverlayError as exc:
+                msg = f"local overlay merge failed: {exc}"
+                logger.warning("catalog_resolver.trigger_sync: %s", msg)
+                notes.append(msg)
+                payload = dict(raw.payload)
             resolved = ResolvedCatalog(
-                payload=merge_local_overlay(raw.payload, self._overlay),
+                payload=payload,
                 source=raw.source,
                 etag=raw.etag,
                 fetched_at=raw.fetched_at,
-                notes=list(raw.notes),
+                notes=notes,
             )
 
         # Latest successful sync across all tiers
