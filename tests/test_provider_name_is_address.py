@@ -79,8 +79,7 @@ class TestProviderNameIsItsAddress:
             model_requested="anthropic-haiku",
         )
         assert d.provider_name == "anthropic-haiku", (
-            f"Expected anthropic-haiku, got {d.provider_name} "
-            f"(layer: {d.layer}, rule: {d.rule_name})"
+            f"Expected anthropic-haiku, got {d.provider_name} (layer: {d.layer}, rule: {d.rule_name})"
         )
 
     @pytest.mark.asyncio
@@ -92,8 +91,7 @@ class TestProviderNameIsItsAddress:
             model_requested="openai-gpt4o",
         )
         assert d.provider_name == "openai-gpt4o", (
-            f"Expected openai-gpt4o, got {d.provider_name} "
-            f"(layer: {d.layer}, rule: {d.rule_name})"
+            f"Expected openai-gpt4o, got {d.provider_name} (layer: {d.layer}, rule: {d.rule_name})"
         )
 
     # --- Guard against false positives -------------------------------
@@ -110,8 +108,7 @@ class TestProviderNameIsItsAddress:
             model_requested="",
         )
         assert d.provider_name == "gemini-flash-lite", (
-            f"Expected gemini-flash-lite (heuristic) for unnamed request, "
-            f"got {d.provider_name} (layer: {d.layer})"
+            f"Expected gemini-flash-lite (heuristic) for unnamed request, got {d.provider_name} (layer: {d.layer})"
         )
 
     @pytest.mark.asyncio
@@ -123,6 +120,5 @@ class TestProviderNameIsItsAddress:
             model_requested="auto",
         )
         assert d.provider_name == "gemini-flash-lite", (
-            f"Expected gemini-flash-lite (heuristic) for auto request, "
-            f"got {d.provider_name} (layer: {d.layer})"
+            f"Expected gemini-flash-lite (heuristic) for auto request, got {d.provider_name} (layer: {d.layer})"
         )
