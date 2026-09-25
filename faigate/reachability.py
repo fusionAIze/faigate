@@ -34,3 +34,18 @@ def reachability_model_matches(entry: dict[str, Any], observed_model: str) -> bo
     if not model_is_concrete(claimed):
         return False
     return claimed == observed
+
+
+def provider_routes_to_itself(decision: Any, provider_name: str) -> bool:
+    """Return True when *decision* routes *provider_name* to itself.
+
+    The named-provider layer (layer 1b) sends a request to the provider whose
+    name matches ``model_requested``.  A provider is reachable by its own name
+    when the route decision's ``provider_name`` matches *provider_name*.
+
+    ``auto`` and the empty string are intentionally excluded: they mean "let
+    the routing decide", not "I name this specific provider".
+    """
+    if not provider_name or provider_name == "auto":
+        return False
+    return decision.provider_name == provider_name
