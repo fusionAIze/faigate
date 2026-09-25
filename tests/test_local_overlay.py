@@ -178,7 +178,7 @@ def test_invalid_json_raises_overlay_error(tmp_path: Path) -> None:
 
 
 def test_allowlist_is_the_documented_operator_field_set() -> None:
-    assert set(OPERATOR_FIELDS) == {"account_tier", "key_limits", "proof_level", "quota"}
+    assert OPERATOR_FIELDS == ("account_tier", "key_limits", "quota")
     # No physical fact may appear on the allowlist.
     assert "context_window" not in OPERATOR_FIELDS
     assert "pricing" not in OPERATOR_FIELDS

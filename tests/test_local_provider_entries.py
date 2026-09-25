@@ -113,8 +113,16 @@ def test_self_hosted_proof_level_is_defined() -> None:
     assert PROOF_LEVEL_SELF_HOSTED == "self_hosted"
 
 
-def test_self_hosted_proof_level_is_on_operator_allowlist() -> None:
-    assert "proof_level" in OPERATOR_FIELDS
+def test_proof_level_is_not_on_operator_allowlist() -> None:
+    """``proof_level`` is NOT an operator field in the quota/account-tier
+    sense -- it describes the PROVENANCE of the entry, not a property
+    that an operator controls per-key or per-account. It is handled
+    specially in the self-hosted path of ``validate_overlay``.
+
+    This assertion protects the external contract tested in
+    ``test_local_overlay::test_allowlist_is_the_documented_operator_field_set``.
+    """
+    assert "proof_level" not in OPERATOR_FIELDS
 
 
 def test_self_hosted_entry_is_tagged_as_local_after_merge() -> None:

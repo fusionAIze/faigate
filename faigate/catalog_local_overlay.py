@@ -70,10 +70,11 @@ PROOF_LEVEL_SELF_HOSTED = "self_hosted"
 #: rather than a property of the model. Anything outside this set is a
 #: physical fact and is rejected.
 #:
-#: ``proof_level`` is on the allowlist so it can pass through to the merge
-#: logic, where a value of :data:`PROOF_LEVEL_SELF_HOSTED` bypasses the
-#: restriction and lets the entry carry physical facts as the operator's own.
-OPERATOR_FIELDS = ("account_tier", "key_limits", "proof_level", "quota")
+#: Note that ``proof_level`` is intentionally absent: it is a provenance
+#: signal, not an operator field. Validation checks it *before* the
+#: allowlist so self-hosted entries bypass physical-fact rejection without
+#: polluting the operator-field concept.
+OPERATOR_FIELDS = ("account_tier", "key_limits", "quota")
 
 #: Physical facts that an overlay is most likely to reach for by mistake.
 #: They are named here so the rejection message can explain *why* the field
