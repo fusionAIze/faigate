@@ -7,13 +7,10 @@ reason reports the ambiguity so an operator can see both rule names.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
-from faigate.config import load_config
+from faigate.config import Config, load_config
 from faigate.router import Router
-
 
 AMBIGUOUS_CONFIG = """
 server:
@@ -70,12 +67,8 @@ class TestAmbiguousStaticRules:
         # RED PROOF: base code returns "Static rule 'explicit-flash' matched"
         # without mentioning the second matching rule.  This assertion fails
         # against the base.
-        assert "also matched by" in d.reason, (
-            f"Expected 'also matched by' in reason, got: {d.reason}"
-        )
-        assert "also-flash" in d.reason, (
-            f"Expected 'also-flash' mentioned in reason, got: {d.reason}"
-        )
+        assert "also matched by" in d.reason, f"Expected 'also matched by' in reason, got: {d.reason}"
+        assert "also-flash" in d.reason, f"Expected 'also-flash' mentioned in reason, got: {d.reason}"
 
     @pytest.mark.asyncio
     async def test_ambiguous_match_uses_first_rule(self, tmp_path):
@@ -101,9 +94,7 @@ class TestAmbiguousStaticRules:
             model_requested="flash",
         )
         assert d.rule_name == "explicit-flash"
-        assert "also matched by" not in d.reason, (
-            f"Expected clean reason without 'also matched by', got: {d.reason}"
-        )
+        assert "also matched by" not in d.reason, f"Expected clean reason without 'also matched by', got: {d.reason}"
 
     @pytest.mark.asyncio
     async def test_ambiguous_match_logs_warning(self, tmp_path, caplog):
@@ -114,13 +105,9 @@ class TestAmbiguousStaticRules:
             [{"role": "user", "content": "hello"}],
             model_requested="flash",
         )
-        warnings = [
-            rec.message for rec in caplog.records
-            if "Ambiguous match in static rules" in rec.message
-        ]
+        warnings = [rec.message for rec in caplog.records if "Ambiguous match in static rules" in rec.message]
         assert len(warnings) == 1, (
-            f"Expected exactly one WARNING about ambiguous static rules, "
-            f"got {len(warnings)}: {warnings}"
+            f"Expected exactly one WARNING about ambiguous static rules, got {len(warnings)}: {warnings}"
         )
         assert "explicit-flash" in warnings[0]
         assert "also-flash" in warnings[0]
@@ -131,19 +118,11 @@ class TestAmbiguousConfigWarning:
 
     def test_config_load_warns_on_ambiguous_rules(self, tmp_path, caplog):
         """Loading config with ambiguous rules logs a warning."""
-        import logging
-
         caplog.set_level("WARNING", logger="faigate.config")
         _cfg(tmp_path, AMBIGUOUS_CONFIG)
 
-        ambiguous = [
-            r for r in caplog.records
-            if "Ambiguous static rules" in r.getMessage()
-        ]
-        assert len(ambiguous) >= 1, (
-            f"Expected at least one 'Ambiguous static rules' warning, "
-            f"got {len(ambiguous)}"
-        )
+        ambiguous = [r for r in caplog.records if "Ambiguous static rules" in r.getMessage()]
+        assert len(ambiguous) >= 1, f"Expected at least one 'Ambiguous static rules' warning, got {len(ambiguous)}"
         msg = ambiguous[0].getMessage()
         assert "explicit-flash" in msg
         assert "also-flash" in msg

@@ -1580,8 +1580,10 @@ def _normalize_static_rules(data: dict[str, Any]) -> dict[str, Any]:
                 logger.warning(
                     "Ambiguous static rules: '%s' (line %d) and '%s' (line %d) "
                     "can match the same model_requested — first in file wins",
-                    r1["name"], i,
-                    r2["name"], j,
+                    r1["name"],
+                    i,
+                    r2["name"],
+                    j,
                 )
 
     return data

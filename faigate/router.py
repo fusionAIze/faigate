@@ -2492,12 +2492,11 @@ class Router:
             logger.warning(
                 "Ambiguous match in static rules: rules %s all match "
                 "model_requested=%r — using '%s' (first in file order)",
-                names, ctx.model_requested, first["name"],
+                names,
+                ctx.model_requested,
+                first["name"],
             )
-            reason = (
-                f"Static rule '{first['name']}' matched (also matched by "
-                f"{', '.join(repr(n) for n in names[1:])})"
-            )
+            reason = f"Static rule '{first['name']}' matched (also matched by {', '.join(repr(n) for n in names[1:])})"
         else:
             reason = f"Static rule '{first['name']}' matched"
 
