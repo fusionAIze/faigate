@@ -22,6 +22,7 @@ from importlib import resources
 from typing import Any
 
 from .catalog_cache import CatalogCache
+from .catalog_local_overlay import merge_local_overlay
 from .metadata_catalog_sync import (
     DEFAULT_TIMEOUT_SECONDS,
     MetadataCatalogSync,
@@ -229,10 +230,12 @@ class CatalogResolver:
         config: ResolverConfig | None = None,
         cache: CatalogCache | None = None,
         sync: MetadataCatalogSync | None = None,
+        overlay: dict[str, Any] | None = None,
     ) -> None:
         self._config = config or ResolverConfig.from_env()
         self._cache = cache or CatalogCache()
         self._sync = sync or MetadataCatalogSync()
+        self._overlay = overlay or {}
 
     @property
     def config(self) -> ResolverConfig:
@@ -240,7 +243,16 @@ class CatalogResolver:
 
     def resolve(self, *, force_refresh: bool = False) -> ResolvedCatalog:
         """Return the best-available catalog right now."""
+        result = self._resolve_raw(force_refresh=force_refresh)
+        # Apply local overlay on top of whatever the resolution produced
+        if self._overlay:
+            result.payload = merge_local_overlay(result.payload, self._overlay)
+        return result
+
+    def _resolve_raw(self, *, force_refresh: bool = False) -> ResolvedCatalog:
+        """Resolution chain without local overlay — used by trigger_sync for comparison."""
         notes: list[str] = []
+        result: ResolvedCatalog | None = None
 
         # Tier 1: private (only if token configured)
         if self._config.token:
@@ -251,41 +263,42 @@ class CatalogResolver:
                 force_refresh=force_refresh,
                 notes=notes,
             )
-            if result is not None:
-                return result
 
         # Tier 2: public (anonymous)
-        result = self._try_remote(
-            tier="public",
-            url=self._config.public_url,
-            token=None,
-            force_refresh=force_refresh,
-            notes=notes,
-        )
-        if result is not None:
-            return result
+        if result is None:
+            result = self._try_remote(
+                tier="public",
+                url=self._config.public_url,
+                token=None,
+                force_refresh=force_refresh,
+                notes=notes,
+            )
 
         # Tier 3: bundled snapshot
-        bundled = _load_bundled_snapshot()
-        if bundled is not None:
-            notes.append("falling back to bundled snapshot")
-            logger.info("catalog resolve: using bundled snapshot")
-            return ResolvedCatalog(
-                payload=bundled,
-                source="bundled",
+        if result is None:
+            bundled = _load_bundled_snapshot()
+            if bundled is not None:
+                notes.append("falling back to bundled snapshot")
+                logger.info("catalog resolve: using bundled snapshot")
+                result = ResolvedCatalog(
+                    payload=bundled,
+                    source="bundled",
+                    etag=None,
+                    notes=notes,
+                )
+
+        # Tier 4: total failure — empty catalog
+        if result is None:
+            notes.append("no catalog source available")
+            logger.warning("catalog resolve: no source available — empty catalog")
+            result = ResolvedCatalog(
+                payload={"providers": {}},
+                source="empty",
                 etag=None,
                 notes=notes,
             )
 
-        # Total failure: empty catalog
-        notes.append("no catalog source available")
-        logger.warning("catalog resolve: no source available — empty catalog")
-        return ResolvedCatalog(
-            payload={"providers": {}},
-            source="empty",
-            etag=None,
-            notes=notes,
-        )
+        return result
 
     def _try_remote(
         self,
@@ -422,11 +435,23 @@ class CatalogResolver:
 
         before_providers_count = len((before or {"providers": {}}).get("providers", {}))
 
-        # Force a full remote refresh
-        resolved = self.resolve(force_refresh=True)
+        # Force a full remote refresh (raw, without overlay) so the diff
+        # compares remote catalogs, not remote+overlay.
+        raw = self._resolve_raw(force_refresh=True)
 
         # Detect changes between before and after
-        changes = _compute_catalog_changes(before, resolved.payload)
+        changes = _compute_catalog_changes(before, raw.payload)
+
+        # Apply overlay on the resolved result for consumers
+        resolved = raw
+        if self._overlay:
+            resolved = ResolvedCatalog(
+                payload=merge_local_overlay(raw.payload, self._overlay),
+                source=raw.source,
+                etag=raw.etag,
+                fetched_at=raw.fetched_at,
+                notes=list(raw.notes),
+            )
 
         # Latest successful sync across all tiers
         last_success_at: float | None = None

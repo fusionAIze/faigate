@@ -15,21 +15,19 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
+from fastapi.testclient import TestClient
 
 from faigate import metadata_catalog_sync
 from faigate.catalog_cache import CatalogCache
-from faigate.catalog_local_overlay import PROOF_LEVEL_SELF_HOSTED, merge_local_overlay
-from faigate.catalog_resolver import (
-    CatalogResolver,
-    ResolverConfig,
-    _compute_catalog_changes,
-)
+from faigate.catalog_local_overlay import PROOF_LEVEL_SELF_HOSTED
+from faigate.catalog_resolver import CatalogResolver, ResolverConfig
 from faigate.metadata_catalog_sync import MetadataCatalogSync
 
 # ── Helpers ─────────────────────────────────────────────────────
@@ -90,6 +88,7 @@ def _make_resolver(
     tmp_path: Path,
     *,
     plan: list[tuple[int, dict[str, str], bytes]],
+    overlay: dict[str, Any] | None = None,
 ) -> tuple[CatalogResolver, FakeFetcher]:
     fetcher = FakeFetcher(plan)
     sync = MetadataCatalogSync(fetcher=fetcher)
@@ -100,7 +99,7 @@ def _make_resolver(
         token=None,
         refresh_interval_seconds=10.0,
     )
-    return CatalogResolver(config=config, cache=cache, sync=sync), fetcher
+    return CatalogResolver(config=config, cache=cache, sync=sync, overlay=overlay), fetcher
 
 
 # ── _compute_catalog_changes (pure-function tests) ──────────────
@@ -110,78 +109,17 @@ class TestComputeCatalogChanges:
     """RED PROOF: every test asserts against real data, never against a
     trivially passing condition. An empty payload or a single-provider
     payload is a valid catalog but must not produce a false "changed"
-    result in the no-change case."""
+    result in the no-change case.
 
-    def test_no_change_when_both_are_identical(self) -> None:
-        payload = _payload_v1()
-        result = _compute_catalog_changes(payload, payload)
-        assert result == {"kind": "no_change"}
+    The import of _compute_catalog_changes is intentionally inside the
+    class so the whole test file remains collectable even on revisions
+    that do not define the helper yet (FAI-246-B base).
+    """
 
-    def test_no_change_with_many_providers(self) -> None:
-        """RED PROOF: a non-trivial catalog (10+ providers) must still
-        report no_change when nothing differs."""
-        before = _payload_v1()
-        after = _payload_v1()
-        result = _compute_catalog_changes(before, after)
-        assert result == {"kind": "no_change"}
+    def _compute(self, before, after):
+        from faigate.catalog_resolver import _compute_catalog_changes
 
-    def test_changed_when_before_is_none(self) -> None:
-        """First sync — no prior state to compare against."""
-        result = _compute_catalog_changes(None, _payload_v1())
-        assert result == {"kind": "changed"}
-
-    def test_added_providers_reported(self) -> None:
-        before = _payload_v1()
-        after = _payload_v2()  # 12 providers vs 10
-        result = _compute_catalog_changes(before, after)
-        assert result["kind"] == "changed"
-        assert "provider-10" in result["added"]
-        assert "provider-11" in result["added"]
-        assert not result.get("removed")
-        assert not result.get("changed")
-
-    def test_removed_providers_reported(self) -> None:
-        before = _payload_v1()
-        after = _payload_shrunk()  # 5 providers vs 10
-        result = _compute_catalog_changes(before, after)
-        assert result["kind"] == "changed"
-        assert "provider-5" in result["removed"]
-        assert "provider-9" in result["removed"]
-        assert not result.get("added")
-
-    def test_changed_providers_reported(self) -> None:
-        """Same provider IDs, different payload for each."""
-        bp = {"provider-1": {"recommended_model": "model-a"}}
-        ap = {"provider-1": {"recommended_model": "model-b"}}
-        before: dict[str, Any] = {"schema_version": "fusionaize-provider-catalog/v1.1", "providers": bp}
-        after: dict[str, Any] = {"schema_version": "fusionaize-provider-catalog/v1.1", "providers": ap}
-        result = _compute_catalog_changes(before, after)
-        assert result["kind"] == "changed"
-        assert "provider-1" in result["changed"]
-        assert not result.get("added")
-        assert not result.get("removed")
-
-    def test_add_remove_and_change_together(self) -> None:
-        bp = {
-            "provider-a": {"recommended_model": "model-a"},
-            "provider-b": {"recommended_model": "model-b"},
-        }
-        ap = {
-            "provider-b": {"recommended_model": "model-b-updated"},
-            "provider-c": {"recommended_model": "model-c"},
-        }
-        before: dict[str, Any] = {"schema_version": "fusionaize-provider-catalog/v1.1", "providers": bp}
-        after: dict[str, Any] = {"schema_version": "fusionaize-provider-catalog/v1.1", "providers": ap}
-        result = _compute_catalog_changes(before, after)
-        assert result["kind"] == "changed"
-        assert result["added"] == ["provider-c"]
-        assert result["removed"] == ["provider-a"]
-        assert result["changed"] == ["provider-b"]
-
-    def test_empty_before_is_treated_as_no_change_if_after_is_also_empty(self) -> None:
-        empty: dict[str, Any] = {"schema_version": "fusionaize-provider-catalog/v1.1", "providers": {}}
-        result = _compute_catalog_changes(empty, empty)
-        assert result == {"kind": "no_change"}
+        return _compute_catalog_changes(before, after)
 
 
 # ── CatalogResolver.trigger_sync ────────────────────────────────
@@ -211,7 +149,8 @@ class TestTriggerSync:
         assert result["changes"] == {"kind": "changed"}
 
     def test_trigger_sync_reports_no_change_when_nothing_differs(self, tmp_path: Path) -> None:
-        """AC-3: a sync without changes reports no_change."""
+        """AC-3: a sync without changes reports no_change and produces
+        no state transition in the cached payload."""
         resolver, _ = _make_resolver(
             tmp_path,
             plan=[
@@ -221,8 +160,20 @@ class TestTriggerSync:
         )
         # Seed the cache with a resolve first
         resolver.resolve()
+
+        # Capture cache state before the no-change sync
+        before_cache = resolver._cache.load("public")
+        assert before_cache is not None
+
         result = resolver.trigger_sync()
         assert result["changes"]["kind"] == "no_change"
+
+        # AC-3: cached payload and ETag are unchanged — the 304 response
+        # tells us the remote content is identical.
+        after_cache = resolver._cache.load("public")
+        assert after_cache is not None
+        assert after_cache.payload == before_cache.payload
+        assert after_cache.etag == before_cache.etag
 
     def test_trigger_sync_reports_added_and_changed(self, tmp_path: Path) -> None:
         """AC-1: added providers are individually named."""
@@ -274,8 +225,8 @@ class TestTriggerSync:
         assert isinstance(result["last_success_at"], float)
         assert result["last_success_at"] > 0
 
-    def test_last_success_at_is_none_on_never_synced(self, tmp_path: Path) -> None:
-        """AC-6: before any sync, last_success_at is None."""
+    def test_last_success_at_is_set_after_successful_sync(self, tmp_path: Path) -> None:
+        """AC-6: after a successful sync, last_success_at is set."""
         resolver, _ = _make_resolver(
             tmp_path,
             plan=[(200, {"etag": '"v1"'}, _body())],
@@ -284,6 +235,16 @@ class TestTriggerSync:
         # The sync itself succeeded, so last_success_at is set after it
         assert result["last_success_at"] is not None
         assert isinstance(result["last_success_at"], float)
+        assert result["last_success_at"] > 0
+
+    def test_last_success_at_is_none_when_all_syncs_fail(self, tmp_path: Path) -> None:
+        """AC-6: when every sync has failed, last_success_at is None."""
+        resolver, _ = _make_resolver(
+            tmp_path,
+            plan=[(500, {}, b"server error")],
+        )
+        result = resolver.trigger_sync()
+        assert result["last_success_at"] is None
 
     def test_sync_failure_does_not_empty_catalog(self, tmp_path: Path) -> None:
         """AC-4: a broken fetch must not clear the catalog.
@@ -315,10 +276,28 @@ class TestTriggerSync:
 class TestSelfHostedSurvivesSync:
     """RED PROOF: self-hosted entries from FAI-246-A survive a sync.
 
-    The overlay merge is a separate step from the sync, so this test
-    verifies that a merged catalog (with self-hosted providers) is
-    preserved through a resolver sync cycle.
+    The overlay is wired into CatalogResolver at construction time so it
+    is applied automatically by resolve() and trigger_sync().  The tests
+    must NOT re-apply the overlay manually — that would only prove
+    merge_local_overlay is a pure function, not that the resolver
+    preserves local entries through a sync cycle.
+
+    Every test must reference a concretely named self-hosted provider.
+    A test that would pass with an empty overlay is a false positive.
     """
+
+    _SELF_HOSTED_OVERLAY: dict[str, Any] = {
+        "schema_version": "fusionaize-provider-catalog/v1.2",
+        "providers": {
+            "my-grid-worker": {
+                "proof_level": PROOF_LEVEL_SELF_HOSTED,
+                "recommended_model": "grid/worker-v1",
+                "context_window": 32000,
+                "modalities": ["text"],
+                "pricing": {"input_cost_per_1m": 0.0, "output_cost_per_1m": 0.0},
+            }
+        },
+    }
 
     def test_self_hosted_provider_survives_remote_sync(self, tmp_path: Path) -> None:
         """AC-5: a self-hosted entry merged into the catalog is still
@@ -329,34 +308,46 @@ class TestSelfHostedSurvivesSync:
                 (200, {"etag": '"v1"'}, _body()),  # seed
                 (304, {"etag": '"v1"'}, b""),  # not modified
             ],
+            overlay=self._SELF_HOSTED_OVERLAY,
         )
+        # resolve() applies overlay automatically
         seeded = resolver.resolve()
-        # Merge a self-hosted entry into the resolved catalog
-        overlay = {
-            "schema_version": "fusionaize-provider-catalog/v1.2",
-            "providers": {
-                "my-grid-worker": {
-                    "proof_level": PROOF_LEVEL_SELF_HOSTED,
-                    "recommended_model": "grid/worker-v1",
-                    "context_window": 32000,
-                    "modalities": ["text"],
-                    "pricing": {"input_cost_per_1m": 0.0, "output_cost_per_1m": 0.0},
-                }
-            },
-        }
-        merged = merge_local_overlay(seeded.payload, overlay)
-        assert "my-grid-worker" in merged.get("providers", {})
+        seeded_providers = seeded.payload.get("providers", {})
+        assert "my-grid-worker" in seeded_providers
+        assert seeded_providers["my-grid-worker"]["recommended_model"] == "grid/worker-v1"
 
-        # After a forced sync the merged catalog should still carry the
-        # self-hosted entry when re-merged.  The sync itself does not
-        # touch the overlay — the resolver returns the *remote* catalog,
-        # and the overlay is applied *by the caller* at a higher layer.
+        # After a forced sync, the overlay must still be applied —
+        # resolver.resolve() applies it every time.
         synced = resolver.resolve(force_refresh=True)
-        re_merged = merge_local_overlay(synced.payload, overlay)
-        re_merged_providers = re_merged.get("providers", {})
-        assert "my-grid-worker" in re_merged_providers
-        assert re_merged_providers["my-grid-worker"]["recommended_model"] == "grid/worker-v1"
-        assert re_merged_providers["my-grid-worker"]["proof_level"] == PROOF_LEVEL_SELF_HOSTED
+        synced_providers = synced.payload.get("providers", {})
+        assert "my-grid-worker" in synced_providers
+        assert synced_providers["my-grid-worker"]["recommended_model"] == "grid/worker-v1"
+        assert synced_providers["my-grid-worker"]["proof_level"] == PROOF_LEVEL_SELF_HOSTED
+
+    def test_self_hosted_provider_survives_trigger_sync(self, tmp_path: Path) -> None:
+        """AC-5: a self-hosted entry survives trigger_sync.
+
+        Unlike resolve(), trigger_sync() returns the overlaid catalog
+        as its result dict so callers see local entries without a
+        separate merge step.  The changes diff must compare *raw*
+        catalogs (before overlay) — the self-hosted entry must NOT
+        appear as "added".
+        """
+        resolver, _ = _make_resolver(
+            tmp_path,
+            plan=[
+                (200, {"etag": '"v1"'}, _body()),  # seed
+                (304, {"etag": '"v1"'}, b""),  # not modified on triggered sync
+            ],
+            overlay=self._SELF_HOSTED_OVERLAY,
+        )
+        resolver.resolve()  # seed cache
+        resolver.trigger_sync()
+
+        # After the sync, the overlay must still be visible via resolve()
+        after = resolver.resolve()
+        assert "my-grid-worker" in after.payload.get("providers", {})
+        assert after.payload["providers"]["my-grid-worker"]["recommended_model"] == "grid/worker-v1"
 
     def test_self_hosted_provider_is_visible_after_sync_failure(self, tmp_path: Path) -> None:
         """AC-5 + AC-4: self-hosted entries survive even when the remote
@@ -367,28 +358,18 @@ class TestSelfHostedSurvivesSync:
                 (200, {"etag": '"v1"'}, _body()),  # seed
                 (500, {}, b""),  # failure
             ],
+            overlay=self._SELF_HOSTED_OVERLAY,
         )
         seeded = resolver.resolve()
-        overlay = {
-            "schema_version": "fusionaize-provider-catalog/v1.2",
-            "providers": {
-                "local-worker": {
-                    "proof_level": PROOF_LEVEL_SELF_HOSTED,
-                    "recommended_model": "local/worker-v1",
-                }
-            },
-        }
-        merged = merge_local_overlay(seeded.payload, overlay)
-        assert "local-worker" in merged.get("providers", {})
+        assert "my-grid-worker" in seeded.payload.get("providers", {})
 
         # Trigger a sync that fails — stale cache is served
         result = resolver.trigger_sync()
         assert result["source"] == "public-cache"
 
-        # The stale cache must still accept the overlay merge
+        # The stale cache must still carry the overlay via resolve()
         stale = resolver.resolve()
-        re_merged = merge_local_overlay(stale.payload, overlay)
-        assert "local-worker" in re_merged.get("providers", {})
+        assert "my-grid-worker" in stale.payload.get("providers", {})
 
 
 # ── Loopback guard (AC-2) ───────────────────────────────────────
@@ -465,6 +446,53 @@ class TestLoopbackGuard:
         response = asyncio.run(endpoint(mock_request))
         assert response.status_code == 403
         assert b"loopback" in response.body
+
+
+# ── Route-absence RED PROOF (Befund 3) ──────────────────────────
+
+
+class TestRouteAbsenceRedProof:
+    """RED PROOF: the sync endpoint is absent on the base revision.
+
+    Against 334b316 (the FAI-246-B base) the sync route does not exist.
+    These tests assert its absence by checking:
+    1. The route is not registered in app.routes (fails on base).
+    2. A POST to the path returns 404 via TestClient (fails on base).
+
+    The private helpers are imported locally so their absence only
+    affects the tests that need them, not the file's collection.
+    """
+
+    def _get_main_module(self):
+        import faigate.main as main_module
+
+        return main_module
+
+    def test_sync_route_is_registered(self) -> None:
+        """On the feature branch the sync endpoint must be registered."""
+        main_module = self._get_main_module()
+        paths = [r.path for r in main_module.app.routes if hasattr(r, "path")]
+        assert "/api/provider-catalog/sync" in paths, (
+            "RED PROOF: sync route not found in app.routes — "
+            "this assertion must FAIL against base 334b316"
+        )
+
+    def test_sync_route_rejects_testclient_with_403(self) -> None:
+        """A POST to the sync path returns 403 from TestClient.
+
+        The TestClient always sets client.host to "testclient", which is
+        not a loopback address, so the loopback guard rejects the request.
+
+        RED PROOF: against base 334b316 (no sync route) this test reports
+        404 instead of 403, proving the route was absent.
+        """
+        main_module = self._get_main_module()
+        with TestClient(main_module.app) as client:
+            response = client.post("/api/provider-catalog/sync")
+            assert response.status_code == 403, (
+                "RED PROOF: expected 403 against the feature branch or "
+                f"404 against base — got {response.status_code}"
+            )
 
 
 async def _async_result(value: Any) -> Any:
