@@ -2474,20 +2474,39 @@ class Router:
         if not cfg.get("enabled"):
             return None
 
+        matched_rules: list[dict] = []
         for rule in cfg.get("rules", []):
             match = rule.get("match", {})
 
             if self._match_static(match, ctx):
-                logger.debug("Static rule matched: %s → %s", rule["name"], rule["route_to"])
-                return RoutingDecision(
-                    provider_name=rule["route_to"],
-                    layer="static",
-                    rule_name=rule["name"],
-                    confidence=1.0,
-                    reason=f"Static rule '{rule['name']}' matched",
-                )
+                matched_rules.append(rule)
 
-        return None
+        if not matched_rules:
+            return None
+
+        first = matched_rules[0]
+        logger.debug("Static rule matched: %s → %s", first["name"], first["route_to"])
+
+        if len(matched_rules) > 1:
+            names = [r["name"] for r in matched_rules]
+            logger.warning(
+                "Ambiguous match in static rules: rules %s all match "
+                "model_requested=%r — using '%s' (first in file order)",
+                names,
+                ctx.model_requested,
+                first["name"],
+            )
+            reason = f"Static rule '{first['name']}' matched (also matched by {', '.join(repr(n) for n in names[1:])})"
+        else:
+            reason = f"Static rule '{first['name']}' matched"
+
+        return RoutingDecision(
+            provider_name=first["route_to"],
+            layer="static",
+            rule_name=first["name"],
+            confidence=1.0,
+            reason=reason,
+        )
 
     def _match_static(self, match: dict, ctx: _RoutingContext) -> bool:
         """Evaluate a static match block."""
