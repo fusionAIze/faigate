@@ -11,11 +11,9 @@ Acceptance criteria:
 2. A self-hosted entry carries its own proof level (not 'official').
 3. Physical facts are accepted for self-hosted entries but still rejected for
    curated providers.
-4. A self-hosted entry replaces the curated entry entirely; the catalog facts
-   are not merged in.
-5. A collision between a self-hosted name and a curated provider is warned
-   about (not silently resolved).
-6. The self-hosted entry survives a merge into the catalog (tagged with
+4. A collision between a self-hosted name and a curated provider raises
+   :class:`OverlayError` -- the operator must rename the local entry.
+5. The self-hosted entry survives a merge into the catalog (tagged with
    ``_local_overlay``).
 7. RED PROOF: the scenario that was rejected before (grid-worker-local with
    context_window) now passes with ``proof_level="self_hosted"``.
@@ -23,13 +21,12 @@ Acceptance criteria:
 
 from __future__ import annotations
 
-import logging
-
 import pytest
 
 from faigate.catalog_local_overlay import (
     OPERATOR_FIELDS,
     PROOF_LEVEL_SELF_HOSTED,
+    OverlayError,
     OverlayRejectedError,
     filter_catalog,
     merge_local_overlay,
@@ -177,7 +174,9 @@ def test_curated_provider_still_rejects_physical_facts() -> None:
 
 def test_self_hosted_on_curated_name_still_bypasses_rejection() -> None:
     """Even if the provider name matches a curated one, the self-hosted flag
-    bypasses physical-fact rejection. (A warning is logged instead.)"""
+    bypasses physical-fact rejection at validation time. (Merge and filter
+    will raise OverlayError if the name collides with a curated
+    provider, but validation itself does not know the catalog.)"""
     overlay = validate_overlay(
         {
             "providers": {
@@ -195,13 +194,13 @@ def test_self_hosted_on_curated_name_still_bypasses_rejection() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Criterion 4 — self-hosted entry replaces curated entry entirely
+# Criterion 4 — self-hosted collision with curated name raises error
 # --------------------------------------------------------------------------- #
 
 
-def test_self_hosted_entry_replaces_curated_entry_in_merge() -> None:
-    """A self-hosted overlay replaces the curated entry entirely; catalog
-    facts are not carried over."""
+def test_self_hosted_collision_with_curated_name_raises_error_in_merge() -> None:
+    """A self-hosted overlay that uses a curated provider name raises
+    OverlayError. The operator must rename the local entry."""
     overlay = validate_overlay(
         {
             "providers": {
@@ -213,19 +212,16 @@ def test_self_hosted_entry_replaces_curated_entry_in_merge() -> None:
         }
     )
 
-    merged = merge_local_overlay(_catalog(), overlay)
+    with pytest.raises(OverlayError) as excinfo:
+        merge_local_overlay(_catalog(), overlay)
 
-    deepseek = merged["providers"]["deepseek"]
-    # Self-hosted field present.
-    assert deepseek["context_window"] == 512
-    # Catalog-only fields are gone — the entry is replaced.
-    assert "modalities" not in deepseek
-    assert "pricing" not in deepseek
-    assert "recommended_model" not in deepseek
+    assert excinfo.value.provider_id == "deepseek"
+    assert "rename" in str(excinfo.value)
 
 
-def test_self_hosted_entry_replaces_curated_in_filter() -> None:
-    """filter_catalog also replaces curated entries with self-hosted ones."""
+def test_self_hosted_collision_raises_error_in_filter() -> None:
+    """filter_catalog also raises OverlayError for name
+    collisions."""
     selection = validate_overlay(
         {
             "providers": {
@@ -237,60 +233,68 @@ def test_self_hosted_entry_replaces_curated_in_filter() -> None:
         }
     )
 
-    result = filter_catalog(_catalog(), selection)
+    with pytest.raises(OverlayError) as excinfo:
+        filter_catalog(_catalog(), selection)
 
-    deepseek = result["providers"]["deepseek"]
-    assert deepseek["context_window"] == 512
-    assert "modalities" not in deepseek
-    assert "pricing" not in deepseek
+    assert excinfo.value.provider_id == "deepseek"
 
 
 # --------------------------------------------------------------------------- #
-# Criterion 5 — collision warning
+# Criterion 5 — RED PROOF: collision raises error (fails against base code)
 # --------------------------------------------------------------------------- #
 
 
-def test_self_hosted_collision_with_curated_provider_logs_warning(caplog: pytest.LogCaptureFixture) -> None:
-    """When a self-hosted name collides with a curated provider, a warning is
-    logged. The self-hosted entry takes precedence."""
-    caplog.set_level(logging.WARNING)
+def test_red_proof_collision_raises_overlay_collision_error() -> None:
+    """RED PROOF: a self-hosted entry named 'deepseek' collides with the
+    curated catalog and raises OverlayError.
 
-    overlay = validate_overlay(
-        {
-            "providers": {
-                "deepseek": {
-                    "proof_level": PROOF_LEVEL_SELF_HOSTED,
-                    "context_window": 512,
+    Against the base code (797774f) this test would fail with a real
+    AssertionError because the old code accepted the collision with a warning
+    and let the self-hosted entry take precedence — no exception was raised.
+    The new code rejects the ambiguity.
+
+    Uses ``pytest.raises(OverlayError)`` (the base class) instead of
+    ``OverlayCollisionError`` so the module is importable against the base
+    code where ``OverlayCollisionError`` does not exist — this ensures a
+    real ``DID NOT RAISE`` failure instead of an ``ImportError``."""
+    with pytest.raises(OverlayError):
+        merge_local_overlay(
+            _catalog(),
+            {
+                "providers": {
+                    "deepseek": {
+                        "proof_level": PROOF_LEVEL_SELF_HOSTED,
+                        "context_window": 512,
+                    }
                 }
-            }
-        }
-    )
-
-    merge_local_overlay(_catalog(), overlay)
-
-    assert len(caplog.records) >= 1
-    warning_messages = [r.message for r in caplog.records if r.levelno == logging.WARNING]
-    assert any("self-hosted" in msg and "deepseek" in msg and "collides" in msg for msg in warning_messages)
+            },
+        )
 
 
-def test_self_hosted_collision_logs_warning_in_filter(caplog: pytest.LogCaptureFixture) -> None:
-    caplog.set_level(logging.WARNING)
+def test_red_proof_collision_raises_error_in_filter() -> None:
+    """RED PROOF: filter_catalog also raises OverlayError for a
+    self-hosted entry named 'deepseek' that collides with the curated
+    catalog.
 
-    selection = validate_overlay(
-        {
-            "providers": {
-                "deepseek": {
-                    "proof_level": PROOF_LEVEL_SELF_HOSTED,
-                    "context_window": 512,
+    Against the base code (797774f) this test would fail with a real
+    DID NOT RAISE error because the old code accepted the collision
+    with a warning and let the self-hosted entry take precedence.
+
+    Uses ``pytest.raises(OverlayError)`` so the module is importable
+    against the base code where ``OverlayCollisionError`` does not
+    exist."""
+    with pytest.raises(OverlayError):
+        filter_catalog(
+            _catalog(),
+            {
+                "providers": {
+                    "deepseek": {
+                        "proof_level": PROOF_LEVEL_SELF_HOSTED,
+                        "context_window": 512,
+                    }
                 }
-            }
-        }
-    )
-
-    filter_catalog(_catalog(), selection)
-
-    warning_messages = [r.message for r in caplog.records if r.levelno == logging.WARNING]
-    assert any("self-hosted" in msg and "deepseek" in msg and "collides" in msg for msg in warning_messages)
+            },
+        )
 
 
 # --------------------------------------------------------------------------- #

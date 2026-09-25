@@ -115,6 +115,24 @@ class OverlayRejectedError(OverlayError):
         super().__init__(f"local overlay for provider {provider_id!r} rejected: field {field_name!r} {reason}")
 
 
+class OverlayCollisionError(OverlayError):
+    """A self-hosted overlay entry uses the same name as a curated provider.
+
+    The combination of provider and model is unique. A self-hosted provider is
+    a different provider from a curated one with the same name, so the
+    operator must rename the local entry to avoid ambiguity.
+
+    ``provider_id`` names the colliding entry.
+    """
+
+    def __init__(self, *, provider_id: str) -> None:
+        self.provider_id = provider_id
+        super().__init__(
+            f"self-hosted overlay provider {provider_id!r} collides with a "
+            f"curated provider; rename the local entry to avoid ambiguity"
+        )
+
+
 @dataclass
 class LocalOverlay:
     """A validated local overlay, ready to merge into a catalog.
@@ -240,8 +258,9 @@ def merge_local_overlay(
     treated as the operator's own infrastructure. It may carry physical facts
     (context window, modalities, etc.) and fully replaces the curated entry
     rather than overlaying only operator fields. If a self-hosted name
-    collides with a curated provider, a warning is logged and the self-hosted
-    entry takes precedence -- the operator asserts they run that instance.
+    collides with a curated provider, :class:`OverlayCollisionError` is raised
+    -- the operator must rename the local entry because a self-hosted provider
+    is a different provider from a curated one with the same name.
 
     An overlay built from raw mappings is validated first, so a forbidden
     field raises :class:`OverlayRejectedError` here too rather than slipping
@@ -264,11 +283,7 @@ def merge_local_overlay(
         # Self-hosted entry: replace curated entry entirely.
         if is_self_hosted:
             if provider_id in merged_providers:
-                logger.warning(
-                    "self-hosted overlay provider %r collides with a curated provider; "
-                    "the self-hosted entry takes precedence",
-                    provider_id,
-                )
+                raise OverlayCollisionError(provider_id=provider_id)
             merged_providers[provider_id] = dict(operator_fields)
             # Tag as local so consumers can see it is operator-defined.
             local_keys = sorted(operator_fields)
@@ -329,11 +344,7 @@ def filter_catalog(
         # infrastructure. No catalog facts are carried over.
         if is_self_hosted:
             if provider_id in catalog_providers:
-                logger.warning(
-                    "self-hosted selection provider %r collides with a curated provider; "
-                    "the self-hosted entry takes precedence",
-                    provider_id,
-                )
+                raise OverlayCollisionError(provider_id=provider_id)
             merged_providers[provider_id] = dict(overlay_fields)
             local_keys = sorted(overlay_fields)
             merged_providers[provider_id]["_local_overlay"] = local_keys
