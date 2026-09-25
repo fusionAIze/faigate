@@ -29,9 +29,13 @@ jobs:
     steps:
       # The title convention lives in .release-title-prefix so this gate and the
       # Forgejo one cannot drift apart. Reading it needs the repo on disk.
+      # The ref must follow the same tag the rest of the job resolves. On a
+      # workflow_dispatch `github.event.release` is empty, which would silently
+      # check out the default branch and read a prefix that may not be the one
+      # that tag was released under.
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.event.release.tag_name }}
 
       # Resolve BEFORE validating. The title check below reads the release
       # object, and on a workflow_dispatch `github.event.release` is empty - so
