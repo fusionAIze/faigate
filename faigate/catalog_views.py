@@ -102,3 +102,58 @@ def split_catalog_facts(facts: Mapping[str, Any]) -> CatalogViews:
             advisory[fact_id] = fact
 
     return CatalogViews(enforceable=enforceable, advisory=advisory)
+
+
+def build_probed_context_facts(
+    probe_results: dict[str, dict[str, Any]] | None = None,
+    *,
+    catalog: Mapping[str, Any] | None = None,
+    resolve_evidence: Any = None,
+) -> dict[str, dict[str, Any]]:
+    """Build context-window facts from *catalog* with probe overrides.
+
+    Each fact carries ``context_window`` and ``evidence`` fields so it
+    can be passed to :func:`split_catalog_facts`.  When *probe_results* confirms
+    a window, the probe's evidence replaces the catalog's: a confirmed probe
+    puts the fact into the ``enforceable`` view, while an unlisted or unprobed
+    provider stays at the catalog's original level.
+
+    *catalog* defaults to the resolved provider catalog.  *resolve_evidence* is
+    a two-arg ``(provider_name, probed_evidence) -> dict`` callable; defaults to
+    :func:`faigate.provider_catalog.resolve_context_window_evidence`.
+    """
+    if catalog is None:
+        from faigate.provider_catalog import get_provider_catalog  # noqa: F811
+
+        catalog = get_provider_catalog()
+
+    if resolve_evidence is None:
+        from faigate.provider_catalog import resolve_context_window_evidence as _resolve  # noqa: F811
+
+        resolve_evidence = _resolve
+
+    results = resolve_evidence
+    probes = probe_results or {}
+
+    facts: dict[str, dict[str, Any]] = {}
+    for name, entry in catalog.items():
+        ctx_window = entry.get("context_window")
+        if not isinstance(ctx_window, int) or ctx_window <= 0:
+            continue
+        probed = probes.get(name)
+        if probed is not None:
+            evidence = results(name, probed)
+            # When the probe is confirmed, its value replaces the catalog's.
+            if evidence.get("level") == "confirmed":
+                probed_value = evidence.get("probed_value")
+                if isinstance(probed_value, int) and probed_value > 0:
+                    ctx_window = probed_value
+        else:
+            evidence = entry.get("context_evidence")
+            if not isinstance(evidence, dict):
+                evidence = {"level": "unconfirmed"}
+        facts[name] = {
+            "context_window": ctx_window,
+            "evidence": dict(evidence),
+        }
+    return facts

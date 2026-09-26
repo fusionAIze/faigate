@@ -2175,9 +2175,11 @@ def test_build_probed_window_summary_counts_confirmed_and_unlisted() -> None:
         "field-path table is empty"
     )
     assert summary["unconfirmed_before"] >= 0
-    assert summary["unconfirmed_after"] == max(0, summary["unconfirmed_before"] - summary["probed_confirmed"])
-    # After probing, the number of unconfirmed entries should not increase.
+    # unconfirmed_after is counted, not subtracted: only providers that were
+    # unconfirmed *before* and were confirmed by the probe change the count.
+    # A plausible→confirmed transition does not reduce unconfirmed_after.
     assert summary["unconfirmed_after"] <= summary["unconfirmed_before"]
+    assert isinstance(summary["unconfirmed_after"], int)
 
 
 def test_build_probed_window_summary_includes_conflicts() -> None:
@@ -2202,6 +2204,35 @@ def test_build_probed_window_summary_includes_conflicts() -> None:
     assert summary["conflicts"][0]["probed_value"] == 999999
 
 
+def test_build_probed_window_summary_plausible_to_confirmed_does_not_change_unconfirmed() -> None:
+    """When a plausible provider is confirmed by probe, unconfirmed_after stays unchanged.
+
+    RED-PROOF: deepseek-chat has context_evidence.level=plausible in the catalog.
+    Probing it yields confirmed. The subtraction-based formula
+    ``unconfirmed_before - probed_confirmed`` decreases unconfirmed_after
+    by 1, but a plausible→confirmed transition must not affect the unconfirmed
+    count because the provider was never unconfirmed.
+    """
+    from faigate.provider_catalog import (
+        build_probed_window_summary,
+        probe_context_window_evidence,
+    )
+
+    data = _load_probe_fixture("deepseek")
+    probe_results = {
+        "deepseek-chat": probe_context_window_evidence("deepseek-chat", data),
+    }
+
+    summary = build_probed_window_summary(probe_results)
+
+    assert summary["probed_confirmed"] == 1
+    assert summary["unconfirmed_after"] == summary["unconfirmed_before"], (
+        f"unconfirmed_before={summary['unconfirmed_before']}, "
+        f"unconfirmed_after={summary['unconfirmed_after']}; "
+        "confirming a plausible provider must not reduce the unconfirmed count"
+    )
+
+
 def test_probe_field_paths_table_has_no_gaps() -> None:
     """Every provider in _PROBE_FIELD_PATHS has a non-empty field path.
 
@@ -2219,3 +2250,95 @@ def test_probe_field_paths_table_has_no_gaps() -> None:
         f"_PROBE_FIELD_PATHS has empty field paths: {empty}. "
         "Every entry must name a dotted field path into the /models response."
     )
+
+
+# --------------------------------------------------------------------------- #
+# FAI-238-B Befund 2: production entry point for probed context-window views
+# --------------------------------------------------------------------------- #
+
+
+def test_build_probed_window_view_confirmed_in_enforceable() -> None:
+    """A confirmed probed window lands in the enforceable view.
+
+    RED-PROOF: this test must fail if build_probed_window_view is not wired
+    or if a confirmed probe does not reach the enforceable view.  The test
+    names a specific provider (deepseek-chat) with a concrete window (65536)
+    so an empty probe set cannot pass accidentally.
+    """
+    from faigate.provider_catalog import (
+        build_probed_window_view,
+        probe_context_window_evidence,
+    )
+
+    data = _load_probe_fixture("deepseek")
+    probe_results = {
+        "deepseek-chat": probe_context_window_evidence("deepseek-chat", data),
+    }
+
+    view = build_probed_window_view(probe_results)
+
+    # deepseek-chat was probed and confirmed — must be in enforceable.
+    assert "deepseek-chat" in view["enforceable"], (
+        f"deepseek-chat not in enforceable view; view keys: {sorted(view['enforceable'])}"
+    )
+    fact = view["enforceable"]["deepseek-chat"]
+    assert fact["context_window"] == 65536
+    assert fact["evidence"]["level"] == "confirmed"
+    assert fact["evidence"]["probed_value"] == 65536
+
+    # Also in advisory (confirmed feeds both views).
+    assert "deepseek-chat" in view["advisory"]
+
+    # Summary carries before/after counts.
+    assert "summary" in view
+    assert view["summary"]["probed_confirmed"] >= 1
+
+
+def test_build_probed_window_view_unlisted_not_in_enforceable() -> None:
+    """An unlisted provider (no field path) stays out of the enforceable view.
+
+    RED-PROOF: nvidia has no _PROBE_FIELD_PATHS entry and its /models fixture
+    carries no context window.  It must NOT appear in the enforceable view
+    even when probed.
+    """
+    from faigate.provider_catalog import (
+        build_probed_window_view,
+        probe_context_window_evidence,
+    )
+
+    data = _load_probe_fixture("nvidia")
+    probe_results = {
+        "nvidia": probe_context_window_evidence("nvidia", data),
+    }
+
+    view = build_probed_window_view(probe_results)
+
+    # nvidia is unlisted — must NOT be in enforceable.
+    assert "nvidia" not in view["enforceable"], (
+        f"nvidia appeared in enforceable view but has no field path: {view['enforceable'].get('nvidia')}"
+    )
+
+
+def test_build_probed_window_view_without_probe_results() -> None:
+    """With no probe results, the view reflects catalog facts alone.
+
+    RED-PROOF: an empty probe set must still produce a valid view — the
+    function must not crash and must return at least the advisory entries
+    that the catalog carries.
+    """
+    from faigate.provider_catalog import build_probed_window_view
+
+    view = build_probed_window_view()
+
+    assert "enforceable" in view
+    assert "advisory" in view
+    assert "summary" in view
+    # Without probes, only catalog-confirmed entries are enforceable.
+    # The catalog has some confirmed context_evidence entries.
+    assert isinstance(view["enforceable"], dict)
+    assert isinstance(view["advisory"], dict)
+    # Advisory should be non-empty — many catalog entries have at least
+    # plausible context_evidence.
+    assert len(view["advisory"]) > 0
+    # Summary must still carry counts.
+    assert view["summary"]["probed_confirmed"] == 0

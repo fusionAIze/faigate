@@ -1014,8 +1014,22 @@ def build_probed_window_summary(
         if isinstance(ctx_evidence, dict) and ctx_evidence.get("level") == "unconfirmed":
             unconfirmed_before += 1
 
-    # After: entries that the probe confirmed are no longer unconfirmed.
-    unconfirmed_after = max(0, unconfirmed_before - probed_confirmed)
+    # After: count entries that remain unconfirmed *after* probe results
+    # are applied. A confirmed probe upgrades the entry's evidence, so a
+    # provider that was unconfirmed before and confirmed by the probe
+    # is no longer unconfirmed. A plausible→confirmed transition does not
+    # change the unconfirmed count because the provider was never unconfirmed.
+    unconfirmed_after = 0
+    for name, entry in catalog.items():
+        probed = probe_results.get(name)
+        if probed is not None:
+            resolved = resolve_context_window_evidence(name, probed)
+            if resolved.get("level") == "unconfirmed":
+                unconfirmed_after += 1
+        else:
+            ctx_evidence = entry.get("context_evidence")
+            if isinstance(ctx_evidence, dict) and ctx_evidence.get("level") == "unconfirmed":
+                unconfirmed_after += 1
 
     return {
         "probed_confirmed": probed_confirmed,
@@ -1024,6 +1038,38 @@ def build_probed_window_summary(
         "conflict_count": len(conflicts),
         "unconfirmed_before": unconfirmed_before,
         "unconfirmed_after": unconfirmed_after,
+    }
+
+
+def build_probed_window_view(
+    probe_results: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Return probed context-window facts split into enforceable/advisory views.
+
+    This is the production entry point: the returned ``enforceable`` dict
+    contains only providers whose context window is ``confirmed`` (by probe
+    or by catalog), and the ``advisory`` dict additionally includes
+    ``plausible`` entries.  The ``summary`` block carries before/after
+    unconfirmed counts and conflict details.
+
+    *probe_results* maps provider names to the evidence dicts returned by
+    :func:`probe_context_window_evidence`.  When ``None`` or empty, the
+    views are derived from catalog facts alone.
+    """
+    from .catalog_views import build_probed_context_facts, split_catalog_facts
+
+    facts = build_probed_context_facts(
+        probe_results,
+        catalog=get_provider_catalog(),
+        resolve_evidence=resolve_context_window_evidence,
+    )
+    views = split_catalog_facts(facts)
+    summary = build_probed_window_summary(probe_results or {})
+
+    return {
+        "enforceable": dict(views.enforceable),
+        "advisory": dict(views.advisory),
+        "summary": summary,
     }
 
 
