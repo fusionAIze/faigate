@@ -187,7 +187,7 @@ def cmd_probe_window(args: argparse.Namespace) -> int:
             continue
         # Use the stem as the probe name — these providers are not in
         # _PROBE_FIELD_PATHS, so probe_context_window_evidence returns
-        # unknown_kind="no_field_path".
+        # unknown_kind="unlisted" with probe_state="no_field_path".
         probe_results[stem] = probe_context_window_evidence(stem, data)
         no_field_path.append(stem)
 

@@ -2030,7 +2030,11 @@ def test_probed_window_openrouter_context_length() -> None:
 
 
 def test_probed_window_unlisted_provider_has_no_field_path() -> None:
-    """A provider absent from _PROBE_FIELD_PATHS gets unknown_kind: no_field_path.
+    """A provider absent from _PROBE_FIELD_PATHS gets unknown_kind: unlisted and probe_state: no_field_path.
+
+    The catalog fact is ``unlisted`` — the provider does not expose a context
+    window.  The ``probe_state`` field records why it could not be measured:
+    no field path is configured in ``_PROBE_FIELD_PATHS``.
 
     RED-PROOF: add ``nvidia`` to ``_PROBE_FIELD_PATHS`` and this test fails
     because the provider is no longer without a field path.  The guard ensures
@@ -2043,7 +2047,8 @@ def test_probed_window_unlisted_provider_has_no_field_path() -> None:
     evidence = probe_context_window_evidence("nvidia", _load_probe_fixture("nvidia"))
 
     assert evidence["level"] == "unconfirmed"
-    assert evidence["unknown_kind"] == "no_field_path"
+    assert evidence["unknown_kind"] == "unlisted"
+    assert evidence["probe_state"] == "no_field_path"
     assert "_PROBE_FIELD_PATHS" in evidence["note"]
 
 
@@ -2061,13 +2066,21 @@ def test_probed_window_missing_field_in_data_returns_unlisted() -> None:
 
 
 def test_probed_window_no_data_returns_unprobed() -> None:
-    """Without probe data, a provider with a field path is unprobed, not unlisted."""
+    """Without probe data, a provider with a field path gets probe_state: unprobed.
+
+    ``unprobed`` is a measurement state, not a catalog fact kind — it means
+    "a field path is configured but no probe data was supplied".  It does not
+    carry an ``unknown_kind`` because the catalog fact is not yet known.
+    """
     from faigate.provider_catalog import probe_context_window_evidence
 
     evidence = probe_context_window_evidence("deepseek-chat")
 
     assert evidence["level"] == "unconfirmed"
-    assert evidence["unknown_kind"] == "unprobed"
+    assert "unknown_kind" not in evidence, (
+        f"unprobed is a probe state, not a catalog unknown_kind; got unknown_kind={evidence.get('unknown_kind')!r}"
+    )
+    assert evidence["probe_state"] == "unprobed"
     assert evidence["field_path"] == "context_window"
 
 
@@ -2453,16 +2466,18 @@ def test_cli_probe_window_no_fixtures_reports_error(monkeypatch: pytest.MonkeyPa
 
 
 def test_probed_window_no_field_path_distinguished_from_unlisted() -> None:
-    """A provider without _PROBE_FIELD_PATHS returns ``no_field_path``, not ``unlisted``.
+    """A provider without _PROBE_FIELD_PATHS returns ``unknown_kind: unlisted`` with ``probe_state: no_field_path``.
 
-    ``unlisted`` means: the field path exists but the response carries no value
-    at that path. ``no_field_path`` means: the provider has a recorded response
-    but no one configured a field path for it. These are two different causes
-    and must not share the same ``unknown_kind``.
+    ``unlisted`` means: the provider does not expose a context window — this is
+    the catalog fact, one of the four defined unknown_kind values.  ``probe_state:
+    no_field_path`` records *why* it cannot be measured: no field path is configured
+    in ``_PROBE_FIELD_PATHS``.  These are separate concerns: the catalog fact
+    (unknown_kind) and the measurement detail (probe_state).
 
-    RED-PROOF: if ``probe_context_window_evidence`` falls back to ``unlisted``
-    for a missing field path, this test fails because the ``unknown_kind`` is
-    not ``no_field_path``.
+    RED-PROOF: on HEAD 6730b0c, ``probe_context_window_evidence`` returns
+    ``unknown_kind: "no_field_path"`` — an invented fifth kind.  This test
+    fails there because it asserts ``"unlisted"``, one of the four defined
+    catalog kinds.
     """
     from faigate.provider_catalog import probe_context_window_evidence
 
@@ -2470,10 +2485,15 @@ def test_probed_window_no_field_path_distinguished_from_unlisted() -> None:
     evidence = probe_context_window_evidence("nvidia", data)
 
     assert evidence["level"] == "unconfirmed"
-    assert evidence["unknown_kind"] == "no_field_path", (
-        f"expected no_field_path, got {evidence.get('unknown_kind')!r}; "
-        "a missing _PROBE_FIELD_PATHS entry is a different cause than "
-        "a field path that exists but yields no value"
+    assert evidence["unknown_kind"] == "unlisted", (
+        f"expected unlisted, got {evidence.get('unknown_kind')!r}; "
+        "'unlisted' is one of the four defined catalog unknown_kind values — "
+        "a missing _PROBE_FIELD_PATHS entry does not create a fifth kind, "
+        "it is the measurement detail (probe_state)"
+    )
+    assert evidence.get("probe_state") == "no_field_path", (
+        f"expected probe_state='no_field_path', got {evidence.get('probe_state')!r}; "
+        "no_field_path is a probe state, not an unknown_kind"
     )
     assert "_PROBE_FIELD_PATHS" in evidence["note"], (
         f"note must reference _PROBE_FIELD_PATHS, got: {evidence['note']!r}"
@@ -2482,6 +2502,11 @@ def test_probed_window_no_field_path_distinguished_from_unlisted() -> None:
 
 def test_build_probed_window_summary_counts_no_field_path() -> None:
     """A no_field_path provider is counted and named in the summary.
+
+    The summary distinguishes no_field_path from other unlisted providers
+    via ``probe_state``.  Both carry ``unknown_kind: "unlisted"`` (the catalog
+    fact), but only the one with ``probe_state: "no_field_path"`` increments
+    ``probed_no_field_path`` and appears in ``no_field_path_providers``.
 
     RED-PROOF: if ``build_probed_window_summary`` does not track
     ``no_field_path_providers`` or ``probed_no_field_path``, this test fails
@@ -2492,7 +2517,8 @@ def test_build_probed_window_summary_counts_no_field_path() -> None:
     probe_results = {
         "nvidia": {
             "level": "unconfirmed",
-            "unknown_kind": "no_field_path",
+            "unknown_kind": "unlisted",
+            "probe_state": "no_field_path",
             "note": (
                 "Provider 'nvidia' has a recorded /models response "
                 "but no field path is configured in _PROBE_FIELD_PATHS"
@@ -2509,7 +2535,7 @@ def test_build_probed_window_summary_counts_no_field_path() -> None:
         f"expected no_field_path_providers=['nvidia'], got {summary.get('no_field_path_providers')}"
     )
     assert summary["probed_confirmed"] == 0
-    assert summary["probed_unlisted"] == 0
+    assert summary["probed_unlisted"] == 1
 
 
 def test_cli_probe_window_names_nvidia_as_no_field_path(
@@ -2583,3 +2609,97 @@ def test_cli_probe_window_names_nvidia_as_no_field_path(
     assert "no_field_path" in result, f"JSON output missing 'no_field_path' key; keys: {sorted(result)}"
     assert "nvidia" in result["no_field_path"], f"nvidia not in JSON no_field_path list: {result['no_field_path']}"
     assert result["summary"]["probed_no_field_path"] >= 1
+
+
+# --------------------------------------------------------------------------- #
+# FAI-238-B Riegel d): unknown_kind values are restricted to the four defined catalog kinds
+# --------------------------------------------------------------------------- #
+
+
+_VALID_KINDS = frozenset({"derivable", "not_applicable", "runtime_dependent", "unlisted"})
+
+
+def test_valid_unknown_kinds_set_is_not_empty() -> None:
+    """The set of valid unknown_kind values must not be empty or open-ended.
+
+    An empty or trivially broad set would pass every check — including
+    invented values.  The set must be fixed and match the four catalog kinds.
+    """
+    assert _VALID_KINDS, "valid unknown_kind set must not be empty"
+    assert _VALID_KINDS == {"derivable", "not_applicable", "runtime_dependent", "unlisted"}, (
+        f"valid unknown_kind set is wrong: {_VALID_KINDS}"
+    )
+
+
+def test_all_probed_unknown_kinds_are_valid() -> None:
+    """Every unknown_kind emitted by probe_context_window_evidence must be valid.
+
+    This test probes every fixture that carries real data (models_data is not
+    None) and asserts that the resulting unknown_kind — if present — belongs
+    to the four defined catalog kinds.  Providers without field paths also
+    emit unknown_kind, and it must be valid too.
+
+    RED-PROOF: change probe_context_window_evidence to return an invented
+    unknown_kind (e.g. "no_field_path") and this test fails because the
+    value is not in _VALID_KINDS.
+    """
+    from faigate.provider_catalog import _VALID_UNKNOWN_KINDS, probe_context_window_evidence
+
+    assert _VALID_UNKNOWN_KINDS == _VALID_KINDS, "module-level _VALID_UNKNOWN_KINDS diverged from test expectation"
+
+    providers = {
+        "deepseek-chat": "deepseek",
+        "deepseek-reasoner": "deepseek",
+        "byteplus": "byteplus",
+        "openrouter-fallback": "openrouter",
+        "mistral": "mistral",
+    }
+
+    for name, stem in providers.items():
+        data = _load_probe_fixture(stem)
+        evidence = probe_context_window_evidence(name, data)
+        uk = evidence.get("unknown_kind")
+        if uk is not None:
+            assert uk in _VALID_UNKNOWN_KINDS, (
+                f"provider {name!r} emitted unknown_kind={uk!r} which is not in "
+                f"the four defined catalog kinds: {sorted(_VALID_UNKNOWN_KINDS)}"
+            )
+
+    # nvidia has no field path — its unknown_kind must still be valid.
+    nvidia = probe_context_window_evidence("nvidia", _load_probe_fixture("nvidia"))
+    nvidia_uk = nvidia.get("unknown_kind")
+    assert nvidia_uk is not None, "nvidia must have an unknown_kind"
+    assert nvidia_uk in _VALID_UNKNOWN_KINDS, (
+        f"nvidia emitted unknown_kind={nvidia_uk!r} which is not in "
+        f"the four defined catalog kinds: {sorted(_VALID_UNKNOWN_KINDS)}"
+    )
+
+    # unprobed (no data) must NOT carry unknown_kind — it's a probe state.
+    unprobed = probe_context_window_evidence("deepseek-chat")
+    assert "unknown_kind" not in unprobed, f"unprobed must not carry unknown_kind; got {unprobed.get('unknown_kind')!r}"
+    assert unprobed.get("probe_state") == "unprobed", (
+        f"unprobed must carry probe_state='unprobed'; got {unprobed.get('probe_state')!r}"
+    )
+
+
+def test_invented_unknown_kind_is_rejected() -> None:
+    """A constructed unknown_kind outside the four defined kinds must fail.
+
+    This test does NOT call probe_context_window_evidence — it asserts that
+    the validation set itself rejects an invented value.  If someone adds a
+    fifth kind without updating _VALID_KINDS, this test catches it.
+
+    RED-PROOF: if this test passes with the invented value, the Riegel is
+    broken — it means _VALID_KINDS is too permissive.
+    """
+    invented = "no_field_path"
+    assert invented not in _VALID_KINDS, (
+        f"'{invented}' must NOT be in _VALID_KINDS — it is an invented "
+        f"fifth kind, not one of the four defined catalog unknown_kind values"
+    )
+
+    invented2 = "unprobed"
+    assert invented2 not in _VALID_KINDS, (
+        f"'{invented2}' must NOT be in _VALID_KINDS — it is an invented "
+        f"fifth kind, not one of the four defined catalog unknown_kind values"
+    )

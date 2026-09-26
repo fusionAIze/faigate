@@ -866,6 +866,12 @@ _PROBE_FIELD_PATHS: dict[str, str] = {
     "mistral": "max_context_length",
 }
 
+# The four defined unknown_kind values from the catalog schema
+# (catalog.v1.json).  Every unknown_kind emitted by faigate code must
+# belong to this set.  Invented values — "no_field_path", "unprobed" —
+# are not catalog fact kinds; they belong in separate fields.
+_VALID_UNKNOWN_KINDS: frozenset[str] = frozenset({"derivable", "not_applicable", "runtime_dependent", "unlisted"})
+
 
 def probe_context_window_evidence(
     provider_name: str,
@@ -877,10 +883,15 @@ def probe_context_window_evidence(
     positive integer at that path, the fact is tagged ``confirmed`` with the
     probe timestamp, source URL, and probed value.  When the provider has no
     field path (its ``/models`` endpoint does not expose a context window), the
-    fact carries ``unknown_kind: "unlisted"`` and level ``"unconfirmed"``.
+    fact carries ``unknown_kind: "unlisted"`` and ``probe_state: "no_field_path"``
+    — the ``unknown_kind`` is ``"unlisted"`` because the catalog fact is that
+    the provider does not expose a window, while ``probe_state`` records the
+    measurement detail (no field path configured).
 
     When *models_data* is ``None``, the function returns the evidence shape
-    without a probed value — the caller is responsible for supplying the data.
+    without a probed value and with ``probe_state: "unprobed"`` — the caller is
+    responsible for supplying the data.  No ``unknown_kind`` is set because the
+    catalog fact is not yet known.
 
     Returns a dict suitable as a ``context_evidence`` block.
     """
@@ -889,7 +900,8 @@ def probe_context_window_evidence(
     if field_path is None:
         return {
             "level": "unconfirmed",
-            "unknown_kind": "no_field_path",
+            "unknown_kind": "unlisted",
+            "probe_state": "no_field_path",
             "note": (
                 f"Provider {provider_name!r} has a recorded /models response "
                 f"but no field path is configured in _PROBE_FIELD_PATHS"
@@ -899,7 +911,7 @@ def probe_context_window_evidence(
     if models_data is None:
         return {
             "level": "unconfirmed",
-            "unknown_kind": "unprobed",
+            "probe_state": "unprobed",
             "field_path": field_path,
             "note": (f"Provider {provider_name!r} has field path {field_path!r} but no probe data was supplied"),
         }
@@ -984,9 +996,11 @@ def build_probed_window_summary(
     The summary includes:
     * ``probed_confirmed`` — count of windows tagged ``confirmed`` by the probe
     * ``probed_unlisted`` — count of providers whose /models endpoint exposes
-      no context window
+      no context window (includes both "no value at field path" and "no field
+      path configured" — the ``unknown_kind`` is ``"unlisted"`` for both)
     * ``probed_no_field_path`` — count of providers with a recorded response
       but no field path configured in ``_PROBE_FIELD_PATHS``
+      (detected via ``probe_state: "no_field_path"``)
     * ``no_field_path_providers`` — names of providers without a field path
     * ``conflicts`` — providers where the probe disagrees with the catalog
     * ``unconfirmed_before`` / ``unconfirmed_after`` — the count of catalog
@@ -1013,9 +1027,9 @@ def build_probed_window_summary(
                 )
         elif evidence.get("unknown_kind") == "unlisted":
             probed_unlisted += 1
-        elif evidence.get("unknown_kind") == "no_field_path":
-            probed_no_field_path += 1
-            no_field_path_providers.append(name)
+            if evidence.get("probe_state") == "no_field_path":
+                probed_no_field_path += 1
+                no_field_path_providers.append(name)
 
     # Count unconfirmed catalog entries before applying probe results.
     unconfirmed_before = 0
