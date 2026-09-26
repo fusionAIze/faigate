@@ -2030,12 +2030,12 @@ def test_probed_window_openrouter_context_length() -> None:
 
 
 def test_probed_window_unlisted_provider_has_no_field_path() -> None:
-    """A provider absent from _PROBE_FIELD_PATHS gets unknown_kind: unlisted.
+    """A provider absent from _PROBE_FIELD_PATHS gets unknown_kind: no_field_path.
 
     RED-PROOF: add ``nvidia`` to ``_PROBE_FIELD_PATHS`` and this test fails
-    because the provider is no longer unlisted.  The guard ensures the
-    unlisted set is not silently empty — a provider must genuinely be absent
-    from the field-path table to qualify.
+    because the provider is no longer without a field path.  The guard ensures
+    the no-field-path set is not silently empty — a provider must genuinely be
+    absent from the field-path table to qualify.
     """
     from faigate.provider_catalog import probe_context_window_evidence
 
@@ -2043,8 +2043,8 @@ def test_probed_window_unlisted_provider_has_no_field_path() -> None:
     evidence = probe_context_window_evidence("nvidia", _load_probe_fixture("nvidia"))
 
     assert evidence["level"] == "unconfirmed"
-    assert evidence["unknown_kind"] == "unlisted"
-    assert "does not expose" in evidence["note"]
+    assert evidence["unknown_kind"] == "no_field_path"
+    assert "_PROBE_FIELD_PATHS" in evidence["note"]
 
 
 def test_probed_window_missing_field_in_data_returns_unlisted() -> None:
@@ -2445,3 +2445,141 @@ def test_cli_probe_window_no_fixtures_reports_error(monkeypatch: pytest.MonkeyPa
         assert "no probe results" in stderr_output.lower(), (
             f"expected error message about no probe results, got: {stderr_output!r}"
         )
+
+
+# --------------------------------------------------------------------------- #
+# FAI-238-B Riegel c): no_field_path providers are named, not silently skipped
+# --------------------------------------------------------------------------- #
+
+
+def test_probed_window_no_field_path_distinguished_from_unlisted() -> None:
+    """A provider without _PROBE_FIELD_PATHS returns ``no_field_path``, not ``unlisted``.
+
+    ``unlisted`` means: the field path exists but the response carries no value
+    at that path. ``no_field_path`` means: the provider has a recorded response
+    but no one configured a field path for it. These are two different causes
+    and must not share the same ``unknown_kind``.
+
+    RED-PROOF: if ``probe_context_window_evidence`` falls back to ``unlisted``
+    for a missing field path, this test fails because the ``unknown_kind`` is
+    not ``no_field_path``.
+    """
+    from faigate.provider_catalog import probe_context_window_evidence
+
+    data = _load_probe_fixture("nvidia")
+    evidence = probe_context_window_evidence("nvidia", data)
+
+    assert evidence["level"] == "unconfirmed"
+    assert evidence["unknown_kind"] == "no_field_path", (
+        f"expected no_field_path, got {evidence.get('unknown_kind')!r}; "
+        "a missing _PROBE_FIELD_PATHS entry is a different cause than "
+        "a field path that exists but yields no value"
+    )
+    assert "_PROBE_FIELD_PATHS" in evidence["note"], (
+        f"note must reference _PROBE_FIELD_PATHS, got: {evidence['note']!r}"
+    )
+
+
+def test_build_probed_window_summary_counts_no_field_path() -> None:
+    """A no_field_path provider is counted and named in the summary.
+
+    RED-PROOF: if ``build_probed_window_summary`` does not track
+    ``no_field_path_providers`` or ``probed_no_field_path``, this test fails
+    because the provider is invisible in the output.
+    """
+    from faigate.provider_catalog import build_probed_window_summary
+
+    probe_results = {
+        "nvidia": {
+            "level": "unconfirmed",
+            "unknown_kind": "no_field_path",
+            "note": (
+                "Provider 'nvidia' has a recorded /models response "
+                "but no field path is configured in _PROBE_FIELD_PATHS"
+            ),
+        },
+    }
+
+    summary = build_probed_window_summary(probe_results)
+
+    assert summary["probed_no_field_path"] == 1, (
+        f"expected probed_no_field_path=1, got {summary.get('probed_no_field_path')}"
+    )
+    assert summary["no_field_path_providers"] == ["nvidia"], (
+        f"expected no_field_path_providers=['nvidia'], got {summary.get('no_field_path_providers')}"
+    )
+    assert summary["probed_confirmed"] == 0
+    assert summary["probed_unlisted"] == 0
+
+
+def test_cli_probe_window_names_nvidia_as_no_field_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The ``faigate-models probe-window`` CLI names nvidia as a provider
+    with a recorded response but no field path configured.
+
+    RED-PROOF: nvidia has a fixture file (``nvidia_models.json``) but no entry
+    in ``_PROBE_FIELD_PATHS``. Against ead1fb2 this test fails with an assert
+    because nvidia is not probed at all — the CLI iterates only
+    ``_PROBE_FIELD_PATHS`` keys. The fix must scan the fixtures directory for
+    providers outside the field-path table so the operator sees them.
+    """
+    import argparse as _argparse
+
+    from faigate import models_cli
+    from faigate.provider_catalog import _PROBE_FIELD_PATHS
+
+    # Gegenprobe: nvidia must genuinely be absent from _PROBE_FIELD_PATHS.
+    # If someone adds it to the table, this test's premise is gone.
+    assert "nvidia" not in _PROBE_FIELD_PATHS, (
+        "nvidia must NOT be in _PROBE_FIELD_PATHS for this test to be meaningful; "
+        "if it was added, the provider is no longer a no_field_path case"
+    )
+
+    fixtures_dir = str(Path(__file__).resolve().parent / "fixtures" / "models_probe")
+
+    # Gegenprobe: the nvidia fixture must exist on disk.
+    nvidia_fixture = Path(fixtures_dir) / "nvidia_models.json"
+    assert nvidia_fixture.is_file(), (
+        f"nvidia fixture not found at {nvidia_fixture}; the test cannot prove "
+        "nvidia is named if the fixture file is missing"
+    )
+
+    stdout_buf = io.StringIO()
+    stderr_buf = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", stdout_buf)
+    monkeypatch.setattr(sys, "stderr", stderr_buf)
+
+    ns = _argparse.Namespace(
+        command="probe-window",
+        fixtures_dir=fixtures_dir,
+        json=False,
+    )
+    rc = models_cli.cmd_probe_window(ns)
+    assert rc == 0, f"cmd_probe_window returned non-zero: {rc}"
+
+    stdout = stdout_buf.getvalue()
+
+    # nvidia must be named — either in the summary line or in the
+    # "no field path configured" section.
+    assert "nvidia" in stdout, (
+        f"nvidia not found in probe-window output:\n{stdout}\n"
+        "nvidia has a recorded /models response but no _PROBE_FIELD_PATHS entry; "
+        "the CLI must name it so the operator knows a recording exists without a mapping"
+    )
+
+    # Also check the JSON path.
+    stdout_buf_json = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", stdout_buf_json)
+    ns_json = _argparse.Namespace(
+        command="probe-window",
+        fixtures_dir=fixtures_dir,
+        json=True,
+    )
+    rc_json = models_cli.cmd_probe_window(ns_json)
+    assert rc_json == 0
+
+    result = json.loads(stdout_buf_json.getvalue())
+    assert "no_field_path" in result, f"JSON output missing 'no_field_path' key; keys: {sorted(result)}"
+    assert "nvidia" in result["no_field_path"], f"nvidia not in JSON no_field_path list: {result['no_field_path']}"
+    assert result["summary"]["probed_no_field_path"] >= 1

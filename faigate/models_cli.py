@@ -156,6 +156,7 @@ def cmd_probe_window(args: argparse.Namespace) -> int:
 
     probe_results: dict[str, dict[str, Any]] = {}
     skipped: list[str] = []
+    no_field_path: list[str] = []
 
     for name in _PROBE_FIELD_PATHS:
         stem = _FIXTURE_STEMS.get(name, name)
@@ -171,6 +172,25 @@ def cmd_probe_window(args: argparse.Namespace) -> int:
             continue
         probe_results[name] = probe_context_window_evidence(name, data)
 
+    # Also probe fixture files for providers that have no _PROBE_FIELD_PATHS
+    # entry. These providers have a recorded /models response but no one has
+    # configured a field path for them — the operator needs to see them named.
+    probed_stems: set[str] = {_FIXTURE_STEMS.get(n, n) for n in _PROBE_FIELD_PATHS}
+    for fixture_path in sorted(fixtures_dir.glob("*_models.json")):
+        stem = fixture_path.stem.replace("_models", "")
+        if stem in probed_stems:
+            continue
+        try:
+            data = json.loads(fixture_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as exc:
+            print(f"WARNING: cannot read fixture {fixture_path.name!r}: {exc}", file=sys.stderr)
+            continue
+        # Use the stem as the probe name — these providers are not in
+        # _PROBE_FIELD_PATHS, so probe_context_window_evidence returns
+        # unknown_kind="no_field_path".
+        probe_results[stem] = probe_context_window_evidence(stem, data)
+        no_field_path.append(stem)
+
     if not probe_results:
         print(
             "ERROR: no probe results — no fixture files found for any provider in _PROBE_FIELD_PATHS.",
@@ -179,6 +199,10 @@ def cmd_probe_window(args: argparse.Namespace) -> int:
         print(f"  fixtures directory: {fixtures_dir}", file=sys.stderr)
         print(f"  providers in field-path table: {sorted(_PROBE_FIELD_PATHS)}", file=sys.stderr)
         return 2
+
+    # no_field_path is collected during the fixture scan above; pass it through
+    # to the report so the operator sees providers with recordings but no mapping.
+    # The summary also carries it, but the text report prints it explicitly.
 
     view = build_probed_window_view(probe_results)
 
@@ -190,10 +214,12 @@ def cmd_probe_window(args: argparse.Namespace) -> int:
         }
         if skipped:
             output["skipped"] = skipped
+        if no_field_path:
+            output["no_field_path"] = no_field_path
         print(json.dumps(output, indent=2, default=str))
         return 0
 
-    _print_probe_window_report(view, probe_results, skipped)
+    _print_probe_window_report(view, probe_results, skipped, no_field_path)
     return 0
 
 
@@ -201,6 +227,7 @@ def _print_probe_window_report(
     view: dict[str, Any],
     probe_results: dict[str, dict[str, Any]],
     skipped: list[str],
+    no_field_path: list[str],
 ) -> None:
     summary = view["summary"]
     enforceable = view["enforceable"]
@@ -211,12 +238,19 @@ def _print_probe_window_report(
     # Summary
     print(f"  probed confirmed : {summary['probed_confirmed']}")
     print(f"  probed unlisted  : {summary['probed_unlisted']}")
+    if summary.get("probed_no_field_path"):
+        providers_str = ", ".join(summary["no_field_path_providers"])
+        print(f"  probed no field path: {summary['probed_no_field_path']}  ({providers_str})")
     print(f"  conflicts        : {summary['conflict_count']}")
     print(f"  unconfirmed before : {summary['unconfirmed_before']}")
     print(f"  unconfirmed after  : {summary['unconfirmed_after']}")
 
     if skipped:
         print(f"\n  skipped (no fixture): {', '.join(skipped)}")
+
+    if no_field_path:
+        print(f"\n  no field path configured: {', '.join(no_field_path)}")
+        print("    (recorded response exists but no entry in _PROBE_FIELD_PATHS)")
 
     # Per-provider details
     print(f"\n  Enforceable view ({len(enforceable)} providers):")

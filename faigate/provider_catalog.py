@@ -889,8 +889,11 @@ def probe_context_window_evidence(
     if field_path is None:
         return {
             "level": "unconfirmed",
-            "unknown_kind": "unlisted",
-            "note": (f"Provider {provider_name!r} /models endpoint does not expose a context window field"),
+            "unknown_kind": "no_field_path",
+            "note": (
+                f"Provider {provider_name!r} has a recorded /models response "
+                f"but no field path is configured in _PROBE_FIELD_PATHS"
+            ),
         }
 
     if models_data is None:
@@ -982,6 +985,9 @@ def build_probed_window_summary(
     * ``probed_confirmed`` — count of windows tagged ``confirmed`` by the probe
     * ``probed_unlisted`` — count of providers whose /models endpoint exposes
       no context window
+    * ``probed_no_field_path`` — count of providers with a recorded response
+      but no field path configured in ``_PROBE_FIELD_PATHS``
+    * ``no_field_path_providers`` — names of providers without a field path
     * ``conflicts`` — providers where the probe disagrees with the catalog
     * ``unconfirmed_before`` / ``unconfirmed_after`` — the count of catalog
       entries whose ``context_evidence.level`` is ``"unconfirmed"`` before and
@@ -989,6 +995,8 @@ def build_probed_window_summary(
     """
     probed_confirmed = 0
     probed_unlisted = 0
+    probed_no_field_path = 0
+    no_field_path_providers: list[str] = []
     conflicts: list[dict[str, Any]] = []
 
     for name, evidence in probe_results.items():
@@ -1005,6 +1013,9 @@ def build_probed_window_summary(
                 )
         elif evidence.get("unknown_kind") == "unlisted":
             probed_unlisted += 1
+        elif evidence.get("unknown_kind") == "no_field_path":
+            probed_no_field_path += 1
+            no_field_path_providers.append(name)
 
     # Count unconfirmed catalog entries before applying probe results.
     unconfirmed_before = 0
@@ -1034,6 +1045,8 @@ def build_probed_window_summary(
     return {
         "probed_confirmed": probed_confirmed,
         "probed_unlisted": probed_unlisted,
+        "probed_no_field_path": probed_no_field_path,
+        "no_field_path_providers": no_field_path_providers,
         "conflicts": conflicts,
         "conflict_count": len(conflicts),
         "unconfirmed_before": unconfirmed_before,
