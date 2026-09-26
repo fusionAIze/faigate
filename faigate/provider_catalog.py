@@ -866,6 +866,12 @@ _PROBE_FIELD_PATHS: dict[str, str] = {
     "mistral": "max_context_length",
 }
 
+# The four defined unknown_kind values from the catalog schema
+# (catalog.v1.json).  Every unknown_kind emitted by faigate code must
+# belong to this set.  Invented values — "no_field_path", "unprobed" —
+# are not catalog fact kinds; they belong in separate fields.
+_VALID_UNKNOWN_KINDS: frozenset[str] = frozenset({"derivable", "not_applicable", "runtime_dependent", "unlisted"})
+
 
 def probe_context_window_evidence(
     provider_name: str,
@@ -877,10 +883,15 @@ def probe_context_window_evidence(
     positive integer at that path, the fact is tagged ``confirmed`` with the
     probe timestamp, source URL, and probed value.  When the provider has no
     field path (its ``/models`` endpoint does not expose a context window), the
-    fact carries ``unknown_kind: "unlisted"`` and level ``"unconfirmed"``.
+    fact carries ``unknown_kind: "unlisted"`` and ``probe_state: "no_field_path"``
+    — the ``unknown_kind`` is ``"unlisted"`` because the catalog fact is that
+    the provider does not expose a window, while ``probe_state`` records the
+    measurement detail (no field path configured).
 
     When *models_data* is ``None``, the function returns the evidence shape
-    without a probed value — the caller is responsible for supplying the data.
+    without a probed value and with ``probe_state: "unprobed"`` — the caller is
+    responsible for supplying the data.  No ``unknown_kind`` is set because the
+    catalog fact is not yet known.
 
     Returns a dict suitable as a ``context_evidence`` block.
     """
@@ -890,13 +901,17 @@ def probe_context_window_evidence(
         return {
             "level": "unconfirmed",
             "unknown_kind": "unlisted",
-            "note": (f"Provider {provider_name!r} /models endpoint does not expose a context window field"),
+            "probe_state": "no_field_path",
+            "note": (
+                f"Provider {provider_name!r} has a recorded /models response "
+                f"but no field path is configured in _PROBE_FIELD_PATHS"
+            ),
         }
 
     if models_data is None:
         return {
             "level": "unconfirmed",
-            "unknown_kind": "unprobed",
+            "probe_state": "unprobed",
             "field_path": field_path,
             "note": (f"Provider {provider_name!r} has field path {field_path!r} but no probe data was supplied"),
         }
@@ -981,7 +996,12 @@ def build_probed_window_summary(
     The summary includes:
     * ``probed_confirmed`` — count of windows tagged ``confirmed`` by the probe
     * ``probed_unlisted`` — count of providers whose /models endpoint exposes
-      no context window
+      no context window (includes both "no value at field path" and "no field
+      path configured" — the ``unknown_kind`` is ``"unlisted"`` for both)
+    * ``probed_no_field_path`` — count of providers with a recorded response
+      but no field path configured in ``_PROBE_FIELD_PATHS``
+      (detected via ``probe_state: "no_field_path"``)
+    * ``no_field_path_providers`` — names of providers without a field path
     * ``conflicts`` — providers where the probe disagrees with the catalog
     * ``unconfirmed_before`` / ``unconfirmed_after`` — the count of catalog
       entries whose ``context_evidence.level`` is ``"unconfirmed"`` before and
@@ -989,6 +1009,8 @@ def build_probed_window_summary(
     """
     probed_confirmed = 0
     probed_unlisted = 0
+    probed_no_field_path = 0
+    no_field_path_providers: list[str] = []
     conflicts: list[dict[str, Any]] = []
 
     for name, evidence in probe_results.items():
@@ -1005,6 +1027,9 @@ def build_probed_window_summary(
                 )
         elif evidence.get("unknown_kind") == "unlisted":
             probed_unlisted += 1
+            if evidence.get("probe_state") == "no_field_path":
+                probed_no_field_path += 1
+                no_field_path_providers.append(name)
 
     # Count unconfirmed catalog entries before applying probe results.
     unconfirmed_before = 0
@@ -1014,16 +1039,64 @@ def build_probed_window_summary(
         if isinstance(ctx_evidence, dict) and ctx_evidence.get("level") == "unconfirmed":
             unconfirmed_before += 1
 
-    # After: entries that the probe confirmed are no longer unconfirmed.
-    unconfirmed_after = max(0, unconfirmed_before - probed_confirmed)
+    # After: count entries that remain unconfirmed *after* probe results
+    # are applied. A confirmed probe upgrades the entry's evidence, so a
+    # provider that was unconfirmed before and confirmed by the probe
+    # is no longer unconfirmed. A plausible→confirmed transition does not
+    # change the unconfirmed count because the provider was never unconfirmed.
+    unconfirmed_after = 0
+    for name, entry in catalog.items():
+        probed = probe_results.get(name)
+        if probed is not None:
+            resolved = resolve_context_window_evidence(name, probed)
+            if resolved.get("level") == "unconfirmed":
+                unconfirmed_after += 1
+        else:
+            ctx_evidence = entry.get("context_evidence")
+            if isinstance(ctx_evidence, dict) and ctx_evidence.get("level") == "unconfirmed":
+                unconfirmed_after += 1
 
     return {
         "probed_confirmed": probed_confirmed,
         "probed_unlisted": probed_unlisted,
+        "probed_no_field_path": probed_no_field_path,
+        "no_field_path_providers": no_field_path_providers,
         "conflicts": conflicts,
         "conflict_count": len(conflicts),
         "unconfirmed_before": unconfirmed_before,
         "unconfirmed_after": unconfirmed_after,
+    }
+
+
+def build_probed_window_view(
+    probe_results: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Return probed context-window facts split into enforceable/advisory views.
+
+    This is the production entry point: the returned ``enforceable`` dict
+    contains only providers whose context window is ``confirmed`` (by probe
+    or by catalog), and the ``advisory`` dict additionally includes
+    ``plausible`` entries.  The ``summary`` block carries before/after
+    unconfirmed counts and conflict details.
+
+    *probe_results* maps provider names to the evidence dicts returned by
+    :func:`probe_context_window_evidence`.  When ``None`` or empty, the
+    views are derived from catalog facts alone.
+    """
+    from .catalog_views import build_probed_context_facts, split_catalog_facts
+
+    facts = build_probed_context_facts(
+        probe_results,
+        catalog=get_provider_catalog(),
+        resolve_evidence=resolve_context_window_evidence,
+    )
+    views = split_catalog_facts(facts)
+    summary = build_probed_window_summary(probe_results or {})
+
+    return {
+        "enforceable": dict(views.enforceable),
+        "advisory": dict(views.advisory),
+        "summary": summary,
     }
 
 
