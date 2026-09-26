@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import io
 import json
+import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -2342,3 +2345,103 @@ def test_build_probed_window_view_without_probe_results() -> None:
     assert len(view["advisory"]) > 0
     # Summary must still carry counts.
     assert view["summary"]["probed_confirmed"] == 0
+
+
+# --------------------------------------------------------------------------- #
+# FAI-238-B Befund 2: CLI entry point for probed context-window views
+# --------------------------------------------------------------------------- #
+
+
+def test_cli_probe_window_deepseek_lands_in_enforceable_with_before_after(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The ``faigate-models probe-window`` CLI calls the real argparse path,
+    probes a confirmed provider (deepseek-chat) from recorded fixtures, and
+    reports the enforceable view with before/after unconfirmed counts.
+
+    RED-PROOF: this test must fail if the ``probe-window`` subcommand is not
+    registered, if ``cmd_probe_window`` is not wired to its default func, or
+    if a confirmed probe does not land in the ``enforceable`` view.  The test
+    names a specific provider (deepseek-chat) with a concrete window value
+    (65536) — an empty probe set cannot pass accidentally.
+
+    Riegel (a): without a fixture file, the CLI exits non-zero instead of
+    silently reporting nothing.  deepseek-chat's fixture is
+    ``tests/fixtures/models_probe/deepseek_models.json``.
+
+    Riegel (b): no network access — the CLI reads fixtures from disk only.
+
+    Riegel (c): nvidia has no _PROBE_FIELD_PATHS entry and is not probed;
+    the CLI does not crash or guess.
+    """
+    import argparse as _argparse
+
+    from faigate import models_cli
+
+    fixtures_dir = str(Path(__file__).resolve().parent / "fixtures" / "models_probe")
+
+    ns = _argparse.Namespace(
+        command="probe-window",
+        fixtures_dir=fixtures_dir,
+        json=True,
+    )
+
+    # Capture stdout via monkeypatching sys.stdout.
+    buf = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", buf)
+
+    rc = models_cli.cmd_probe_window(ns)
+    assert rc == 0, f"cmd_probe_window returned non-zero: {rc}"
+
+    result = json.loads(buf.getvalue())
+
+    # deepseek-chat must be in enforceable with its probed window value.
+    assert "enforceable" in result, f"missing enforceable key; keys: {sorted(result)}"
+    assert "deepseek-chat" in result["enforceable"], (
+        f"deepseek-chat not in enforceable view; enforceable keys: {sorted(result['enforceable'])}"
+    )
+    fact = result["enforceable"]["deepseek-chat"]
+    assert fact["context_window"] == 65536, f"expected context_window=65536, got {fact['context_window']}"
+    assert fact["evidence"]["level"] == "confirmed"
+    assert fact["evidence"]["probed_value"] == 65536
+
+    # Summary must carry before/after unconfirmed counts.
+    summary = result["summary"]
+    assert "unconfirmed_before" in summary, f"missing unconfirmed_before in summary; keys: {sorted(summary)}"
+    assert "unconfirmed_after" in summary, f"missing unconfirmed_after in summary; keys: {sorted(summary)}"
+    assert isinstance(summary["unconfirmed_before"], int)
+    assert isinstance(summary["unconfirmed_after"], int)
+    assert summary["probed_confirmed"] >= 1, f"expected at least one confirmed probe, got {summary}"
+
+
+def test_cli_probe_window_no_fixtures_reports_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When no fixture files exist for any provider, the CLI exits non-zero
+    with an error message — it must not silently succeed with empty results.
+
+    RED-PROOF: remove the empty-directory guard in ``cmd_probe_window`` and
+    this test passes because build_probed_window_view({}) succeeds.  The guard
+    ensures the operator is told that probing found nothing.
+    """
+    import argparse as _argparse
+
+    from faigate import models_cli
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Capture both stdout and stderr.
+        stdout_buf = io.StringIO()
+        stderr_buf = io.StringIO()
+        monkeypatch.setattr(sys, "stdout", stdout_buf)
+        monkeypatch.setattr(sys, "stderr", stderr_buf)
+
+        ns = _argparse.Namespace(
+            command="probe-window",
+            fixtures_dir=tmpdir,
+            json=False,
+        )
+        rc = models_cli.cmd_probe_window(ns)
+
+        assert rc != 0, f"expected non-zero exit when no fixtures exist, got {rc}"
+        stderr_output = stderr_buf.getvalue()
+        assert "no probe results" in stderr_output.lower(), (
+            f"expected error message about no probe results, got: {stderr_output!r}"
+        )

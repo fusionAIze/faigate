@@ -1,10 +1,11 @@
 """CLI for the provider catalog updater.
 
 Usage:
-    faigate-models update            Force-refresh the cached catalog from remote.
-    faigate-models update --check    Exit 0 if cache is fresh, 1 if stale, 2 on error.
-    faigate-models update --diff     Show provider/model deltas vs current cache.
-    faigate-models status            Print cache age, source, ETag, providers count.
+    faigate-models update               Force-refresh the cached catalog from remote.
+    faigate-models update --check       Exit 0 if cache is fresh, 1 if stale, 2 on error.
+    faigate-models update --diff        Show provider/model deltas vs current cache.
+    faigate-models status               Print cache age, source, ETag, providers count.
+    faigate-models probe-window         Probe context windows from recorded /models responses.
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from pathlib import Path
 from typing import Any
 
 from .catalog_resolver import (
@@ -118,6 +120,123 @@ def cmd_status(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_probe_window(args: argparse.Namespace) -> int:
+    """Probe context windows from recorded /models responses and show the results.
+
+    This is an offline operator command: it reads recorded ``GET /models`` JSON
+    fixtures from *--fixtures-dir* (default: ``tests/fixtures/models_probe/``),
+    probes every provider listed in ``_PROBE_FIELD_PATHS`` for which a fixture
+    exists, and prints the enforceable/advisory view with before/after
+    unconfirmed counts.
+
+    Without a fixture file for a provider, that provider is skipped with a
+    note — the probe never makes network calls.  A provider that has no entry
+    in ``_PROBE_FIELD_PATHS`` is flagged as unlisted.
+    """
+    from .provider_catalog import (
+        _PROBE_FIELD_PATHS,
+        build_probed_window_view,
+        probe_context_window_evidence,
+    )
+
+    fixtures_dir = Path(args.fixtures_dir)
+    if not fixtures_dir.is_dir():
+        print(f"ERROR: fixtures directory not found: {fixtures_dir}", file=sys.stderr)
+        return 2
+
+    # Map provider names to fixture file stems.  Providers like
+    # "deepseek-chat" and "deepseek-reasoner" share "deepseek_models.json".
+    _FIXTURE_STEMS: dict[str, str] = {
+        "byteplus": "byteplus",
+        "deepseek-chat": "deepseek",
+        "deepseek-reasoner": "deepseek",
+        "openrouter-fallback": "openrouter",
+        "mistral": "mistral",
+    }
+
+    probe_results: dict[str, dict[str, Any]] = {}
+    skipped: list[str] = []
+
+    for name in _PROBE_FIELD_PATHS:
+        stem = _FIXTURE_STEMS.get(name, name)
+        fixture_path = fixtures_dir / f"{stem}_models.json"
+        if not fixture_path.is_file():
+            skipped.append(name)
+            continue
+        try:
+            data = json.loads(fixture_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as exc:
+            print(f"WARNING: cannot read fixture for {name!r}: {exc}", file=sys.stderr)
+            skipped.append(name)
+            continue
+        probe_results[name] = probe_context_window_evidence(name, data)
+
+    if not probe_results:
+        print(
+            "ERROR: no probe results — no fixture files found for any provider in _PROBE_FIELD_PATHS.",
+            file=sys.stderr,
+        )
+        print(f"  fixtures directory: {fixtures_dir}", file=sys.stderr)
+        print(f"  providers in field-path table: {sorted(_PROBE_FIELD_PATHS)}", file=sys.stderr)
+        return 2
+
+    view = build_probed_window_view(probe_results)
+
+    if args.json:
+        output: dict[str, Any] = {
+            "enforceable": view["enforceable"],
+            "advisory": view["advisory"],
+            "summary": view["summary"],
+        }
+        if skipped:
+            output["skipped"] = skipped
+        print(json.dumps(output, indent=2, default=str))
+        return 0
+
+    _print_probe_window_report(view, probe_results, skipped)
+    return 0
+
+
+def _print_probe_window_report(
+    view: dict[str, Any],
+    probe_results: dict[str, dict[str, Any]],
+    skipped: list[str],
+) -> None:
+    summary = view["summary"]
+    enforceable = view["enforceable"]
+
+    print("Probed context-window view")
+    print("=" * 60)
+
+    # Summary
+    print(f"  probed confirmed : {summary['probed_confirmed']}")
+    print(f"  probed unlisted  : {summary['probed_unlisted']}")
+    print(f"  conflicts        : {summary['conflict_count']}")
+    print(f"  unconfirmed before : {summary['unconfirmed_before']}")
+    print(f"  unconfirmed after  : {summary['unconfirmed_after']}")
+
+    if skipped:
+        print(f"\n  skipped (no fixture): {', '.join(skipped)}")
+
+    # Per-provider details
+    print(f"\n  Enforceable view ({len(enforceable)} providers):")
+    if not enforceable:
+        print("    (none)")
+    else:
+        for name in sorted(enforceable):
+            fact = enforceable[name]
+            ev = fact.get("evidence", {})
+            probed_value = ev.get("probed_value", fact["context_window"])
+            field_path = ev.get("field_path", "n/a")
+            print(f"    {name:30s}  window={probed_value:>6d}  path={field_path}")
+
+    # Conflicts
+    if summary["conflicts"]:
+        print("\n  Conflicts (probe disagrees with catalog):")
+        for c in summary["conflicts"]:
+            print(f"    {c['provider']:30s}  catalog={c['catalog_value']:>6d}  probe={c['probed_value']:>6d}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         prog="faigate-models",
@@ -141,6 +260,15 @@ def main() -> int:
     p_status = sub.add_parser("status", help="Show cache state.")
     p_status.add_argument("--json", action="store_true", help="Emit JSON.")
     p_status.set_defaults(func=cmd_status)
+
+    p_probe = sub.add_parser("probe-window", help="Probe context windows from recorded /models responses.")
+    p_probe.add_argument(
+        "--fixtures-dir",
+        default=str(Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "models_probe"),
+        help="Directory with recorded GET /models JSON fixtures (default: tests/fixtures/models_probe/)",
+    )
+    p_probe.add_argument("--json", action="store_true", help="Emit JSON.")
+    p_probe.set_defaults(func=cmd_probe_window)
 
     args = parser.parse_args()
     return args.func(args)
