@@ -17,11 +17,33 @@ resolved alias, so the vendor claim was empty rather than wrong. Replacing the
 alias with the real model ``deepseek-v4-flash`` on 2026-09-23 turned that empty
 claim into a false one: ``byteplus/volcengine/deepseek-v4-flash`` asserts that
 Volcano Engine built DeepSeek V4. Nothing caught it.
+
+KNOWN_ALIAS_CLAIMS
+-------------------
+Providers listed here carry runtime-dependent model names (``*-latest``,
+``*-auto``, ``*-default``).  Their vendor claims are alias claims — the
+identifier the provider resolves at runtime is not a stable catalog fact,
+so the vendor field is a best-effort convention rather than an independently
+verifiable statement.
+
+``byteplus`` and ``volcengine`` serve ByteDance's own Seed and Doubao models
+under ``vendor="volcengine"``, which confuses the platform with the
+manufacturer.  The convention is acknowledged here rather than silently
+accepted or silently rejected.
+
+This set is a barrier against unsubstantiated alias claims.  It must never
+be emptied to make tests pass — that is the mistake that sank a lane on
+2026-09-24.
 """
 
 import pytest
 
 from faigate.registry import ALL as PROVIDERS
+from faigate.registry import is_runtime_dependent_model
+
+# Providers whose vendor claims are alias claims because the model is
+# runtime-resolved.  Must never be emptied.
+KNOWN_ALIAS_CLAIMS: frozenset[str] = frozenset({"volcengine-plan", "mistral"})
 
 # Model-name prefix -> the vendor spellings the registry already uses for that
 # maker. Deliberately small: a family belongs here once the registry carries at
@@ -44,7 +66,7 @@ def _entries() -> list[tuple[str, str, str]]:
     for name, entry in sorted(PROVIDERS.items()):
         vendor = str(entry.get("vendor") or "")
         model = str(entry.get("model") or "")
-        if vendor and model:
+        if vendor and model and name not in KNOWN_ALIAS_CLAIMS:
             out.append((name, vendor, model))
     return out
 
@@ -61,6 +83,41 @@ def test_the_map_actually_matches_something() -> None:
     # A family map that matches no entry would let every assertion below pass.
     matched = [name for name, _, model in _entries() if _family(model)]
     assert matched, "no registry entry matches any known model family"
+
+
+# ---------------------------------------------------------------------------
+# Criterion 6: KNOWN_ALIAS_CLAIMS guard — barrier against unsubstantiated
+# alias claims.  Must never be emptied.
+# ---------------------------------------------------------------------------
+
+
+def test_known_alias_claims_must_not_be_empty() -> None:
+    """Criterion 6a: KNOWN_ALIAS_CLAIMS must never be emptied.
+
+    Emptying this set would let runtime-dependent entries pass vendor
+    validation without acknowledging their alias status — the exact
+    mistake that sank a lane on 2026-09-24.
+    """
+    assert KNOWN_ALIAS_CLAIMS, "KNOWN_ALIAS_CLAIMS must not be empty"
+
+
+def test_known_alias_claims_matches_runtime_dependent_entries() -> None:
+    """Criterion 6b: KNOWN_ALIAS_CLAIMS must exactly match runtime-dependent entries.
+
+    Every provider with a runtime-dependent model must be listed, and
+    every listed provider must still have a runtime-dependent model.
+    """
+    runtime_dep = {
+        name for name, entry in PROVIDERS.items() if is_runtime_dependent_model(str(entry.get("model") or ""))
+    }
+    missing = runtime_dep - KNOWN_ALIAS_CLAIMS
+    extra = KNOWN_ALIAS_CLAIMS - runtime_dep
+    assert not missing, "entries with runtime-dependent models not in KNOWN_ALIAS_CLAIMS:\n" + "\n".join(
+        f"  {n}" for n in sorted(missing)
+    )
+    assert not extra, "entries in KNOWN_ALIAS_CLAIMS no longer have runtime-dependent models:\n" + "\n".join(
+        f"  {n}" for n in sorted(extra)
+    )
 
 
 @pytest.mark.parametrize("name,vendor,model", _entries())

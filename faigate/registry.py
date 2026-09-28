@@ -750,3 +750,32 @@ def is_auth_optional(name: str) -> bool:
     if entry is None:
         return False
     return bool(entry.get("auth_optional", False))
+
+
+# ---------------------------------------------------------------------------
+# Runtime-dependent model name heuristic
+# ---------------------------------------------------------------------------
+# These patterns identify model names that the provider resolves at request
+# time.  The catalog cannot carry window, pricing, or capability facts for
+# such identifiers because the underlying model can change without notice.
+#
+# This is a heuristic on string patterns — it forces a judgment, not
+# replaces one.
+_RUNTIME_DEPENDENT_PATTERNS: tuple[str, ...] = ("latest", "auto", "default")
+
+
+def is_runtime_dependent_model(model: str) -> bool:
+    """Return True if *model* looks like a runtime-resolved alias.
+
+    A runtime-dependent model name is resolved by the provider at request
+    time.  The catalog cannot carry window, pricing, or capability facts for
+    such identifiers because the underlying model can change without notice.
+
+    This is a heuristic on string patterns — it forces a judgment, not
+    replaces one.
+    """
+    lowered = model.lower()
+    for pattern in _RUNTIME_DEPENDENT_PATTERNS:
+        if lowered.endswith(pattern):
+            return True
+    return False
