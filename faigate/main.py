@@ -2932,6 +2932,56 @@ async def health():
     }
 
 
+@app.get("/livez")
+async def liveness():
+    """Lightweight liveness check — answers without external work.
+
+    Kriterium 1 (F13-A): never triggers provider probes or background
+    tasks.  Only confirms the process is alive and the ASGI loop
+    responds.
+    """
+    return {"status": "ok"}
+
+
+@app.get("/readyz")
+async def readiness():
+    """Readiness check — 503 when a required provider is not reachable.
+
+    Kriterium 2 (F13-A): only checks providers listed in
+    ``health.required_providers``.  An optional provider's failure does
+    NOT affect readiness; a required provider's failure returns 503.
+
+    Kriterium 5 (F13-A): this is NOT the path that a full health-check
+    queries — the detailed diagnosis stays on /health.
+    """
+    required = _config.health.get("required_providers", [])
+    if not required:
+        # No required providers configured → trivially ready
+        return {"status": "ok", "ready": True}
+
+    unreachable: list[str] = []
+    for name in required:
+        provider = _providers.get(name)
+        if provider is None:
+            unreachable.append(name)
+            continue
+        state = _provider_request_readiness(provider)
+        if not state.get("ready", False):
+            unreachable.append(name)
+
+    if unreachable:
+        return JSONResponse(
+            {
+                "status": "service_unavailable",
+                "ready": False,
+                "unreachable_required": sorted(unreachable),
+            },
+            status_code=503,
+        )
+
+    return {"status": "ok", "ready": True}
+
+
 @app.get("/api/providers")
 async def provider_inventory(
     capability: str | None = None,
