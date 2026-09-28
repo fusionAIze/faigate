@@ -8,6 +8,636 @@
       "object": "model",
       "created": 1740600000,
       "owned_by": "byteplus",
+      "status": "Active",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "deepseek-v4",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Active",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "deepseek-r1",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Active",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "deepseek-v3",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Active",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "llama-3-1-405b",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Active",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "llama-3-1-70b",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Active",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "llama-3-1-8b",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Active",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "llama-3-2-90b",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Active",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "llama-3-2-11b",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Active",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "llama-3-2-3b",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Active",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "mistral-large-2407",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Active",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "mistral-large-2407-32k",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Active",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "mixtral-8x22b",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Active",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "mixtral-8x7b",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Active",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "gemma-2-27b",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Active",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "gemma-2-9b",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Active",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "qwen-2-72b",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Active",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "qwen-2-32b",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Active",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "qwen-2-7b",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Active",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "qwen-2-5-72b",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Active",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "seed-2-0-lite",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Active",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      },
+      "versioned_id": "seed-2-0-lite-240701"
+    },
+    {
+      "id": "seed-2-0",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Active",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "seed-1-5",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Active",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "seed-1-5-plus",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Active",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "doubao-pro-128k",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Active",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "doubao-pro-32k",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Active",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "doubao-lite-128k",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Active",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "doubao-lite-32k",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Active",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "seed-2-0-lite",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Retiring",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      },
+      "versioned_id": "seed-2-0-lite-231201"
+    },
+    {
+      "id": "seed-1-0",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Retiring",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "seed-1-0-plus",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Retiring",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "llama-2-70b",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Retiring",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "llama-2-13b",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Retiring",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "llama-2-7b",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Retiring",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "deepseek-v2",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Retiring",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "deepseek-v2-lite",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Retiring",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "mistral-7b",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Retiring",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "mistral-8x7b",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Retiring",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "qwen-1-72b",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Retiring",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "qwen-1-32b",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Retiring",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "gemma-1-7b",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Retiring",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "gemma-1-2b",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Retiring",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "doubao-pro-64k",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Retiring",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "doubao-lite-64k",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Retiring",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "llama-3-1-70b-32k",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Retiring",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "gpt-3-5-turbo",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Shutdown",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "gpt-3-5-turbo-16k",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Shutdown",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "gpt-4",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Shutdown",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "gpt-4-32k",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Shutdown",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "gpt-4-turbo",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Shutdown",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "gpt-4-turbo-preview",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Shutdown",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "claude-2",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Shutdown",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "claude-2-1",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Shutdown",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "claude-instant-1",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Shutdown",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "claude-instant-1-2",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Shutdown",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "palm-2",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Shutdown",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "palm-2-chat",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Shutdown",
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_tokens": 16384
+      }
+    },
+    {
+      "id": "text-bison-001",
+      "object": "model",
+      "created": 1740600000,
+      "owned_by": "byteplus",
+      "status": "Shutdown",
       "token_limits": {
         "context_window": 131072,
         "max_output_tokens": 16384

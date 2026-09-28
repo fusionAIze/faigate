@@ -45,3 +45,48 @@ def extract_context_window(models_data: dict[str, Any], field_path: str) -> int 
     if isinstance(current, int) and not isinstance(current, bool):
         return current
     return None
+
+
+def extract_model_lifecycles(
+    models_data: dict[str, Any],
+    status_field: str = "status",
+) -> list[dict[str, Any]]:
+    """Extract per-model lifecycle status from a /models response.
+
+    Each model entry in the ``data`` array is scanned for its ``id`` and the
+    field named by *status_field*.  When a model carries a ``versioned_id``
+    that differs from its ``id``, both are recorded so callers can detect
+    short-name/versioned-name divergence.
+
+    Returns a list of lifecycle entries, one per model in the response.
+    When the same short ``id`` appears multiple times (e.g., active and
+    retiring variants of the same base model), each entry is separate so
+    callers can detect the ambiguity.
+    """
+    if not isinstance(models_data, dict):
+        return []
+
+    data_list = models_data.get("data")
+    if not isinstance(data_list, list):
+        return []
+
+    entries: list[dict[str, Any]] = []
+    for entry in data_list:
+        if not isinstance(entry, dict):
+            continue
+        model_id = entry.get("id")
+        if not isinstance(model_id, str) or not model_id:
+            continue
+
+        lifecycle: dict[str, Any] = {
+            "model_id": model_id,
+            "status": str(entry.get(status_field, "") or ""),
+        }
+
+        versioned_id = entry.get("versioned_id")
+        if isinstance(versioned_id, str) and versioned_id and versioned_id != model_id:
+            lifecycle["versioned_id"] = versioned_id
+
+        entries.append(lifecycle)
+
+    return entries

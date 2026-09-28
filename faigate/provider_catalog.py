@@ -866,6 +866,11 @@ _PROBE_FIELD_PATHS: dict[str, str] = {
     "mistral": "max_context_length",
 }
 
+# Lifecycle field name for probe extraction — each model in a /models
+# response carries a status field that indicates Active / Retiring / Shutdown.
+_PROBE_LIFECYCLE_FIELD = "status"
+
+
 # The four defined unknown_kind values from the catalog schema
 # (catalog.v1.json).  Every unknown_kind emitted by faigate code must
 # belong to this set.  Invented values — "no_field_path", "unprobed" —
@@ -1098,6 +1103,118 @@ def build_probed_window_view(
         "advisory": dict(views.advisory),
         "summary": summary,
     }
+
+
+# --------------------------------------------------------------------------- #
+# Probed model lifecycle evidence (FAI-239-A)
+# --------------------------------------------------------------------------- #
+
+
+def probe_model_lifecycles(
+    models_data: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Extract per-model lifecycle status from a provider's /models response.
+
+    Delegates to :func:`faigate.capability_probe.extract_model_lifecycles`
+    and annotates each entry with the probe's timestamp and source URL.
+    Returns a list of lifecycle dicts (one per model in the response).
+    """
+    from .capability_probe import extract_model_lifecycles
+
+    probed_at = str(models_data.get("_recorded_at") or "")
+    source_url = str(models_data.get("_source") or "")
+    entries = extract_model_lifecycles(models_data, status_field=_PROBE_LIFECYCLE_FIELD)
+
+    for entry in entries:
+        if probed_at:
+            entry["probed_at"] = probed_at
+        if source_url:
+            entry["source"] = source_url
+    return entries
+
+
+def build_provider_lifecycle_catalog(
+    probe_data: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Build a lifecycle catalog from probe data.
+
+    *probe_data* maps provider names to their /models response dicts (the
+    same shape as the fixtures in ``tests/fixtures/models_probe/``).
+
+    Returns a dict keyed by provider name. Each value is a dict with:
+    - ``models`` — list of per-model lifecycle entries
+    - ``lifecycle`` — a summary of statuses observed for this provider:
+        ``active``, ``retiring``, ``shutdown`` counts, plus the full model list
+    - ``ambiguous_names`` — model short names that map to multiple versioned
+      IDs with different statuses, listed so the caller can flag ambiguity
+
+    When *probe_data* is ``None`` or empty, returns ``{}``.
+    """
+    if not probe_data:
+        return {}
+
+    catalog: dict[str, Any] = {}
+    for provider_name, models_data in probe_data.items():
+        if not isinstance(models_data, dict):
+            continue
+        entries = probe_model_lifecycles(models_data)
+        if not entries:
+            continue
+
+        # Count statuses
+        active_models: list[str] = []
+        retiring_models: list[str] = []
+        shutdown_models: list[str] = []
+        ambiguous: list[dict[str, Any]] = []
+
+        for entry in entries:
+            status = entry.get("status", "")
+            model_id = entry.get("model_id", "")
+            if status == "Active":
+                active_models.append(model_id)
+            elif status == "Retiring":
+                retiring_models.append(model_id)
+            elif status == "Shutdown":
+                shutdown_models.append(model_id)
+
+        # Detect ambiguous short names (same model_id, different versioned_id + status)
+        from collections import Counter
+
+        name_counter: Counter[str] = Counter()
+        for entry in entries:
+            name_counter[entry.get("model_id", "")] += 1
+        for model_id, count in name_counter.items():
+            if count > 1:
+                variants = [e for e in entries if e.get("model_id") == model_id]
+                statuses = {v.get("status") for v in variants}
+                ambiguous.append(
+                    {
+                        "model_id": model_id,
+                        "entries": variants,
+                        "statuses": sorted(statuses),
+                        "note": (
+                            f"Model name {model_id!r} appears {count} times "
+                            f"with statuses {sorted(statuses)} — "
+                            "the short name is ambiguous"
+                        ),
+                    }
+                )
+
+        catalog[provider_name] = {
+            "models": entries,
+            "lifecycle": {
+                "active": len(active_models),
+                "retiring": len(retiring_models),
+                "shutdown": len(shutdown_models),
+                "total": len(entries),
+                "active_models": active_models,
+                "retiring_models": retiring_models,
+                "shutdown_models": shutdown_models,
+            },
+            "ambiguous_names": ambiguous,
+        }
+
+    return catalog
 
 
 def get_provider_catalog_entry(provider_name: str) -> dict[str, Any]:
