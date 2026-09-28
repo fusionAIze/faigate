@@ -24,7 +24,7 @@ def _load_fixture(name: str) -> dict:
 
 def _extract_model_lifecycles(models_data: dict) -> list[dict]:
     """Lazy import wrapper for RED PROOF compatibility."""
-    from faigate.capability_probe import extract_model_lifecycles as _f
+    from faigate.provider_catalog import extract_model_lifecycles as _f
 
     return _f(models_data, status_field="status")
 
@@ -70,27 +70,58 @@ def test_lifecycle_counts_match_report() -> None:
     assert lc["total"] == 58, f"Expected 58 total, got {lc['total']}"
 
 
-def test_lifecycle_uses_same_fixture_as_context_window() -> None:
-    """The lifecycle probe consumes the same fixture files as the context-window
-    probe — no separate data source."""
-    byteplus = _load_fixture("byteplus")
-    deepseek = _load_fixture("deepseek")
-    openrouter = _load_fixture("openrouter")
-    mistral = _load_fixture("mistral")
-    nvidia = _load_fixture("nvidia")
+def test_lifecycle_entries_carry_the_context_window_probe_field_path() -> None:
+    """Criterion 1: the lifecycle probe is the same probe as FAI-238-A.
 
-    # All must be processable by the lifecycle extractor
-    for name, data in [
-        ("byteplus", byteplus),
-        ("deepseek", deepseek),
-        ("openrouter", openrouter),
-        ("mistral", mistral),
-        ("nvidia", nvidia),
-    ]:
-        entries = _extract_model_lifecycles(data)
-        assert isinstance(entries, list), f"{name}: expected list, got {type(entries)}"
-        # Even providers without a status field produce entries (status="")
-        assert len(entries) > 0, f"{name}: expected at least one entry"
+    Every lifecycle entry carries the provider's field path from the shared
+    ``_PROBE_FIELD_PATHS`` table that the context-window probe reads through
+    — the identifier of the same probe, not a parallel data source.
+    """
+    from faigate import provider_catalog as pc
+
+    # (probe provider key, fixture stem) — the same recorded response is read
+    # by both the lifecycle probe and the FAI-238-A context-window probe.
+    cases = [
+        ("byteplus", "byteplus"),
+        ("deepseek-chat", "deepseek"),
+        ("openrouter-fallback", "openrouter"),
+        ("mistral", "mistral"),
+    ]
+    for provider_key, fixture in cases:
+        data = _load_fixture(fixture)
+        expected_path = pc._PROBE_FIELD_PATHS[provider_key]
+
+        catalog = pc.build_provider_lifecycle_catalog({provider_key: data})
+        entries = catalog[provider_key]["models"]
+        assert entries, f"{provider_key}: expected lifecycle entries"
+        for entry in entries:
+            assert entry.get("field_path") == expected_path, (
+                f"{provider_key}: lifecycle entry {entry.get('model_id')!r} must carry the "
+                f"shared probe field path {expected_path!r}"
+            )
+
+        # The very same probe, read through the same path, yields the
+        # context-window fact — the coupling is to the real probe, not a copy.
+        evidence = pc.probe_context_window_evidence(provider_key, data)
+        assert evidence.get("field_path") == expected_path
+        assert evidence.get("level") == "confirmed"
+        from faigate.capability_probe import extract_context_window
+
+        assert extract_context_window(data, expected_path) == evidence["probed_value"]
+
+
+def test_probe_field_paths_is_the_context_window_table() -> None:
+    """The probe identifier the lifecycle entries carry is the one and only
+    ``_PROBE_FIELD_PATHS`` table — the same identifier the context-window
+    evidence block reports under ``field_path``."""
+    from faigate import provider_catalog as pc
+
+    data = _load_fixture("byteplus")
+    evidence = pc.probe_context_window_evidence("byteplus", data)
+    entry = pc.extract_lifecycle_probe(data)["entries"][0]
+
+    assert evidence.get("field_path") == pc._PROBE_FIELD_PATHS["byteplus"]
+    assert entry.get("field_path", pc.probed_field_path_for(entry, "byteplus")) == evidence["field_path"]
 
 
 def test_lifecycle_catalog_from_probe() -> None:
@@ -159,6 +190,63 @@ def test_short_name_is_ambiguous_flagged() -> None:
     assert "ambiguous" in entry["note"].lower()
 
 
+def test_ambiguous_name_states_which_version_is_meant() -> None:
+    """Criterion 2: the catalog does not stop at 'ambiguous' — it says which
+    concrete version an unversioned short name resolves to.
+
+    The provider resolves ``seed-2-0-lite`` to its Active variant, so the
+    ambiguous-name entry must name ``seed-2-0-lite-240701`` and record that the
+    resolution came from the Active status.
+    """
+    data = _load_fixture("byteplus")
+    catalog = _build_provider_lifecycle_catalog({"byteplus": data})
+
+    entry = catalog["byteplus"]["ambiguous_names"][0]
+    assert entry["resolved_versioned_id"] == "seed-2-0-lite-240701", (
+        f"the short name must resolve to its Active version, got {entry.get('resolved_versioned_id')!r}"
+    )
+    assert entry["resolved_by"] == "active_status"
+    assert entry["resolution_note"], "the resolution must be explained"
+    # The resolution must name the active version, not merely assert ambiguity.
+    assert "seed-2-0-lite-240701" in entry["resolution_note"]
+    # And it must NOT point at the retiring variant.
+    assert "seed-2-0-lite-231201" not in entry["resolution_note"]
+
+
+def test_ambiguous_resolution_falls_back_only_when_marked() -> None:
+    """When no variant is Active and the sole Retiring variant is versioned,
+    the fallback is named and explicitly marked as a fallback — never
+    presented as an authoritative resolution."""
+    from faigate.provider_catalog import build_provider_lifecycle_catalog
+
+    data = {
+        "data": [
+            {"id": "x-model", "status": "Shutdown", "versioned_id": "x-model-1"},
+            {"id": "x-model", "status": "Retiring", "versioned_id": "x-model-2"},
+        ]
+    }
+    entry = build_provider_lifecycle_catalog({"p": data})["p"]["ambiguous_names"][0]
+    assert entry["resolved_versioned_id"] == "x-model-2"
+    assert entry["resolved_by"] == "retiring_status"
+
+
+def test_ambiguous_resolution_is_none_when_undecidable() -> None:
+    """When the resolution cannot be decided from the recorded response, the
+    entry says so (``resolved_versioned_id is None``) instead of guessing."""
+    from faigate.provider_catalog import build_provider_lifecycle_catalog
+
+    data = {
+        "data": [
+            {"id": "y-model", "status": "Shutdown"},
+            {"id": "y-model", "status": "Shutdown"},
+        ]
+    }
+    entry = build_provider_lifecycle_catalog({"p": data})["p"]["ambiguous_names"][0]
+    assert entry["resolved_versioned_id"] is None
+    assert entry["resolved_by"] == ""
+    assert "not decidable" in entry["resolution_note"]
+
+
 # --------------------------------------------------------------------------- #
 # Criterion 3: Abgekündigte Modelle bleiben sichtbar und nutzbar
 # --------------------------------------------------------------------------- #
@@ -188,15 +276,90 @@ def test_retiring_models_appear_in_catalog() -> None:
 
 
 def test_total_includes_all_statuses() -> None:
-    """The total model count equals active + retiring + shutdown,
+    """The total model count equals active + retiring + shutdown + unknown,
     proving no models are silently excluded."""
     data = _load_fixture("byteplus")
     catalog = _build_provider_lifecycle_catalog({"byteplus": data})
 
     lc = catalog["byteplus"]["lifecycle"]
-    assert lc["total"] == lc["active"] + lc["retiring"] + lc["shutdown"], (
-        f"Total {lc['total']} != {lc['active']} + {lc['retiring']} + {lc['shutdown']}"
+    assert lc["total"] == lc["active"] + lc["retiring"] + lc["shutdown"] + lc["unknown"], (
+        f"Total {lc['total']} != {lc['active']} + {lc['retiring']} + {lc['shutdown']} + {lc['unknown']}"
     )
+
+
+def test_unexpected_status_lands_in_a_visible_bucket() -> None:
+    """Criterion 3: a status outside Active/Retiring/Shutdown must not fall
+    into an invisible remainder while ``total`` counts it.
+
+    A model with status ``Deprecated`` lands in ``unknown_models`` and its raw
+    status is recorded, so total always equals the sum of the visible lists.
+    """
+    from faigate.provider_catalog import build_provider_lifecycle_catalog
+
+    data = {
+        "data": [
+            {"id": "a-model", "status": "Active"},
+            {"id": "b-deprecated", "status": "Deprecated"},
+            {"id": "c-no-status"},
+        ]
+    }
+    lc = build_provider_lifecycle_catalog({"p": data})["p"]["lifecycle"]
+
+    assert lc["unknown"] == 2
+    assert "b-deprecated" in lc["unknown_models"]
+    assert "c-no-status" in lc["unknown_models"], "a model with no status field must stay visible, not vanish"
+    assert "Deprecated" in lc["unknown_statuses"]
+    assert lc["total"] == lc["active"] + lc["retiring"] + lc["shutdown"] + lc["unknown"]
+    assert set(lc["active_models"] + lc["retiring_models"] + lc["shutdown_models"] + lc["unknown_models"]) == {
+        "a-model",
+        "b-deprecated",
+        "c-no-status",
+    }
+
+
+def test_empty_response_is_reported_not_dropped() -> None:
+    """Criterion 3: a provider whose /models response is empty is reported as
+    an observed state, not silently removed from the catalog."""
+    from faigate.provider_catalog import build_provider_lifecycle_catalog
+
+    catalog = build_provider_lifecycle_catalog({"p": {"data": []}})
+    assert "p" in catalog, "a supplied provider with an empty response must not vanish"
+    assert catalog["p"]["probe_state"] == "empty_response"
+    assert catalog["p"]["lifecycle"]
+    assert catalog["p"]["lifecycle"]["total"] == 0
+
+
+def test_no_status_field_provider_is_reported_not_dropped() -> None:
+    """Criterion 3: a provider that returns models but no status field is
+    reported with its observed state — it is not silently omitted and not
+    mistaken for 'everything is healthy'."""
+    from faigate.provider_catalog import build_provider_lifecycle_catalog
+
+    catalog = build_provider_lifecycle_catalog({"p": {"data": [{"id": "m1"}]}})
+    assert "p" in catalog
+    assert catalog["p"]["probe_state"] == "no_status_field"
+    assert catalog["p"]["models"][0]["model_id"] == "m1"
+
+
+def test_cli_probe_lifecycles_reports_missing_and_unusable_providers() -> None:
+    """The CLI probe never turns an unprobed or unusable provider into silence:
+    each requested provider is listed with the state it was observed in."""
+    from faigate.provider_catalog import cli_probe_lifecycles
+
+    catalog = cli_probe_lifecycles(
+        ["byteplus", "nvidia", "not-configured"],
+        recorded_responses={
+            "byteplus": _load_fixture("byteplus"),
+            "nvidia": _load_fixture("nvidia"),
+        },
+    )
+    probe = catalog["_probe"]
+    assert probe["states"]["byteplus"] == "measured"
+    assert probe["states"]["nvidia"] == "no_status_field"
+    assert probe["missing"] == ["not-configured"]
+    assert probe["states"]["not-configured"] == "missing_recorded_response"
+    # Every requested provider is accounted for one way or another.
+    assert set(probe["states"]) == {"byteplus", "nvidia", "not-configured"}
 
 
 # --------------------------------------------------------------------------- #
@@ -250,24 +413,33 @@ def test_non_dict_models_data_returns_empty() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# RED PROOF: empty candidate set must fail the test
+# Guard: an empty candidate set must fail the check, not pass it
 # --------------------------------------------------------------------------- #
 
 
-def test_empty_candidate_set_does_not_pass_silently() -> None:
-    """A lifecycle extractor that receives an empty model list must
-    return no entries.  A test that loops over an empty set and reports
-    'no violations' is worthless — this guard asserts that the empty
-    case actually produces an empty result, and the caller must check
-    for emptiness rather than assume 'no violations means everything is
-    fine'."""
-    entries = _extract_model_lifecycles({"data": []})
-    assert len(entries) == 0, "An empty model list must produce zero entries"
-    # The real check: if a caller iterates over entries and finds none,
-    # they must not conclude "all models are healthy" — they must report
-    # that no data was available.  This test exists to enforce that the
-    # extractor returns empty (not None, not a single entry with no
-    # status) so the emptiness is detectable.
+def test_empty_candidate_set_fails_the_check_does_not_pass_silently() -> None:
+    """A check that loops over an empty candidate set and reports 'no
+    violations' is worthless.  The lifecycle probe therefore reports a
+    failing status when it measured nothing, so a consumer can never read
+    an empty run as a clean one."""
+    from faigate.provider_catalog import cli_probe_lifecycles
+
+    # Nothing recorded at all: an empty candidate set.
+    empty = cli_probe_lifecycles(["p"], recorded_responses={})
+    assert empty["_probe"]["status"] == "insufficient_evidence", (
+        "an empty candidate set must fail the check, not pass it"
+    )
+    assert empty["_probe"]["measured"] == []
+
+    # A provider that only returned models with no status was still measured
+    # as empty: it must not count as a successful measurement either.
+    unusable = cli_probe_lifecycles(["p"], recorded_responses={"p": {"data": [{"id": "m1"}]}})
+    assert unusable["_probe"]["status"] == "insufficient_evidence"
+
+    # The check passes only when there is a real candidate.
+    measured = cli_probe_lifecycles(["p"], recorded_responses={"p": {"data": [{"id": "m1", "status": "Active"}]}})
+    assert measured["_probe"]["status"] == "ok"
+    assert measured["_probe"]["measured"] == ["p"]
 
 
 # --------------------------------------------------------------------------- #

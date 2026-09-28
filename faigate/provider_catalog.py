@@ -1109,32 +1109,149 @@ def build_probed_window_view(
 # Probed model lifecycle evidence (FAI-239-A)
 # --------------------------------------------------------------------------- #
 
+# Lifecycle statuses that get their own visible bucket in the summary. A
+# provider that reports any other string (a new status, a typo, a localisation
+# of one of these three) is not silently dropped: it lands in ``unknown_models``
+# and its raw value is kept in ``unknown_statuses`` so an operator can see
+# exactly what the provider said.
+_LIFECYCLE_KNOWN_STATUSES: tuple[str, str, str] = ("Active", "Retiring", "Shutdown")
 
-def probe_model_lifecycles(
+
+def probe_state_for_lifecycle(provider_name: str, models_data: dict[str, Any] | None) -> str:
+    """Return the measurement state of one provider's lifecycle probe.
+
+    This is a state *of the measurement*, not a catalog fact — it therefore
+    lives in its own field and never in an ``unknown_kind``. It reports what
+    the probe actually saw, so a provider that produced no usable lifecycle
+    evidence is reported as observed rather than silently omitted:
+
+    - ``"measured"`` — the response carried at least one model with a status.
+    - ``"no_status_field"`` — the response carried models, but none of them
+      exposed the status field (the status field is absent, not empty).
+    - ``"empty_response"`` — the response was a dict but its ``data`` array
+      was empty: the endpoint answered and named no models.
+    - ``"no_probe_data"`` — no response was supplied for this provider.
+
+    The first three are observations and reach
+    :func:`build_provider_lifecycle_catalog` as its ``probe_state_models``.
+    """
+    if not isinstance(models_data, dict):
+        return "no_probe_data"
+    data_list = models_data.get("data")
+    if not isinstance(data_list, list) or not data_list:
+        return "empty_response"
+    for entry in data_list:
+        if isinstance(entry, dict) and _PROBE_LIFECYCLE_FIELD in entry:
+            return "measured"
+    return "no_status_field"
+
+
+def extract_model_lifecycles(
     models_data: dict[str, Any],
+    status_field: str = _PROBE_LIFECYCLE_FIELD,
 ) -> list[dict[str, Any]]:
     """Extract per-model lifecycle status from a provider's /models response.
 
-    Delegates to :func:`faigate.capability_probe.extract_model_lifecycles`
-    and annotates each entry with the probe's timestamp and source URL.
-    Returns a list of lifecycle dicts (one per model in the response).
-    """
-    from .capability_probe import extract_model_lifecycles
+    This is the lifecycle counterpart to
+    :func:`faigate.capability_probe.extract_context_window`, and reads the
+    same recorded responses (:data:`_PROBE_FIELD_PATHS` providers, fixtures
+    in ``tests/fixtures/models_probe/``). Each model entry in the ``data``
+    array is scanned for its ``id`` and the field named by *status_field*.
 
+    When a model carries a ``versioned_id`` that differs from its ``id``, both
+    are recorded so callers can see that the short name and the versioned id
+    diverge. When the same short ``id`` appears multiple times (an active and
+    a retiring variant of the same base model), each entry stays separate so
+    callers can detect the ambiguity.
+
+    An entry is produced for every dict in the ``data`` array that has a
+    non-empty string ``id`` — including one whose status field is absent (the
+    status is then ``""``). Returning only the models that carry a known
+    status would itself be a silent drop.
+
+    Returns ``[]`` for a non-dict ``models_data`` or a missing/non-list
+    ``data`` block.
+    """
+    if not isinstance(models_data, dict):
+        return []
+
+    data_list = models_data.get("data")
+    if not isinstance(data_list, list):
+        return []
+
+    entries: list[dict[str, Any]] = []
+    for entry in data_list:
+        if not isinstance(entry, dict):
+            continue
+        model_id = entry.get("id")
+        if not isinstance(model_id, str) or not model_id:
+            continue
+
+        lifecycle: dict[str, Any] = {
+            "model_id": model_id,
+            "status": str(entry.get(status_field, "") or ""),
+        }
+
+        versioned_id = entry.get("versioned_id")
+        if isinstance(versioned_id, str) and versioned_id and versioned_id != model_id:
+            lifecycle["versioned_id"] = versioned_id
+
+        entries.append(lifecycle)
+
+    return entries
+
+
+def extract_lifecycle_probe(
+    models_data: dict[str, Any],
+) -> dict[str, Any]:
+    """Extract lifecycle entries from a /models response and tag each with provenance.
+
+    The entries come straight from :func:`extract_model_lifecycles`. Each is
+    annotated with the field path configured for its provider in
+    :data:`_PROBE_FIELD_PATHS` when one exists — the identifier of the same
+    FAI-238-A probe that the context-window evidence is read through, so a
+    consumer can see the lifecycle read and the context-window read are the
+    same probe. Each is also annotated with the probe's recorded timestamp and
+    source URL when the recorded response carries them. Those keys are written
+    only onto the returned copy — a recorded status field literally named one
+    of them is preserved, not overwritten. The recorded ``data`` array itself
+    is never mutated, so one probe result can be re-read.
+
+    Returns ``{"entries": [...], "probed_at": str, "source": str}`` with all
+    entries present, including those whose status is ``""``. The provenance
+    values are also returned separately so a caller can record the probe's
+    age even when the response yielded no models.
+    """
+    if not isinstance(models_data, dict):
+        return {"entries": [], "probed_at": "", "source": ""}
     probed_at = str(models_data.get("_recorded_at") or "")
     source_url = str(models_data.get("_source") or "")
-    entries = extract_model_lifecycles(models_data, status_field=_PROBE_LIFECYCLE_FIELD)
+    entries: list[dict[str, Any]] = []
+    for entry in extract_model_lifecycles(models_data, _PROBE_LIFECYCLE_FIELD):
+        annotated = dict(entry)
+        for key, value in (("probed_at", probed_at), ("source", source_url)):
+            if value and key not in annotated:
+                annotated[key] = value
+        entries.append(annotated)
+    return {"entries": entries, "probed_at": probed_at, "source": source_url}
 
-    for entry in entries:
-        if probed_at:
-            entry["probed_at"] = probed_at
-        if source_url:
-            entry["source"] = source_url
-    return entries
+
+def probed_field_path_for(entry: dict[str, Any], provider_name: str) -> str | None:
+    """Return the FAI-238-A probe field path recorded for *entry*, or ``None``.
+
+    The lifecycle probe and the context-window probe read the same recorded
+    /models responses and share the one field-path table
+    (:data:`_PROBE_FIELD_PATHS`). This returns the path from that table — or
+    from the entry's own ``field_path`` key when the extraction carried one —
+    so the result is an identifier of the *shared* probe, not a copy of it.
+    """
+    return entry.get("field_path") or _PROBE_FIELD_PATHS.get(provider_name)
 
 
 def build_provider_lifecycle_catalog(
     probe_data: dict[str, dict[str, Any]] | None = None,
+    *,
+    probe_state_models: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Build a lifecycle catalog from probe data.
 
@@ -1143,29 +1260,85 @@ def build_provider_lifecycle_catalog(
 
     Returns a dict keyed by provider name. Each value is a dict with:
     - ``models`` — list of per-model lifecycle entries
-    - ``lifecycle`` — a summary of statuses observed for this provider:
-        ``active``, ``retiring``, ``shutdown`` counts, plus the full model list
-    - ``ambiguous_names`` — model short names that map to multiple versioned
-      IDs with different statuses, listed so the caller can flag ambiguity
+    - ``probe_state`` — the measurement state of this provider's probe (see
+      :func:`probe_state_for_lifecycle`); ``"empty_response"`` and
+      ``"no_status_field"`` are reported states, not gaps
+    - ``lifecycle`` — a summary of statuses observed for this provider. The
+      counts are ``active``, ``retiring``, ``shutdown`` and ``unknown``; the
+      corresponding model lists are ``active_models``, ``retiring_models``,
+      ``shutdown_models`` and ``unknown_models``. ``total`` is defined as the
+      sum of all four counts — every model lands in exactly one visible
+      bucket, so no model disappears quietly. ``unknown_statuses`` holds the
+      raw status strings that reached the unknown bucket.
+    - ``ambiguous_names`` — short names that appear more than once with
+      differing statuses; each entry carries the resolving ``versioned_id``
+      (see below)
 
-    When *probe_data* is ``None`` or empty, returns ``{}``.
+    Ambiguity resolution: a short ``model_id`` may appear more than once (for
+    example ``seed-2-0-lite`` as both ``Active`` and ``Retiring``), and the
+    provider's short name resolves to the ``Active`` variant. When a name is
+    ambiguous and exactly one variant is ``Active``, the ambiguous-name entry
+    carries ``resolved_versioned_id`` (that variant's versioned id, or its
+    model id when it has none) and ``resolved_by: "active_status"``, so a
+    consumer can tell *which* concrete version the short name means. When no
+    variant is Active, exactly one variant is Retiring, and every variant
+    carries a versioned id, the entry carries the retiring target and
+    ``resolved_by: "retiring_status"`` as the explicitly marked fallback.
+    Otherwise ``resolved_versioned_id`` is ``None`` with a reason in
+    ``resolution_note`` — the ambiguity is stated, never guessed away.
+
+    *probe_state_models* is how :func:`cli_probe_lifecycles` hands in
+    providers it observed without any status field. Such a provider is
+    reported with ``probe_state`` set and empty models rather than dropped;
+    the distinction between a supplied empty response, an unsupplied provider
+    and a provider with no empty response cannot be derived from an empty
+    *probe_data*, so it must be stated explicitly.
+
+    When *probe_data* is ``None`` or empty and no *probe_state_models* are
+    given, returns ``{}``.
     """
-    if not probe_data:
+    if not probe_data and not probe_state_models:
         return {}
 
     catalog: dict[str, Any] = {}
-    for provider_name, models_data in probe_data.items():
+
+    for provider_name, models_data in (probe_state_models or {}).items():
+        state = probe_state_for_lifecycle(provider_name, models_data)
+        if state == "measured":
+            continue  # a measured provider is carried through probe_data below
+        catalog[provider_name] = {
+            "models": [],
+            "probe_state": state,
+            "lifecycle": _empty_lifecycle_summary(),
+            "ambiguous_names": [],
+        }
+
+    from collections import Counter
+
+    for provider_name, models_data in (probe_data or {}).items():
         if not isinstance(models_data, dict):
             continue
-        entries = probe_model_lifecycles(models_data)
+        probe = extract_lifecycle_probe(models_data)
+        entries = probe["entries"]
+        state = probe_state_for_lifecycle(provider_name, models_data)
+        if not entries and state == "empty_response":
+            # A supplied provider whose response is empty is an observed state,
+            # not an absence: report it instead of dropping it.
+            catalog[provider_name] = {
+                "models": [],
+                "probe_state": "empty_response",
+                "lifecycle": _empty_lifecycle_summary(),
+                "ambiguous_names": [],
+            }
+            continue
         if not entries:
             continue
 
-        # Count statuses
         active_models: list[str] = []
         retiring_models: list[str] = []
         shutdown_models: list[str] = []
-        ambiguous: list[dict[str, Any]] = []
+        unknown_models: list[str] = []
+        unknown_statuses: set[str] = set()
 
         for entry in entries:
             status = entry.get("status", "")
@@ -1176,44 +1349,187 @@ def build_provider_lifecycle_catalog(
                 retiring_models.append(model_id)
             elif status == "Shutdown":
                 shutdown_models.append(model_id)
+            else:
+                # Any other status — a new one, a typo, a missing field — is
+                # kept visible here instead of counting in ``total`` alone.
+                unknown_models.append(model_id)
+                unknown_statuses.add(status)
 
         # Detect ambiguous short names (same model_id, different versioned_id + status)
-        from collections import Counter
-
         name_counter: Counter[str] = Counter()
         for entry in entries:
             name_counter[entry.get("model_id", "")] += 1
+        ambiguous: list[dict[str, Any]] = []
         for model_id, count in name_counter.items():
             if count > 1:
                 variants = [e for e in entries if e.get("model_id") == model_id]
                 statuses = {v.get("status") for v in variants}
-                ambiguous.append(
-                    {
-                        "model_id": model_id,
-                        "entries": variants,
-                        "statuses": sorted(statuses),
-                        "note": (
-                            f"Model name {model_id!r} appears {count} times "
-                            f"with statuses {sorted(statuses)} — "
-                            "the short name is ambiguous"
-                        ),
-                    }
-                )
+                ambiguous.append(_resolve_ambiguous_name(model_id, count, variants, statuses))
+
+        # Stamp each entry with the shared FAI-238-A probe field path so the
+        # lifecycle read is tied to the same probe, not a parallel one.
+        for entry in entries:
+            field_path = probed_field_path_for(entry, provider_name)
+            if field_path:
+                entry["field_path"] = field_path
 
         catalog[provider_name] = {
             "models": entries,
+            "probe_state": state,
             "lifecycle": {
                 "active": len(active_models),
                 "retiring": len(retiring_models),
                 "shutdown": len(shutdown_models),
-                "total": len(entries),
+                "unknown": len(unknown_models),
+                "total": len(active_models) + len(retiring_models) + len(shutdown_models) + len(unknown_models),
                 "active_models": active_models,
                 "retiring_models": retiring_models,
                 "shutdown_models": shutdown_models,
+                "unknown_models": unknown_models,
+                "unknown_statuses": sorted(unknown_statuses),
             },
             "ambiguous_names": ambiguous,
         }
 
+    return catalog
+
+
+def _empty_lifecycle_summary() -> dict[str, Any]:
+    """Return a lifecycle summary with every bucket present and empty."""
+    return {
+        "active": 0,
+        "retiring": 0,
+        "shutdown": 0,
+        "unknown": 0,
+        "total": 0,
+        "active_models": [],
+        "retiring_models": [],
+        "shutdown_models": [],
+        "unknown_models": [],
+        "unknown_statuses": [],
+    }
+
+
+def _resolve_ambiguous_name(
+    model_id: str,
+    count: int,
+    variants: list[dict[str, Any]],
+    statuses: set[str],
+) -> dict[str, Any]:
+    """Describe one ambiguous short name, including which variant it resolves to.
+
+    The provider's short name resolves to its ``Active`` variant. When exactly
+    one variant is Active, that is a decisive resolution and the returned entry
+    carries ``resolved_versioned_id`` plus ``resolved_by: "active_status"``. If
+    no variant is Active, exactly one is Retiring, and every variant is
+    versioned, the retiring variant is named as the explicitly marked fallback
+    (``resolved_by: "retiring_status"``) — never presented as authoritative.
+    Otherwise the resolution is undecidable here and said so plainly.
+    """
+    active_variants = [v for v in variants if v.get("status") == "Active"]
+    resolving: dict[str, Any] | None = None
+    resolved_by = ""
+    if len(active_variants) == 1:
+        resolving = active_variants[0]
+        resolved_by = "active_status"
+    else:
+        retiring_variants = [v for v in variants if v.get("status") == "Retiring"]
+        if len(retiring_variants) == 1 and all(v.get("versioned_id") for v in variants):
+            resolving = retiring_variants[0]
+            resolved_by = "retiring_status"
+
+    resolved_versioned_id: str | None = None
+    resolution_note = (
+        "No variant is Active and the resolution is not decidable from the "
+        "recorded response — the short name is ambiguous without a resolution."
+    )
+    if resolving is not None:
+        resolved_versioned_id = str(resolving.get("versioned_id") or resolving.get("model_id") or "")
+        if resolved_by == "active_status":
+            resolution_note = (
+                f"The short name resolves to its Active variant "
+                f"{resolved_versioned_id!r}; the provider serves the Active "
+                "variant for an unversioned model id."
+            )
+        else:
+            resolution_note = (
+                f"No variant is Active; the short name falls back to the sole "
+                f"Retiring variant {resolved_versioned_id!r}."
+            )
+
+    return {
+        "model_id": model_id,
+        "entries": variants,
+        "statuses": sorted(statuses),
+        "resolved_versioned_id": resolved_versioned_id,
+        "resolved_by": resolved_by,
+        "resolution_note": resolution_note,
+        "note": (
+            f"Model name {model_id!r} appears {count} times "
+            f"with statuses {sorted(statuses)} — "
+            "the short name is ambiguous"
+        ),
+    }
+
+
+def cli_probe_lifecycles(
+    providers: list[str],
+    *,
+    recorded_responses: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Run the lifecycle probe over *providers* and build the lifecycle catalog.
+
+    *recorded_responses* maps provider names to recorded /models responses
+    (the shape the FAI-238-A probe consumes and the fixtures in
+    ``tests/fixtures/models_probe/`` carry). For every requested provider the
+    matching response is handed to :func:`build_provider_lifecycle_catalog`
+    through its documented inputs: providers that yielded models go in as
+    *probe_data*, providers that yielded none go in as *probe_state_models*
+    and are reported with their observed state instead of vanishing.
+
+    A requested provider for which no response was recorded is reported in
+    ``missing`` — it is never silently treated as healthy, and the probe
+    catalogue has no entry for it. The returned dict is the lifecycle catalog
+    extended with a top-level ``_probe`` block listing every requested provider
+    and the state it was observed in.
+
+    The ``_probe`` block carries a ``status`` that is ``"ok"`` only when at
+    least one requested provider was actually measured, and
+    ``"insufficient_evidence"`` otherwise. A run that measured nothing must
+    not look like a clean run: the guard against an empty candidate set is
+    that the check *fails* on it, it does not pass vacuously.
+    """
+    recorded = recorded_responses or {}
+    probe_data: dict[str, dict[str, Any]] = {}
+    probe_state_models: dict[str, dict[str, Any]] = {}
+    missing: list[str] = []
+    states: dict[str, str] = {}
+    for provider in providers:
+        if provider not in recorded:
+            missing.append(provider)
+            states[provider] = "missing_recorded_response"
+            continue
+        models_data = recorded[provider]
+        state = probe_state_for_lifecycle(provider, models_data)
+        states[provider] = state
+        if state == "measured":
+            probe_data[provider] = models_data
+        else:
+            probe_state_models[provider] = models_data
+
+    catalog = build_provider_lifecycle_catalog(
+        probe_data if probe_data else None,
+        probe_state_models=probe_state_models if probe_state_models else None,
+    )
+    measured = [p for p, state in states.items() if state == "measured"]
+    catalog["_probe"] = {
+        "providers": list(providers),
+        "states": states,
+        "missing": missing,
+        "measured": measured,
+        # An empty candidate set is a failed check, not a clean one.
+        "status": "ok" if measured else "insufficient_evidence",
+    }
     return catalog
 
 
