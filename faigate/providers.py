@@ -183,6 +183,10 @@ class ProviderBackend:
             **dict(cfg.get("transport", {})),
         }
         self.health = ProviderHealth(name=name)
+        # A provider whose name no routing rule targets is not addressable.
+        # Set to False by the caller when no static rule or named-provider
+        # layer can route to this provider name.
+        self._addressable: bool = True
         self._last_probe_strategy = ""
         self._last_probe_payload = ""
         self._last_probe_verified = False
@@ -742,6 +746,8 @@ class ProviderBackend:
             return "treat this route as degraded until connectivity recovers"
         if normalized == "addressability-mismatch":
             return "the endpoint answered, but the responding model does not match the catalog entry"
+        if normalized == "not-addressable":
+            return "no routing rule targets this provider; add a static rule or route its name explicitly"
         return "inspect the last route error before relying on this provider"
 
     def _check_addressability(self) -> dict[str, Any] | None:
@@ -910,6 +916,23 @@ class ProviderBackend:
                 "probe_payload": probe_payload,
                 "verified_via": verified_via,
                 "operator_hint": self._request_readiness_action(final_status),
+            }
+        if not self._addressable:
+            return {
+                "ready": False,
+                "status": "not-addressable",
+                "reason": (f"provider '{self.name}' is configured but no routing rule targets this provider name"),
+                "probe_strategy": probe_strategy,
+                "compatibility": compatibility,
+                "profile": profile,
+                "billing_mode": billing_mode,
+                "probe_confidence": probe_confidence,
+                "quota_group": quota_group,
+                "quota_isolated": quota_isolated,
+                "notes": notes,
+                "probe_payload": probe_payload,
+                "verified_via": verified_via,
+                "operator_hint": self._request_readiness_action("not-addressable"),
             }
         if self._last_probe_verified:
             addressability = self._check_addressability()
