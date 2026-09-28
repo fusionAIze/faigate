@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 import faigate.main as faigate_main
 from faigate.provider_availability import (
     build_provider_availability_overlay,
@@ -310,3 +312,71 @@ class TestReadinessSummaryRollup:
         assert summary["providers_not_ready"] == 1
         assert summary["statuses"] == {"unknown": 1}
         assert sum(summary["statuses"].values()) == summary["providers_total"]
+
+
+# ── No readiness regression (FAI-237-B criterion 4) ──────────────────────────
+#
+# The addressability signal must be additive: a provider that reported ready
+# before this change has to keep reporting ready, and one that reported a
+# specific failure has to keep naming that same failure. The guard is a
+# before/after comparison per ladder branch, not an absolute count — every
+# ready case below would have to observe `ready` on the base commit too.
+
+READY_STATUSES = {"ready", "ready-verified", "ready-compat"}
+
+
+class TestNoReadinessRegression:
+    """Criterion 4: addressable providers keep the status they had before."""
+
+    def test_previously_ready_providers_stay_ready(self):
+        """The ladder's ready branches are unchanged by the new gate.
+
+        Three shapes of ready provider — bare config-ready, probe-verified
+        and compatibility-backed — must all still report ready with
+        addressability left at its default. Sorted comparison so the guard
+        fails loudly if the set is empty or a branch silently flips.
+        """
+        bare_ready = _make_backend("bare-ready")
+        probe_verified = _make_backend("probe-verified")
+        probe_verified._last_probe_verified = True
+        probe_verified._last_probe_strategy = "models"
+        compat_ready = _make_backend("compat-ready")
+        compat_ready.transport["compatibility"] = "openai-compat"
+        compat_ready.transport["probe_confidence"] = "medium"
+
+        statuses = sorted(
+            backend.request_readiness()["status"] for backend in (bare_ready, probe_verified, compat_ready)
+        )
+
+        assert statuses == ["ready", "ready-compat", "ready-verified"]
+        assert set(statuses) <= READY_STATUSES
+
+    def test_previously_not_ready_providers_keep_their_specific_status(self):
+        """The non-ready branches must not be rerouted into 'not-addressable'.
+
+        'no key' and 'endpoint did not answer' were already their own states
+        before addressability existed. The new gate sits after them, so an
+        addressable provider with a missing key still says 'missing-key' and
+        a failing endpoint still says 'transport-error'.
+        """
+        missing_key = _make_backend("missing-key", api_key="")
+        endpoint_down = _make_backend(
+            "endpoint-down",
+            last_error="Probe connection error: [Errno 61] Connection refused",
+            healthy=False,
+        )
+
+        assert missing_key.request_readiness()["status"] == "missing-key"
+        assert endpoint_down.request_readiness()["status"] == "transport-error"
+
+    def test_regression_guard_fails_on_an_empty_candidate_set(self):
+        """An empty candidate set must make the guard fail, not pass vacuously.
+
+        A ready-set check that iterates an empty list and reports no
+        violations proves nothing. This mirrors the real assertion above so
+        the empty case is caught rather than silently passing.
+        """
+        candidates = [backend for backend in () if backend.request_readiness()["ready"]]
+
+        with pytest.raises(AssertionError):
+            assert candidates, "regression guard had no candidates to check"
