@@ -17,6 +17,7 @@ from faigate.reachability import (
     static_rule_targets,
     uncovered_addressability_layers,
 )
+from faigate.router import Router, providers_routed_to_themselves
 
 
 class FakeJsonFetcher:
@@ -186,20 +187,22 @@ _STATIC_RULES = {
 }
 
 
-def _contract(provider_names, *, static_rules=None, mode_providers=()):
+def _contract(provider_names, *, static_rules=None, mode_providers=(), named_provider_names=()):
     """Derive the addressable set the runtime would hand the factory.
 
     This is the shipped derivation, not a fixture: ``provider_names`` is the
-    configured key set, ``static_rules`` the layer-1 contract and
-    ``mode_providers`` the names some routing mode can select. A configured key
-    that no layer reaches — not a rule target, not mode-eligible, and not
-    addressable by its own name — falls out of the set, and that is exactly the
-    provider the readiness ladder must call ``not-addressable``.
+    configured key set, ``static_rules`` the layer-1 contract, ``mode_providers``
+    the names some routing mode can select and ``named_provider_names`` the keys
+    the router resolves to themselves. A configured key that no layer reaches —
+    not a rule target, not mode-eligible, not self-routing — falls out of the
+    set, and that is exactly the provider the readiness ladder must call
+    ``not-addressable``.
     """
     return addressable_provider_names(
         provider_names=provider_names,
         static_rules=static_rules,
         mode_providers=mode_providers,
+        named_provider_names=named_provider_names,
     )
 
 
@@ -305,6 +308,76 @@ class TestAddressabilityReadiness:
 
         backend = create_provider_backend("mode-only-provider", dict(_PROVIDER_CFG), addressable_names=with_mode)
         assert backend.request_readiness()["status"] == "ready"
+
+    def test_a_key_the_router_resolves_to_itself_is_addressable_without_a_rule(self):
+        """The named-provider layer is the third address, and it is enough alone.
+
+        A client that asks for a configured provider key by name lands on that
+        provider even when no rule and no mode names it. Counting only rules and
+        modes would report such a provider not-addressable and hide a reachable
+        route behind a failure state.
+        """
+        names = ["self-routed-provider"]
+        empty_rules = {"enabled": True, "rules": []}
+        without_name = _contract(names, static_rules=empty_rules)
+        with_name = _contract(names, static_rules=empty_rules, named_provider_names={"self-routed-provider"})
+
+        assert without_name == set()
+        assert with_name == {"self-routed-provider"}
+
+        backend = create_provider_backend("self-routed-provider", dict(_PROVIDER_CFG), addressable_names=with_name)
+        assert backend.request_readiness()["status"] == "ready"
+
+    def test_a_name_a_rule_captures_elsewhere_is_not_addressable_by_its_own_key(self):
+        """The measure is the resolved outcome, not the configured key set.
+
+        When a static rule claims one key and routes it to a *different*
+        provider (the shipped ``openai-codex-spark`` case), asking for that key
+        does not reach that provider. The key is therefore not addressable
+        unless some other layer reaches its name; treating the raw key list as
+        self-routing would mark it ready and hide the capture.
+        """
+        names = ["captured-key", "rule-target"]
+        rules = {
+            "enabled": True,
+            "rules": [{"match": {"fallthrough": True}, "route_to": "rule-target"}],
+        }
+        # The router resolves neither key to itself: ``captured-key`` is
+        # captured by the rule, and ``rule-target`` is answered by the same rule.
+        addressable = _contract(names, static_rules=rules, named_provider_names=set())
+
+        assert addressable == {"rule-target"}
+        assert "captured-key" not in addressable
+
+        captured = create_provider_backend("captured-key", dict(_PROVIDER_CFG), addressable_names=addressable)
+        assert captured.request_readiness()["status"] == "not-addressable"
+
+    def test_the_named_provider_layer_measurement_resolves_each_key_by_its_own_name(self):
+        """The layer-1b measurement is the router's actual answer, key by key.
+
+        Synthetic, so it pins the measurement itself rather than the shipped
+        config's shape: two bare keys and one that a fallthrough rule claims
+        for another provider. The empty input is the self-guard — a measurement
+        that returned nothing for an empty contract would be indistinguishable
+        from a measurement that returns nothing for every contract, so the same
+        call must answer ``{"a", "b"}`` when keys are present.
+        """
+        from faigate.config import Config
+
+        cfg = Config(
+            {
+                "providers": {"a": {"api_key": "k"}, "b": {"api_key": "k"}, "captured": {"api_key": "k"}},
+                "static_rules": {
+                    "enabled": True,
+                    "rules": [{"name": "capture", "match": {"model_requested": ["captured"]}, "route_to": "a"}],
+                },
+            }
+        )
+
+        assert providers_routed_to_themselves(Router(cfg), {}) == set()
+        resolved = providers_routed_to_themselves(Router(cfg), cfg.providers)
+        assert {"a", "b"} <= resolved
+        assert "captured" not in resolved
 
     def test_key_endpoint_and_addressability_are_distinct_states(self):
         """The three failure modes must be their own status, not one bucket.
@@ -496,7 +569,21 @@ class TestNoReadinessRegression:
         mode_providers = _mode_eligible_provider_names(config=cfg, providers=providers)
         assert mode_providers, "no mode can select any provider; the layer is unmeasured"
 
-        addressable = _contract(names, static_rules=cfg.static_rules, mode_providers=mode_providers)
+        # The named-provider layer is measured, not inferred from the key list:
+        # a bare token a static rule redirects (openai-codex-spark) does reach
+        # itself, so it must not be counted by assumption.
+        name_targets = providers_routed_to_themselves(Router(cfg), cfg.providers)
+        assert name_targets, "the router resolves no provider to its own name; the layer is unmeasured"
+        assert "openai-codex-spark" not in name_targets, (
+            "openai-codex-spark is captured by a static rule and must not be counted as self-routing"
+        )
+
+        addressable = _contract(
+            names,
+            static_rules=cfg.static_rules,
+            mode_providers=mode_providers,
+            named_provider_names=name_targets,
+        )
         assert addressable, "no shipped provider is addressable; the derivation is broken"
 
         # Coverage is a precondition, not a formality: if a routing layer
@@ -506,6 +593,7 @@ class TestNoReadinessRegression:
         layer_coverage = {
             "static-rules": static_rule_targets(cfg.static_rules) & set(names),
             "policy-modes": set(mode_providers) & set(names),
+            "named-provider": name_targets & set(names),
         }
         assert addressability_coverage_holds(provider_names=names, layer_coverage=layer_coverage), (
             uncovered_addressability_layers(layer_coverage=layer_coverage)
@@ -537,7 +625,14 @@ class TestNoReadinessRegression:
         mode_providers = _mode_eligible_provider_names(config=cfg, providers=providers)
         assert mode_providers, "no mode can select any provider; the layer is unmeasured"
 
-        addressable = _contract(names, static_rules=cfg.static_rules, mode_providers=mode_providers)
+        name_targets = providers_routed_to_themselves(Router(cfg), cfg.providers)
+
+        addressable = _contract(
+            names,
+            static_rules=cfg.static_rules,
+            mode_providers=mode_providers,
+            named_provider_names=name_targets,
+        )
         backends = [create_provider_backend(name, dict(_PROVIDER_CFG), addressable_names=addressable) for name in names]
         assert len(backends) == len(names)
 
@@ -562,15 +657,18 @@ class TestAddressabilityCoverageGate:
         while most shipped providers were unaddressed by any rule.
         """
         names = ["a", "b"]
-        only_rules = {"static-rules": {"a"}, "policy-modes": set()}
+        only_rules = {"static-rules": {"a"}, "policy-modes": set(), "named-provider": set()}
 
         assert addressability_coverage_holds(provider_names=names, layer_coverage=only_rules) is False
-        assert uncovered_addressability_layers(layer_coverage=only_rules) == ("policy-modes",)
+        assert uncovered_addressability_layers(layer_coverage=only_rules) == ("policy-modes", "named-provider")
 
     def test_no_layer_measured_at_all_cannot_claim_coverage(self):
         """The empty-iteration shape: nothing measured, so everything is missing."""
         assert (
-            addressability_coverage_holds(provider_names=["a"], layer_coverage={"static-rules": 0, "policy-modes": 0})
+            addressability_coverage_holds(
+                provider_names=["a"],
+                layer_coverage={"static-rules": 0, "policy-modes": 0, "named-provider": 0},
+            )
             is False
         )
         assert addressability_coverage_holds(provider_names=["a"], layer_coverage={}) is False
@@ -580,10 +678,13 @@ class TestAddressabilityCoverageGate:
         """Declaring a layer covers it: leaving it out of the mapping fails.
 
         The gate is asked to check the declared layers, so a caller that
-        measures only one of two layers is caught rather than passing on the
+        measures only some of them is caught rather than passing on the
         mapping's keys.
         """
-        assert uncovered_addressability_layers(layer_coverage={"static-rules": {"a"}}) == ("policy-modes",)
+        assert uncovered_addressability_layers(layer_coverage={"static-rules": {"a"}}) == (
+            "policy-modes",
+            "named-provider",
+        )
         assert ROUTING_LAYERS, "an empty layer tuple would make the gate vacuous"
 
     def test_a_fully_measured_contract_passes_so_the_gate_is_not_always_false(self):
@@ -595,9 +696,11 @@ class TestAddressabilityCoverageGate:
         layer_coverage = {
             "static-rules": static_rule_targets(_STATIC_RULES) & set(names),
             "policy-modes": {"addressed-provider", "never-by-any-rule"} & set(names),
+            "named-provider": {"never-by-any-rule"} & set(names),
         }
         assert layer_coverage["static-rules"] == {"addressed-provider"}
         assert layer_coverage["policy-modes"] == set(names)
+        assert layer_coverage["named-provider"] == {"never-by-any-rule"}
 
         assert addressability_coverage_holds(provider_names=names, layer_coverage=layer_coverage) is True
         assert uncovered_addressability_layers(layer_coverage=layer_coverage) == ()

@@ -685,6 +685,39 @@ def _context_for_model_requested(
     )
 
 
+def providers_routed_to_themselves(
+    router: Router,
+    providers: dict[str, Any] | None,
+) -> set[str]:
+    """Return the configured keys the router resolves to themselves by name.
+
+    This measures the **named-provider layer** (1b): for each configured key it
+    runs the name through the addressing layers in the order the request path
+    uses them and keeps the key only when the decision lands back on it. That is
+    the honest answer to "can a request reach this provider by its own name", and
+    it is *not* the same as the raw key list:
+
+    - ``auto`` and ``""`` are excluded — they mean "let the routing decide".
+    - a key a higher layer captures to a **different** provider (a bare token a
+      static rule redirects) never reaches itself, because the rule answers
+      before layer 1b runs.
+
+    The whole addressing chain is evaluated, not layer 1b in isolation: asking
+    the named-provider layer directly would report every key that is not a rule
+    target, including the ones another rule captures to a different provider.
+    """
+    if not providers:
+        return set()
+    routed: set[str] = set()
+    for name in providers:
+        key = str(name)
+        ctx = _context_for_model_requested(providers, key)
+        decision = router._layer_policy(ctx) or router._layer_static(ctx) or router._layer_named_provider(ctx)
+        if decision is not None and str(decision.provider_name) == key:
+            routed.add(key)
+    return routed
+
+
 def _collect_keyword_hits(text: str, keywords: tuple[str, ...] | set[str] | list[str]) -> list[str]:
     """Return de-duplicated keywords that match one text using boundary-aware checks."""
     hits: list[str] = []

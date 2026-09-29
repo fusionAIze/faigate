@@ -946,6 +946,30 @@ class ProviderBackend:
                 "verified_via": verified_via,
                 "operator_hint": self._request_readiness_action(final_status),
             }
+        # Addressability gates every success state: a provider that has a key, a
+        # clean transport record and even a passing probe may still be
+        # unreachable if no routing rule can send a request to its name. It must
+        # therefore be checked before the probe branch, or a probe would flip a
+        # not-addressable provider to ready-verified. Naming it here keeps
+        # 'ready' meaning "this route accepts requests", separate from the
+        # key/endpoint failures above and stable regardless of probe order.
+        if not self._addressable:
+            return {
+                "ready": False,
+                "status": "not-addressable",
+                "reason": f"provider '{self.name}' is configured but no routing layer addresses this provider name",
+                "probe_strategy": probe_strategy,
+                "compatibility": compatibility,
+                "profile": profile,
+                "billing_mode": billing_mode,
+                "probe_confidence": probe_confidence,
+                "quota_group": quota_group,
+                "quota_isolated": quota_isolated,
+                "notes": notes,
+                "probe_payload": probe_payload,
+                "verified_via": verified_via,
+                "operator_hint": self._request_readiness_action("not-addressable"),
+            }
         if self._last_probe_verified:
             addressability = self._check_addressability()
             if addressability:
@@ -980,28 +1004,7 @@ class ProviderBackend:
                 "verified_via": verified_via or probe_strategy,
                 "operator_hint": self._request_readiness_action(status),
             }
-        # Addressability is the last gate: a provider that has a key, a clean
-        # transport record and a passing probe may still be unreachable if no
-        # routing rule can send a request to its name. Naming that here keeps
-        # 'ready' meaning "this route accepts requests", separate from the
-        # key/endpoint failures above.
-        if not self._addressable:
-            return {
-                "ready": False,
-                "status": "not-addressable",
-                "reason": f"provider '{self.name}' is configured but no routing layer addresses this provider name",
-                "probe_strategy": probe_strategy,
-                "compatibility": compatibility,
-                "profile": profile,
-                "billing_mode": billing_mode,
-                "probe_confidence": probe_confidence,
-                "quota_group": quota_group,
-                "quota_isolated": quota_isolated,
-                "notes": notes,
-                "probe_payload": probe_payload,
-                "verified_via": verified_via,
-                "operator_hint": self._request_readiness_action("not-addressable"),
-            }
+        # Addressability is checked before the probe branch above.
         if compatibility != "native" and probe_confidence != "high":
             status = "ready-compat"
             return {

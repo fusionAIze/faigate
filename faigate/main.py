@@ -90,7 +90,7 @@ from .reachability import (
     static_rule_targets,
     uncovered_addressability_layers,
 )
-from .router import Router, RoutingDecision
+from .router import Router, RoutingDecision, providers_routed_to_themselves
 from .updates import (
     UpdateChecker,
     apply_auto_update_guardrails,
@@ -2824,6 +2824,7 @@ async def lifespan(app: FastAPI):
     )
 
     _config = load_config()
+    _router = Router(_config)
     logger.info("Loaded config with %d providers", len(_config.providers))
 
     # Addressability is a property of the whole routing contract, not of a
@@ -2838,14 +2839,17 @@ async def lifespan(app: FastAPI):
     # trusting the layer list it was handed.
     _rule_targets = static_rule_targets(_config.static_rules) & set(_config.providers)
     _mode_targets = _mode_eligible_provider_names() & set(_config.providers)
+    _name_targets = providers_routed_to_themselves(_router, _config.providers) & set(_config.providers)
     _addressability_layer_coverage = {
         "static-rules": _rule_targets,
         "policy-modes": _mode_targets,
+        "named-provider": _name_targets,
     }
     _addressable_names = addressable_provider_names(
         provider_names=_config.providers,
         static_rules=_config.static_rules,
         mode_providers=_mode_targets,
+        named_provider_names=_name_targets,
     )
     for name, pcfg in _config.providers.items():
         if _provider_requires_static_api_key(name, pcfg) and not pcfg.get("api_key"):
@@ -2870,7 +2874,6 @@ async def lifespan(app: FastAPI):
         except Exception as exc:  # noqa: BLE001
             logger.warning("Failed to register virtual provider %s: %s", vp_name, exc)
 
-    _router = Router(_config)
     # Surface the negative signal here so an operator can act on it without
     # reading /health closely.
     _not_addressable = sorted(

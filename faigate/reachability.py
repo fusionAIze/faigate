@@ -8,6 +8,15 @@ not reachable — it advertises a model that doesn't exist at that endpoint.
 Provider-resolved aliases (like ``*-latest``) break this invariant by design:
 the provider can silently redirect them to any model without the catalog
 knowing, so the catalog cannot hold a stable fact about what they serve.
+
+The same module answers the routing question — can a request reach a configured
+provider *at all* — because that too is a property of the routing contract, not
+of the provider backend. Three layers can address a configured key:
+``static-rules`` (a rule routes to it), ``policy-modes`` (a mode's selector
+admits it) and ``named-provider`` (the key is the name a client would ask for).
+The third is measured, not assumed: a key that a static rule captures to a
+different provider answers to a different name and is therefore unreachable by
+its own. See :func:`addressable_provider_names`.
 """
 
 from __future__ import annotations
@@ -30,16 +39,16 @@ def static_rule_targets(static_rules: dict[str, Any] | None) -> set[str]:
 
 
 def is_addressable_provider_name(provider_name: str | None, static_rules: dict[str, Any] | None) -> bool:
-    """Return True when a request can reach *provider_name* by this name.
+    """Return True when a static rule routes to *provider_name*.
 
-    A provider is addressable when the routing engine can send a request to it:
+    This is only the ``static-rules`` layer. It is a *sufficient* but not a
+    *necessary* condition for addressability: a provider reached by a mode or by
+    its own name is addressable without any static rule naming it. Use
+    :func:`addressable_provider_names` for the full contract; this helper is the
+    single-layer test that derivation composes.
 
-    - a static rule routes to the provider name (``static_rules``), or
-    - the named-provider layer accepts the name itself — the requested model
-      equals a configured provider key (``Router._layer_named_provider``).
-
-    ``auto`` and ``""`` are reachable by no name and are therefore never
-    addressable, matching the layer that excludes them.
+    ``auto`` and ``""`` are not name-shaped and are therefore never a rule
+    target, matching the identity layer that excludes them too.
     """
     if not provider_name_is_its_own_address(provider_name):
         return False
@@ -51,6 +60,7 @@ def addressable_provider_names(
     provider_names: Any,
     static_rules: dict[str, Any] | None,
     mode_providers: Any = (),
+    named_provider_names: Any = (),
 ) -> set[str]:
     """Return the provider names a request can reach in the given routing contract.
 
@@ -59,22 +69,31 @@ def addressable_provider_names(
     than the raw config keys, because a config key is a routing target, not yet
     an address (see the identity gate in ``main._is_known_model_identity``).
 
-    A configured provider is addressable when **any** routing layer can send a
-    request to its name:
+    A configured provider is addressable when **any** of the three routing
+    layers that can address a key reaches it:
 
     - a static rule routes to it (``static_rules`` — layer 1), or
-    - a routing mode's policy selector lists it among that mode's eligible
-      providers (layer 0 — the mode resolves to the name when a client asks for
-      the mode or for ``auto``), or
-    - the named-provider layer accepts the name itself: a request that asks for
-      the provider key by name resolves to it (layer 1b), which every name-shaped
-      key satisfies except ``auto`` and ``""``.
+    - a routing mode's policy selector admits it (layer 0 — the mode resolves to
+      the name when a client asks for the mode or for ``auto``), or
+    - the named-provider layer resolves the key to itself (layer 1b — a request
+      that asks for the provider key by name lands on that provider).
 
-    ``mode_providers`` is the set of names some routing mode can select. It is
-    precomputed by the caller because eligibility is a property of the policy
-    selector, not of the routing contract alone. Passing it empty means "no mode
-    can route anywhere", not "every name is unreachable by mode" — which is why
-    a caller that reports coverage must gate on
+    The named-provider layer is measured, **not** assumed from the key list. The
+    layer only fires when a rule or a mode has not already claimed the name
+    first, so two keys are genuinely unreachable by their own name and must not
+    be counted: the non-address names ``auto`` and ``""`` (which the layer
+    excludes by design), and a key a higher layer captures to a *different*
+    provider — asking for that key answers with another provider. The caller
+    measures the actual outcomes and passes them as ``named_provider_names``;
+    counting the raw key set instead would make every configured provider
+    addressable and the ``not-addressable`` state unreachable.
+
+    ``mode_providers`` is the set of names some routing mode admits and
+    ``named_provider_names`` the set of keys the router resolves to themselves.
+    Both are precomputed by the caller because they are properties of the
+    routing layers, not of the routing contract alone. Passing one empty means
+    "no layer of that kind reaches anywhere", not "every name is unreachable
+    there" — which is why a caller that reports coverage must gate on
     :func:`addressability_coverage_holds`: an unmeasured layer would otherwise
     look like a layer that addresses nothing.
 
@@ -83,8 +102,10 @@ def addressable_provider_names(
     describes, and asking it here would make the signal circular.
     """
     names = {str(name).strip() for name in (provider_names or {}) if str(name).strip()}
-    reachable = {str(name).strip() for name in (mode_providers or []) if str(name).strip()}
-    return {name for name in names if name in reachable or is_addressable_provider_name(name, static_rules)}
+    by_mode = {str(name).strip() for name in (mode_providers or []) if str(name).strip()}
+    by_name = {str(name).strip() for name in (named_provider_names or []) if str(name).strip()}
+    addressed = by_mode | by_name
+    return {name for name in names if name in addressed or is_addressable_provider_name(name, static_rules)}
 
 
 #: The routing layers that give a configured provider key an address. Coverage
@@ -92,8 +113,10 @@ def addressable_provider_names(
 #: fail while a layer reaches nothing — not pass because the only layer it
 #: happens to measure addresses everything. See
 #: :func:`uncovered_addressability_layers` for why the declaration cannot be
-#: taken on faith.
-ROUTING_LAYERS = ("static-rules", "policy-modes")
+#: taken on faith. ``named-provider`` is the third layer
+#: :func:`addressable_provider_names` reads; leaving it out would let the
+#: derivation depend on a layer the coverage check never measured.
+ROUTING_LAYERS = ("static-rules", "policy-modes", "named-provider")
 
 
 def uncovered_addressability_layers(
@@ -208,13 +231,3 @@ def provider_name_is_its_own_address(provider_name: str | None) -> bool:
     """
     name = str(provider_name or "").strip()
     return bool(name) and name not in _NON_ADDRESS_NAMES
-
-
-def builtin_provider_names(providers: dict[str, Any] | None) -> set[str]:
-    """Return the built-in provider names, excluding the ``kilo-auto/*`` modes.
-
-    These are always addressable by their own name: the named-provider layer
-    matches the configured key, and the ``kilo-auto/*`` routing modes resolve
-    to them rather than being addressed themselves.
-    """
-    return {str(name) for name in (providers or {}) if not str(name).startswith("kilo-auto/")}
