@@ -84,9 +84,7 @@ def addressable_provider_names(
     """
     names = {str(name).strip() for name in (provider_names or {}) if str(name).strip()}
     reachable = {str(name).strip() for name in (mode_providers or []) if str(name).strip()}
-    return {
-        name for name in names if name in reachable or is_addressable_provider_name(name, static_rules)
-    }
+    return {name for name in names if name in reachable or is_addressable_provider_name(name, static_rules)}
 
 
 #: The routing layers that give a configured provider key an address. Coverage
@@ -125,11 +123,7 @@ def uncovered_addressability_layers(
     declared layer absent from the mapping is reported as uncovered.
     """
     coverage = layer_coverage if isinstance(layer_coverage, dict) else {}
-    return tuple(
-        layer
-        for layer in declared_layers
-        if _layer_reach_count(coverage.get(layer)) == 0
-    )
+    return tuple(layer for layer in declared_layers if _layer_reach_count(coverage.get(layer)) == 0)
 
 
 def _layer_reach_count(measurement: Any) -> int:
@@ -165,9 +159,7 @@ def addressability_coverage_holds(
     names = {str(name).strip() for name in (provider_names or {}) if str(name).strip()}
     if not names:
         return False
-    return not uncovered_addressability_layers(
-        layer_coverage=layer_coverage, declared_layers=declared_layers
-    )
+    return not uncovered_addressability_layers(layer_coverage=layer_coverage, declared_layers=declared_layers)
 
 
 def model_is_concrete(model_id: str) -> bool:

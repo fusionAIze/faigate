@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 import faigate.main as faigate_main
 from faigate.provider_availability import (
     build_provider_availability_overlay,
@@ -16,7 +14,6 @@ from faigate.reachability import (
     ROUTING_LAYERS,
     addressability_coverage_holds,
     addressable_provider_names,
-    is_addressable_provider_name,
     static_rule_targets,
     uncovered_addressability_layers,
 )
@@ -245,9 +242,7 @@ class TestAddressabilityReadiness:
         assert addressable == {"addressed-provider"}
         assert "never-by-any-rule" not in addressable
 
-        backend = create_provider_backend(
-            "never-by-any-rule", dict(_PROVIDER_CFG), addressable_names=addressable
-        )
+        backend = create_provider_backend("never-by-any-rule", dict(_PROVIDER_CFG), addressable_names=addressable)
 
         readiness = backend.request_readiness()
 
@@ -268,9 +263,7 @@ class TestAddressabilityReadiness:
         addressable = _contract(["addressed-provider"], static_rules=_STATIC_RULES)
         assert addressable == {"addressed-provider"}
 
-        backend = create_provider_backend(
-            "addressed-provider", dict(_PROVIDER_CFG), addressable_names=addressable
-        )
+        backend = create_provider_backend("addressed-provider", dict(_PROVIDER_CFG), addressable_names=addressable)
 
         readiness = backend.request_readiness()
 
@@ -288,9 +281,7 @@ class TestAddressabilityReadiness:
         addressable = _contract(names, static_rules=_STATIC_RULES)
 
         addressed = create_provider_backend("addressed-provider", dict(_PROVIDER_CFG), addressable_names=addressable)
-        unaddressed = create_provider_backend(
-            "never-by-any-rule", dict(_PROVIDER_CFG), addressable_names=addressable
-        )
+        unaddressed = create_provider_backend("never-by-any-rule", dict(_PROVIDER_CFG), addressable_names=addressable)
 
         assert "addressed-provider" in addressable
         assert "never-by-any-rule" not in addressable
@@ -312,9 +303,7 @@ class TestAddressabilityReadiness:
         assert without_modes == set()
         assert with_mode == {"mode-only-provider"}
 
-        backend = create_provider_backend(
-            "mode-only-provider", dict(_PROVIDER_CFG), addressable_names=with_mode
-        )
+        backend = create_provider_backend("mode-only-provider", dict(_PROVIDER_CFG), addressable_names=with_mode)
         assert backend.request_readiness()["status"] == "ready"
 
     def test_key_endpoint_and_addressability_are_distinct_states(self):
@@ -447,17 +436,11 @@ class TestNoReadinessRegression:
         loudly if the set is empty or a branch silently flips.
         """
         addressable = {"bare-ready", "probe-verified", "compat-ready"}
-        bare_ready = create_provider_backend(
-            "bare-ready", dict(_PROVIDER_CFG), addressable_names=addressable
-        )
-        probe_verified = create_provider_backend(
-            "probe-verified", dict(_PROVIDER_CFG), addressable_names=addressable
-        )
+        bare_ready = create_provider_backend("bare-ready", dict(_PROVIDER_CFG), addressable_names=addressable)
+        probe_verified = create_provider_backend("probe-verified", dict(_PROVIDER_CFG), addressable_names=addressable)
         probe_verified._last_probe_verified = True
         probe_verified._last_probe_strategy = "models"
-        compat_ready = create_provider_backend(
-            "compat-ready", dict(_PROVIDER_CFG), addressable_names=addressable
-        )
+        compat_ready = create_provider_backend("compat-ready", dict(_PROVIDER_CFG), addressable_names=addressable)
         compat_ready.transport["compatibility"] = "openai-compat"
         compat_ready.transport["probe_confidence"] = "medium"
 
@@ -524,9 +507,9 @@ class TestNoReadinessRegression:
             "static-rules": static_rule_targets(cfg.static_rules) & set(names),
             "policy-modes": set(mode_providers) & set(names),
         }
-        assert addressability_coverage_holds(
-            provider_names=names, layer_coverage=layer_coverage
-        ), uncovered_addressability_layers(layer_coverage=layer_coverage)
+        assert addressability_coverage_holds(provider_names=names, layer_coverage=layer_coverage), (
+            uncovered_addressability_layers(layer_coverage=layer_coverage)
+        )
 
         unaddressed = sorted(set(names) - addressable)
         assert unaddressed == [], f"shipped providers no layer addresses: {unaddressed}"
@@ -555,9 +538,7 @@ class TestNoReadinessRegression:
         assert mode_providers, "no mode can select any provider; the layer is unmeasured"
 
         addressable = _contract(names, static_rules=cfg.static_rules, mode_providers=mode_providers)
-        backends = [
-            create_provider_backend(name, dict(_PROVIDER_CFG), addressable_names=addressable) for name in names
-        ]
+        backends = [create_provider_backend(name, dict(_PROVIDER_CFG), addressable_names=addressable) for name in names]
         assert len(backends) == len(names)
 
         not_ready = [b.name for b in backends if not b.request_readiness()["ready"]]
@@ -592,9 +573,7 @@ class TestAddressabilityCoverageGate:
             addressability_coverage_holds(provider_names=["a"], layer_coverage={"static-rules": 0, "policy-modes": 0})
             is False
         )
-        assert (
-            addressability_coverage_holds(provider_names=["a"], layer_coverage={}) is False
-        )
+        assert addressability_coverage_holds(provider_names=["a"], layer_coverage={}) is False
         assert addressability_coverage_holds(provider_names=[], layer_coverage={}) is False
 
     def test_an_omitted_declared_layer_is_reported_not_ignored(self):

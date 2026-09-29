@@ -773,7 +773,10 @@ class ProviderBackend:
         if normalized == "addressability-mismatch":
             return "the endpoint answered, but the responding model does not match the catalog entry"
         if normalized == "not-addressable":
-            return "no routing layer addresses this provider; add a static rule, a mode selector, or route its name explicitly"
+            return (
+                "no routing layer addresses this provider; add a static rule, "
+                "a mode selector, or route its name explicitly"
+            )
         return "inspect the last route error before relying on this provider"
 
     def _check_addressability(self) -> dict[str, Any] | None:
