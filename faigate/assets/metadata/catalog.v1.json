@@ -1024,15 +1024,27 @@
       "watch_sources": [],
       "notes": "Mistral AI – Mistral Large, Codestral, etc.",
       "last_reviewed": "2026-04-01",
+      "pricing": {
+        "source_type": "provider-docs",
+        "source_url": "https://mistral.ai/pricing",
+        "refreshed_at": "2026-04-01T12:00:00Z",
+        "freshness_status": "fresh",
+        "input_cost_per_1m": 2.0,
+        "output_cost_per_1m": 6.0
+      },
       "vendor": "mistral",
       "model": "mistral-large-latest",
       "hop": [],
+      "context_window": 128000,
+      "limits": {
+        "max_input_tokens": 128000
+      },
       "context_evidence": {
         "level": "plausible",
-        "as_of": "2026-09-29",
+        "as_of": "2026-09-12",
         "unknown_kind": "runtime_dependent",
-        "unknown_reason": "mistral-large-latest is a provider-resolved alias — the catalog cannot carry a stable context window, price, or capability fact about it",
-        "note": "This entry carries no context_window, limits, or pricing. It used to carry 128000 and 2.0/6.0 per 1M, with a note recording that the public sources disagreed (LiteLLM azure/mistral-large-latest=32000). Keeping a number that the maker re-points without a version bump and without a signal is not a fact, it is a guess about today: the alias can resolve to a different model tomorrow. The facts belong to the concrete model the alias resolves to, not to the alias. The identifier stays a valid wiring target (example_model/recommended_model), because which model a provider prefers is a decision, not a property."
+        "unknown_reason": "mistral-large-latest is a provider-resolved alias — the catalog cannot carry stable facts about it",
+        "note": "Carried over unchanged from faigate's embedded provider table. The public sources disagree with it: LiteLLM azure/mistral-large-latest=32000. The value is kept so this migration does not silently change routing headroom; the divergence is recorded here so the correction can be a deliberate step."
       }
     },
     "moonshot": {
@@ -1679,16 +1691,27 @@
       "watch_sources": [],
       "notes": "Volcano Engine – coding models (ark-code-latest, doubao-seed-code, kimi-k2.5, kimi-k2-thinking, glm-4.7)",
       "last_reviewed": "2026-04-01",
+      "pricing": {
+        "source_type": "unknown",
+        "source_url": "",
+        "refreshed_at": "2026-04-01T02:22:11Z",
+        "freshness_status": "unknown"
+      },
       "vendor": "volcengine",
       "model": "ark-code-latest",
       "hop": [],
       "entry_type": "plan",
+      "context_window": 262144,
+      "limits": {
+        "max_input_tokens": 262144
+      },
       "context_evidence": {
         "level": "plausible",
-        "as_of": "2026-09-29",
         "unknown_kind": "runtime_dependent",
-        "unknown_reason": "ark-code-latest is a provider-resolved alias — the catalog cannot carry a stable context window, price, or capability fact about it",
-        "note": "This entry carries no context_window, limits, or pricing. It used to carry 262144, derived from model_caps[\"kimi-k2.6\"] as a plan rollup over ark coding models (ark-code-latest, kimi-k2.x, glm-4.x). A rollup is an estimate of what the plan serves today, not a fact about the alias: the plan re-points ark-code-latest at whichever coding model is current, without a version bump and without a signal, so the rollup can be wrong tomorrow and nothing would record it. The window belongs to the concrete model the alias resolves to. The identifier stays a valid wiring target, because which model a plan prefers is a decision, not a property."
+        "unknown_reason": "ark-code-latest is a provider-resolved alias — the catalog cannot carry stable facts about it",
+        "derived_from": "model_caps[\"kimi-k2.6\"]",
+        "derived_from_value": 262144,
+        "note": "plan rollup over ark coding models (ark-code-latest, kimi-k2.x, glm-4.x); no single window. Derived from the coding workhorse kimi-k2.6."
       }
     },
     "xai": {
