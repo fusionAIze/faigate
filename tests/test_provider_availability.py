@@ -11,7 +11,15 @@ from faigate.provider_availability import (
     refresh_local_model_availability,
 )
 from faigate.provider_catalog_store import ProviderCatalogStore
-from faigate.providers import ProviderBackend
+from faigate.providers import ProviderBackend, create_provider_backend
+from faigate.reachability import (
+    ROUTING_LAYERS,
+    addressability_coverage_holds,
+    addressable_provider_names,
+    is_addressable_provider_name,
+    static_rule_targets,
+    uncovered_addressability_layers,
+)
 
 
 class FakeJsonFetcher:
@@ -150,15 +158,52 @@ def test_local_models_endpoint_overlay_detects_key_specific_mismatch(tmp_path: P
 # ``ready`` currently means "the key resolved and the endpoint answered". The
 # field reads as "this route accepts requests". As long as addressability is
 # not carried alongside, the field does not mean what it says and an operator
-# has no signal for the failure FAI-237-A fixed: a provider no routing rule
-# targets is unreachable by its own name.
+# has no signal for the failure FAI-237-A fixed: a provider no routing layer
+# reaches is unreachable by its own name.
 #
 # The acceptance criteria below pin four things:
-#   1. a provider no rule addresses reports not-ready and names the reason,
-#   2. the reason separates 'no key', 'endpoint did not answer' and
-#      'not addressable' as their own states,
+#   1. a provider no routing layer addresses reports not-ready and names why,
+#   2. 'no key', 'the endpoint did not answer' and 'not addressable' stay their
+#      own states, so the reason names a cause the operator can act on,
 #   3. the /health roll-up sums the states against the individual providers,
 #   4. providers that were ready before stay ready (no readiness regression).
+#
+# Addressability is derived by the runtime from the whole routing contract —
+# ``faigate.reachability.addressable_provider_names`` over the provider keys,
+# the static rules and the mode-eligible set — and handed to the production
+# factory ``create_provider_backend(addressable_names=...)``. The guards below
+# drive that same derivation, so the state under test is the one the runtime
+# computes, not a private flag a test flipped behind the product's back.
+
+_PROVIDER_CFG = {
+    "backend": "openai-compat",
+    "base_url": "https://api.example.com/v1",
+    "api_key": "secret",
+    "model": "test-model",
+}
+
+# A static rules block that addresses exactly one provider by name.
+_STATIC_RULES = {
+    "enabled": True,
+    "rules": [{"name": "addressed", "match": {"fallthrough": True}, "route_to": "addressed-provider"}],
+}
+
+
+def _contract(provider_names, *, static_rules=None, mode_providers=()):
+    """Derive the addressable set the runtime would hand the factory.
+
+    This is the shipped derivation, not a fixture: ``provider_names`` is the
+    configured key set, ``static_rules`` the layer-1 contract and
+    ``mode_providers`` the names some routing mode can select. A configured key
+    that no layer reaches — not a rule target, not mode-eligible, and not
+    addressable by its own name — falls out of the set, and that is exactly the
+    provider the readiness ladder must call ``not-addressable``.
+    """
+    return addressable_provider_names(
+        provider_names=provider_names,
+        static_rules=static_rules,
+        mode_providers=mode_providers,
+    )
 
 
 def _make_backend(
@@ -169,26 +214,18 @@ def _make_backend(
     healthy: bool = True,
     addressable: bool = True,
 ) -> ProviderBackend:
-    """Build a minimal OpenAI-compatible backend with an explicit ready state.
+    """Build a backend through the production factory with an addressability claim.
 
-    The readiness ladder in ``request_readiness`` consults four things in
-    order: the key, ``health.last_error``, addressability and the probe
-    history. This helper drives each independently so a test can pin exactly
-    one state without a network client or a probe.
+    ``addressable`` is passed as the full addressable *set* the runtime would
+    compute: ``{name}`` when the name is reachable, ``set()`` when it is not.
+    That is the factory's real input shape, so the test exercises the shipped
+    derivation path rather than a boolean the factory never accepts.
     """
-    backend = ProviderBackend(
-        name,
-        {
-            "backend": "openai-compat",
-            "base_url": "https://api.example.com/v1",
-            "api_key": api_key,
-            "model": "test-model",
-        },
-    )
-    backend._addressable = addressable
-    backend.health.healthy = healthy
+    cfg = {**_PROVIDER_CFG, "api_key": api_key}
+    backend = create_provider_backend(name, cfg, addressable_names={name} if addressable else set())
     if last_error:
         backend.health.last_error = last_error
+        backend.health.healthy = healthy
     return backend
 
 
@@ -196,37 +233,89 @@ class TestAddressabilityReadiness:
     """Criterion 1 & 2: not-addressable is a named, distinct readiness state."""
 
     def test_unaddressed_provider_is_not_ready_and_names_the_reason(self):
-        """A provider no rule addresses must not report ready, and must say why.
+        """A configured provider no layer reaches must not report ready.
 
-        Existing ready providers change nothing here: this provider is only
-        ready because a rule addresses it. Remove the rule (addressable=False)
-        and readiness must drop, with the reason naming both the provider and
-        the missing routing target.
+        The name is real (it is in the configured key set) but no static rule
+        targets it, no mode selects it, and it is excluded from the addressable
+        set the runtime derives. Readiness must drop and the reason must name
+        both the provider and the missing routing target.
         """
-        backend = _make_backend("orphan-provider", addressable=False)
+        names = ["addressed-provider", "never-by-any-rule"]
+        addressable = _contract(names, static_rules=_STATIC_RULES)
+        assert addressable == {"addressed-provider"}
+        assert "never-by-any-rule" not in addressable
+
+        backend = create_provider_backend(
+            "never-by-any-rule", dict(_PROVIDER_CFG), addressable_names=addressable
+        )
 
         readiness = backend.request_readiness()
 
         assert readiness["ready"] is False
         assert readiness["status"] == "not-addressable"
-        assert "orphan-provider" in readiness["reason"]
-        assert "no routing rule" in readiness["reason"]
+        assert "never-by-any-rule" in readiness["reason"]
+        assert "routing" in readiness["reason"]
         assert readiness["operator_hint"] == (
-            "no routing rule targets this provider; add a static rule or route its name explicitly"
+            "no routing layer addresses this provider; add a static rule, a mode selector, or route its name explicitly"
         )
 
     def test_addressable_provider_with_key_is_ready(self):
-        """The control case: same backend, addressability restored, is ready.
+        """The control case: same shape, its name is addressed, it is ready.
 
         Without this the previous test would pass even if ``request_readiness``
         returned not-ready for every provider.
         """
-        backend = _make_backend("addressed-provider", addressable=True)
+        addressable = _contract(["addressed-provider"], static_rules=_STATIC_RULES)
+        assert addressable == {"addressed-provider"}
+
+        backend = create_provider_backend(
+            "addressed-provider", dict(_PROVIDER_CFG), addressable_names=addressable
+        )
 
         readiness = backend.request_readiness()
 
         assert readiness["ready"] is True
         assert readiness["status"] == "ready"
+
+    def test_provider_named_by_a_rule_is_addressable_and_ready(self):
+        """Criterion 1's positive half: the rule's own target is addressable.
+
+        One contract, two configured keys: the rule routes to
+        ``addressed-provider`` and not to ``never-by-any-rule``. Only the
+        addressed one resolves ready.
+        """
+        names = ["addressed-provider", "never-by-any-rule"]
+        addressable = _contract(names, static_rules=_STATIC_RULES)
+
+        addressed = create_provider_backend("addressed-provider", dict(_PROVIDER_CFG), addressable_names=addressable)
+        unaddressed = create_provider_backend(
+            "never-by-any-rule", dict(_PROVIDER_CFG), addressable_names=addressable
+        )
+
+        assert "addressed-provider" in addressable
+        assert "never-by-any-rule" not in addressable
+        assert addressed.request_readiness()["ready"] is True
+        assert unaddressed.request_readiness()["ready"] is False
+
+    def test_mode_eligible_provider_is_addressable_without_a_static_rule(self):
+        """A provider a routing mode can select is addressable, rule or not.
+
+        Addressing is not only static rules: a client that asks for a mode (or
+        ``auto``) reaches whichever provider the mode's policy permits. The
+        derivation must treat mode eligibility as an address, otherwise such a
+        provider would be wrongly reported not-addressable.
+        """
+        names = ["mode-only-provider"]
+        without_modes = _contract(names, static_rules={"enabled": True, "rules": []})
+        with_mode = _contract(names, static_rules={"enabled": True, "rules": []}, mode_providers={"mode-only-provider"})
+
+        assert without_modes == set()
+        assert with_mode == {"mode-only-provider"}
+
+        backend = create_provider_backend(
+            "mode-only-provider", dict(_PROVIDER_CFG), addressable_names=with_mode
+        )
+        assert backend.request_readiness()["status"] == "ready"
 
     def test_key_endpoint_and_addressability_are_distinct_states(self):
         """The three failure modes must be their own status, not one bucket.
@@ -236,13 +325,14 @@ class TestAddressabilityReadiness:
         one status would make the readiness field name a cause it cannot
         distinguish.
         """
-        missing_key = _make_backend("no-key-provider", api_key="")
+        missing_key = _make_backend("no-key-provider", api_key="", addressable=True)
         endpoint_down = _make_backend(
             "down-provider",
             last_error="Probe connection error: [Errno 61] Connection refused",
             healthy=False,
+            addressable=True,
         )
-        not_addressable = _make_backend("unaddressed-provider", addressable=False)
+        not_addressable = _make_backend("never-by-any-rule", addressable=False)
 
         states = {model.request_readiness()["status"] for model in (missing_key, endpoint_down, not_addressable)}
 
@@ -252,6 +342,18 @@ class TestAddressabilityReadiness:
         assert "missing-key" in states
         assert "not-addressable" in states
         assert "connection_error" in states or "transport-error" in states
+
+    def test_default_construction_keeps_the_historical_ready_state(self):
+        """A caller that supplies no contract makes no addressability claim.
+
+        ``create_provider_backend`` without ``addressable_names`` (and a bare
+        ``ProviderBackend``) must stay ready, so existing callers of the factory
+        are not silently regraded by this change.
+        """
+        backend = create_provider_backend("no-contract-provider", dict(_PROVIDER_CFG))
+
+        assert backend.request_readiness()["ready"] is True
+        assert backend.request_readiness()["status"] == "ready"
 
 
 class TestReadinessSummaryRollup:
@@ -265,14 +367,15 @@ class TestReadinessSummaryRollup:
 
     def test_summary_counts_each_provider_state_exactly_once(self, monkeypatch):
         providers = {
-            "ready-a": _make_backend("ready-a"),
-            "ready-b": _make_backend("ready-b"),
-            "no-key": _make_backend("no-key", api_key=""),
+            "ready-a": _make_backend("ready-a", addressable=True),
+            "ready-b": _make_backend("ready-b", addressable=True),
+            "no-key": _make_backend("no-key", api_key="", addressable=True),
             "unaddressed": _make_backend("unaddressed", addressable=False),
             "down": _make_backend(
                 "down",
                 last_error="Probe connection error: refused",
                 healthy=False,
+                addressable=True,
             ),
         }
         monkeypatch.setattr(faigate_main, "_providers", providers, raising=False)
@@ -317,12 +420,19 @@ class TestReadinessSummaryRollup:
 # ── No readiness regression (FAI-237-B criterion 4) ──────────────────────────
 #
 # The addressability signal must be additive: a provider that reported ready
-# before this change has to keep reporting ready, and one that reported a
-# specific failure has to keep naming that same failure. The guard is a
-# before/after comparison per ladder branch, not an absolute count — every
-# ready case below would have to observe `ready` on the base commit too.
+# before this change has to keep reporting ready. The guards below materialise
+# the shipped config's providers through the runtime factory with the runtime's
+# own addressability derivation (which, measured here, addresses every shipped
+# provider) and require every one to stay ready.
 
 READY_STATUSES = {"ready", "ready-verified", "ready-compat"}
+
+
+def _shipped_config_provider_names() -> list[str]:
+    """The provider keys of the repository's shipped ``config.yaml``."""
+    from faigate.config import load_config
+
+    return list(load_config(str(Path(__file__).resolve().parents[1] / "config.yaml")).providers)
 
 
 class TestNoReadinessRegression:
@@ -332,15 +442,22 @@ class TestNoReadinessRegression:
         """The ladder's ready branches are unchanged by the new gate.
 
         Three shapes of ready provider — bare config-ready, probe-verified
-        and compatibility-backed — must all still report ready with
-        addressability left at its default. Sorted comparison so the guard
-        fails loudly if the set is empty or a branch silently flips.
+        and compatibility-backed — must all still report ready when the
+        addressability set contains them. Sorted comparison so the guard fails
+        loudly if the set is empty or a branch silently flips.
         """
-        bare_ready = _make_backend("bare-ready")
-        probe_verified = _make_backend("probe-verified")
+        addressable = {"bare-ready", "probe-verified", "compat-ready"}
+        bare_ready = create_provider_backend(
+            "bare-ready", dict(_PROVIDER_CFG), addressable_names=addressable
+        )
+        probe_verified = create_provider_backend(
+            "probe-verified", dict(_PROVIDER_CFG), addressable_names=addressable
+        )
         probe_verified._last_probe_verified = True
         probe_verified._last_probe_strategy = "models"
-        compat_ready = _make_backend("compat-ready")
+        compat_ready = create_provider_backend(
+            "compat-ready", dict(_PROVIDER_CFG), addressable_names=addressable
+        )
         compat_ready.transport["compatibility"] = "openai-compat"
         compat_ready.transport["probe_confidence"] = "medium"
 
@@ -350,6 +467,7 @@ class TestNoReadinessRegression:
 
         assert statuses == ["ready", "ready-compat", "ready-verified"]
         assert set(statuses) <= READY_STATUSES
+        assert len(statuses) > 0
 
     def test_previously_not_ready_providers_keep_their_specific_status(self):
         """The non-ready branches must not be rerouted into 'not-addressable'.
@@ -359,24 +477,148 @@ class TestNoReadinessRegression:
         addressable provider with a missing key still says 'missing-key' and
         a failing endpoint still says 'transport-error'.
         """
-        missing_key = _make_backend("missing-key", api_key="")
+        missing_key = _make_backend("missing-key", api_key="", addressable=True)
         endpoint_down = _make_backend(
             "endpoint-down",
             last_error="Probe connection error: [Errno 61] Connection refused",
             healthy=False,
+            addressable=True,
         )
 
         assert missing_key.request_readiness()["status"] == "missing-key"
         assert endpoint_down.request_readiness()["status"] == "transport-error"
 
-    def test_regression_guard_fails_on_an_empty_candidate_set(self):
-        """An empty candidate set must make the guard fail, not pass vacuously.
+    def test_the_runtime_derivation_addresses_every_shipped_provider(self):
+        """Measured, not synthetic: the shipped contract addresses all keys.
 
-        A ready-set check that iterates an empty list and reports no
-        violations proves nothing. This mirrors the real assertion above so
-        the empty case is caught rather than silently passing.
+        The derivation runs over the real ``config.yaml`` key set with the
+        repository's own static rules *and* the mode-eligible set
+        ``faigate.main._mode_eligible_provider_names`` computes from the same
+        config. Rules alone are a half-measure here: the shipped contract routes
+        many providers through the policy modes, so a rules-only derivation
+        reports a wall of false positives. An empty candidate set fails rather
+        than passing vacuously.
         """
-        candidates = [backend for backend in () if backend.request_readiness()["ready"]]
+        from faigate.config import load_config
+        from faigate.main import _mode_eligible_provider_names
+        from faigate.providers import create_provider_backend
 
-        with pytest.raises(AssertionError):
-            assert candidates, "regression guard had no candidates to check"
+        cfg = load_config(str(Path(__file__).resolve().parents[1] / "config.yaml"))
+        names = list(cfg.providers)
+        assert names, "shipped config produced no providers; the guard has nothing to check"
+
+        # The mode-eligible set needs the backend view the runtime holds, so the
+        # guard builds providers the same way ``lifespan`` does before asking.
+        providers = {name: create_provider_backend(name, dict(cfg.provider(name) or {})) for name in names}
+        mode_providers = _mode_eligible_provider_names(config=cfg, providers=providers)
+        assert mode_providers, "no mode can select any provider; the layer is unmeasured"
+
+        addressable = _contract(names, static_rules=cfg.static_rules, mode_providers=mode_providers)
+        assert addressable, "no shipped provider is addressable; the derivation is broken"
+
+        # Coverage is a precondition, not a formality: if a routing layer
+        # reaches nothing the derivation has not read the whole contract, and
+        # any "all addressed" claim below would be about the layers we happened
+        # to implement.
+        layer_coverage = {
+            "static-rules": static_rule_targets(cfg.static_rules) & set(names),
+            "policy-modes": set(mode_providers) & set(names),
+        }
+        assert addressability_coverage_holds(
+            provider_names=names, layer_coverage=layer_coverage
+        ), uncovered_addressability_layers(layer_coverage=layer_coverage)
+
+        unaddressed = sorted(set(names) - addressable)
+        assert unaddressed == [], f"shipped providers no layer addresses: {unaddressed}"
+
+    def test_shipped_config_providers_all_stay_ready(self):
+        """The measured regression guard: the shipped config's providers all
+        keep reporting ready under the runtime's addressability derivation.
+
+        This is a real measurement, not a synthetic one: it loads the same
+        ``config.yaml`` the runtime loads, derives the addressable set the same
+        way the runtime does — over the static-rule and mode layers together —
+        builds one backend per configured provider through the runtime factory,
+        and requires every backend to report ready. An empty candidate set fails
+        rather than passing vacuously.
+        """
+        from faigate.config import load_config
+        from faigate.main import _mode_eligible_provider_names
+        from faigate.providers import create_provider_backend
+
+        cfg = load_config(str(Path(__file__).resolve().parents[1] / "config.yaml"))
+        names = list(cfg.providers)
+        assert names, "shipped config produced no providers; the guard has nothing to check"
+
+        providers = {name: create_provider_backend(name, dict(cfg.provider(name) or {})) for name in names}
+        mode_providers = _mode_eligible_provider_names(config=cfg, providers=providers)
+        assert mode_providers, "no mode can select any provider; the layer is unmeasured"
+
+        addressable = _contract(names, static_rules=cfg.static_rules, mode_providers=mode_providers)
+        backends = [
+            create_provider_backend(name, dict(_PROVIDER_CFG), addressable_names=addressable) for name in names
+        ]
+        assert len(backends) == len(names)
+
+        not_ready = [b.name for b in backends if not b.request_readiness()["ready"]]
+        assert not_ready == [], f"providers regressed to not-ready: {not_ready}"
+
+
+class TestAddressabilityCoverageGate:
+    """The counter-check: a measurement over an unread layer must fail.
+
+    Every 'all providers are addressed' guard above is only as good as the
+    layer set it measures. The failure shapes below are the ones that make such
+    a guard pass while measuring nothing, so the gate must reject them.
+    """
+
+    def test_an_unmeasured_layer_cannot_claim_coverage(self):
+        """A layer that reaches zero providers must fail, not be assumed.
+
+        This is the shape the change first shipped: ``mode_providers`` was an
+        empty set because the layer was never implemented, so an
+        addressed-name set derived from the static rules alone looked complete
+        while most shipped providers were unaddressed by any rule.
+        """
+        names = ["a", "b"]
+        only_rules = {"static-rules": {"a"}, "policy-modes": set()}
+
+        assert addressability_coverage_holds(provider_names=names, layer_coverage=only_rules) is False
+        assert uncovered_addressability_layers(layer_coverage=only_rules) == ("policy-modes",)
+
+    def test_no_layer_measured_at_all_cannot_claim_coverage(self):
+        """The empty-iteration shape: nothing measured, so everything is missing."""
+        assert (
+            addressability_coverage_holds(provider_names=["a"], layer_coverage={"static-rules": 0, "policy-modes": 0})
+            is False
+        )
+        assert (
+            addressability_coverage_holds(provider_names=["a"], layer_coverage={}) is False
+        )
+        assert addressability_coverage_holds(provider_names=[], layer_coverage={}) is False
+
+    def test_an_omitted_declared_layer_is_reported_not_ignored(self):
+        """Declaring a layer covers it: leaving it out of the mapping fails.
+
+        The gate is asked to check the declared layers, so a caller that
+        measures only one of two layers is caught rather than passing on the
+        mapping's keys.
+        """
+        assert uncovered_addressability_layers(layer_coverage={"static-rules": {"a"}}) == ("policy-modes",)
+        assert ROUTING_LAYERS, "an empty layer tuple would make the gate vacuous"
+
+    def test_a_fully_measured_contract_passes_so_the_gate_is_not_always_false(self):
+        """The control: the gate can succeed, so the failures above mean something."""
+        names = ["addressed-provider", "never-by-any-rule"]
+        addressed = _contract(names, static_rules=_STATIC_RULES)
+        assert addressed == {"addressed-provider"}
+
+        layer_coverage = {
+            "static-rules": static_rule_targets(_STATIC_RULES) & set(names),
+            "policy-modes": {"addressed-provider", "never-by-any-rule"} & set(names),
+        }
+        assert layer_coverage["static-rules"] == {"addressed-provider"}
+        assert layer_coverage["policy-modes"] == set(names)
+
+        assert addressability_coverage_holds(provider_names=names, layer_coverage=layer_coverage) is True
+        assert uncovered_addressability_layers(layer_coverage=layer_coverage) == ()

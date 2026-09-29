@@ -84,6 +84,12 @@ from .provider_catalog_refresh import (
 from .provider_catalog_store import ProviderCatalogStore
 from .provider_sources import list_provider_sources
 from .providers import ProviderBackend, ProviderError, classify_runtime_issue, create_provider_backend
+from .reachability import (
+    addressability_coverage_holds,
+    addressable_provider_names,
+    static_rule_targets,
+    uncovered_addressability_layers,
+)
 from .router import Router, RoutingDecision
 from .updates import (
     UpdateChecker,
@@ -1197,6 +1203,109 @@ def _provider_request_readiness(provider: Any) -> dict[str, Any]:
         )
         state["operator_hint"] = "prefer lower-pressure siblings while this route recovers"
     return state
+
+
+def _mode_eligible_provider_names(
+    config: Config | None = None,
+    providers: dict[str, Any] | None = None,
+) -> set[str]:
+    """Return the provider names at least one enabled routing mode could select.
+
+    A routing mode is an address: a client that asks for the mode (or for
+    ``auto``, which resolves to the default mode) reaches whichever provider the
+    mode's policy selector ranks first. A provider that is eligible in some mode
+    is therefore addressable even when no static rule names it — exactly the
+    case ``Router._select_policy_provider`` serves.
+
+    Eligibility is decided by the same method the request path uses
+    (``Router._provider_matches_policy``) rather than re-derived here, so the
+    addressability answer cannot drift from the routing it describes.
+    """
+    cfg = config if config is not None else _config
+    provider_map = providers if providers is not None else _providers
+    if cfg is None or not provider_map:
+        return set()
+
+    modes = cfg.routing_modes
+    if not modes.get("enabled"):
+        return set()
+
+    router = Router(cfg)
+    ctx = _mode_probe_context(provider_map)
+    eligible: set[str] = set()
+    for name, provider in provider_map.items():
+        provider_cfg = cfg.provider(name)
+        if not isinstance(provider_cfg, dict):
+            provider_cfg = _provider_config_view(provider)
+        for mode in modes.get("modes", {}).values():
+            if router._provider_matches_policy(provider_cfg, name, mode.get("select", {}) or {}, ctx):
+                eligible.add(name)
+                break
+    return eligible
+
+
+def _provider_config_view(provider: Any) -> dict[str, Any]:
+    """Return the config-shaped mapping a backend exposes, for policy matching.
+
+    ``_provider_matches_policy`` reads the provider's identity ``name``,
+    ``capabilities`` and ``tier`` off this mapping — its allow/deny filters
+    match against that ``name``. When a provider is not in the config (a virtual
+    provider registered by a community hook) the caller falls back to the
+    backend instance, which carries the same fields, so eligibility is still
+    answered by the routing method itself.
+    """
+    return {
+        "name": str(getattr(provider, "name", "") or ""),
+        "capabilities": dict(getattr(provider, "capabilities", {}) or {}),
+        "tier": str(getattr(provider, "tier", "") or ""),
+    }
+
+
+def _mode_probe_context(provider_map: dict[str, Any]) -> Any:
+    """Build a request-shaped context for policy eligibility probes.
+
+    Policy matching is dimension-aware (tier, cost, capability, image sizing),
+    so it needs a context. Addressability asks the *weakest* question — "could
+    any request reach this name" — so the context carries no requirements, which
+    makes every provider that a mode's allow/deny/capability filters permit
+    eligible.
+
+    ``providers`` holds the **config mapping** per name, not the backend: the
+    policy selector reads provider fields off this mapping (see
+    ``_provider_config_view``), and handing it backends would leave those reads
+    empty so that name-based allow/deny filters silently matched nothing.
+    """
+    from .router import _RoutingContext as _RouterCtx
+
+    return _RouterCtx(
+        system_prompt="",
+        last_user_message="",
+        full_text="",
+        total_tokens=0,
+        stable_prefix_tokens=0,
+        requested_output_tokens=0,
+        total_requested_tokens=0,
+        requested_image_outputs=0,
+        requested_image_side_px=0,
+        requested_image_size="",
+        requested_image_policy="",
+        required_capability="",
+        cache_preference="",
+        model_requested="auto",
+        has_tools=False,
+        client_profile="",
+        profile_hints={},
+        hook_hints={},
+        applied_hooks=[],
+        headers={},
+        provider_health={},
+        provider_runtime_state={},
+        providers={
+            str(name): (provider if isinstance(provider, dict) else _provider_config_view(provider))
+            for name, provider in provider_map.items()
+        },
+        request_insights={},
+    )
 
 
 def _request_readiness_summary() -> dict[str, Any]:
@@ -2717,12 +2826,32 @@ async def lifespan(app: FastAPI):
     _config = load_config()
     logger.info("Loaded config with %d providers", len(_config.providers))
 
-    # Initialize provider backends
+    # Addressability is a property of the whole routing contract, not of a
+    # provider: whether a request can reach a configured key by its name is
+    # decided by the layers (static rules, policy modes, the named-provider
+    # layer), not by the provider's own key or endpoint. Derive it once here
+    # from that contract and hand each backend the answer, so readiness reports
+    # 'not-addressable' for the keys no layer can route to instead of calling
+    # them ready because their key resolved.
+    # Each layer reports how many configured providers it reaches, so the
+    # coverage gate below can fail on a layer that measured nothing instead of
+    # trusting the layer list it was handed.
+    _rule_targets = static_rule_targets(_config.static_rules) & set(_config.providers)
+    _mode_targets = _mode_eligible_provider_names() & set(_config.providers)
+    _addressability_layer_coverage = {
+        "static-rules": _rule_targets,
+        "policy-modes": _mode_targets,
+    }
+    _addressable_names = addressable_provider_names(
+        provider_names=_config.providers,
+        static_rules=_config.static_rules,
+        mode_providers=_mode_targets,
+    )
     for name, pcfg in _config.providers.items():
         if _provider_requires_static_api_key(name, pcfg) and not pcfg.get("api_key"):
             logger.warning("Provider %s has no API key, skipping", name)
             continue
-        _providers[name] = create_provider_backend(name, pcfg)
+        _providers[name] = create_provider_backend(name, pcfg, addressable_names=_addressable_names)
         logger.info("  ✓ %s → %s (%s)", name, pcfg["model"], pcfg.get("tier", "default"))
 
     # Merge virtual providers registered by community hooks
@@ -2742,6 +2871,31 @@ async def lifespan(app: FastAPI):
             logger.warning("Failed to register virtual provider %s: %s", vp_name, exc)
 
     _router = Router(_config)
+    # Surface the negative signal here so an operator can act on it without
+    # reading /health closely.
+    _not_addressable = sorted(
+        name for name in _providers if _provider_request_readiness(_providers[name]).get("status") == "not-addressable"
+    )
+    if _not_addressable:
+        logger.warning(
+            "%d provider(s) are configured but no routing layer targets their name: %s",
+            len(_not_addressable),
+            ", ".join(_not_addressable),
+        )
+    # Addressability is only trusted once the whole contract has been read. A
+    # routing layer that addresses nothing means the derivation is missing the
+    # providers that layer would reach, so the 'not-addressable' set above is
+    # incomplete and saying "these and no others" would be a claim over a
+    # contract we have not finished reading. Fail loudly instead.
+    if not addressability_coverage_holds(
+        provider_names=_config.providers,
+        layer_coverage=_addressability_layer_coverage,
+    ):
+        logger.error(
+            "Addressability coverage is incomplete: routing layer(s) %s address no configured provider. "
+            "'not-addressable' readiness is not trustworthy until every layer is measured.",
+            ", ".join(uncovered_addressability_layers(layer_coverage=_addressability_layer_coverage)),
+        )
     _adaptive_state = AdaptiveRouteState()
     await _refresh_local_worker_probes(force=True)
     _update_checker = UpdateChecker(
