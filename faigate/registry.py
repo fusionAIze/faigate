@@ -203,11 +203,18 @@ BUILTIN: dict[str, ProviderDef] = {
         base_url_env="MISTRAL_BASE_URL",
         api_key_env="MISTRAL_API_KEY",
         tier="default",
+        # FAI-241-B: FAI-241 was rejected because it invented a rename for an
+        # alias claim. Mistral's own /models (measured 2026-09-24) has no
+        # "large" id at all, and the window/pricing here cannot be tied to a
+        # concrete version. The model move is a product decision, so the entry
+        # stays an alias claim with the reason recorded rather than guessed at.
         example_model="mistral/mistral-large-latest",
         vendor="mistral",
         model="mistral-large-latest",
         pricing={"input": 2.00, "output": 6.00},
-        notes="Mistral AI – Mistral Large, Codestral, etc.",
+        notes=(
+            "Mistral AI – alias claim (mistral-large-latest); which versioned id faigate recommends is open (FAI-241)"
+        ),
     ),
     # ── Groq ──────────────────────────────────────────────────────────────
     "groq": ProviderDef(
@@ -429,6 +436,20 @@ CUSTOM: dict[str, ProviderDef] = {
         notes="Kimi Coding – Anthropic-compat endpoint via Moonshot",
     ),
     # ── Volcano Engine / Doubao (China) ───────────────────────────────────
+    # vendor names the manufacturer, hop names the platform.
+    #
+    # The convention, settled 2026-09-29 under FAI-241-A, is that ``vendor``
+    # carries whoever built the model and ``hop`` carries every intermediary
+    # that serves it. ByteDance built Seed and Doubao; Volcano Engine (CN) and
+    # BytePlus (international) are two platforms serving them.
+    #
+    # Before this, four entries here read ``vendor="volcengine"`` for
+    # ByteDance's own models -- both the platform and the maker, so the field
+    # named neither. (A fifth, ``volcengine-plan``, is still an exception and
+    # says why at its entry: its model is a provider-resolved alias, so no maker
+    # can be named from its name.) The mapping was only ever demonstrated for
+    # these entries: another platform without a registered maker-and-model pair
+    # would need its own second source, not a guess.
     "volcengine": ProviderDef(
         backend="openai-compat",
         base_url="https://ark.cn-beijing.volces.com/api/v3",
@@ -436,8 +457,9 @@ CUSTOM: dict[str, ProviderDef] = {
         api_key_env="VOLCANO_ENGINE_API_KEY",
         tier="default",
         example_model="volcengine/doubao-seed-1-8-251228",
-        vendor="volcengine",
+        vendor="bytedance",
         model="doubao-seed-1-8-251228",
+        hop=["volcengine"],
         pricing={"input": 0.0, "output": 0.0},
         notes="Volcano Engine – Doubao, Kimi K2.5, GLM 4.7, DeepSeek V3.2 (CN)",
     ),
@@ -449,8 +471,18 @@ CUSTOM: dict[str, ProviderDef] = {
         api_key_env="VOLCANO_ENGINE_API_KEY",
         tier="default",
         example_model="volcengine-plan/ark-code-latest",
+        # ``ark-code-latest`` is a provider-resolved alias, so the name carries
+        # no maker. Naming ``bytedance`` here would be a guess the identifier
+        # cannot support -- the plan re-points the alias at whichever coding
+        # model is current, and that need not be a ByteDance model at all.
+        # ``volcengine`` is written down as the platform the alias is bound to,
+        # which is what the identifier actually states, and hop carries the
+        # platform for the canonical path either way. The unresolved maker is
+        # recorded in the catalog's ``unknown_reason`` rather than invented
+        # here (FAI-241-A).
         vendor="volcengine",
         model="ark-code-latest",
+        hop=["volcengine-plan"],
         pricing={"input": 0.0, "output": 0.0},
         notes=(
             "Volcano Engine – coding models (ark-code-latest, doubao-seed-code, kimi-k2.5, kimi-k2-thinking, glm-4.7)"
@@ -464,7 +496,7 @@ CUSTOM: dict[str, ProviderDef] = {
         api_key_env="BYTEPLUS_API_KEY",
         tier="default",
         example_model="byteplus/seed-2-0-pro",
-        vendor="volcengine",
+        vendor="bytedance",
         model="seed-2-0-pro",
         hop=["byteplus"],
         pricing={"input": 0.0, "output": 0.0},
@@ -753,29 +785,47 @@ def is_auth_optional(name: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Runtime-dependent model name heuristic
+# Runtime-dependent model name heuristic (FAI-241-A)
 # ---------------------------------------------------------------------------
-# These patterns identify model names that the provider resolves at request
-# time.  The catalog cannot carry window, pricing, or capability facts for
-# such identifiers because the underlying model can change without notice.
+# A provider-resolved alias ends in one of these windows.  The provider maps
+# the identifier to a concrete model at request time, so the catalog cannot
+# carry a stable window, pricing, or capability fact for it: the underlying
+# model can change without a version bump and without a signal.  The catalog
+# is therefore *not responsible* for such an identifier — it is not ignorant
+# of it either, because ignorance would assume the fact is knowable.
 #
-# This is a heuristic on string patterns — it forces a judgment, not
-# replaces one.
-_RUNTIME_DEPENDENT_PATTERNS: tuple[str, ...] = ("latest", "auto", "default")
+# The windows are the heuristic's vocabulary.  Each maps to the concrete model
+# it resolves to when that is known; ``None`` means the resolution is not
+# pinned here, which is itself a true statement about a runtime alias.
+#
+# This is a heuristic on string patterns — it forces a judgment, it does not
+# replace one.
+RUNTIME_ALIAS_WINDOWS: dict[str, str | None] = {
+    "latest": None,
+    "auto": None,
+    "default": None,
+}
 
 
 def is_runtime_dependent_model(model: str) -> bool:
-    """Return True if *model* looks like a runtime-resolved alias.
+    """Return True if *model* looks like a provider-resolved alias.
 
-    A runtime-dependent model name is resolved by the provider at request
-    time.  The catalog cannot carry window, pricing, or capability facts for
-    such identifiers because the underlying model can change without notice.
+    A provider-resolved alias is mapped to a concrete model at request time,
+    so the catalog cannot carry a stable window, pricing, or capability fact
+    for it.  The name ends in one of the windows in
+    :data:`RUNTIME_ALIAS_WINDOWS` (``latest``, ``auto``, ``default``).
 
-    This is a heuristic on string patterns — it forces a judgment, not
-    replaces one.
+    This is a heuristic on string patterns — it forces a judgment, it does
+    not replace one.  A name that ends in ``latest`` but is a concrete pin
+    (there is none in the registry) would be a false positive; a provider
+    alias that does not use one of these words is a false negative.  Both
+    are decisions the reviewer of this list owes, not the pattern.
+
+    The registry itself may still wire such an alias as a provider's
+    ``example_model``/``recommended_model``: which model a provider prefers to
+    serve is a decision, not a property, and is not a catalog fact.  This
+    predicate therefore only decides whether a *fact* may be attached to the
+    identifier — never whether it may be referenced.
     """
-    lowered = model.lower()
-    for pattern in _RUNTIME_DEPENDENT_PATTERNS:
-        if lowered.endswith(pattern):
-            return True
-    return False
+    lowered = str(model or "").strip().lower()
+    return any(lowered.endswith(window) for window in RUNTIME_ALIAS_WINDOWS)
