@@ -866,9 +866,17 @@ _PROBE_FIELD_PATHS: dict[str, str] = {
     "mistral": "max_context_length",
 }
 
-# Lifecycle field name for probe extraction — each model in a /models
-# response carries a status field that indicates Active / Retiring / Shutdown.
+# Lifecycle field names for probe extraction.  A /models response carries one
+# entry per *versioned* model id; ``name`` is the short name the provider keys
+# on, ``id`` is the concrete versioned id it actually serves, and ``version``
+# is the version suffix.  BytePlus omits ``status`` for models it has not
+# marked, which is how it reports "active" — so an absent status is read as
+# ``Active`` and flagged as inferred (see ``status_source``) rather than left
+# blank, which would contradict the provider's own 28/17/13 report.
 _PROBE_LIFECYCLE_FIELD = "status"
+_PROBE_NAME_FIELD = "name"
+_PROBE_VERSIONED_ID_FIELD = "versioned_id"
+_PROBE_ABSENT_STATUS = "Active"
 
 
 # The four defined unknown_kind values from the catalog schema
@@ -1155,18 +1163,31 @@ def extract_model_lifecycles(
     This is the lifecycle counterpart to
     :func:`faigate.capability_probe.extract_context_window`, and reads the
     same recorded responses (:data:`_PROBE_FIELD_PATHS` providers, fixtures
-    in ``tests/fixtures/models_probe/``). Each model entry in the ``data``
-    array is scanned for its ``id`` and the field named by *status_field*.
+    in ``tests/fixtures/models_probe/``).
 
-    When a model carries a ``versioned_id`` that differs from its ``id``, both
-    are recorded so callers can see that the short name and the versioned id
-    diverge. When the same short ``id`` appears multiple times (an active and
-    a retiring variant of the same base model), each entry stays separate so
+    A provider's /models listing keys each entry on the *short name* it
+    advertises (``name``, e.g. ``seed-2-0-lite``) while the concrete served
+    version carries a longer, suffixed id (``id``, e.g.
+    ``seed-2-0-lite-260428``). Both are recorded:
+
+    - ``model_id`` — the short name the provider keys on (falls back to ``id``
+      when the response carries no separate ``name``).
+    - ``versioned_id`` — the concrete versioned id, recorded only when it
+      differs from ``model_id``, so a consumer can see the two diverge.
+
+    Absent status: BytePlus omits ``status`` for the models it has not marked,
+    which is how it spells "active". An absent status is therefore read as
+    ``Active`` and ``status_source`` records that it was ``"inferred_absent"``
+    rather than ``"reported"`` — never left as a blank string, which would
+    make the counts contradict the provider's own report, and never silently
+    promoted to a healthy status without a trace.
+
+    When the same short name appears multiple times (an active and a
+    retiring variant of the same base model), each entry stays separate so
     callers can detect the ambiguity.
 
     An entry is produced for every dict in the ``data`` array that has a
-    non-empty string ``id`` — including one whose status field is absent (the
-    status is then ``""``). Returning only the models that carry a known
+    non-empty string ``id``. Returning only the models that carry a known
     status would itself be a silent drop.
 
     Returns ``[]`` for a non-dict ``models_data`` or a missing/non-list
@@ -1183,18 +1204,23 @@ def extract_model_lifecycles(
     for entry in data_list:
         if not isinstance(entry, dict):
             continue
-        model_id = entry.get("id")
-        if not isinstance(model_id, str) or not model_id:
+        versioned_id = entry.get("id")
+        if not isinstance(versioned_id, str) or not versioned_id:
             continue
 
+        name = entry.get(_PROBE_NAME_FIELD)
+        model_id = name if isinstance(name, str) and name else versioned_id
+
+        reported = entry.get(status_field)
+        reported_status = str(reported) if isinstance(reported, str) and reported else ""
         lifecycle: dict[str, Any] = {
             "model_id": model_id,
-            "status": str(entry.get(status_field, "") or ""),
+            "status": reported_status or _PROBE_ABSENT_STATUS,
+            "status_source": "reported" if reported_status else "inferred_absent",
         }
 
-        versioned_id = entry.get("versioned_id")
-        if isinstance(versioned_id, str) and versioned_id and versioned_id != model_id:
-            lifecycle["versioned_id"] = versioned_id
+        if versioned_id != model_id:
+            lifecycle[_PROBE_VERSIONED_ID_FIELD] = versioned_id
 
         entries.append(lifecycle)
 
@@ -1218,9 +1244,8 @@ def extract_lifecycle_probe(
     is never mutated, so one probe result can be re-read.
 
     Returns ``{"entries": [...], "probed_at": str, "source": str}`` with all
-    entries present, including those whose status is ``""``. The provenance
-    values are also returned separately so a caller can record the probe's
-    age even when the response yielded no models.
+    entries present. The provenance values are also returned separately so a
+    caller can record the probe's age even when the response yielded no models.
     """
     if not isinstance(models_data, dict):
         return {"entries": [], "probed_at": "", "source": ""}
@@ -1259,7 +1284,14 @@ def build_provider_lifecycle_catalog(
     same shape as the fixtures in ``tests/fixtures/models_probe/``).
 
     Returns a dict keyed by provider name. Each value is a dict with:
-    - ``models`` — list of per-model lifecycle entries
+    - ``models`` — list of per-model lifecycle entries. Each carries the short
+      ``model_id`` the provider keys on, the ``status``, whether that status
+      was reported or inferred (``status_source``), the ``versioned_id`` when
+      it diverges from the short name, and the shared probe ``field_path``.
+      An absent status is read as ``Active`` and flagged
+      ``status_source: "inferred_absent"`` — the provider's own way of saying
+      "not marked" (see :func:`extract_model_lifecycles`), so no model is left
+      with a blank status that the counts would contradict.
     - ``probe_state`` — the measurement state of this provider's probe (see
       :func:`probe_state_for_lifecycle`); ``"empty_response"`` and
       ``"no_status_field"`` are reported states, not gaps
@@ -1424,25 +1456,25 @@ def _resolve_ambiguous_name(
     no variant is Active, exactly one is Retiring, and every variant is
     versioned, the retiring variant is named as the explicitly marked fallback
     (``resolved_by: "retiring_status"``) — never presented as authoritative.
-    Otherwise the resolution is undecidable here and said so plainly.
+
+    Otherwise the resolution is undecidable here and the returned
+    ``resolution_note`` describes *this* collision — it is derived from the
+    statuses actually observed, so it never claims "no variant is Active" about
+    a set in which Active variants exist (for example two Active variants, or
+    Active variants whose versioned ids are both absent).
     """
     active_variants = [v for v in variants if v.get("status") == "Active"]
+    retiring_variants = [v for v in variants if v.get("status") == "Retiring"]
     resolving: dict[str, Any] | None = None
     resolved_by = ""
     if len(active_variants) == 1:
         resolving = active_variants[0]
         resolved_by = "active_status"
-    else:
-        retiring_variants = [v for v in variants if v.get("status") == "Retiring"]
-        if len(retiring_variants) == 1 and all(v.get("versioned_id") for v in variants):
-            resolving = retiring_variants[0]
-            resolved_by = "retiring_status"
+    elif not active_variants and len(retiring_variants) == 1 and all(v.get("versioned_id") for v in variants):
+        resolving = retiring_variants[0]
+        resolved_by = "retiring_status"
 
     resolved_versioned_id: str | None = None
-    resolution_note = (
-        "No variant is Active and the resolution is not decidable from the "
-        "recorded response — the short name is ambiguous without a resolution."
-    )
     if resolving is not None:
         resolved_versioned_id = str(resolving.get("versioned_id") or resolving.get("model_id") or "")
         if resolved_by == "active_status":
@@ -1455,6 +1487,28 @@ def _resolve_ambiguous_name(
             resolution_note = (
                 f"No variant is Active; the short name falls back to the sole "
                 f"Retiring variant {resolved_versioned_id!r}."
+            )
+    else:
+        # Say exactly what was observed, not a canned sentence: the note must
+        # be consistent with ``statuses`` for every collision shape.
+        if len(active_variants) > 1:
+            resolution_note = (
+                f"{len(active_variants)} variants are Active and no unique version "
+                "can be chosen — the resolution is not decidable from the "
+                "recorded response; the short name is ambiguous without a "
+                "resolution."
+            )
+        elif active_variants:
+            resolution_note = (
+                "A variant is Active but its versioned id is absent, so the "
+                "resolution is not decidable from the recorded response; the "
+                "short name is ambiguous without a resolution."
+            )
+        else:
+            resolution_note = (
+                "No variant is Active and the resolution is not decidable from "
+                "the recorded response; the short name is ambiguous without a "
+                "resolution."
             )
 
     return {

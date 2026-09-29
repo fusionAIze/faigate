@@ -1,647 +1,2060 @@
 {
-  "_recorded_at": "2026-09-24",
+  "_recorded_at": "2026-09-29",
   "_source": "GET https://ark.ap-southeast.bytepluses.com/api/v3/models",
   "object": "list",
   "data": [
     {
-      "id": "deepseek-v4-flash",
+      "created": 1738728958,
+      "domain": "LLM",
+      "features": {
+        "batch": {
+          "batch_chat": true,
+          "batch_job": true
+        },
+        "cache": {
+          "prefix_cache": true,
+          "session_cache": false
+        },
+        "structured_outputs": {
+          "json_object": true,
+          "json_schema": true
+        }
+      },
+      "id": "deepseek-r1-250120",
+      "modalities": {
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "text"
+        ]
+      },
+      "name": "deepseek-r1",
       "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Active",
+      "status": "Shutdown",
+      "task_type": [
+        "TextGeneration"
+      ],
       "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
+        "context_window": 98304,
+        "max_input_token_length": 65536,
+        "max_output_token_length": 16384,
+        "max_reasoning_token_length": 32768
+      },
+      "version": "250120"
     },
     {
-      "id": "deepseek-v4",
+      "created": 1739004880,
+      "domain": "LLM",
+      "features": {
+        "structured_outputs": {
+          "json_object": false,
+          "json_schema": false
+        }
+      },
+      "id": "deepseek-r1-distill-qwen-32b-250120",
+      "modalities": {
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "text"
+        ]
+      },
+      "name": "deepseek-r1-distill-qwen-32b",
       "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Active",
+      "status": "Shutdown",
+      "task_type": [
+        "TextGeneration"
+      ],
       "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
+        "context_window": 65536,
+        "max_input_token_length": 32768,
+        "max_output_token_length": 8192,
+        "max_reasoning_token_length": 32768
+      },
+      "version": "250120"
     },
     {
-      "id": "deepseek-r1",
+      "created": 1739778488,
+      "domain": "LLM",
+      "features": {
+        "structured_outputs": {
+          "json_object": false,
+          "json_schema": false
+        },
+        "tools": {
+          "function_calling": true
+        }
+      },
+      "id": "deepseek-v3-241226",
+      "modalities": {
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "text"
+        ]
+      },
+      "name": "deepseek-v3",
       "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Active",
+      "status": "Shutdown",
+      "task_type": [
+        "TextGeneration"
+      ],
       "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
+        "context_window": 65536,
+        "max_output_token_length": 8192
+      },
+      "version": "241226"
     },
     {
+      "created": 1740396828,
+      "domain": "LLM",
+      "features": {
+        "structured_outputs": {
+          "json_object": false,
+          "json_schema": false
+        },
+        "tools": {
+          "function_calling": true
+        }
+      },
+      "id": "skylark-pro-250215",
+      "modalities": {
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "text"
+        ]
+      },
+      "name": "skylark-pro",
+      "object": "model",
+      "status": "Shutdown",
+      "task_type": [
+        "TextGeneration"
+      ],
+      "token_limits": {
+        "context_window": 131072,
+        "max_output_token_length": 12288
+      },
+      "version": "250215"
+    },
+    {
+      "created": 1740472440,
+      "domain": "LLM",
+      "features": {
+        "batch": {
+          "batch_chat": false,
+          "batch_job": false
+        },
+        "cache": {
+          "prefix_cache": false,
+          "session_cache": false
+        },
+        "structured_outputs": {
+          "json_object": false,
+          "json_schema": false
+        },
+        "tools": {
+          "function_calling": true
+        }
+      },
+      "id": "skylark-lite-250215",
+      "modalities": {
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "text"
+        ]
+      },
+      "name": "skylark-lite",
+      "object": "model",
+      "status": "Shutdown",
+      "task_type": [
+        "TextGeneration"
+      ],
+      "token_limits": {
+        "context_window": 32768,
+        "max_input_token_length": 32768,
+        "max_output_token_length": 12288
+      },
+      "version": "250215"
+    },
+    {
+      "created": 1743061691,
+      "domain": "LLM",
+      "features": {
+        "batch": {
+          "batch_chat": true,
+          "batch_job": true
+        },
+        "cache": {
+          "prefix_cache": true,
+          "session_cache": false
+        },
+        "structured_outputs": {
+          "json_object": true,
+          "json_schema": true
+        },
+        "tools": {
+          "function_calling": true
+        }
+      },
       "id": "deepseek-v3",
-      "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Active",
-      "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
-    },
-    {
-      "id": "llama-3-1-405b",
-      "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Active",
-      "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
-    },
-    {
-      "id": "llama-3-1-70b",
-      "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Active",
-      "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
-    },
-    {
-      "id": "llama-3-1-8b",
-      "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Active",
-      "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
-    },
-    {
-      "id": "llama-3-2-90b",
-      "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Active",
-      "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
-    },
-    {
-      "id": "llama-3-2-11b",
-      "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Active",
-      "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
-    },
-    {
-      "id": "llama-3-2-3b",
-      "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Active",
-      "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
-    },
-    {
-      "id": "mistral-large-2407",
-      "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Active",
-      "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
-    },
-    {
-      "id": "mistral-large-2407-32k",
-      "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Active",
-      "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
-    },
-    {
-      "id": "mixtral-8x22b",
-      "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Active",
-      "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
-    },
-    {
-      "id": "mixtral-8x7b",
-      "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Active",
-      "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
-    },
-    {
-      "id": "gemma-2-27b",
-      "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Active",
-      "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
-    },
-    {
-      "id": "gemma-2-9b",
-      "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Active",
-      "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
-    },
-    {
-      "id": "qwen-2-72b",
-      "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Active",
-      "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
-    },
-    {
-      "id": "qwen-2-32b",
-      "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Active",
-      "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
-    },
-    {
-      "id": "qwen-2-7b",
-      "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Active",
-      "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
-    },
-    {
-      "id": "qwen-2-5-72b",
-      "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Active",
-      "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
-    },
-    {
-      "id": "seed-2-0-lite",
-      "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Active",
-      "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
+      "modalities": {
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "text"
+        ]
       },
-      "versioned_id": "seed-2-0-lite-240701"
-    },
-    {
-      "id": "seed-2-0",
+      "name": "deepseek-v3",
       "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Active",
+      "status": "Shutdown",
+      "task_type": [
+        "TextGeneration"
+      ],
       "token_limits": {
         "context_window": 131072,
-        "max_output_tokens": 16384
-      }
-    },
-    {
-      "id": "seed-1-5",
-      "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Active",
-      "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
-    },
-    {
-      "id": "seed-1-5-plus",
-      "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Active",
-      "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
-    },
-    {
-      "id": "doubao-pro-128k",
-      "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Active",
-      "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
-    },
-    {
-      "id": "doubao-pro-32k",
-      "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Active",
-      "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
-    },
-    {
-      "id": "doubao-lite-128k",
-      "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Active",
-      "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
-    },
-    {
-      "id": "doubao-lite-32k",
-      "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Active",
-      "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
-    },
-    {
-      "id": "seed-2-0-lite",
-      "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Retiring",
-      "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
+        "max_input_token_length": 131072,
+        "max_output_token_length": 16384
       },
-      "versioned_id": "seed-2-0-lite-231201"
+      "version": "250324"
     },
     {
-      "id": "seed-1-0",
+      "created": 1743650654,
+      "domain": "",
+      "features": {
+        "structured_outputs": {
+          "json_object": false,
+          "json_schema": false
+        }
+      },
+      "id": "skylark-embedding-vision-250328",
+      "modalities": {
+        "input_modalities": [
+          "text",
+          "image"
+        ]
+      },
+      "name": "skylark-embedding-vision",
       "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
       "status": "Retiring",
+      "task_type": [
+        "ImageEmbedding",
+        "TextEmbedding"
+      ],
       "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
+        "context_window": 8192
+      },
+      "version": "250328"
     },
     {
-      "id": "seed-1-0-plus",
+      "created": 1744825402,
+      "domain": "LLM",
+      "features": {
+        "batch": {
+          "batch_chat": true,
+          "batch_job": true
+        },
+        "cache": {
+          "prefix_cache": true,
+          "session_cache": true
+        },
+        "structured_outputs": {
+          "json_object": true,
+          "json_schema": true
+        },
+        "tools": {
+          "function_calling": true
+        }
+      },
+      "id": "skylark-pro",
+      "modalities": {
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "text"
+        ]
+      },
+      "name": "skylark-pro",
       "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Retiring",
-      "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
-    },
-    {
-      "id": "llama-2-70b",
-      "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Retiring",
-      "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
-    },
-    {
-      "id": "llama-2-13b",
-      "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Retiring",
-      "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
-    },
-    {
-      "id": "llama-2-7b",
-      "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Retiring",
-      "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
-    },
-    {
-      "id": "deepseek-v2",
-      "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Retiring",
-      "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
-    },
-    {
-      "id": "deepseek-v2-lite",
-      "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Retiring",
-      "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
-    },
-    {
-      "id": "mistral-7b",
-      "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Retiring",
-      "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
-    },
-    {
-      "id": "mistral-8x7b",
-      "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Retiring",
-      "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
-    },
-    {
-      "id": "qwen-1-72b",
-      "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Retiring",
-      "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
-    },
-    {
-      "id": "qwen-1-32b",
-      "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Retiring",
-      "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
-    },
-    {
-      "id": "gemma-1-7b",
-      "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Retiring",
-      "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
-    },
-    {
-      "id": "gemma-1-2b",
-      "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Retiring",
-      "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
-    },
-    {
-      "id": "doubao-pro-64k",
-      "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Retiring",
-      "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
-    },
-    {
-      "id": "doubao-lite-64k",
-      "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Retiring",
-      "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
-    },
-    {
-      "id": "llama-3-1-70b-32k",
-      "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Retiring",
-      "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
-    },
-    {
-      "id": "gpt-3-5-turbo",
-      "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
       "status": "Shutdown",
+      "task_type": [
+        "TextGeneration"
+      ],
       "token_limits": {
         "context_window": 131072,
-        "max_output_tokens": 16384
-      }
+        "max_output_token_length": 12288
+      },
+      "version": "250415"
     },
     {
-      "id": "gpt-3-5-turbo-16k",
+      "created": 1748240507,
+      "domain": "VLM",
+      "features": {
+        "batch": {
+          "batch_chat": true,
+          "batch_job": true
+        },
+        "structured_outputs": {
+          "json_object": true,
+          "json_schema": true
+        }
+      },
+      "id": "skylark-vision-250515",
+      "modalities": {
+        "input_modalities": [
+          "text",
+          "image"
+        ],
+        "output_modalities": [
+          "text"
+        ]
+      },
+      "name": "skylark-vision",
       "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
       "status": "Shutdown",
+      "task_type": [
+        "VisualQuestionAnswering"
+      ],
       "token_limits": {
         "context_window": 131072,
-        "max_output_tokens": 16384
-      }
+        "max_output_token_length": 12288
+      },
+      "version": "250515"
     },
     {
-      "id": "gpt-4",
+      "created": 1748334484,
+      "domain": "ImageGeneration",
+      "features": {
+        "structured_outputs": {
+          "json_object": false,
+          "json_schema": false
+        }
+      },
+      "id": "seedream-3-0-t2i-250415",
+      "modalities": {
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "image"
+        ]
+      },
+      "name": "seedream-3-0-t2i",
       "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Shutdown",
-      "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
+      "status": "Retiring",
+      "task_type": [
+        "TextToImage"
+      ],
+      "token_limits": {},
+      "version": "250415"
     },
     {
-      "id": "gpt-4-32k",
+      "created": 1748490117,
+      "domain": "LLM",
+      "features": {
+        "structured_outputs": {
+          "json_object": true,
+          "json_schema": true
+        },
+        "tools": {
+          "function_calling": true
+        }
+      },
+      "id": "deepseek-r1-250528",
+      "modalities": {
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "text"
+        ]
+      },
+      "name": "deepseek-r1",
       "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
       "status": "Shutdown",
+      "task_type": [
+        "TextGeneration"
+      ],
       "token_limits": {
         "context_window": 131072,
-        "max_output_tokens": 16384
-      }
+        "max_input_token_length": 98304,
+        "max_output_token_length": 16384,
+        "max_reasoning_token_length": 32768
+      },
+      "version": "250528"
     },
     {
-      "id": "gpt-4-turbo",
+      "created": 1748944645,
+      "domain": "VideoGeneration",
+      "features": {
+        "structured_outputs": {
+          "json_object": false,
+          "json_schema": false
+        }
+      },
+      "id": "seedance-1-0-lite-i2v-250428",
+      "modalities": {
+        "input_modalities": [
+          "text",
+          "image"
+        ],
+        "output_modalities": [
+          "video"
+        ]
+      },
+      "name": "seedance-1-0-lite-i2v",
       "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Shutdown",
-      "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
+      "status": "Retiring",
+      "task_type": [
+        "ImageToVideo"
+      ],
+      "token_limits": {},
+      "version": "250428"
     },
     {
-      "id": "gpt-4-turbo-preview",
+      "created": 1749019489,
+      "domain": "VideoGeneration",
+      "features": {
+        "structured_outputs": {
+          "json_object": false,
+          "json_schema": false
+        }
+      },
+      "id": "seedance-1-0-lite-t2v-250428",
+      "modalities": {
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "video"
+        ]
+      },
+      "name": "seedance-1-0-lite-t2v",
       "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Shutdown",
-      "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
+      "status": "Retiring",
+      "task_type": [
+        "TextToVideo"
+      ],
+      "token_limits": {},
+      "version": "250428"
     },
     {
-      "id": "claude-2",
+      "created": 1750916435,
+      "domain": "VideoGeneration",
+      "features": {
+        "structured_outputs": {
+          "json_object": false,
+          "json_schema": false
+        }
+      },
+      "id": "seedance-1-0-pro-250528",
+      "modalities": {
+        "input_modalities": [
+          "text",
+          "image"
+        ],
+        "output_modalities": [
+          "video"
+        ]
+      },
+      "name": "seedance-1-0-pro",
       "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Shutdown",
-      "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
+      "task_type": [
+        "ImageToVideo",
+        "TextToVideo"
+      ],
+      "token_limits": {},
+      "version": "250528"
     },
     {
-      "id": "claude-2-1",
+      "created": 1751270603,
+      "domain": "VLM",
+      "features": {
+        "batch": {
+          "batch_chat": true,
+          "batch_job": true
+        },
+        "structured_outputs": {
+          "json_object": true,
+          "json_schema": true
+        },
+        "tools": {
+          "function_calling": true
+        }
+      },
+      "id": "seed-1-6-flash-250615",
+      "modalities": {
+        "input_modalities": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output_modalities": [
+          "text"
+        ]
+      },
+      "name": "seed-1-6-flash",
       "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Shutdown",
+      "status": "Retiring",
+      "task_type": [
+        "VisualQuestionAnswering"
+      ],
       "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
+        "context_window": 262144,
+        "max_input_token_length": 229376,
+        "max_output_token_length": 32768,
+        "max_reasoning_token_length": 32768
+      },
+      "version": "250615"
     },
     {
-      "id": "claude-instant-1",
+      "created": 1751270778,
+      "domain": "VLM",
+      "features": {
+        "batch": {
+          "batch_chat": true,
+          "batch_job": true
+        },
+        "structured_outputs": {
+          "json_object": true,
+          "json_schema": true
+        },
+        "tools": {
+          "function_calling": true
+        }
+      },
+      "id": "seed-1-6-250615",
+      "modalities": {
+        "input_modalities": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output_modalities": [
+          "text"
+        ]
+      },
+      "name": "seed-1-6",
       "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Shutdown",
+      "status": "Retiring",
+      "task_type": [
+        "VisualQuestionAnswering"
+      ],
       "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
+        "context_window": 262144,
+        "max_input_token_length": 229376,
+        "max_output_token_length": 32768,
+        "max_reasoning_token_length": 32768
+      },
+      "version": "250615"
     },
     {
-      "id": "claude-instant-1-2",
+      "created": 1753088117,
+      "domain": "LLM",
+      "features": {
+        "batch": {
+          "batch_chat": false,
+          "batch_job": false
+        },
+        "cache": {
+          "prefix_cache": false,
+          "session_cache": false
+        },
+        "structured_outputs": {
+          "json_object": false,
+          "json_schema": false
+        },
+        "tools": {
+          "function_calling": true
+        }
+      },
+      "id": "kimi-k2-250711",
+      "modalities": {
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "text"
+        ]
+      },
+      "name": "kimi-k2",
       "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
       "status": "Shutdown",
+      "task_type": [
+        "TextGeneration"
+      ],
       "token_limits": {
         "context_window": 131072,
-        "max_output_tokens": 16384
-      }
+        "max_input_token_length": 131072,
+        "max_output_token_length": 32768
+      },
+      "version": "250711"
     },
     {
-      "id": "palm-2",
+      "created": 1753676058,
+      "domain": "ImageGeneration",
+      "features": {
+        "structured_outputs": {
+          "json_object": false,
+          "json_schema": false
+        }
+      },
+      "id": "seededit-3-0-i2i-250628",
+      "modalities": {
+        "input_modalities": [
+          "text",
+          "image"
+        ],
+        "output_modalities": [
+          "image"
+        ]
+      },
+      "name": "seededit-3-0-i2i",
       "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
       "status": "Shutdown",
-      "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
+      "task_type": [
+        "ImageToImage"
+      ],
+      "token_limits": {},
+      "version": "250628"
     },
     {
-      "id": "palm-2-chat",
+      "created": 1753784178,
+      "domain": "VLM",
+      "features": {
+        "batch": {
+          "batch_chat": false,
+          "batch_job": false
+        },
+        "structured_outputs": {
+          "json_object": true,
+          "json_schema": true
+        },
+        "tools": {
+          "function_calling": true
+        }
+      },
+      "id": "seed-1-6-flash-250715",
+      "modalities": {
+        "input_modalities": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output_modalities": [
+          "text"
+        ]
+      },
+      "name": "seed-1-6-flash",
       "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Shutdown",
+      "status": "Retiring",
+      "task_type": [
+        "VisualQuestionAnswering"
+      ],
       "token_limits": {
-        "context_window": 131072,
-        "max_output_tokens": 16384
-      }
+        "context_window": 262144,
+        "max_input_token_length": 229376,
+        "max_output_token_length": 32768,
+        "max_reasoning_token_length": 32768
+      },
+      "version": "250715"
     },
     {
-      "id": "text-bison-001",
+      "created": 1753961060,
+      "domain": "Embedding",
+      "features": {
+        "structured_outputs": {
+          "json_object": false,
+          "json_schema": false
+        },
+        "tools": {
+          "function_calling": true
+        }
+      },
+      "id": "skylark-embedding-vision-250615",
+      "modalities": {
+        "input_modalities": [
+          "text",
+          "image"
+        ]
+      },
+      "name": "skylark-embedding-vision",
       "object": "model",
-      "created": 1740600000,
-      "owned_by": "byteplus",
-      "status": "Shutdown",
+      "status": "Retiring",
+      "task_type": [
+        "ImageEmbedding",
+        "TextEmbedding"
+      ],
+      "token_limits": {
+        "context_window": 131072
+      },
+      "version": "250615"
+    },
+    {
+      "created": 1754449900,
+      "domain": "LLM",
+      "features": {
+        "structured_outputs": {
+          "json_object": false,
+          "json_schema": false
+        },
+        "tools": {
+          "function_calling": true
+        }
+      },
+      "id": "gpt-oss-120b-250805",
+      "modalities": {
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "text"
+        ]
+      },
+      "name": "gpt-oss-120b",
+      "object": "model",
+      "status": "Retiring",
       "token_limits": {
         "context_window": 131072,
-        "max_output_tokens": 16384
-      }
+        "max_input_token_length": 98304,
+        "max_output_token_length": 65536,
+        "max_reasoning_token_length": 32768
+      },
+      "version": "250805"
+    },
+    {
+      "created": 1755837062,
+      "domain": "LLM",
+      "features": {
+        "batch": {
+          "batch_chat": false,
+          "batch_job": false
+        },
+        "cache": {
+          "prefix_cache": false,
+          "session_cache": false
+        },
+        "structured_outputs": {
+          "json_object": false,
+          "json_schema": false
+        },
+        "tools": {
+          "function_calling": true
+        }
+      },
+      "id": "deepseek-v3-1-250821",
+      "modalities": {
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "text"
+        ]
+      },
+      "name": "deepseek-v3-1",
+      "object": "model",
+      "status": "Retiring",
+      "task_type": [
+        "TextGeneration"
+      ],
+      "token_limits": {
+        "context_window": 131072,
+        "max_input_token_length": 98304,
+        "max_output_token_length": 32768,
+        "max_reasoning_token_length": 32768
+      },
+      "version": "250821"
+    },
+    {
+      "created": 1757334416,
+      "domain": "ImageGeneration",
+      "features": {
+        "structured_outputs": {
+          "json_object": false,
+          "json_schema": false
+        }
+      },
+      "id": "seedream-4-0-250828",
+      "modalities": {
+        "input_modalities": [
+          "text",
+          "image"
+        ],
+        "output_modalities": [
+          "image"
+        ]
+      },
+      "name": "seedream-4-0",
+      "object": "model",
+      "task_type": [
+        "ImageToImage",
+        "TextToImage"
+      ],
+      "token_limits": {},
+      "version": "250828"
+    },
+    {
+      "created": 1757927317,
+      "domain": "LLM",
+      "features": {
+        "batch": {
+          "batch_chat": false,
+          "batch_job": false
+        },
+        "cache": {
+          "prefix_cache": false,
+          "session_cache": false
+        },
+        "structured_outputs": {
+          "json_object": false,
+          "json_schema": false
+        },
+        "tools": {
+          "function_calling": true
+        }
+      },
+      "id": "kimi-k2-250905",
+      "modalities": {
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "text"
+        ]
+      },
+      "name": "kimi-k2",
+      "object": "model",
+      "status": "Shutdown",
+      "task_type": [
+        "TextGeneration"
+      ],
+      "token_limits": {
+        "context_window": 262144,
+        "max_input_token_length": 229376,
+        "max_output_token_length": 32768
+      },
+      "version": "250905"
+    },
+    {
+      "created": 1757990662,
+      "domain": "VLM",
+      "features": {
+        "batch": {
+          "batch_chat": true,
+          "batch_job": true
+        },
+        "structured_outputs": {
+          "json_object": true,
+          "json_schema": true
+        },
+        "tools": {
+          "function_calling": true
+        }
+      },
+      "id": "seed-1-6-250915",
+      "modalities": {
+        "input_modalities": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output_modalities": [
+          "text"
+        ]
+      },
+      "name": "seed-1-6",
+      "object": "model",
+      "status": "Retiring",
+      "task_type": [
+        "VisualQuestionAnswering"
+      ],
+      "token_limits": {
+        "context_window": 262144,
+        "max_input_token_length": 229376,
+        "max_output_token_length": 32768,
+        "max_reasoning_token_length": 32768
+      },
+      "version": "250915"
+    },
+    {
+      "created": 1760504832,
+      "domain": "VideoGeneration",
+      "features": {
+        "structured_outputs": {
+          "json_object": false,
+          "json_schema": false
+        }
+      },
+      "id": "seedance-1-0-pro-fast-251015",
+      "modalities": {
+        "input_modalities": [
+          "text",
+          "image"
+        ],
+        "output_modalities": [
+          "video"
+        ]
+      },
+      "name": "seedance-1-0-pro-fast",
+      "object": "model",
+      "task_type": [
+        "ImageToVideo",
+        "TextToVideo"
+      ],
+      "token_limits": {},
+      "version": "251015"
+    },
+    {
+      "created": 1761220664,
+      "domain": "LLM",
+      "features": {
+        "structured_outputs": {
+          "json_object": false,
+          "json_schema": false
+        },
+        "tools": {
+          "function_calling": true
+        }
+      },
+      "id": "seed-translation-250915",
+      "modalities": {
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "text"
+        ]
+      },
+      "name": "seed-translation",
+      "object": "model",
+      "task_type": [
+        "TextGeneration"
+      ],
+      "token_limits": {
+        "context_window": 4096,
+        "max_input_token_length": 1024,
+        "max_output_token_length": 3072
+      },
+      "version": "250915"
+    },
+    {
+      "created": 1764141624,
+      "domain": "LLM",
+      "features": {
+        "batch": {
+          "batch_chat": true,
+          "batch_job": true
+        },
+        "cache": {
+          "prefix_cache": true,
+          "session_cache": true
+        },
+        "structured_outputs": {
+          "json_object": true,
+          "json_schema": true
+        },
+        "tools": {
+          "function_calling": true
+        }
+      },
+      "id": "kimi-k2-thinking-251104",
+      "modalities": {
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "text"
+        ]
+      },
+      "name": "kimi-k2",
+      "object": "model",
+      "status": "Shutdown",
+      "task_type": [
+        "TextGeneration"
+      ],
+      "token_limits": {
+        "context_window": 262144,
+        "max_input_token_length": 229376,
+        "max_output_token_length": 32768,
+        "max_reasoning_token_length": 32768
+      },
+      "version": "thinking-251104"
+    },
+    {
+      "created": 1764295050,
+      "domain": "ImageGeneration",
+      "features": {
+        "structured_outputs": {
+          "json_object": false,
+          "json_schema": false
+        }
+      },
+      "id": "seedream-4-5-251128",
+      "modalities": {
+        "input_modalities": [
+          "text",
+          "image"
+        ],
+        "output_modalities": [
+          "image"
+        ]
+      },
+      "name": "seedream-4-5",
+      "object": "model",
+      "task_type": [
+        "TextToImage",
+        "ImageToImage"
+      ],
+      "token_limits": {},
+      "version": "251128"
+    },
+    {
+      "created": 1764927076,
+      "domain": "LLM",
+      "features": {
+        "batch": {
+          "batch_chat": false,
+          "batch_job": false
+        },
+        "cache": {
+          "prefix_cache": false,
+          "session_cache": false
+        },
+        "structured_outputs": {
+          "json_object": false,
+          "json_schema": false
+        },
+        "tools": {
+          "function_calling": true
+        }
+      },
+      "id": "deepseek-v3-2-251201",
+      "modalities": {
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "text"
+        ]
+      },
+      "name": "deepseek-v3-2",
+      "object": "model",
+      "status": "Retiring",
+      "task_type": [
+        "TextGeneration"
+      ],
+      "token_limits": {
+        "context_window": 131072,
+        "max_input_token_length": 98304,
+        "max_output_token_length": 32768,
+        "max_reasoning_token_length": 32768
+      },
+      "version": "251201"
+    },
+    {
+      "created": 1765188094,
+      "domain": "VideoGeneration",
+      "features": {
+        "structured_outputs": {
+          "json_object": false,
+          "json_schema": false
+        }
+      },
+      "id": "seedance-1-5-pro-251215",
+      "modalities": {
+        "input_modalities": [
+          "text",
+          "image"
+        ],
+        "output_modalities": [
+          "video"
+        ]
+      },
+      "name": "seedance-1-5-pro",
+      "object": "model",
+      "status": "Retiring",
+      "task_type": [
+        "ImageToVideo",
+        "TextToVideo"
+      ],
+      "token_limits": {},
+      "version": "251215"
+    },
+    {
+      "created": 1767881946,
+      "domain": "VLM",
+      "features": {
+        "batch": {
+          "batch_chat": false,
+          "batch_job": false
+        },
+        "cache": {
+          "prefix_cache": false,
+          "session_cache": false
+        },
+        "structured_outputs": {
+          "json_object": true,
+          "json_schema": true
+        },
+        "tools": {
+          "function_calling": true
+        }
+      },
+      "id": "seed-1-8-251228",
+      "modalities": {
+        "input_modalities": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output_modalities": [
+          "text"
+        ]
+      },
+      "name": "seed-1-8",
+      "object": "model",
+      "status": "Retiring",
+      "task_type": [
+        "VisualQuestionAnswering",
+        "TextGeneration"
+      ],
+      "token_limits": {
+        "context_window": 262144,
+        "max_input_token_length": 229376,
+        "max_output_token_length": 65536,
+        "max_reasoning_token_length": 32768
+      },
+      "version": "251228"
+    },
+    {
+      "created": 1768200421,
+      "domain": "LLM",
+      "features": {
+        "batch": {
+          "batch_chat": true,
+          "batch_job": true
+        },
+        "cache": {
+          "prefix_cache": true,
+          "session_cache": true
+        },
+        "structured_outputs": {
+          "json_object": false,
+          "json_schema": false
+        },
+        "tools": {
+          "function_calling": true
+        }
+      },
+      "id": "glm-4-7-251222",
+      "modalities": {
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "text"
+        ]
+      },
+      "name": "glm-4-7",
+      "object": "model",
+      "status": "Retiring",
+      "task_type": [
+        "TextGeneration"
+      ],
+      "token_limits": {
+        "context_window": 204800,
+        "max_input_token_length": 204800,
+        "max_output_token_length": 131072,
+        "max_reasoning_token_length": 131072
+      },
+      "version": "251222"
+    },
+    {
+      "created": 1768829931,
+      "domain": "",
+      "features": {
+        "structured_outputs": {
+          "json_object": false,
+          "json_schema": false
+        }
+      },
+      "id": "skylark-embedding-vision-251215",
+      "modalities": {
+        "input_modalities": [
+          "text",
+          "image",
+          "video"
+        ]
+      },
+      "name": "skylark-embedding-vision",
+      "object": "model",
+      "task_type": [
+        "ImageEmbedding",
+        "MultimodalEmbedding",
+        "TextEmbedding"
+      ],
+      "token_limits": {},
+      "version": "251215"
+    },
+    {
+      "created": 1770193829,
+      "domain": "ImageGeneration",
+      "features": {
+        "structured_outputs": {
+          "json_object": false,
+          "json_schema": false
+        }
+      },
+      "id": "seedream-5-0-260128",
+      "modalities": {
+        "input_modalities": [
+          "text",
+          "image"
+        ],
+        "output_modalities": [
+          "image"
+        ]
+      },
+      "name": "seedream-5-0",
+      "object": "model",
+      "task_type": [
+        "ImageToImage",
+        "TextToImage"
+      ],
+      "token_limits": {},
+      "version": "260128"
+    },
+    {
+      "created": 1770983005,
+      "domain": "VLM",
+      "features": {
+        "batch": {
+          "batch_chat": true,
+          "batch_job": true
+        },
+        "cache": {
+          "prefix_cache": false,
+          "session_cache": false
+        },
+        "structured_outputs": {
+          "json_object": false,
+          "json_schema": false
+        },
+        "tools": {
+          "function_calling": true
+        }
+      },
+      "id": "seed-2-0-mini-260215",
+      "modalities": {
+        "input_modalities": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output_modalities": [
+          "text"
+        ]
+      },
+      "name": "seed-2-0-mini",
+      "object": "model",
+      "status": "Retiring",
+      "task_type": [
+        "VisualQuestionAnswering",
+        "TextGeneration"
+      ],
+      "token_limits": {
+        "context_window": 262144,
+        "max_input_token_length": 262144,
+        "max_output_token_length": 131072,
+        "max_reasoning_token_length": 131072
+      },
+      "version": "260215"
+    },
+    {
+      "created": 1772273377,
+      "domain": "VLM",
+      "features": {
+        "batch": {
+          "batch_chat": true,
+          "batch_job": true
+        },
+        "cache": {
+          "prefix_cache": false,
+          "session_cache": false
+        },
+        "structured_outputs": {
+          "json_object": true,
+          "json_schema": true
+        },
+        "tools": {
+          "function_calling": true
+        }
+      },
+      "id": "seed-2-0-lite-260228",
+      "modalities": {
+        "input_modalities": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output_modalities": [
+          "text"
+        ]
+      },
+      "name": "seed-2-0-lite",
+      "object": "model",
+      "status": "Retiring",
+      "task_type": [
+        "VisualQuestionAnswering",
+        "TextGeneration"
+      ],
+      "token_limits": {
+        "context_window": 262144,
+        "max_input_token_length": 262144,
+        "max_output_token_length": 131072,
+        "max_reasoning_token_length": 131072
+      },
+      "version": "260228"
+    },
+    {
+      "created": 1773649218,
+      "domain": "VideoGeneration",
+      "features": {
+        "structured_outputs": {
+          "json_object": false,
+          "json_schema": false
+        }
+      },
+      "id": "dreamina-seedance-2-0-260128",
+      "modalities": {
+        "input_modalities": [
+          "image",
+          "video",
+          "audio",
+          "text"
+        ],
+        "output_modalities": [
+          "video"
+        ]
+      },
+      "name": "dreamina-seedance-2-0",
+      "object": "model",
+      "task_type": [
+        "MultimodalToVideo",
+        "VideoEditing",
+        "VideoExtension"
+      ],
+      "token_limits": {},
+      "version": "260128"
+    },
+    {
+      "created": 1773649799,
+      "domain": "VideoGeneration",
+      "features": {
+        "structured_outputs": {
+          "json_object": false,
+          "json_schema": false
+        }
+      },
+      "id": "dreamina-seedance-2-0-fast-260128",
+      "modalities": {
+        "input_modalities": [
+          "image",
+          "video",
+          "audio",
+          "text"
+        ],
+        "output_modalities": [
+          "video"
+        ]
+      },
+      "name": "dreamina-seedance-2-0-fast",
+      "object": "model",
+      "task_type": [
+        "MultimodalToVideo",
+        "VideoEditing",
+        "VideoExtension"
+      ],
+      "token_limits": {},
+      "version": "260128"
+    },
+    {
+      "created": 1773818199,
+      "domain": "VLM",
+      "features": {
+        "batch": {
+          "batch_chat": false,
+          "batch_job": false
+        },
+        "cache": {
+          "prefix_cache": false,
+          "session_cache": false
+        },
+        "structured_outputs": {
+          "json_object": false,
+          "json_schema": false
+        },
+        "tools": {
+          "function_calling": true
+        }
+      },
+      "id": "seed-2-0-pro-260328",
+      "modalities": {
+        "input_modalities": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output_modalities": [
+          "text"
+        ]
+      },
+      "name": "seed-2-0-pro",
+      "object": "model",
+      "task_type": [
+        "VisualQuestionAnswering",
+        "TextGeneration"
+      ],
+      "token_limits": {
+        "context_window": 262144,
+        "max_input_token_length": 262144,
+        "max_output_token_length": 131072,
+        "max_reasoning_token_length": 131072
+      },
+      "version": "260328"
+    },
+    {
+      "created": 1774855703,
+      "domain": "3DGeneration",
+      "features": {
+        "structured_outputs": {
+          "json_object": false,
+          "json_schema": false
+        }
+      },
+      "id": "hyper3d-gen2-260112",
+      "modalities": {},
+      "name": "hyper3d-gen2",
+      "object": "model",
+      "token_limits": {},
+      "version": "260112"
+    },
+    {
+      "created": 1774855941,
+      "domain": "3DGeneration",
+      "features": {
+        "structured_outputs": {
+          "json_object": false,
+          "json_schema": false
+        }
+      },
+      "id": "hitem3d-2-0-251223",
+      "modalities": {},
+      "name": "hitem3d-2-0",
+      "object": "model",
+      "token_limits": {},
+      "version": "251223"
+    },
+    {
+      "created": 1775707437,
+      "domain": "VLM",
+      "features": {
+        "batch": {
+          "batch_chat": false,
+          "batch_job": false
+        },
+        "cache": {
+          "prefix_cache": false,
+          "session_cache": false
+        },
+        "structured_outputs": {
+          "json_object": false,
+          "json_schema": false
+        },
+        "tools": {
+          "function_calling": true
+        }
+      },
+      "id": "seed-2-0-code-preview-260328",
+      "modalities": {
+        "input_modalities": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output_modalities": [
+          "text"
+        ]
+      },
+      "name": "seed-2-0-code",
+      "object": "model",
+      "task_type": [
+        "VisualQuestionAnswering",
+        "TextGeneration"
+      ],
+      "token_limits": {
+        "context_window": 262144,
+        "max_input_token_length": 262144,
+        "max_output_token_length": 131072,
+        "max_reasoning_token_length": 131072
+      },
+      "version": "preview-260328"
+    },
+    {
+      "created": 1776252927,
+      "domain": "ImageGeneration",
+      "features": {
+        "structured_outputs": {
+          "json_object": false,
+          "json_schema": false
+        }
+      },
+      "id": "seedream-4-0-20260415",
+      "modalities": {
+        "input_modalities": [
+          "text",
+          "image"
+        ],
+        "output_modalities": [
+          "image"
+        ]
+      },
+      "name": "seedream-4-0",
+      "object": "model",
+      "task_type": [
+        "ImageToImage",
+        "TextToImage"
+      ],
+      "token_limits": {},
+      "version": "20260415"
+    },
+    {
+      "created": 1778162197,
+      "domain": "VLM",
+      "features": {
+        "structured_outputs": {
+          "json_object": true,
+          "json_schema": true
+        },
+        "tools": {
+          "function_calling": true
+        }
+      },
+      "id": "seed-2-0-mini-260428",
+      "modalities": {
+        "input_modalities": [
+          "text",
+          "image",
+          "video",
+          "audio"
+        ],
+        "output_modalities": [
+          "text"
+        ]
+      },
+      "name": "seed-2-0-mini",
+      "object": "model",
+      "task_type": [
+        "TextGeneration",
+        "SpeechToText",
+        "VisualQuestionAnswering"
+      ],
+      "token_limits": {
+        "context_window": 262144,
+        "max_input_token_length": 229376,
+        "max_output_token_length": 131072,
+        "max_reasoning_token_length": 131072
+      },
+      "version": "260428"
+    },
+    {
+      "created": 1778162292,
+      "domain": "VLM",
+      "features": {
+        "structured_outputs": {
+          "json_object": true,
+          "json_schema": true
+        },
+        "tools": {
+          "function_calling": true
+        }
+      },
+      "id": "seed-2-0-lite-260428",
+      "modalities": {
+        "input_modalities": [
+          "text",
+          "image",
+          "video",
+          "audio"
+        ],
+        "output_modalities": [
+          "text"
+        ]
+      },
+      "name": "seed-2-0-lite",
+      "object": "model",
+      "task_type": [
+        "TextGeneration",
+        "VisualQuestionAnswering",
+        "SpeechToText"
+      ],
+      "token_limits": {
+        "context_window": 262144,
+        "max_input_token_length": 229376,
+        "max_output_token_length": 131072,
+        "max_reasoning_token_length": 131072
+      },
+      "version": "260428"
+    },
+    {
+      "created": 1778916757,
+      "domain": "LLM",
+      "features": {
+        "batch": {
+          "batch_chat": false,
+          "batch_job": false
+        },
+        "cache": {
+          "prefix_cache": false,
+          "session_cache": false
+        },
+        "structured_outputs": {
+          "json_object": false,
+          "json_schema": false
+        },
+        "tools": {
+          "function_calling": true
+        }
+      },
+      "id": "deepseek-v4-pro-260425",
+      "modalities": {
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "text"
+        ]
+      },
+      "name": "deepseek-v4-pro",
+      "object": "model",
+      "task_type": [
+        "TextGeneration"
+      ],
+      "token_limits": {
+        "context_window": 1048576,
+        "max_input_token_length": 1048576,
+        "max_output_token_length": 393216,
+        "max_reasoning_token_length": 393216
+      },
+      "version": "260425"
+    },
+    {
+      "created": 1778916960,
+      "domain": "LLM",
+      "features": {
+        "batch": {
+          "batch_chat": false,
+          "batch_job": false
+        },
+        "cache": {
+          "prefix_cache": false,
+          "session_cache": false
+        },
+        "structured_outputs": {
+          "json_object": false,
+          "json_schema": false
+        },
+        "tools": {
+          "function_calling": true
+        }
+      },
+      "id": "deepseek-v4-flash-260425",
+      "modalities": {
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "text"
+        ]
+      },
+      "name": "deepseek-v4-flash",
+      "object": "model",
+      "task_type": [
+        "TextGeneration"
+      ],
+      "token_limits": {
+        "context_window": 1048576,
+        "max_input_token_length": 1048576,
+        "max_output_token_length": 393216,
+        "max_reasoning_token_length": 393216
+      },
+      "version": "260425"
+    },
+    {
+      "created": 1781026367,
+      "domain": "VideoGeneration",
+      "features": {
+        "structured_outputs": {
+          "json_object": false,
+          "json_schema": false
+        }
+      },
+      "id": "dreamina-seedance-2-0-mini-260615",
+      "modalities": {
+        "input_modalities": [
+          "text",
+          "image",
+          "video",
+          "audio"
+        ],
+        "output_modalities": [
+          "video"
+        ]
+      },
+      "name": "dreamina-seedance-2-0-mini",
+      "object": "model",
+      "task_type": [
+        "MultimodalToVideo",
+        "VideoExtension",
+        "VideoEditing"
+      ],
+      "token_limits": {},
+      "version": "260615"
+    },
+    {
+      "created": 1782466214,
+      "domain": "LLM",
+      "features": {
+        "batch": {
+          "batch_chat": false,
+          "batch_job": false
+        },
+        "cache": {
+          "prefix_cache": true,
+          "session_cache": true
+        },
+        "structured_outputs": {
+          "json_object": true,
+          "json_schema": false
+        },
+        "tools": {
+          "function_calling": true
+        }
+      },
+      "id": "glm-5-2-260617",
+      "modalities": {
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "text"
+        ]
+      },
+      "name": "glm-5-2",
+      "object": "model",
+      "task_type": [
+        "TextGeneration"
+      ],
+      "token_limits": {
+        "context_window": 1048576,
+        "max_input_token_length": 1048576,
+        "max_output_token_length": 131072,
+        "max_reasoning_token_length": 131072
+      },
+      "version": "260617"
+    },
+    {
+      "created": 1782822528,
+      "domain": "VideoGeneration",
+      "features": {
+        "structured_outputs": {
+          "json_object": false,
+          "json_schema": false
+        }
+      },
+      "id": "dreamina-seedance-2-5-260628",
+      "modalities": {
+        "input_modalities": [
+          "text",
+          "image",
+          "video",
+          "audio"
+        ],
+        "output_modalities": [
+          "video"
+        ]
+      },
+      "name": "dreamina-seedance-2-5",
+      "object": "model",
+      "task_type": [
+        "MultimodalToVideo",
+        "VideoExtension",
+        "VideoEditing"
+      ],
+      "token_limits": {},
+      "version": "260628"
+    },
+    {
+      "created": 1782822799,
+      "domain": "ImageGeneration",
+      "features": {
+        "structured_outputs": {
+          "json_object": false,
+          "json_schema": false
+        }
+      },
+      "id": "dola-seedream-5-0-pro-260628",
+      "modalities": {
+        "input_modalities": [
+          "text",
+          "image"
+        ],
+        "output_modalities": [
+          "image"
+        ]
+      },
+      "name": "dola-seedream-5-0-pro",
+      "object": "model",
+      "task_type": [
+        "ImageToImage",
+        "TextToImage"
+      ],
+      "token_limits": {},
+      "version": "260628"
+    },
+    {
+      "created": 1782894309,
+      "domain": "VLM",
+      "features": {
+        "batch": {
+          "batch_chat": false,
+          "batch_job": false
+        },
+        "cache": {
+          "prefix_cache": false,
+          "session_cache": false
+        },
+        "structured_outputs": {
+          "json_object": true,
+          "json_schema": true
+        },
+        "tools": {
+          "function_calling": true
+        }
+      },
+      "id": "dola-seed-2-1-turbo-260628",
+      "modalities": {
+        "input_modalities": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output_modalities": [
+          "text"
+        ]
+      },
+      "name": "dola-seed-2-1-turbo",
+      "object": "model",
+      "task_type": [
+        "VisualQuestionAnswering",
+        "TextGeneration"
+      ],
+      "token_limits": {
+        "context_window": 262144,
+        "max_input_token_length": 262144,
+        "max_output_token_length": 262144,
+        "max_reasoning_token_length": 262144
+      },
+      "version": "260628"
+    },
+    {
+      "created": 1785748879,
+      "domain": "LLM",
+      "features": {
+        "batch": {
+          "batch_chat": false,
+          "batch_job": false
+        },
+        "cache": {
+          "prefix_cache": false,
+          "session_cache": false
+        },
+        "structured_outputs": {
+          "json_object": false,
+          "json_schema": false
+        },
+        "tools": {
+          "function_calling": true
+        }
+      },
+      "id": "deepseek-v4-flash-ga-260731",
+      "modalities": {
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "text"
+        ]
+      },
+      "name": "deepseek-v4-flash-ga",
+      "object": "model",
+      "task_type": [
+        "TextGeneration"
+      ],
+      "token_limits": {
+        "context_window": 1048576,
+        "max_input_token_length": 1048576,
+        "max_output_token_length": 393216,
+        "max_reasoning_token_length": 393216
+      },
+      "version": "260731"
+    },
+    {
+      "created": 1786864313,
+      "domain": "LLM",
+      "features": {
+        "batch": {
+          "batch_chat": false,
+          "batch_job": false
+        },
+        "cache": {
+          "prefix_cache": false,
+          "session_cache": false
+        },
+        "structured_outputs": {
+          "json_object": false,
+          "json_schema": false
+        },
+        "tools": {
+          "function_calling": true
+        }
+      },
+      "id": "deepseek-v4-pro-ga-260813",
+      "modalities": {
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "text"
+        ]
+      },
+      "name": "deepseek-v4-pro-ga",
+      "object": "model",
+      "task_type": [
+        "TextGeneration"
+      ],
+      "token_limits": {
+        "context_window": 1048576,
+        "max_input_token_length": 1048576,
+        "max_output_token_length": 393216,
+        "max_reasoning_token_length": 393216
+      },
+      "version": "260813"
+    },
+    {
+      "created": 1788509140,
+      "domain": "LLM",
+      "features": {
+        "batch": {
+          "batch_chat": false,
+          "batch_job": false
+        },
+        "cache": {
+          "prefix_cache": true,
+          "session_cache": true
+        },
+        "structured_outputs": {
+          "json_object": true,
+          "json_schema": false
+        },
+        "tools": {
+          "function_calling": true
+        }
+      },
+      "id": "glm-5-3-flash-260828",
+      "modalities": {
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "text"
+        ]
+      },
+      "name": "glm-5-3-flash",
+      "object": "model",
+      "task_type": [
+        "TextGeneration"
+      ],
+      "token_limits": {
+        "context_window": 1048576,
+        "max_input_token_length": 1048576,
+        "max_output_token_length": 131072,
+        "max_reasoning_token_length": 131072
+      },
+      "version": "260828"
+    },
+    {
+      "created": 1789379546,
+      "domain": "LLM",
+      "features": {
+        "batch": {
+          "batch_chat": false,
+          "batch_job": false
+        },
+        "cache": {
+          "prefix_cache": false,
+          "session_cache": false
+        },
+        "structured_outputs": {
+          "json_object": false,
+          "json_schema": false
+        },
+        "tools": {
+          "function_calling": true
+        }
+      },
+      "id": "deepseek-v4-1-flash-260910",
+      "modalities": {
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "text"
+        ]
+      },
+      "name": "deepseek-v4-1-flash",
+      "object": "model",
+      "task_type": [
+        "TextGeneration"
+      ],
+      "token_limits": {
+        "context_window": 1048576,
+        "max_input_token_length": 1048576,
+        "max_output_token_length": 393216,
+        "max_reasoning_token_length": 393216
+      },
+      "version": "260910"
+    },
+    {
+      "created": 1789531791,
+      "domain": "ImageGeneration",
+      "features": {
+        "tools": {
+          "function_calling": true
+        }
+      },
+      "id": "dola-seedream-5-0-flash-260915",
+      "name": "dola-seedream-5-0-flash",
+      "object": "model",
+      "version": "260915"
     }
   ]
 }
