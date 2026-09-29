@@ -44,6 +44,24 @@ _WIZARD_PROVIDER_API_KEYS = (
 )
 
 
+# Metadata overrides that redirect the catalog resolution chain away from the
+# bundled snapshot. ``provider_catalog._resolve_catalog_payload`` reads these
+# from ``os.environ`` on every call, so an operator who has pointed the gateway
+# at an external ``fusionaize-metadata`` checkout sees their catalog leak into
+# the suite: providers the external file omits (mistral, volcengine) vanish,
+# and every test asserting a bundled provider's window, cap, or pricing fails
+# on a value that is correct in the repo but absent from the operator's file.
+# Remove them for the duration of every test; tests that exercise the override
+# chain set them explicitly via ``monkeypatch.setenv``.
+_METADATA_OVERRIDE_ENV = (
+    "FAIGATE_PROVIDER_METADATA_FILE",
+    "FAIGATE_PROVIDER_METADATA_DIR",
+    "FAIGATE_PROVIDER_METADATA_PRODUCT",
+    "FAIGATE_OFFERINGS_METADATA_FILE",
+    "FAIGATE_PACKAGES_METADATA_FILE",
+)
+
+
 def load_real_module(name: str) -> ModuleType:
     """Import the genuine top-level module even if a test stub is installed.
 
@@ -84,6 +102,24 @@ def _keep_wizard_provider_keys_hermetic(monkeypatch: pytest.MonkeyPatch) -> None
     provide it explicitly via ``monkeypatch.setenv`` or their ``.env`` file.
     """
     for key in _WIZARD_PROVIDER_API_KEYS:
+        monkeypatch.delenv(key, raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _keep_catalog_hermetic(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep catalog reads independent of any external metadata checkout.
+
+    ``faigate.provider_catalog._resolve_catalog_payload`` consults
+    ``FAIGATE_PROVIDER_METADATA_FILE`` then ``FAIGATE_PROVIDER_METADATA_DIR``
+    before falling back to the bundled snapshot, reading the environment on
+    every call. An operator with either exported runs the suite against their
+    own ``fusionaize-metadata`` file instead of the shipped catalog, so
+    providers that file omits (mistral, volcengine) disappear and the tests
+    that assert bundled window, cap, and pricing facts fail. Remove every
+    override for the duration of each test; tests that exercise the chain set
+    them explicitly via ``monkeypatch.setenv``.
+    """
+    for key in _METADATA_OVERRIDE_ENV:
         monkeypatch.delenv(key, raising=False)
 
 
