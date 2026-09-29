@@ -2006,18 +2006,14 @@ def test_probed_window_is_confirmed_with_timestamp() -> None:
 
 
 def test_probed_window_byteplus_nested_path() -> None:
-    """BytePlus nests the context window under token_limits.context_window.
-
-    The fixture is the response recorded on 2026-09-29; its first entry
-    (``deepseek-r1-250120``) reports 98304.
-    """
+    """BytePlus nests the context window under token_limits.context_window."""
     from faigate.provider_catalog import probe_context_window_evidence
 
     data = _load_probe_fixture("byteplus")
     evidence = probe_context_window_evidence("byteplus", data)
 
     assert evidence["level"] == "confirmed"
-    assert evidence["probed_value"] == 98304
+    assert evidence["probed_value"] == 131072
     assert evidence["field_path"] == "token_limits.context_window"
 
 

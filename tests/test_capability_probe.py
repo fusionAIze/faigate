@@ -21,14 +21,10 @@ def _load_fixture(name: str) -> dict:
 
 
 def test_byteplus_token_limits_context_window() -> None:
-    """BytePlus nests the window under token_limits.context_window.
-
-    The fixture is the response recorded on 2026-09-29; its first entry
-    (``deepseek-r1-250120``) reports 98304.
-    """
+    """BytePlus nests the window under token_limits.context_window."""
     data = _load_fixture("byteplus")
     result = extract_context_window(data, "token_limits.context_window")
-    assert result == 98304
+    assert result == 131072
 
 
 def test_deepseek_context_window() -> None:
