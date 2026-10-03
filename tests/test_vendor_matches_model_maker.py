@@ -53,12 +53,14 @@ KNOWN_ALIAS_CLAIMS: frozenset[str] = frozenset({"volcengine-plan", "mistral"})
 # The platform-versus-maker convention, as settled under FAI-241-A.
 #
 # The mapping is not extrapolated from these two providers: it is the evidence
-# registered on 2026-09-23 and 2026-09-24, when BytePlus's own ``/models``
+# registered on 2026-09-29, when BytePlus's own ``/models``
 # endpoint (``GET https://ark.ap-southeast.bytepluses.com/api/v3/models``,
 # recorded in ``tests/fixtures/models_probe/byteplus_models.json``) returned
-# models with ``"owned_by": "byteplus"``. BytePlus is the platform, not the
-# maker: the maker claim for those models is registered elsewhere in the
-# registry (``deepseek-v4-flash`` -> DeepSeek, ``seed-*`` -> ByteDance).
+# 58 models, **none of which carry an ``owned_by`` field**. BytePlus makes no
+# ownership claim in its listing; the registry therefore may not read one.
+# BytePlus is the platform, not the maker: the maker claim for those models is
+# registered elsewhere in the registry (``deepseek-v4-flash`` -> DeepSeek,
+# ``seed-*`` -> ByteDance).
 #
 # The map is deliberately narrow.  It carries two providers because two
 # platforms have a registered, independent maker claim; a third platform
@@ -190,10 +192,19 @@ def test_platform_convention_covers_entries() -> None:
 def test_byteplus_measured_its_own_models_as_platform_owned() -> None:
     """The convention rests on a measurement, not on a preference.
 
-    BytePlus's ``GET /models`` (recorded 2026-09-24) reports each model with
-    ``"owned_by": "byteplus"`` — the platform, not the maker.  The registry
-    therefore may not read that value as a maker claim.  Recorded payload, no
-    network access.
+    BytePlus's ``GET /models`` (recorded 2026-09-29) returns 58 models, none
+    of which carry an ``owned_by`` field.  The platform makes no ownership
+    claim in its model listing.  The registry therefore may not read a maker
+    claim from this response — there is nothing to read.
+
+    The evidence level is **confirmed**: what the recording proves is that
+    BytePlus does not self-declare an owner.  The inference that BytePlus is
+    a platform rather than a maker is a convention resting on that absence,
+    not a fact the recording independently establishes.
+
+    If a future recording adds ``owned_by``, this test fails, forcing
+    re-evaluation of whether the registry may read it as a maker claim.
+    Recorded payload, no network access.
     """
     import json
     from pathlib import Path
@@ -202,8 +213,9 @@ def test_byteplus_measured_its_own_models_as_platform_owned() -> None:
     payload = json.loads(fixture.read_text(encoding="utf-8"))
     recorded = [str(model.get("owned_by") or "") for model in payload.get("data", [])]
     assert recorded, f"no models recorded in {fixture.name} — the measurement this convention rests on is gone"
-    assert all(owner == "byteplus" for owner in recorded), (
-        "BytePlus /models no longer reports its models as platform-owned: " + ", ".join(sorted(set(recorded)))
+    assert all(owner == "" for owner in recorded), (
+        "BytePlus /models (recorded 2026-09-29) no longer reports all models without owned_by: "
+        + ", ".join(f"{r!r}" for r in sorted(set(recorded)) if r)
     )
 
 
