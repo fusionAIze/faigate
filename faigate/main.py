@@ -63,7 +63,13 @@ from .lane_registry import (
     get_route_add_recommendations,
 )
 from .metrics import MetricsStore, calc_cost
-from .model_identity import ModelIdentity, ModelIdentityResolver, catalog_model_identities, derive_short_name
+from .model_identity import (
+    ModelIdentity,
+    ModelIdentityResolver,
+    catalog_model_identities,
+    classify_entry_binding,
+    derive_short_name,
+)
 from .oauth_readiness import oauth_readiness_block
 from .provider_availability import (
     record_availability_from_config,
@@ -3431,7 +3437,28 @@ def _routable_model_entries(
         },
     )
 
-    return entries
+    # ── Binding classification (FAI-251) ─────────────────────────────
+    #
+    # Every offered name carries a binding class.  A name that cannot be
+    # classified as either provider-bound or intent is silently dropped so
+    # the gateway never advertises a name whose routing semantics are
+    # unclear.
+    configured_names = {n.strip().lower() for n in provider_map}
+    filtered: dict[str, dict[str, Any]] = {}
+    for name_key, entry in entries.items():
+        binding, binds_to = classify_entry_binding(
+            entry.get("id", name_key),
+            entry,
+            configured_names,
+        )
+        if binding == "unknown":
+            continue
+        entry["binding"] = binding
+        if binding == "provider-bound" and binds_to:
+            entry["binds_to"] = binds_to
+        filtered[name_key] = entry
+
+    return filtered
 
 
 def _routable_model_ids(

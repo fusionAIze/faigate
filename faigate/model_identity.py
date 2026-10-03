@@ -194,6 +194,61 @@ class ModelIdentityResolver:
         return [identity.long_form for identity in self._identities]
 
 
+def classify_entry_binding(
+    offered_name: str,
+    entry: dict[str, Any],
+    configured_providers: set[str],
+) -> tuple[str, str | None]:
+    """Classify an offered model entry as ``provider-bound`` or ``intent``.
+
+    A name is *provider-bound* when it names exactly one configured provider
+    backend — the entry then carries that provider name.  A name is *intent*
+    when it routes by policy and does not name a specific provider.
+
+    Parameters
+    ----------
+    offered_name:
+        The name as it appears in the offered model list (the entry key).
+    entry:
+        The entry dict produced by ``_routable_model_entries``.  Source
+        markers (``mode``, ``catalog``, ``static_rule``, ``shortcut``,
+        ``contract``) determine the classification strategy.
+    configured_providers:
+        Set of configured provider backend names.
+
+    Returns
+    -------
+    ``("provider-bound", provider_name)`` or ``("intent", None)``.
+    """
+    # Modes are always intent — they express routing policy, not a provider.
+    if entry.get("mode"):
+        return "intent", None
+
+    # Catalog identities describe a model, not a configured backend.
+    if entry.get("catalog"):
+        return "intent", None
+
+    # Static rules and shortcuts: if the offered name itself IS a configured
+    # provider, it is provider-bound to that provider.  Otherwise the name
+    # is an intent label (e.g. "chat", "flash") that routes through a rule.
+    if entry.get("static_rule") or entry.get("shortcut"):
+        normalized = offered_name.strip().lower()
+        if normalized in configured_providers:
+            return "provider-bound", normalized
+        return "intent", None
+
+    # Provider backend entries: the offered name IS the provider name.
+    if entry.get("contract"):
+        normalized = offered_name.strip().lower()
+        if normalized in configured_providers:
+            return "provider-bound", normalized
+        # Should not happen, but be defensive.
+        return "intent", None
+
+    # Everything else (e.g. the "auto" selector) is intent.
+    return "intent", None
+
+
 def catalog_model_identities() -> list[ModelIdentity]:
     """Build model identities from the catalog, with ``registry.ALL`` fallback.
 
