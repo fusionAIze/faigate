@@ -44,18 +44,20 @@ def test_catalog_is_not_empty():
 # names a decision someone still owes. Removing an entry without fixing the
 # catalog turns the test red again, which is the point.
 #
-#   volcengine-plan  FAI-240. No Volcano Engine account is available here
-#                    (ark.cn-beijing.volces.com answers 401), so the plan
+#   volcengine-plan  FAI-240/FAI-241-B. No Volcano Engine account is available
+#                    here (ark.cn-beijing.volces.com answers 401), so the plan
 #                    endpoint and its model set cannot be measured. A lane
 #                    already tried to fill this in by analogy to BytePlus on
 #                    2026-09-24 and invented both the path and the model; that
-#                    work was rejected.
-#   mistral          FAI-241. Measured 2026-09-24 against Mistral's own /models:
-#                    'mistral-large-latest' does not exist, and no model with
-#                    "large" in its id exists at all. 30 concrete versioned ids
-#                    are available (codestral-2508, ministral-14b-2512, ...).
-#                    Which one faigate should recommend is a product decision,
-#                    not a rename.
+#                    work was rejected, and this entry is the alias claim that
+#                    must remain until the endpoint can be measured.
+#   mistral          FAI-241-B. FAI-241 was rejected because it turned this
+#                    alias claim into an invented rename. Measured 2026-09-24
+#                    against Mistral's own /models: 'mistral-large-latest' does
+#                    not exist, and no model with "large" in its id exists at
+#                    all. 30 concrete versioned ids are available (codestral-2508,
+#                    ministral-14b-2512, ...). Which one faigate should recommend
+#                    is a product decision, not a rename.
 KNOWN_ALIAS_CLAIMS = {"volcengine-plan", "mistral"}
 
 
