@@ -194,16 +194,43 @@ class ModelIdentityResolver:
         return [identity.long_form for identity in self._identities]
 
 
+# ── Unknown-kind vocabulary (FAI-251) ────────────────────────────────
+#
+# When a name cannot be classified as provider-bound or intent it is
+# *unknown*.  The kind explains why:
+#
+#   derivable          Classification is derivable from available data but
+#                      not yet implemented.
+#   not_applicable     The entry's source markers do not fit the
+#                      classification scheme (e.g. a contract entry whose
+#                      name is not in the configured provider set).
+#   runtime_dependent  Classification depends on runtime state that is not
+#                      available at list-building time.
+#   unlisted           The entry carries a source marker this function does
+#                      not recognise.
+#
+# Only ``not_applicable`` is reachable in production today: the
+# ``contract`` branch returns it when the entry name is not in the
+# configured provider set.  The other three kinds are vocabulary the
+# guard can grow into without changing the return signature.
+
+UNKNOWN_KIND_DERIVABLE = "derivable"
+UNKNOWN_KIND_NOT_APPLICABLE = "not_applicable"
+UNKNOWN_KIND_RUNTIME_DEPENDENT = "runtime_dependent"
+UNKNOWN_KIND_UNLISTED = "unlisted"
+
+
 def classify_entry_binding(
     offered_name: str,
     entry: dict[str, Any],
     configured_providers: set[str],
 ) -> tuple[str, str | None]:
-    """Classify an offered model entry as ``provider-bound`` or ``intent``.
+    """Classify an offered model entry as ``provider-bound``, ``intent``, or ``unknown``.
 
     A name is *provider-bound* when it names exactly one configured provider
     backend — the entry then carries that provider name.  A name is *intent*
-    when it routes by policy and does not name a specific provider.
+    when it routes by policy and does not name a specific provider.  A name
+    that is neither is *unknown* and must not be advertised.
 
     Parameters
     ----------
@@ -218,7 +245,9 @@ def classify_entry_binding(
 
     Returns
     -------
-    ``("provider-bound", provider_name)`` or ``("intent", None)``.
+    ``("provider-bound", provider_name)``, ``("intent", None)``, or
+    ``("unknown", kind)`` where *kind* is one of the ``UNKNOWN_KIND_*``
+    constants.
     """
     # Modes are always intent — they express routing policy, not a provider.
     if entry.get("mode"):
@@ -231,6 +260,12 @@ def classify_entry_binding(
     # Static rules and shortcuts: if the offered name itself IS a configured
     # provider, it is provider-bound to that provider.  Otherwise the name
     # is an intent label (e.g. "chat", "flash") that routes through a rule.
+    #
+    # In production the provider-bound branch here is unreachable because
+    # ``_routable_model_entries`` claims provider names via ``contract``
+    # before any static rule or shortcut can claim them.  The branch is
+    # correct by construction and is exercised by unit tests; removing it
+    # would make the function silently wrong if the claim order ever changes.
     if entry.get("static_rule") or entry.get("shortcut"):
         normalized = offered_name.strip().lower()
         if normalized in configured_providers:
@@ -242,8 +277,10 @@ def classify_entry_binding(
         normalized = offered_name.strip().lower()
         if normalized in configured_providers:
             return "provider-bound", normalized
-        # Should not happen, but be defensive.
-        return "intent", None
+        # A contract entry whose name is not in the configured set is a
+        # configuration error — the entry claims a provider that does not
+        # exist.  Classify as unknown so the gateway never advertises it.
+        return "unknown", UNKNOWN_KIND_NOT_APPLICABLE
 
     # Everything else (e.g. the "auto" selector) is intent.
     return "intent", None
