@@ -11,16 +11,17 @@
 [![Docker](https://img.shields.io/badge/docker-ready-2496ED?logo=docker&logoColor=white)](./Dockerfile)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](./pyproject.toml)
 
+> [!NOTE]
+> **Public mirror.** The canonical repository is hosted on our self-hosted git.
+> This GitHub copy is a mirror kept in sync for visibility and installation.
+> Bug reports are welcome via Issues; changes are applied upstream and arrive
+> here with the next release.
+
 Local OpenAI-compatible AI gateway for 🦞 [OpenClaw](https://openclaw.ai/) and other AI-native clients.
 
 fusionAIze Gate gives OpenClaw, n8n, CLI tools, and custom apps one local endpoint and routes each request to the best configured provider or local worker. It keeps routing, fallback, onboarding, and operator visibility under your control instead of scattering provider logic across every client.
 
 Runs locally on Linux, macOS, and Windows, with first-class workstation guidance for `systemd`, `launchd`, Task Scheduler, and Homebrew-driven macOS installs.
-
----
-
-> **Repository provenance.** The canonical home of this repository is Forgejo
-> at `git.langevc.com/fusionaize/faigate`. The GitHub repository is a mirror.
 
 ## Quick Navigation
 
@@ -471,18 +472,11 @@ Apache-2.0. See [LICENSE](./LICENSE).
 
 ## Repository & Contributing
 
-> **Repository provenance.** The canonical home of this repository is Forgejo
-> at `git.langevc.com/fusionaize/faigate`. The GitHub repository is a mirror.
+The canonical repository is maintained on self-hosted infrastructure. The GitHub
+repository serves as the public release and distribution mirror. Bug reports and
+pull requests submitted via GitHub are welcome and are applied upstream.
 
-Clone the canonical repository and open pull requests there:
-
-```bash
-git clone git@git.langevc.com:fusionaize/faigate.git
-```
-
-Releases are cut on the canonical side and pushed outward, so the mirror's `main`
-is replaced by whatever canonical holds. The mirror is not write-protected —
-Dependabot opens pull requests there and auto-merge is enabled for them — but a
-change that lands only on the mirror is overwritten by the next release push
-unless it is brought over first. If you merge something there, open it on the
-canonical side as well.
+Releases are cut upstream and pushed outward, which replaces the mirror's `main`.
+A change merged only on the mirror is therefore overwritten by the next release
+push unless it is carried upstream first — the dependency updates released in
+2.10.1 had to be.
