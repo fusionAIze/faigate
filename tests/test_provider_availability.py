@@ -258,6 +258,20 @@ class TestAddressabilityReadiness:
             "no routing layer addresses this provider; add a static rule, a mode selector, or route its name explicitly"
         )
 
+    def test_addressability_gate_actually_prevents_ready_when_unaddressed(self):
+        """RED PROOF: the addressability gate prevents ready for unaddressed providers.
+
+        On the baseline (cba34ae), ``_addressable`` does not exist, so setting
+        it to False has no effect and ``request_readiness()`` returns "ready".
+        This test fails there with a real assertion, not an ImportError,
+        proving the gate is a real code change that changes real behaviour.
+        """
+        backend = create_provider_backend("redproof-prov", dict(_PROVIDER_CFG))
+        backend._addressable = False
+        readiness = backend.request_readiness()
+        assert readiness["ready"] is False
+        assert readiness["status"] == "not-addressable"
+
     def test_addressable_provider_with_key_is_ready(self):
         """The control case: same shape, its name is addressed, it is ready.
 
