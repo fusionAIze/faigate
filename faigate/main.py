@@ -2838,19 +2838,34 @@ async def lifespan(app: FastAPI):
     # coverage gate below can fail on a layer that measured nothing instead of
     # trusting the layer list it was handed.
     _rule_targets = static_rule_targets(_config.static_rules) & set(_config.providers)
-    _mode_targets = _mode_eligible_provider_names() & set(_config.providers)
+    _mode_targets = _mode_eligible_provider_names(providers=_config.providers) & set(_config.providers)
     _name_targets = providers_routed_to_themselves(_router, _config.providers) & set(_config.providers)
     _addressability_layer_coverage = {
         "static-rules": _rule_targets,
         "policy-modes": _mode_targets,
         "named-provider": _name_targets,
     }
-    _addressable_names = addressable_provider_names(
+    # Addressability is only trusted once every routing layer has been measured.
+    # When coverage doesn't hold, no addressability claim is made — providers
+    # keep their historical ready state — so a false 'not-addressable' signal
+    # never reaches /health.  See :func:`faigate.reachability.addressability_coverage_holds`.
+    if addressability_coverage_holds(
         provider_names=_config.providers,
-        static_rules=_config.static_rules,
-        mode_providers=_mode_targets,
-        named_provider_names=_name_targets,
-    )
+        layer_coverage=_addressability_layer_coverage,
+    ):
+        _addressable_names = addressable_provider_names(
+            provider_names=_config.providers,
+            static_rules=_config.static_rules,
+            mode_providers=_mode_targets,
+            named_provider_names=_name_targets,
+        )
+    else:
+        logger.error(
+            "Addressability coverage is incomplete: routing layer(s) %s address no configured provider. "
+            "'not-addressable' readiness is not trustworthy until every layer is measured.",
+            ", ".join(uncovered_addressability_layers(layer_coverage=_addressability_layer_coverage)),
+        )
+        _addressable_names = None
     for name, pcfg in _config.providers.items():
         if _provider_requires_static_api_key(name, pcfg) and not pcfg.get("api_key"):
             logger.warning("Provider %s has no API key, skipping", name)
@@ -2875,30 +2890,21 @@ async def lifespan(app: FastAPI):
             logger.warning("Failed to register virtual provider %s: %s", vp_name, exc)
 
     # Surface the negative signal here so an operator can act on it without
-    # reading /health closely.
-    _not_addressable = sorted(
-        name for name in _providers if _provider_request_readiness(_providers[name]).get("status") == "not-addressable"
-    )
-    if _not_addressable:
-        logger.warning(
-            "%d provider(s) are configured but no routing layer targets their name: %s",
-            len(_not_addressable),
-            ", ".join(_not_addressable),
+    # reading /health closely. Only logged when addressability was actually
+    # derived — None means the gate above fired and the measurement cannot
+    # be trusted.
+    if _addressable_names is not None:
+        _not_addressable = sorted(
+            name
+            for name in _providers
+            if _provider_request_readiness(_providers[name]).get("status") == "not-addressable"
         )
-    # Addressability is only trusted once the whole contract has been read. A
-    # routing layer that addresses nothing means the derivation is missing the
-    # providers that layer would reach, so the 'not-addressable' set above is
-    # incomplete and saying "these and no others" would be a claim over a
-    # contract we have not finished reading. Fail loudly instead.
-    if not addressability_coverage_holds(
-        provider_names=_config.providers,
-        layer_coverage=_addressability_layer_coverage,
-    ):
-        logger.error(
-            "Addressability coverage is incomplete: routing layer(s) %s address no configured provider. "
-            "'not-addressable' readiness is not trustworthy until every layer is measured.",
-            ", ".join(uncovered_addressability_layers(layer_coverage=_addressability_layer_coverage)),
-        )
+        if _not_addressable:
+            logger.warning(
+                "%d provider(s) are configured but no routing layer targets their name: %s",
+                len(_not_addressable),
+                ", ".join(_not_addressable),
+            )
     _adaptive_state = AdaptiveRouteState()
     await _refresh_local_worker_probes(force=True)
     _update_checker = UpdateChecker(
