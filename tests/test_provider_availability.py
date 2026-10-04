@@ -276,17 +276,21 @@ class TestAddressabilityReadiness:
         """The control case: same shape, its name is addressed, it is ready.
 
         Without this the previous test would pass even if ``request_readiness``
-        returned not-ready for every provider.
+        returned not-ready for every provider. The counter-example (a provider
+        excluded from the set) proves the addressable set is the active
+        criterion — without it, a factory that always sets ``_addressable=True``
+        would pass.
         """
         addressable = _contract(["addressed-provider"], static_rules=_STATIC_RULES)
         assert addressable == {"addressed-provider"}
 
-        backend = create_provider_backend("addressed-provider", dict(_PROVIDER_CFG), addressable_names=addressable)
+        addressed = create_provider_backend("addressed-provider", dict(_PROVIDER_CFG), addressable_names=addressable)
+        unaddressed = create_provider_backend("never-by-any-rule", dict(_PROVIDER_CFG), addressable_names=addressable)
 
-        readiness = backend.request_readiness()
-
-        assert readiness["ready"] is True
-        assert readiness["status"] == "ready"
+        assert addressed.request_readiness()["ready"] is True
+        assert addressed.request_readiness()["status"] == "ready"
+        assert unaddressed.request_readiness()["ready"] is False
+        assert unaddressed.request_readiness()["status"] == "not-addressable"
 
     def test_provider_named_by_a_rule_is_addressable_and_ready(self):
         """Criterion 1's positive half: the rule's own target is addressable.
@@ -540,6 +544,13 @@ class TestNoReadinessRegression:
         assert set(statuses) <= READY_STATUSES
         assert len(statuses) > 0
 
+        # Negative control: a provider excluded from the addressable set must
+        # NOT report ready — otherwise the test passes on a stub that ignores
+        # the addressable set entirely.
+        unaddressed = create_provider_backend("unaddressed", dict(_PROVIDER_CFG), addressable_names=addressable)
+        assert unaddressed.request_readiness()["ready"] is False
+        assert unaddressed.request_readiness()["status"] == "not-addressable"
+
     def test_previously_not_ready_providers_keep_their_specific_status(self):
         """The non-ready branches must not be rerouted into 'not-addressable'.
 
@@ -648,7 +659,12 @@ class TestNoReadinessRegression:
             mode_providers=mode_providers,
             named_provider_names=name_targets,
         )
-        backends = [create_provider_backend(name, dict(_PROVIDER_CFG), addressable_names=addressable) for name in names]
+        backends = [
+            create_provider_backend(
+                name, {**dict(cfg.provider(name) or {}), "api_key": "test-key"}, addressable_names=addressable
+            )
+            for name in names
+        ]
         assert len(backends) == len(names)
 
         not_ready = [b.name for b in backends if not b.request_readiness()["ready"]]
