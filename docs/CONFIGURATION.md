@@ -252,6 +252,37 @@ If OpenClaw is one of the main clients, these settings give the cleanest fit:
 
 That gives OpenClaw one provider entry, one primary model id, and optional explicit aliases without mirroring every upstream directly in the OpenClaw config.
 
+## Local Catalog Overlay
+
+An operator can declare a provider the curated catalog does not carry — a grid
+worker, a local vLLM — in a local overlay file. Overlay entries survive a remote
+catalog update.
+
+| Setting | Value |
+| --- | --- |
+| `FAIGATE_CATALOG_LOCAL_OVERLAY` | Path to the overlay file |
+| Default path | `~/.cache/faigate/catalog-local-overlay.v1.json` |
+
+A missing file is not an error: it means there is no overlay. A file that is
+present but malformed — invalid JSON, a wrong shape, or a forbidden field —
+raises instead of being ignored, so the mistake is visible.
+
+### Self-hosted entries
+
+An entry that states a physical fact about a provider needs an explicit
+`proof_level` of `self_hosted`. The fields it brings are then marked as local in
+the merged catalog, so a reader can tell an operator's own measurement from a
+vendor's claim.
+
+Without that marker, a physical fact on a curated provider is still refused. The
+rule assumes operator and vendor are different parties, which they are not for a
+worker you run yourself — the marker is how you say so.
+
+A name collision between an overlay entry and a curated provider raises rather
+than picking a winner. Provider and model are unique, so a collision never comes
+from the subject matter, only from naming a local entry exactly like a curated
+one. That is a mistake to report, not a precedence question to settle.
+
 ## Provider Contracts
 
 ### `generic`
