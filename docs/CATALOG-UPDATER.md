@@ -324,5 +324,4 @@ minimum or against the bundled baseline (`faigate/metadata_catalog_sync.py:133`,
 
 ## Related
 
-* [docs/blueprints/model-updater/prd.md](blueprints/model-updater/prd.md) — full PRD
 * [docs/FUSIONAIZE-SHARED-METADATA.md](FUSIONAIZE-SHARED-METADATA.md) — design rationale & repo layout
