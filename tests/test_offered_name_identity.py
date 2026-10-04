@@ -9,7 +9,21 @@ binding classes:
     provider (routing modes, static-rule labels, model shortcuts, catalog
     identities).
 
-A name that is neither is *not* advertised.  There is no silent third kind.
+A name that is neither is *not* advertised.  There is no silent third kind:
+``classify_entry_binding`` is total, and an entry whose source marker it does
+not recognise (including a markerless entry that is not ``auto``) is
+``unknown`` — dropped by the offered-list guard rather than defaulted to
+``intent``.
+
+Two counter-proofs guard these tests against measuring nothing:
+
+*   the production-coupled tests read the real ``_routable_model_entries``
+    output, so removing the FAI-251 classification block from ``main.py``
+    turns them red;
+*   the unit tests reach ``classify_entry_binding`` through
+    ``_call_classifier``, which asserts the function exists, so a run against
+    the base (where it is absent) fails with a real ``AssertionError`` instead
+    of a collection-time ``ImportError``.
 
 Additionally, every ``provider-bound`` name must route to the provider it
 binds to — never silently to a different provider.  If cross-provider
@@ -19,13 +33,28 @@ failover is allowed, the response must disclose which provider served.
 from __future__ import annotations
 
 from faigate.config import load_config
-try:
-    from faigate.model_identity import classify_entry_binding
-except ImportError:  # pragma: no cover — only missing on base during red proof
-    classify_entry_binding = None  # type: ignore[assignment]
 from faigate.router import Router
 
 # ── Helper ────────────────────────────────────────────────────────────
+
+
+def _call_classifier(offered_name, entry, configured_providers):
+    """Invoke the lane's binding classifier, asserting it exists.
+
+    On the base commit (cba34ae) ``classify_entry_binding`` does not exist.
+    Importing it lazily and asserting keeps a run against that base a
+    genuine ``AssertionError`` (a missing classifier is itself a failure of
+    the invariant), never a collection-time ``ImportError`` that would say
+    nothing about behaviour.
+    """
+    from faigate import model_identity
+
+    classifier = getattr(model_identity, "classify_entry_binding", None)
+    assert classifier is not None, (
+        "faigate.model_identity.classify_entry_binding is missing — the FAI-251 "
+        "binding classifier is not implemented on this commit"
+    )
+    return classifier(offered_name, entry, configured_providers)
 
 
 class _ProviderStub:
@@ -57,7 +86,7 @@ class TestClassifyEntryBinding:
     def test_provider_backend_entry_is_provider_bound(self):
         """A provider backend entry always binds to its own name."""
         entry = {"contract": True, "id": "deepseek-v4-flash"}
-        binding, binds_to = classify_entry_binding("deepseek-v4-flash", entry, {"deepseek-v4-flash", "deepseek-v4-pro"})
+        binding, binds_to = _call_classifier("deepseek-v4-flash", entry, {"deepseek-v4-flash", "deepseek-v4-pro"})
         assert binding == "provider-bound"
         assert binds_to == "deepseek-v4-flash"
 
@@ -70,14 +99,14 @@ class TestClassifyEntryBinding:
         from faigate.model_identity import UNKNOWN_KIND_NOT_APPLICABLE
 
         entry = {"contract": True, "id": "unknown-backend"}
-        binding, kind = classify_entry_binding("unknown-backend", entry, {"deepseek-v4-flash"})
+        binding, kind = _call_classifier("unknown-backend", entry, {"deepseek-v4-flash"})
         assert binding == "unknown"
         assert kind == UNKNOWN_KIND_NOT_APPLICABLE
 
     def test_mode_entry_is_always_intent(self):
         """Routing modes express policy, not a provider choice."""
         entry = {"mode": True, "id": "coding-auto"}
-        binding, binds_to = classify_entry_binding("coding-auto", entry, {"deepseek-v4-flash"})
+        binding, binds_to = _call_classifier("coding-auto", entry, {"deepseek-v4-flash"})
         assert binding == "intent"
         assert binds_to is None
 
@@ -93,7 +122,7 @@ class TestClassifyEntryBinding:
             "id": "byteplus/deepseek/deepseek-v4-flash",
             "long_form": "byteplus/deepseek/deepseek-v4-flash",
         }
-        binding, binds_to = classify_entry_binding(
+        binding, binds_to = _call_classifier(
             "byteplus/deepseek/deepseek-v4-flash",
             entry,
             {"deepseek-v4-flash", "byteplus"},
@@ -108,7 +137,7 @@ class TestClassifyEntryBinding:
             "id": "deepseek-v4-flash",
             "route_to": "deepseek-v4-flash",
         }
-        binding, binds_to = classify_entry_binding("deepseek-v4-flash", entry, {"deepseek-v4-flash"})
+        binding, binds_to = _call_classifier("deepseek-v4-flash", entry, {"deepseek-v4-flash"})
         assert binding == "provider-bound"
         assert binds_to == "deepseek-v4-flash"
 
@@ -119,35 +148,62 @@ class TestClassifyEntryBinding:
             "id": "chat",
             "route_to": "deepseek-v4-flash",
         }
-        binding, binds_to = classify_entry_binding("chat", entry, {"deepseek-v4-flash"})
+        binding, binds_to = _call_classifier("chat", entry, {"deepseek-v4-flash"})
         assert binding == "intent"
         assert binds_to is None
 
     def test_shortcut_is_provider_bound_when_name_matches(self):
         """A shortcut whose name IS a configured provider."""
         entry = {"shortcut": True, "id": "deepseek-v4-flash", "target": "deepseek-v4-flash"}
-        binding, binds_to = classify_entry_binding("deepseek-v4-flash", entry, {"deepseek-v4-flash"})
+        binding, binds_to = _call_classifier("deepseek-v4-flash", entry, {"deepseek-v4-flash"})
         assert binding == "provider-bound"
         assert binds_to == "deepseek-v4-flash"
 
     def test_shortcut_is_intent_when_name_is_label(self):
         """A shortcut whose name is an alias (e.g. "flash")."""
         entry = {"shortcut": True, "id": "flash", "target": "gemini-flash"}
-        binding, binds_to = classify_entry_binding("flash", entry, {"gemini-flash"})
+        binding, binds_to = _call_classifier("flash", entry, {"gemini-flash"})
         assert binding == "intent"
         assert binds_to is None
 
     def test_auto_selector_is_intent(self):
         """The virtual ``auto`` selector is always intent."""
         entry = {"id": "auto"}
-        binding, binds_to = classify_entry_binding("auto", entry, set())
+        binding, binds_to = _call_classifier("auto", entry, set())
         assert binding == "intent"
         assert binds_to is None
 
-    def test_no_source_entry_is_intent(self):
-        """An entry with no source marker at all defaults to intent."""
+    def test_markerless_entry_is_unknown_not_intent(self):
+        """An entry with no recognised source marker is unknown, not intent.
+
+        Before FAI-251 this fallthrough returned ``intent``: any entry the
+        classifier did not understand was silently offered as policy.  It is
+        now ``unknown``, so the offered-list guard drops it.  The
+        ``auto`` selector — the only markerless production name — is handled
+        explicitly before this fallthrough.
+        """
+        from faigate.model_identity import UNKNOWN_KIND_NOT_APPLICABLE
+
         entry = {"id": "something-unknown"}
-        binding, binds_to = classify_entry_binding("something-unknown", entry, {"deepseek-v4-flash"})
+        binding, kind = _call_classifier("something-unknown", entry, {"deepseek-v4-flash"})
+        assert binding == "unknown"
+        assert kind == UNKNOWN_KIND_NOT_APPLICABLE
+
+    def test_unrecognized_source_marker_is_unknown(self):
+        """A source marker this function does not recognise must not be intent.
+
+        The classifier is total: an entry whose marker is outside the known
+        vocabulary (mode, catalog, static_rule, shortcut, contract) is
+        unknown.  It cannot slip through as a policy label.
+        """
+        entry = {"some_future_source": True, "id": "future-name"}
+        binding, _ = _call_classifier("future-name", entry, {"deepseek-v4-flash"})
+        assert binding == "unknown"
+
+    def test_auto_selector_markerless_but_intent(self):
+        """``auto`` has no source marker yet is explicitly intent."""
+        entry = {"id": "auto"}
+        binding, binds_to = _call_classifier("auto", entry, set())
         assert binding == "intent"
         assert binds_to is None
 
@@ -156,19 +212,19 @@ class TestClassifyEntryBinding:
     def test_return_values_are_only_provider_bound_intent_or_unknown(self):
         """The function never returns a fourth binding class."""
         entry = {"contract": True, "id": "deepseek-v4-flash"}
-        binding, _ = classify_entry_binding("deepseek-v4-flash", entry, {"deepseek-v4-flash"})
+        binding, _ = _call_classifier("deepseek-v4-flash", entry, {"deepseek-v4-flash"})
         assert binding in ("provider-bound", "intent", "unknown")
 
         entry2 = {"mode": True, "id": "auto"}
-        binding2, _ = classify_entry_binding("auto", entry2, set())
+        binding2, _ = _call_classifier("auto", entry2, set())
         assert binding2 in ("provider-bound", "intent", "unknown")
 
         entry3 = {"catalog": True, "id": "byteplus/deepseek/deepseek-v4-flash"}
-        binding3, _ = classify_entry_binding("byteplus/deepseek/deepseek-v4-flash", entry3, {"deepseek-v4-flash"})
+        binding3, _ = _call_classifier("byteplus/deepseek/deepseek-v4-flash", entry3, {"deepseek-v4-flash"})
         assert binding3 in ("provider-bound", "intent", "unknown")
 
         entry4 = {"contract": True, "id": "nonexistent-backend"}
-        binding4, _ = classify_entry_binding("nonexistent-backend", entry4, {"deepseek-v4-flash"})
+        binding4, _ = _call_classifier("nonexistent-backend", entry4, {"deepseek-v4-flash"})
         assert binding4 in ("provider-bound", "intent", "unknown")
 
     def test_unknown_kind_constants_are_the_four_defined_vocabulary(self):
@@ -193,7 +249,7 @@ class TestClassifyEntryBinding:
         from faigate.model_identity import UNKNOWN_KIND_NOT_APPLICABLE
 
         entry = {"contract": True, "id": "no-such-provider"}
-        binding, kind = classify_entry_binding("no-such-provider", entry, {"real-provider"})
+        binding, kind = _call_classifier("no-such-provider", entry, {"real-provider"})
         assert binding == "unknown"
         assert kind == UNKNOWN_KIND_NOT_APPLICABLE
 
@@ -208,7 +264,7 @@ class TestClassifyEntryBinding:
         the guard exists and works.
         """
         entry = {"contract": True, "id": "deepseek-v4-flash"}
-        binding, extra = classify_entry_binding("deepseek-v4-flash", entry, set())
+        binding, extra = _call_classifier("deepseek-v4-flash", entry, set())
         assert binding != "provider-bound"
         # The contract branch returns ("unknown", UNKNOWN_KIND_NOT_APPLICABLE)
         # when the name is not in the configured provider set.
@@ -411,17 +467,43 @@ async def test_misrouted_allowance_has_no_stale_entries(monkeypatch):
 # ── Criterion 2 red proof ────────────────────────────────────────────
 
 
-def test_provider_bound_routing_test_has_empty_guard():
-    """The routing test must reject an empty provider-bound set."""
-    empty_set: dict[str, str] = {}
+def test_provider_bound_set_is_non_empty_on_production_config(monkeypatch):
+    """The production config yields a non-empty provider-bound set.
+
+    The guard in ``test_every_provider_bound_name_routes_to_its_provider``
+    asserts the provider-bound set is non-empty, so a config that classifies
+    nothing as provider-bound fails loudly instead of passing vacuously.  This
+    test proves the guard is meaningful two ways: the shipped config really
+    does produce provider-bound names, and the guard predicate itself rejects
+    an empty set.
+    """
+    from faigate import main as main_module
+
+    monkeypatch.delenv("FAIGATE_CONFIG_FILE", raising=False)
+    monkeypatch.delenv("FAIGATE_CONFIG_PATH", raising=False)
+    cfg = load_config()
+    monkeypatch.setattr(
+        main_module,
+        "_providers",
+        {name: _ProviderStub() for name in cfg.providers},
+        raising=False,
+    )
+    monkeypatch.setattr(main_module, "_router", Router(cfg), raising=False)
+
+    entries = main_module._routable_model_entries(cfg)
+    provider_bound = {name for name, entry in entries.items() if entry.get("binding") == "provider-bound"}
+    assert provider_bound, (
+        "The production offered list classifies no name as provider-bound — "
+        "the routing test's empty-set guard would fire"
+    )
+
+    # The guard predicate rejects an empty set (Riegel gegen sich selbst).
+    rejected_empty = False
     try:
-        assert empty_set, "No provider-bound names found"
+        assert set(), "No provider-bound names found"
     except AssertionError:
-        pass  # expected
-    else:
-        raise AssertionError(
-            "Empty provider-bound set did not trigger the guard — the routing test would pass vacuously"
-        )
+        rejected_empty = True
+    assert rejected_empty, "the empty provider-bound set was not rejected"
 
 
 # ── Criterion 3: cross-provider failover disclosure ──────────────────

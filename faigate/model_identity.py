@@ -209,10 +209,11 @@ class ModelIdentityResolver:
 #   unlisted           The entry carries a source marker this function does
 #                      not recognise.
 #
-# Only ``not_applicable`` is reachable in production today: the
-# ``contract`` branch returns it when the entry name is not in the
-# configured provider set.  The other three kinds are vocabulary the
-# guard can grow into without changing the return signature.
+# ``not_applicable`` is the reachable kind: the ``contract`` branch returns
+# it when an entry claims a provider that is not configured, and the
+# fallthrough returns it when an entry carries no recognised source marker
+# at all.  The other three kinds are vocabulary the guard can grow into
+# without changing the return signature.
 
 UNKNOWN_KIND_DERIVABLE = "derivable"
 UNKNOWN_KIND_NOT_APPLICABLE = "not_applicable"
@@ -231,6 +232,11 @@ def classify_entry_binding(
     backend — the entry then carries that provider name.  A name is *intent*
     when it routes by policy and does not name a specific provider.  A name
     that is neither is *unknown* and must not be advertised.
+
+    Classification is total: every entry either names a provider, is one of
+    the recognised policy sources (mode, catalog, static rule, shortcut, or
+    the ``auto`` selector), or is unknown.  There is no markerless default
+    that silently advertises as intent.
 
     Parameters
     ----------
@@ -282,8 +288,19 @@ def classify_entry_binding(
         # exist.  Classify as unknown so the gateway never advertises it.
         return "unknown", UNKNOWN_KIND_NOT_APPLICABLE
 
-    # Everything else (e.g. the "auto" selector) is intent.
-    return "intent", None
+    # The virtual ``auto`` selector routes by policy, never to a named
+    # provider — it is intent.  It is the one entry with no source marker,
+    # so it must be named here rather than left to the fallthrough.
+    if offered_name.strip().lower() == "auto":
+        return "intent", None
+
+    # Fallthrough: the entry carries no source marker this function
+    # recognises, so nothing establishes that it binds to exactly one
+    # provider.  Before FAI-251 this returned ``intent``, which advertised
+    # an unclassifiable name as if it were a policy label — the silent
+    # third kind the invariant forbids.  Classify as unknown so
+    # ``_routable_model_entries`` drops it instead of offering it.
+    return "unknown", UNKNOWN_KIND_NOT_APPLICABLE
 
 
 def catalog_model_identities() -> list[ModelIdentity]:
