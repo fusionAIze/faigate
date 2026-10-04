@@ -32,9 +32,16 @@ jobs:
     if: ${{ github.server_url == 'https://github.com' }}
     runs-on: ubuntu-latest
     steps:
+      # On a tag push the default checkout is already the tag. On a
+      # workflow_dispatch it is the default branch, and --current would then
+      # describe whatever tag the default branch carries - the notes of a
+      # different release, labelled as the requested one, which reads correct
+      # and is not. Pin the checkout to the requested tag, the way notify-tap
+      # already does.
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
 
       - name: Resolve target tag
         id: tag

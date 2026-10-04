@@ -1,5 +1,27 @@
 # fusionAIze Gate Changelog
 
+## v2.10.2 - 2026-10-04
+
+### Fixed
+
+- **The gateway did not start on a machine where the installer had never run.**
+  `config.yaml` carries a repo-relative `metrics.db_path`, and
+  `faigate.config._safe_db_path` deliberately refuses it so the database never
+  lands in a checkout — falling back to `~/.local/share/faigate/faigate.db`.
+  Nothing created that directory, and `sqlite3.connect` does not create parents,
+  so `MetricsStore.init` raised `sqlite3.OperationalError: unable to open
+  database file` on a container, a CI runner or a fresh checkout. It passed on
+  every machine where the installer had already made the directory, which is why
+  it survived: the local suite was green and CI's 3.10 job was red on the same
+  commit. `ProviderCatalogStore.init` had created its own parent for this exact
+  reason since it was written; `MetricsStore` now does the same, and skips it for
+  `:memory:`.
+
+  Reproduced locally by running the suite with an empty `HOME`: eleven failures
+  in the liveness and readiness tests before, forty passing after. Every surface
+  that builds the module-level application was affected — `/livez`, `/readyz`,
+  `/health` and the catalog sync route.
+
 ## v2.10.1 - 2026-10-04
 
 ### Fixed
