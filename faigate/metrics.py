@@ -6,6 +6,7 @@ import json
 import logging
 import sqlite3
 import time
+from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger("faigate.metrics")
@@ -118,6 +119,15 @@ class MetricsStore:
         return self._db_path
 
     def init(self) -> None:
+        # The resolved path lives outside the repository - see
+        # faigate.config._safe_db_path, which deliberately rejects the
+        # repo-relative value and falls back to ~/.local/share/faigate. Nothing
+        # else creates that directory, so on a machine where the installer has
+        # not run - a container, a CI runner, a fresh checkout - sqlite3.connect
+        # fails with "unable to open database file". ProviderCatalogStore.init
+        # already creates its parent for the same reason.
+        if self._db_path and self._db_path != ":memory:":
+            Path(self._db_path).expanduser().resolve().parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(self._db_path, check_same_thread=False)
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA synchronous=NORMAL")
