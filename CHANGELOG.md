@@ -38,15 +38,6 @@
   any routing layer is unmeasured. `docs/CONFIGURATION.md` documents the local
   catalog overlay, its environment variable and default path, and the
   `proof_level` marker a self-hosted entry needs.
-- **The model-updater planning artifacts left the product repository.** A PRD,
-  its task list, a progress log and agent notes — 804 lines — were tracked under
-  `docs/blueprints/` and shipped with the documentation of a public,
-  Apache-2.0 licensed repository. The two documents that linked to them are
-  updated rather than left dangling, and one of them no longer describes
-  `MetadataCatalogSync` as upcoming: it has shipped.
-- **Thirty-four German comments and docstrings are now English**, including
-  those of `/livez` and `/readyz`. Comments and docstrings only; the suite
-  result is unchanged either side of the change.
 
 - **A tagged release was published with no release notes.** The notes workflow
   ran `git-cliff --unreleased`, but it is triggered *by* the tag push, so by the
@@ -138,6 +129,15 @@
 
 ### Fixed
 
+- **The model-updater planning artifacts left the product repository.** A PRD,
+  its task list, a progress log and agent notes — 804 lines — were tracked under
+  `docs/blueprints/` and shipped with the documentation of a public,
+  Apache-2.0 licensed repository. The two documents that linked to them are
+  updated rather than left dangling, and one of them no longer describes
+  `MetadataCatalogSync` as upcoming: it has shipped.
+- **Thirty-four German comments and docstrings are now English**, including
+  those of `/livez` and `/readyz`. Comments and docstrings only; the suite
+  result is unchanged either side of the change.
 - **A runtime-resolved alias no longer carries ownership it cannot have.** The
   convention that BytePlus is a platform rather than a model maker rested on a
   single recorded model reporting `owned_by="byteplus"`. The 2026-09-29
