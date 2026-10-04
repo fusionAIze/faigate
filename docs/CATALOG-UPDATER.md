@@ -107,6 +107,24 @@ Catalog cache status
 
 `--json` emits the same data as a JSON object for scripts.
 
+### `faigate-models probe-window`
+
+Reads recorded `GET /models` responses from disk and reports the context window
+each provider actually states. It makes no network calls: the fixtures are the
+only input, `--fixtures-dir` selects them (default `tests/fixtures/models_probe/`),
+and `--json` emits the machine-readable form.
+
+A provider with no fixture is skipped with a note, and a provider with no known
+field path is flagged as unlisted. Both are named in the output, so an empty
+column means the provider states no window, never that it was not looked at.
+
+```bash
+$ faigate-models probe-window
+$ faigate-models probe-window --fixtures-dir ./recorded --json
+```
+
+Exit code `2` when the fixtures directory does not exist.
+
 ### `faigate-models update`
 
 Force-refresh the cache from remote.
