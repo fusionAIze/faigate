@@ -17,6 +17,11 @@ fusionAIze Gate gives OpenClaw, n8n, CLI tools, and custom apps one local endpoi
 
 Runs locally on Linux, macOS, and Windows, with first-class workstation guidance for `systemd`, `launchd`, Task Scheduler, and Homebrew-driven macOS installs.
 
+---
+
+> **Repository provenance.** The canonical home of this repository is Forgejo
+> at `git.langevc.com/fusionaize/faigate`. The GitHub repository is a mirror.
+
 ## Quick Navigation
 
 - [Quickstart](#quickstart)
@@ -466,6 +471,18 @@ Apache-2.0. See [LICENSE](./LICENSE).
 
 ## Repository & Contributing
 
-Canonical repository: **self-hosted Forgejo** — `git.langevc.com/fusionaize/faigate`
-(`git clone git@git.langevc.com:fusionaize/faigate.git`). Develop against the Forgejo
-clone and open pull requests there. The GitHub copy is a read-only mirror.
+> **Repository provenance.** The canonical home of this repository is Forgejo
+> at `git.langevc.com/fusionaize/faigate`. The GitHub repository is a mirror.
+
+Clone the canonical repository and open pull requests there:
+
+```bash
+git clone git@git.langevc.com:fusionaize/faigate.git
+```
+
+Releases are cut on the canonical side and pushed outward, so the mirror's `main`
+is replaced by whatever canonical holds. The mirror is not write-protected —
+Dependabot opens pull requests there and auto-merge is enabled for them — but a
+change that lands only on the mirror is overwritten by the next release push
+unless it is brought over first. If you merge something there, open it on the
+canonical side as well.
