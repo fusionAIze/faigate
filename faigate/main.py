@@ -3106,7 +3106,7 @@ async def health():
 async def liveness():
     """Lightweight liveness check — answers without external work.
 
-    Kriterium 1 (F13-A): never triggers provider probes or background
+    Criterion 1 (F13-A): never triggers provider probes or background
     tasks.  Only confirms the process is alive and the ASGI loop
     responds.
     """
@@ -3117,11 +3117,11 @@ async def liveness():
 async def readiness():
     """Readiness check — 503 when a required provider is not reachable.
 
-    Kriterium 2 (F13-A): only checks providers listed in
+    Criterion 2 (F13-A): only checks providers listed in
     ``health.required_providers``.  An optional provider's failure does
     NOT affect readiness; a required provider's failure returns 503.
 
-    Kriterium 5 (F13-A): this is NOT the path that a full health-check
+    Criterion 5 (F13-A): this is NOT the path that a full health-check
     queries — the detailed diagnosis stays on /health.
     """
     required = _config.health.get("required_providers", [])

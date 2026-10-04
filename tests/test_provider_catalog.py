@@ -2167,7 +2167,7 @@ def test_resolve_context_window_evidence_returns_existing_when_probe_not_confirm
 def test_build_probed_window_summary_counts_confirmed_and_unlisted() -> None:
     """The summary counts probed confirmed, unlisted, and before/after unconfirmed.
 
-    RED-PROOF: this test has a Riegel — if ``probe_results`` is empty the
+    RED-PROOF: this test has a guard — if ``probe_results`` is empty the
     function still returns counts, but an empty dict means nothing was probed;
     the test explicitly asserts that at least one provider was confirmed to
     guard against a silently empty probe set.
@@ -2187,7 +2187,7 @@ def test_build_probed_window_summary_counts_confirmed_and_unlisted() -> None:
 
     summary = build_probed_window_summary(probe_results)
 
-    # Riegel: at least one provider must be confirmed — an empty probe set is a
+    # guard: at least one provider must be confirmed — an empty probe set is a
     # test failure, not a pass.
     assert summary["probed_confirmed"] >= 1, (
         f"expected at least one confirmed probe, got {summary}; "
@@ -2273,7 +2273,7 @@ def test_probe_field_paths_table_has_no_gaps() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# FAI-238-B Befund 2: production entry point for probed context-window views
+# FAI-238-B Finding 2: production entry point for probed context-window views
 # --------------------------------------------------------------------------- #
 
 
@@ -2365,7 +2365,7 @@ def test_build_probed_window_view_without_probe_results() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# FAI-238-B Befund 2: CLI entry point for probed context-window views
+# FAI-238-B Finding 2: CLI entry point for probed context-window views
 # --------------------------------------------------------------------------- #
 
 
@@ -2382,13 +2382,13 @@ def test_cli_probe_window_deepseek_lands_in_enforceable_with_before_after(
     names a specific provider (deepseek-chat) with a concrete window value
     (65536) — an empty probe set cannot pass accidentally.
 
-    Riegel (a): without a fixture file, the CLI exits non-zero instead of
+    guard (a): without a fixture file, the CLI exits non-zero instead of
     silently reporting nothing.  deepseek-chat's fixture is
     ``tests/fixtures/models_probe/deepseek_models.json``.
 
-    Riegel (b): no network access — the CLI reads fixtures from disk only.
+    guard (b): no network access — the CLI reads fixtures from disk only.
 
-    Riegel (c): nvidia has no _PROBE_FIELD_PATHS entry and is not probed;
+    guard (c): nvidia has no _PROBE_FIELD_PATHS entry and is not probed;
     the CLI does not crash or guess.
     """
     import argparse as _argparse
@@ -2465,7 +2465,7 @@ def test_cli_probe_window_no_fixtures_reports_error(monkeypatch: pytest.MonkeyPa
 
 
 # --------------------------------------------------------------------------- #
-# FAI-238-B Riegel c): no_field_path providers are named, not silently skipped
+# FAI-238-B guard c): no_field_path providers are named, not silently skipped
 # --------------------------------------------------------------------------- #
 
 
@@ -2559,7 +2559,7 @@ def test_cli_probe_window_names_nvidia_as_no_field_path(
     from faigate import models_cli
     from faigate.provider_catalog import _PROBE_FIELD_PATHS
 
-    # Gegenprobe: nvidia must genuinely be absent from _PROBE_FIELD_PATHS.
+    # Counter-check: nvidia must genuinely be absent from _PROBE_FIELD_PATHS.
     # If someone adds it to the table, this test's premise is gone.
     assert "nvidia" not in _PROBE_FIELD_PATHS, (
         "nvidia must NOT be in _PROBE_FIELD_PATHS for this test to be meaningful; "
@@ -2568,7 +2568,7 @@ def test_cli_probe_window_names_nvidia_as_no_field_path(
 
     fixtures_dir = str(Path(__file__).resolve().parent / "fixtures" / "models_probe")
 
-    # Gegenprobe: the nvidia fixture must exist on disk.
+    # Counter-check: the nvidia fixture must exist on disk.
     nvidia_fixture = Path(fixtures_dir) / "nvidia_models.json"
     assert nvidia_fixture.is_file(), (
         f"nvidia fixture not found at {nvidia_fixture}; the test cannot prove "
@@ -2616,7 +2616,7 @@ def test_cli_probe_window_names_nvidia_as_no_field_path(
 
 
 # --------------------------------------------------------------------------- #
-# FAI-238-B Riegel d): unknown_kind values are restricted to the four defined catalog kinds
+# FAI-238-B guard d): unknown_kind values are restricted to the four defined catalog kinds
 # --------------------------------------------------------------------------- #
 
 
@@ -2693,7 +2693,7 @@ def test_invented_unknown_kind_is_rejected() -> None:
     the validation set itself rejects an invented value.  If someone adds a
     fifth kind without updating _VALID_KINDS, this test catches it.
 
-    RED-PROOF: if this test passes with the invented value, the Riegel is
+    RED-PROOF: if this test passes with the invented value, the guard is
     broken — it means _VALID_KINDS is too permissive.
     """
     invented = "no_field_path"

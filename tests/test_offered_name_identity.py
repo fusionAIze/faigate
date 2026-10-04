@@ -207,7 +207,7 @@ class TestClassifyEntryBinding:
         assert binding == "intent"
         assert binds_to is None
 
-    # ── Unknown-kind guard (Riegel) ──────────────────────────────
+    # ── Unknown-kind guard (guard) ──────────────────────────────
 
     def test_return_values_are_only_provider_bound_intent_or_unknown(self):
         """The function never returns a fourth binding class."""
@@ -464,7 +464,7 @@ def test_provider_bound_set_is_non_empty_on_production_config(monkeypatch):
         "the routing test's empty-set guard would fire"
     )
 
-    # The guard predicate rejects an empty set (Riegel gegen sich selbst).
+    # The guard predicate rejects an empty set (guard against itself).
     rejected_empty = False
     try:
         assert set(), "No provider-bound names found"
@@ -721,7 +721,7 @@ async def test_cross_provider_failover_discloses_actual_serving_provider(monkeyp
     )
 
 
-# ── Unknown-drop guard: end-to-end proof (Befund B) ──────────────────
+# ── Unknown-drop guard: end-to-end proof (Finding B) ──────────────────
 #
 # The ``unknown``→continue guard in ``_routable_model_entries`` must
 # actually drop entries from the offered list.  In production, no entry

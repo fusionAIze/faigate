@@ -371,7 +371,7 @@ class TestSelfHostedSurvivesSync:
         assert "my-grid-worker" in stale.payload.get("providers", {})
 
 
-# ── Self-hosted via env var (AC-5, Befund 1) ────────────────────
+# ── Self-hosted via env var (AC-5, Finding 1) ────────────────────
 
 
 def _payload_with_curated(*names: str) -> dict[str, Any]:
@@ -625,7 +625,7 @@ class TestLoopbackGuard:
         assert b"loopback" in response.body
 
 
-# ── Route-absence RED PROOF (Befund 3) ──────────────────────────
+# ── Route-absence RED PROOF (Finding 3) ──────────────────────────
 
 
 class TestRouteAbsenceRedProof:

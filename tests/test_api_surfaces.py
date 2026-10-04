@@ -294,7 +294,7 @@ def _build_client(cfg, providers, monkeypatch):
 
 
 # ===================================================================
-# Kriterium 4: the matrix is mechanically bound to its backing tests
+# Criterion 4: the matrix is mechanically bound to its backing tests
 # ===================================================================
 
 
@@ -345,7 +345,7 @@ def test_matrix_states_tested_client_versions():
 
 
 # ===================================================================
-# Kriterium 3: dual-switch semantics, measured
+# Criterion 3: dual-switch semantics, measured
 # ===================================================================
 
 

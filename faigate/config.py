@@ -1867,7 +1867,7 @@ def _normalize_auto_update(data: dict[str, Any]) -> dict[str, Any]:
 def _normalize_health(data: dict[str, Any]) -> dict[str, Any]:
     """Validate health-check configuration, including required_providers.
 
-    Kriterium 3 (F13-A): which routes are required for readiness lives
+    Criterion 3 (F13-A): which routes are required for readiness lives
     in configuration, not hardcoded.
     """
     raw = data.get("health") or {}

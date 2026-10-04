@@ -78,11 +78,11 @@ class _ProviderStub:
         return None
 
 
-# ── Kriterium 1: /livez ─────────────────────────────────────────
+# ── Criterion 1: /livez ─────────────────────────────────────────
 
 
 class TestLiveness:
-    """Kriterium 1: /livez answers without external work."""
+    """Criterion 1: /livez answers without external work."""
 
     def test_livez_returns_200(self) -> None:
         """/livez returns 200 OK with a simple status response."""
@@ -116,11 +116,11 @@ class TestLiveness:
         assert probe_count == 0, "/livez must not trigger provider probes"
 
 
-# ── Kriterium 2: /readyz ────────────────────────────────────────
+# ── Criterion 2: /readyz ────────────────────────────────────────
 
 
 class TestReadiness:
-    """Kriterium 2: /readyz checks required providers.
+    """Criterion 2: /readyz checks required providers.
 
     These tests set ``_providers`` inside the TestClient context so the
     lifespan startup does not overwrite them with real backends.
@@ -180,11 +180,11 @@ class TestReadiness:
         assert resp.json()["ready"] is True
 
 
-# ── Kriterium 4: optional vs required isolation ─────────────────
+# ── Criterion 4: optional vs required isolation ─────────────────
 
 
 class TestRequiredVsOptionalIsolation:
-    """Kriterium 4: optional provider down != 503; required provider down == 503."""
+    """Criterion 4: optional provider down != 503; required provider down == 503."""
 
     def test_optional_provider_down_readiness_stays_200(self) -> None:
         """Only optional providers unhealthy -> /readyz returns 200."""
@@ -231,11 +231,11 @@ class TestRequiredVsOptionalIsolation:
         assert "r2" in resp.json()["unreachable_required"]
 
 
-# ── Kriterium 5: /health carries full diagnosis ─────────────────
+# ── Criterion 5: /health carries full diagnosis ─────────────────
 
 
 class TestHealthCarriesFullDiagnosis:
-    """Kriterium 5: /health carries full provider-level diagnosis.
+    """Criterion 5: /health carries full provider-level diagnosis.
 
     The detailed readiness view (providers, request_readiness per
     provider) stays on /health.  /readyz is a simple binary check
@@ -289,11 +289,11 @@ class TestHealthCarriesFullDiagnosis:
         assert "/health" != "/readyz"
 
 
-# ── Kriterium 3: Config validation ──────────────────────────────
+# ── Criterion 3: Config validation ──────────────────────────────
 
 
 class TestRequiredProvidersConfig:
-    """Kriterium 3: required_providers lives in config, not code."""
+    """Criterion 3: required_providers lives in config, not code."""
 
     def test_required_providers_validates_against_known_providers(self) -> None:
         """Unknown provider in required_providers raises ConfigError."""
