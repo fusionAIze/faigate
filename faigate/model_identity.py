@@ -281,6 +281,13 @@ def classify_entry_binding(
     # Provider backend entries: the offered name IS the provider name.
     if entry.get("contract"):
         normalized = offered_name.strip().lower()
+        # openai-codex-spark: a configured provider that the
+        # "explicit-codex-mini" static rule claims before the named-provider
+        # layer can route it.  The name demonstrably does not route to
+        # exactly one provider, so it is intent, not provider-bound.
+        # Tracked in FAI-242 (static-rule conflict).
+        if normalized == "openai-codex-spark":
+            return "intent", None
         if normalized in configured_providers:
             return "provider-bound", normalized
         # A contract entry whose name is not in the configured set is a

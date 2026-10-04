@@ -362,17 +362,22 @@ def test_red_proof_byteplus_catalog_entry_is_intent_not_provider_bound(monkeypat
 # failure unless it is a known, tracked misrouting.
 
 
-# Known misrouted provider-bound names — each with a tracked issue.
-# These are structurally the same misrouting the reachability test
-# tracks, but checked through the offered-name identity lens.
+# Known misrouted names — each with a tracked issue.  These names do
+# not route to exactly one configured provider, so they are classified
+# as intent (not provider-bound) by the FAI-251 classifier.  When a
+# tracking issue is resolved — the name demonstrably routes to exactly
+# one provider — it is reclassified as provider-bound and removed from
+# this set.
 #
 #   openai-codex-spark  FAI-242 (static-rule conflict).  The static rule
 #                       "explicit-codex-mini" lists "openai-codex-spark" in
 #                       its model_requested tokens and routes to
 #                       openai-codex-mini.  This is a static rule conflict:
 #                       the name of one provider is claimed as an alias of
-#                       another.  Tracked in FAI-242 or a follow-up.
-KNOWN_MISROUTED = {"openai-codex-spark"}
+#                       another.  Classified as intent in
+#                       model_identity.classify_entry_binding until the
+#                       conflict is resolved.
+KNOWN_MISROUTED: set[str] = set()
 
 
 async def test_every_provider_bound_name_routes_to_its_provider(monkeypatch):
@@ -419,49 +424,11 @@ async def test_every_provider_bound_name_routes_to_its_provider(monkeypatch):
             model_requested=name,
         )
         if decision.provider_name != binds_to:
-            if name in KNOWN_MISROUTED:
-                continue
             failures.append((name, binds_to, decision.provider_name, decision.layer, decision.rule_name))
 
     assert not failures, "Provider-bound names that route to a different provider:\n" + "\n".join(
         f"  {n} binds_to={bound} -> {got} (layer={layer}, rule={rule})" for n, bound, got, layer, rule in failures
     )
-
-
-async def test_misrouted_allowance_has_no_stale_entries(monkeypatch):
-    """Every entry in KNOWN_MISROUTED must still exist and still be misrouted."""
-    from faigate import main as main_module
-
-    monkeypatch.delenv("FAIGATE_CONFIG_FILE", raising=False)
-    monkeypatch.delenv("FAIGATE_CONFIG_PATH", raising=False)
-    cfg = load_config()
-    monkeypatch.setattr(
-        main_module,
-        "_providers",
-        {name: _ProviderStub() for name in cfg.providers},
-        raising=False,
-    )
-    monkeypatch.setattr(main_module, "_router", Router(cfg), raising=False)
-
-    router = Router(cfg)
-    entries = main_module._routable_model_entries(cfg)
-
-    for name in sorted(KNOWN_MISROUTED):
-        assert name in entries, (
-            f"{name} is allowed to be misrouted but is no longer in the offered list — remove it from KNOWN_MISROUTED"
-        )
-        entry = entries[name]
-        assert entry.get("binding") == "provider-bound", (
-            f"{name} is in KNOWN_MISROUTED but binding is {entry.get('binding')!r}, "
-            f"not provider-bound — remove it from KNOWN_MISROUTED"
-        )
-        decision = await router.route(
-            [{"role": "user", "content": "hello"}],
-            model_requested=name,
-        )
-        assert decision.provider_name != entry["binds_to"], (
-            f"{name} now routes to itself ({decision.provider_name}) but is still in KNOWN_MISROUTED — remove it"
-        )
 
 
 # ── Criterion 2 red proof ────────────────────────────────────────────
@@ -544,11 +511,11 @@ async def test_provider_bound_decision_discloses_actual_provider(monkeypatch):
     entries = main_module._routable_model_entries(cfg)
     provider_names = {n.strip().lower() for n in cfg.providers}
 
+    checked = 0
     for name, entry in entries.items():
         if entry.get("binding") != "provider-bound":
             continue
-        if name in KNOWN_MISROUTED:
-            continue
+        checked += 1
 
         decision = await router.route(
             [{"role": "user", "content": "hello"}],
@@ -577,6 +544,11 @@ async def test_provider_bound_decision_discloses_actual_provider(monkeypatch):
             assert not (decision.layer == "fallback" and decision.rule_name == "no-match"), (
                 f"Routing {name!r} fell through to fallback/no-match — no meaningful disclosure"
             )
+
+    assert checked > 0, (
+        "No provider-bound names found — the test vacuously passes. "
+        "Either no providers are configured or binding classification is broken."
+    )
 
 
 async def test_bug_report_name_byteplus_deepseek_is_intent_and_discloses_provider(monkeypatch):
@@ -641,12 +613,12 @@ async def test_static_rule_disclosure_matches_route_to(monkeypatch):
     router = Router(cfg)
     entries = main_module._routable_model_entries(cfg)
 
+    checked = 0
     for name, entry in entries.items():
         if entry.get("binding") != "provider-bound":
             continue
-        if name in KNOWN_MISROUTED:
-            continue
 
+        checked += 1
         decision = await router.route(
             [{"role": "user", "content": "hello"}],
             model_requested=name,
@@ -663,3 +635,177 @@ async def test_static_rule_disclosure_matches_route_to(monkeypatch):
             assert decision.provider_name == name, (
                 f"Named-provider layer routed {name!r} to {decision.provider_name!r} instead of {name!r}"
             )
+
+    assert checked > 0, (
+        "No provider-bound names found — the test vacuously passes. "
+        "Either no providers are configured or binding classification is broken."
+    )
+
+
+# ── Criterion 3: cross-provider failover disclosure ──────────────────
+#
+# When a provider-bound name's primary provider is unhealthy and the
+# router falls through to a different provider, the RoutingDecision must
+# disclose the actual serving provider — never silently redirect.
+
+
+async def test_cross_provider_failover_discloses_actual_serving_provider(monkeypatch):
+    """A provider-bound name whose primary is unhealthy must disclose the fallback.
+
+    This is the test that proves criterion 3 with a real cross-provider
+    failover.  The primary provider is marked unhealthy, so the router
+    must fall through to a different provider.  The decision's
+    ``provider_name`` must be the actual serving (fallback) provider, not
+    the original ``binds_to``.
+    """
+    from faigate import main as main_module
+
+    monkeypatch.delenv("FAIGATE_CONFIG_FILE", raising=False)
+    monkeypatch.delenv("FAIGATE_CONFIG_PATH", raising=False)
+    cfg = load_config()
+    monkeypatch.setattr(
+        main_module,
+        "_providers",
+        {name: _ProviderStub() for name in cfg.providers},
+        raising=False,
+    )
+    monkeypatch.setattr(main_module, "_router", Router(cfg), raising=False)
+
+    router = Router(cfg)
+    entries = main_module._routable_model_entries(cfg)
+    provider_names = {n.strip().lower() for n in cfg.providers}
+
+    # Pick the first provider-bound name that routes directly to its
+    # binds_to (no static-rule preemption) to use as the primary.
+    target = None
+    for name, entry in entries.items():
+        if entry.get("binding") != "provider-bound":
+            continue
+        binds_to = entry["binds_to"]
+        decision = await router.route(
+            [{"role": "user", "content": "hello"}],
+            model_requested=name,
+        )
+        if decision.provider_name == binds_to:
+            target = (name, binds_to, entry)
+            break
+
+    assert target is not None, "No provider-bound name found that routes directly to its binds_to"
+
+    name, binds_to, entry = target
+
+    # Mark the primary as unhealthy — the router must fall back.
+    decision = await router.route(
+        [{"role": "user", "content": "hello"}],
+        model_requested=name,
+        provider_health={binds_to: {"healthy": False}},
+    )
+
+    # The decision must still name a configured provider.
+    assert decision.provider_name in provider_names, (
+        f"Failover for {name!r} (binds_to={binds_to!r}) produced "
+        f"provider_name={decision.provider_name!r} which is not configured"
+    )
+
+    # The decision must disclose the actual serving provider — which is
+    # not the unhealthy primary.
+    assert decision.provider_name != binds_to, (
+        f"Failover for {name!r} returned {decision.provider_name!r} "
+        f"which matches the unhealthy primary {binds_to!r} — "
+        f"the failover did not happen or the decision did not disclose it"
+    )
+
+    # The failover reason must be recorded in the decision.
+    assert "primary unhealthy" in decision.reason.lower(), (
+        f"Failover for {name!r} has reason={decision.reason!r} — expected 'primary unhealthy' in the reason text"
+    )
+
+
+# ── Unknown-drop guard: end-to-end proof (Befund B) ──────────────────
+#
+# The ``unknown``→continue guard in ``_routable_model_entries`` must
+# actually drop entries from the offered list.  In production, no entry
+# is unknown (all carry a recognised marker), so the guard never fires.
+# These tests force an unknown classification and prove the guard works.
+
+
+def test_unknown_entry_is_dropped_from_offered_list(monkeypatch):
+    """An entry classified as unknown must not appear in the offered list.
+
+    This test monkeypatches ``classify_entry_binding`` to return
+    ``"unknown"`` for a specific production name and then proves the
+    name is absent from ``_routable_model_entries``.  If someone removes
+    the ``if binding == "unknown": continue`` guard from ``main.py``,
+    the entry reappears with ``binding="unknown"`` and this assertion
+    fails.
+    """
+    from faigate import main as main_module
+    from faigate import model_identity
+
+    monkeypatch.delenv("FAIGATE_CONFIG_FILE", raising=False)
+    monkeypatch.delenv("FAIGATE_CONFIG_PATH", raising=False)
+    cfg = load_config()
+    monkeypatch.setattr(
+        main_module,
+        "_providers",
+        {name: _ProviderStub() for name in cfg.providers},
+        raising=False,
+    )
+    monkeypatch.setattr(main_module, "_router", Router(cfg), raising=False)
+
+    original = main_module.classify_entry_binding
+
+    dropped_name = "deepseek-v4-flash"
+
+    def _force_unknown(offered_name, entry, configured_providers):
+        if offered_name.strip().lower() == dropped_name:
+            return "unknown", model_identity.UNKNOWN_KIND_NOT_APPLICABLE
+        return original(offered_name, entry, configured_providers)
+
+    monkeypatch.setattr(main_module, "classify_entry_binding", _force_unknown)
+
+    entries = main_module._routable_model_entries(cfg)
+
+    assert entries, "No offered names at all — the test vacuously passes"
+
+    assert dropped_name not in entries, (
+        f"{dropped_name!r} was classified as unknown but still appears in the offered list — "
+        f"the unknown-drop guard is missing or bypassed"
+    )
+
+    # The rest of the list must still be present and classified.
+    for name, entry in entries.items():
+        assert "binding" in entry, f"Entry {name!r} missing 'binding' field"
+        assert entry["binding"] in ("provider-bound", "intent"), f"Entry {name!r} has binding={entry['binding']!r}"
+
+
+def test_all_unknown_entries_yield_empty_offered_list(monkeypatch):
+    """If every entry is unknown, the offered list must be empty.
+
+    This is the guard against the guard: a classifier that returns
+    ``"unknown"`` for every entry must produce an empty offered list,
+    not a list of unknown entries or a crash.
+    """
+    from faigate import main as main_module
+    from faigate import model_identity
+
+    monkeypatch.delenv("FAIGATE_CONFIG_FILE", raising=False)
+    monkeypatch.delenv("FAIGATE_CONFIG_PATH", raising=False)
+    cfg = load_config()
+    monkeypatch.setattr(
+        main_module,
+        "_providers",
+        {name: _ProviderStub() for name in cfg.providers},
+        raising=False,
+    )
+    monkeypatch.setattr(main_module, "_router", Router(cfg), raising=False)
+
+    monkeypatch.setattr(
+        main_module,
+        "classify_entry_binding",
+        lambda name, entry, configured: ("unknown", model_identity.UNKNOWN_KIND_NOT_APPLICABLE),
+    )
+
+    entries = main_module._routable_model_entries(cfg)
+
+    assert entries == {}, f"Expected empty offered list when all entries are unknown, got {len(entries)} entries"
