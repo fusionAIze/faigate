@@ -23,6 +23,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from .registry import is_runtime_dependent_model
+
 # The routing engine carries two non-names: ``auto`` asks the layers to decide
 # and the empty string means "no name given".  Router._layer_named_provider
 # treats both as "not a named provider", so neither can address a provider.
@@ -186,8 +188,21 @@ def addressability_coverage_holds(
 
 
 def model_is_concrete(model_id: str) -> bool:
-    """Return True if *model_id* is a concrete identifier, not a provider-resolved alias."""
-    return "latest" not in str(model_id or "")
+    """Return True if *model_id* is a concrete identifier, not a provider-resolved alias.
+
+    A provider-resolved alias is an identifier the provider maps to a concrete
+    model at request time — ``*-latest``, ``*-auto``, ``*-default``.  No stable
+    window, pricing, or capability fact attaches to it, so a check that only
+    knows about ``latest`` would let ``auto`` and ``default`` through.
+
+    The alias vocabulary is not defined here. It lives in
+    :func:`faigate.registry.is_runtime_dependent_model`, because "runtime
+    dependent" is a statement about what may be *claimed*, and every claim is a
+    catalog concern.  This function is one of that predicate's callers; it is
+    the check the registry and reachability invariants go through, so editing
+    the predicate changes what this repo enforces without touching this file.
+    """
+    return not is_runtime_dependent_model(model_id)
 
 
 def reachability_model_matches(entry: dict[str, Any], observed_model: str) -> bool:

@@ -1864,6 +1864,40 @@ def _normalize_auto_update(data: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
+def _normalize_health(data: dict[str, Any]) -> dict[str, Any]:
+    """Validate health-check configuration, including required_providers.
+
+    Kriterium 3 (F13-A): which routes are required for readiness lives
+    in configuration, not hardcoded.
+    """
+    raw = data.get("health") or {}
+    if not isinstance(raw, dict):
+        raise ConfigError("'health' must be a mapping")
+
+    provider_names = set((data.get("providers") or {}).keys())
+    required = raw.get("required_providers", [])
+    if required is None:
+        required = []
+    if not isinstance(required, list):
+        raise ConfigError("'health.required_providers' must be a list")
+
+    normalized_required = []
+    for item in required:
+        if not isinstance(item, str) or not item.strip():
+            raise ConfigError("'health.required_providers' must contain non-empty strings")
+        normalized_required.append(item.strip())
+
+    unknown = sorted(set(normalized_required) - provider_names)
+    if unknown:
+        unknown_list = ", ".join(unknown)
+        raise ConfigError(f"'health.required_providers' references unknown providers: {unknown_list}")
+
+    normalized = dict(data)
+    normalized["health"] = dict(raw)
+    normalized["health"]["required_providers"] = normalized_required
+    return normalized
+
+
 def _normalize_security(data: dict[str, Any]) -> dict[str, Any]:
     """Validate and normalize runtime security settings."""
     raw = data.get("security") or {}
@@ -2344,21 +2378,23 @@ def load_config(path: str | Path | None = None) -> Config:
 
     expanded = _normalize_metadata_sync(
         _normalize_provider_source_refresh(
-            _normalize_api_surfaces(
-                _normalize_anthropic_bridge(
-                    _normalize_provider_catalog_check(
-                        _normalize_security(
-                            _normalize_auto_update(
-                                _normalize_update_check(
-                                    _normalize_request_hooks(
-                                        _validate_routing_mode_references(
-                                            _normalize_model_shortcuts(
-                                                _normalize_routing_modes(
-                                                    _normalize_client_profiles(
-                                                        _normalize_routing_policies(
-                                                            _normalize_static_rules(
-                                                                _normalize_fallback_chain(
-                                                                    _normalize_providers(_walk_expand(raw))
+            _normalize_health(  # F13-A: required_providers validation
+                _normalize_api_surfaces(
+                    _normalize_anthropic_bridge(
+                        _normalize_provider_catalog_check(
+                            _normalize_security(
+                                _normalize_auto_update(
+                                    _normalize_update_check(
+                                        _normalize_request_hooks(
+                                            _validate_routing_mode_references(
+                                                _normalize_model_shortcuts(
+                                                    _normalize_routing_modes(
+                                                        _normalize_client_profiles(
+                                                            _normalize_routing_policies(
+                                                                _normalize_static_rules(
+                                                                    _normalize_fallback_chain(
+                                                                        _normalize_providers(_walk_expand(raw))
+                                                                    )
                                                                 )
                                                             )
                                                         )

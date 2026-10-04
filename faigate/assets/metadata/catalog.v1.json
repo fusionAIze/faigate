@@ -1042,6 +1042,8 @@
       "context_evidence": {
         "level": "plausible",
         "as_of": "2026-09-12",
+        "unknown_kind": "runtime_dependent",
+        "unknown_reason": "mistral-large-latest is a provider-resolved alias — the catalog cannot carry stable facts about it",
         "note": "Carried over unchanged from faigate's embedded provider table. The public sources disagree with it: LiteLLM azure/mistral-large-latest=32000. The value is kept so this migration does not silently change routing headroom; the divergence is recorded here so the correction can be a deliberate step."
       }
     },
@@ -1705,6 +1707,8 @@
       },
       "context_evidence": {
         "level": "plausible",
+        "unknown_kind": "runtime_dependent",
+        "unknown_reason": "ark-code-latest is a provider-resolved alias — the catalog cannot carry stable facts about it",
         "derived_from": "model_caps[\"kimi-k2.6\"]",
         "derived_from_value": 262144,
         "note": "plan rollup over ark coding models (ark-code-latest, kimi-k2.x, glm-4.x); no single window. Derived from the coding workhorse kimi-k2.6."

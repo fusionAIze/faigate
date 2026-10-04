@@ -56,3 +56,6 @@ handover/
 # SkillWeave runtime is local; only the helper is tracked.
 .skillweave/*
 !.skillweave/agents.md
+
+# SkillWeave execution artifacts
+.skillweave/
