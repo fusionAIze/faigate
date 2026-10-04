@@ -194,6 +194,122 @@ class ModelIdentityResolver:
         return [identity.long_form for identity in self._identities]
 
 
+# ── Unknown-kind vocabulary (FAI-251) ────────────────────────────────
+#
+# When a name cannot be classified as provider-bound or intent it is
+# *unknown*.  The kind explains why:
+#
+#   derivable          Classification is derivable from available data but
+#                      not yet implemented.
+#   not_applicable     The entry's source markers do not fit the
+#                      classification scheme (e.g. a contract entry whose
+#                      name is not in the configured provider set).
+#   runtime_dependent  Classification depends on runtime state that is not
+#                      available at list-building time.
+#   unlisted           The entry carries a source marker this function does
+#                      not recognise.
+#
+# ``not_applicable`` is the reachable kind: the ``contract`` branch returns
+# it when an entry claims a provider that is not configured, and the
+# fallthrough returns it when an entry carries no recognised source marker
+# at all.  The other three kinds are vocabulary the guard can grow into
+# without changing the return signature.
+
+UNKNOWN_KIND_DERIVABLE = "derivable"
+UNKNOWN_KIND_NOT_APPLICABLE = "not_applicable"
+UNKNOWN_KIND_RUNTIME_DEPENDENT = "runtime_dependent"
+UNKNOWN_KIND_UNLISTED = "unlisted"
+
+
+def classify_entry_binding(
+    offered_name: str,
+    entry: dict[str, Any],
+    configured_providers: set[str],
+) -> tuple[str, str | None]:
+    """Classify an offered model entry as ``provider-bound``, ``intent``, or ``unknown``.
+
+    A name is *provider-bound* when it names exactly one configured provider
+    backend — the entry then carries that provider name.  A name is *intent*
+    when it routes by policy and does not name a specific provider.  A name
+    that is neither is *unknown* and must not be advertised.
+
+    Classification is total: every entry either names a provider, is one of
+    the recognised policy sources (mode, catalog, static rule, shortcut, or
+    the ``auto`` selector), or is unknown.  There is no markerless default
+    that silently advertises as intent.
+
+    Parameters
+    ----------
+    offered_name:
+        The name as it appears in the offered model list (the entry key).
+    entry:
+        The entry dict produced by ``_routable_model_entries``.  Source
+        markers (``mode``, ``catalog``, ``static_rule``, ``shortcut``,
+        ``contract``) determine the classification strategy.
+    configured_providers:
+        Set of configured provider backend names.
+
+    Returns
+    -------
+    ``("provider-bound", provider_name)``, ``("intent", None)``, or
+    ``("unknown", kind)`` where *kind* is one of the ``UNKNOWN_KIND_*``
+    constants.
+    """
+    # Modes are always intent — they express routing policy, not a provider.
+    if entry.get("mode"):
+        return "intent", None
+
+    # Catalog identities describe a model, not a configured backend.
+    if entry.get("catalog"):
+        return "intent", None
+
+    # Static rules and shortcuts: if the offered name itself IS a configured
+    # provider, it is provider-bound to that provider.  Otherwise the name
+    # is an intent label (e.g. "chat", "flash") that routes through a rule.
+    #
+    # In production the provider-bound branch here is unreachable because
+    # ``_routable_model_entries`` claims provider names via ``contract``
+    # before any static rule or shortcut can claim them.  The branch is
+    # correct by construction and is exercised by unit tests; removing it
+    # would make the function silently wrong if the claim order ever changes.
+    if entry.get("static_rule") or entry.get("shortcut"):
+        normalized = offered_name.strip().lower()
+        if normalized in configured_providers:
+            return "provider-bound", normalized
+        return "intent", None
+
+    # Provider backend entries: the offered name IS the provider name.
+    if entry.get("contract"):
+        normalized = offered_name.strip().lower()
+        # openai-codex-spark: a configured provider that the
+        # "explicit-codex-mini" static rule claims before the named-provider
+        # layer can route it.  The name demonstrably does not route to
+        # exactly one provider, so it is intent, not provider-bound.
+        # Tracked in FAI-242 (static-rule conflict).
+        if normalized == "openai-codex-spark":
+            return "intent", None
+        if normalized in configured_providers:
+            return "provider-bound", normalized
+        # A contract entry whose name is not in the configured set is a
+        # configuration error — the entry claims a provider that does not
+        # exist.  Classify as unknown so the gateway never advertises it.
+        return "unknown", UNKNOWN_KIND_NOT_APPLICABLE
+
+    # The virtual ``auto`` selector routes by policy, never to a named
+    # provider — it is intent.  It is the one entry with no source marker,
+    # so it must be named here rather than left to the fallthrough.
+    if offered_name.strip().lower() == "auto":
+        return "intent", None
+
+    # Fallthrough: the entry carries no source marker this function
+    # recognises, so nothing establishes that it binds to exactly one
+    # provider.  Before FAI-251 this returned ``intent``, which advertised
+    # an unclassifiable name as if it were a policy label — the silent
+    # third kind the invariant forbids.  Classify as unknown so
+    # ``_routable_model_entries`` drops it instead of offering it.
+    return "unknown", UNKNOWN_KIND_NOT_APPLICABLE
+
+
 def catalog_model_identities() -> list[ModelIdentity]:
     """Build model identities from the catalog, with ``registry.ALL`` fallback.
 

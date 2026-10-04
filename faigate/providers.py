@@ -6,7 +6,7 @@ import json
 import logging
 import re
 import time
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -87,8 +87,28 @@ def classify_runtime_issue(
     return "degraded"
 
 
-def create_provider_backend(name: str, cfg: dict) -> ProviderBackend:
-    """Create a provider backend instance, handling OAuth wrapping if needed."""
+def create_provider_backend(
+    name: str,
+    cfg: dict,
+    *,
+    addressable_names: Iterable[str] | None = None,
+) -> ProviderBackend:
+    """Create a provider backend instance, handling OAuth wrapping if needed.
+
+    ``addressable_names`` is the set of provider keys the routing contract can
+    address, computed by the runtime from the whole contract (see
+    :func:`faigate.reachability.addressable_provider_names`). The readiness ladder
+    reports ``not-addressable`` for a key outside that set.
+
+    It must be the caller — the runtime that owns the full contract — that
+    answers this, never the backend itself: a backend asking "can a request reach
+    me?" while computing its own readiness would answer the question it is
+    supposed to report.
+
+    ``None`` (the default) means "no contract was supplied": the caller is not
+    making an addressability claim, so the backend keeps the historical ready
+    state instead of reporting every provider not-addressable.
+    """
     backend_type = cfg.get("backend", "openai-compat")
     if backend_type == "oauth":
         try:
@@ -98,8 +118,12 @@ def create_provider_backend(name: str, cfg: dict) -> ProviderBackend:
                 "OAuth backend requested but faigate.oauth.backend could not be imported. "
                 "Make sure optional OAuth dependencies are installed."
             ) from exc
-        return _OAuthBackend(name, cfg)
-    return ProviderBackend(name, cfg)
+        backend: ProviderBackend = _OAuthBackend(name, cfg)
+    else:
+        backend = ProviderBackend(name, cfg)
+    if addressable_names is not None:
+        backend._addressable = str(name).strip() in {str(n).strip() for n in addressable_names}
+    return backend
 
 
 @dataclass
@@ -183,6 +207,12 @@ class ProviderBackend:
             **dict(cfg.get("transport", {})),
         }
         self.health = ProviderHealth(name=name)
+        # Whether this provider name is an address a request can reach. The
+        # runtime derives it from the whole routing contract and passes it to
+        # create_provider_backend(); a bare ProviderBackend is treated as
+        # addressable so direct construction keeps the historical ready state —
+        # see create_provider_backend() and faigate.reachability.
+        self._addressable: bool = True
         self._last_probe_strategy = ""
         self._last_probe_payload = ""
         self._last_probe_verified = False
@@ -742,6 +772,11 @@ class ProviderBackend:
             return "treat this route as degraded until connectivity recovers"
         if normalized == "addressability-mismatch":
             return "the endpoint answered, but the responding model does not match the catalog entry"
+        if normalized == "not-addressable":
+            return (
+                "no routing layer addresses this provider; add a static rule, "
+                "a mode selector, or route its name explicitly"
+            )
         return "inspect the last route error before relying on this provider"
 
     def _check_addressability(self) -> dict[str, Any] | None:
@@ -911,6 +946,30 @@ class ProviderBackend:
                 "verified_via": verified_via,
                 "operator_hint": self._request_readiness_action(final_status),
             }
+        # Addressability gates every success state: a provider that has a key, a
+        # clean transport record and even a passing probe may still be
+        # unreachable if no routing rule can send a request to its name. It must
+        # therefore be checked before the probe branch, or a probe would flip a
+        # not-addressable provider to ready-verified. Naming it here keeps
+        # 'ready' meaning "this route accepts requests", separate from the
+        # key/endpoint failures above and stable regardless of probe order.
+        if not self._addressable:
+            return {
+                "ready": False,
+                "status": "not-addressable",
+                "reason": f"provider '{self.name}' is configured but no routing layer addresses this provider name",
+                "probe_strategy": probe_strategy,
+                "compatibility": compatibility,
+                "profile": profile,
+                "billing_mode": billing_mode,
+                "probe_confidence": probe_confidence,
+                "quota_group": quota_group,
+                "quota_isolated": quota_isolated,
+                "notes": notes,
+                "probe_payload": probe_payload,
+                "verified_via": verified_via,
+                "operator_hint": self._request_readiness_action("not-addressable"),
+            }
         if self._last_probe_verified:
             addressability = self._check_addressability()
             if addressability:
@@ -945,6 +1004,7 @@ class ProviderBackend:
                 "verified_via": verified_via or probe_strategy,
                 "operator_hint": self._request_readiness_action(status),
             }
+        # Addressability is checked before the probe branch above.
         if compatibility != "native" and probe_confidence != "high":
             status = "ready-compat"
             return {

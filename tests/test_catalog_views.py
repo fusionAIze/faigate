@@ -183,3 +183,113 @@ def test_evidence_level_returns_none_when_absent_or_unrecognised() -> None:
 
 def test_split_catalog_facts_returns_catalog_views() -> None:
     assert isinstance(split_catalog_facts({}), CatalogViews)
+
+
+# --------------------------------------------------------------------------- #
+# build_probed_context_facts integration with split_catalog_facts
+# --------------------------------------------------------------------------- #
+
+
+def test_build_probed_context_facts_confirmed_probe_lands_in_enforceable() -> None:
+    """A confirmed probe puts the fact into the enforceable view.
+
+    RED-PROOF: the probe result must carry ``evidence.level=confirmed`` so
+    ``split_catalog_facts`` places it in the enforceable view.  The fact is
+    built from a synthetic catalog entry and a synthetic probe result — no
+    live catalog dependency.
+    """
+    from faigate.catalog_views import build_probed_context_facts, split_catalog_facts
+
+    def _resolve(name, probed):
+        return dict(probed)
+
+    catalog = {
+        "acme": {
+            "context_window": 128000,
+            "context_evidence": {"level": "plausible"},
+        },
+    }
+    probe_results = {
+        "acme": {
+            "level": "confirmed",
+            "probed_at": "2026-09-26",
+            "probed_value": 200000,
+            "source": "GET https://api.acme.test/v1/models",
+            "field_path": "context_length",
+        },
+    }
+
+    facts = build_probed_context_facts(probe_results, catalog=catalog, resolve_evidence=_resolve)
+    views = split_catalog_facts(facts)
+
+    assert "acme" in views.enforceable
+    assert "acme" in views.advisory
+    assert views.enforceable["acme"]["context_window"] == 200000
+    assert views.enforceable["acme"]["evidence"]["level"] == "confirmed"
+
+
+def test_build_probed_context_facts_unconfirmed_probe_stays_out_of_enforceable() -> None:
+    """An unconfirmed probe leaves the fact at the catalog's original level.
+
+    RED-PROOF: when the probe is ``unconfirmed``, the catalog's existing
+    ``plausible`` evidence must remain — the fact stays in advisory but not
+    enforceable.  The resolve function mimics
+    ``resolve_context_window_evidence``: when the probe is not confirmed,
+    the catalog's existing evidence is returned unchanged.
+    """
+    from faigate.catalog_views import build_probed_context_facts, split_catalog_facts
+
+    def _resolve(name, probed):
+        if probed.get("level") != "confirmed":
+            # Catalog fallback: return the existing catalog evidence.
+            return {"level": "plausible"}
+        return dict(probed)
+
+    catalog = {
+        "acme": {
+            "context_window": 128000,
+            "context_evidence": {"level": "plausible"},
+        },
+    }
+    probe_results = {
+        "acme": {
+            "level": "unconfirmed",
+            "unknown_kind": "unlisted",
+        },
+    }
+
+    facts = build_probed_context_facts(probe_results, catalog=catalog, resolve_evidence=_resolve)
+    views = split_catalog_facts(facts)
+
+    assert "acme" not in views.enforceable
+    assert "acme" in views.advisory
+    assert views.advisory["acme"]["evidence"]["level"] == "plausible"
+
+
+def test_build_probed_context_facts_no_probe_uses_catalog_evidence() -> None:
+    """Without probe results, the catalog's evidence level is preserved.
+
+    RED-PROOF: a plausible catalog entry without a probe stays plausible,
+    and a confirmed catalog entry without a probe stays confirmed
+    (and therefore enforceable).
+    """
+    from faigate.catalog_views import build_probed_context_facts, split_catalog_facts
+
+    catalog = {
+        "acme": {
+            "context_window": 128000,
+            "context_evidence": {"level": "plausible"},
+        },
+        "beta": {
+            "context_window": 200000,
+            "context_evidence": {"level": "confirmed"},
+        },
+    }
+
+    facts = build_probed_context_facts(None, catalog=catalog)
+    views = split_catalog_facts(facts)
+
+    assert "acme" not in views.enforceable
+    assert "acme" in views.advisory
+    assert "beta" in views.enforceable
+    assert "beta" in views.advisory

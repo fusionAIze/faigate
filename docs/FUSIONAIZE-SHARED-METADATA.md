@@ -192,10 +192,12 @@ Resolution order per file (existing semantics, unchanged):
 3. If neither is found → empty catalog (faigate falls back to embedded
    `providers.py` definitions).
 
-Once the upcoming `MetadataCatalogSync` lands (see
-`docs/blueprints/model-updater/`), the public repo will be fetched over
-HTTPS with ETag caching. Setting `FAIGATE_PROVIDER_METADATA_FILE` will only
-be needed for offline development against an in-progress branch.
+`MetadataCatalogSync` (`faigate/metadata_catalog_sync.py`) fetches the public
+repo over HTTPS with ETag caching, and `CatalogResolver`
+(`faigate/catalog_resolver.py`) runs the private-public-bundled chain over it.
+The environment overrides above still take precedence over the synced catalog:
+the resolution order is unchanged, with `FAIGATE_PROVIDER_METADATA_FILE` as its
+first step.
 
 For runtime use, Gate also ships a small helper that materializes a repo
 checkout into one snapshot file:

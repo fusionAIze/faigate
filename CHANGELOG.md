@@ -1,5 +1,82 @@
 # fusionAIze Gate Changelog
 
+## v2.10.0 - 2026-10-04
+
+### Added
+
+- **Liveness and readiness are now separate probes.** `/livez` answers that the
+  process is alive and the ASGI loop responds, and never triggers a provider
+  probe or a background task. `/readyz` returns 503 only when a provider listed
+  in `health.required_providers` is unreachable; an optional provider's failure
+  does not affect it. `/health` keeps the full provider-level diagnosis, so the
+  three questions an orchestrator asks — is it alive, may it take traffic, what
+  exactly is wrong — no longer share one answer. Which providers are required
+  lives in configuration, not in code. (F13-A)
+- **A catalog sync can be triggered on demand.** `POST
+  /api/provider-catalog/sync` runs the sync that previously only happened on its
+  own schedule, so an operator who has just published a catalog change does not
+  have to wait for the next interval to see it. (FAI-246-B)
+- **Context windows can be probed from recorded `/models` responses.**
+  `faigate-models probe-window` reads captured provider responses from disk,
+  with no network access, and reports the context window each one actually
+  states. A provider with no known field path is named in the report rather than
+  silently skipped, so an empty column means "not stated" and never "not
+  looked at". (FAI-238-B)
+- **An operator can declare a provider the curated catalog does not carry.** A
+  grid worker or a local vLLM can be configured as a self-hosted entry and
+  survives a remote catalog update. The entry needs an explicit `proof_level` of
+  `self_hosted`, and the fields it brings are marked as local in the merged
+  catalog. Without that marker a physical fact on a curated provider is still
+  refused: the existing rule was right, it only assumed operator and vendor are
+  different parties, which they are not for a worker you run yourself. A name
+  collision between a self-hosted entry and a curated provider raises rather
+  than picking a winner. (FAI-246-A)
+- **Every API surface now has a documented conformance status.**
+  `docs/CONFORMANCE-MATRIX.md` lists each surface with the test that proves it,
+  and the document is mechanically bound to the suite: every test it cites must
+  exist, and a surface with no citation has to read as untested. The two
+  switches that were previously conflated are separated — `anthropic_bridge.enabled`
+  for the logic layer, `api_surfaces.anthropic_messages` for the HTTP surface.
+  (ASSESS-6.1)
+
+### Changed
+
+- **A provider that no routing layer can address now says so.** Readiness used
+  to ask each backend whether a request could reach it — the question the
+  backend is there to answer, not to ask. Addressability is a property of the
+  whole routing contract, so it is derived once over the three layers that can
+  address a provider key (static rules, mode selectors, and the named-provider
+  layer) and handed to each backend. A provider no layer reaches reports
+  `not-addressable` with an operator hint instead of a generic not-ready. The
+  derivation is gated on coverage: while any declared layer is unmeasured, no
+  addressability claim is made and providers keep their previous ready state, so
+  a false `not-addressable` never reaches `/health`. The named-provider layer is
+  measured rather than assumed from the configured keys — counting the raw keys
+  would make every provider addressable and the new state unreachable. (FAI-237-B)
+- **Every name in `/v1/models` states which provider it binds to.** A name is
+  either provider-bound, and then it routes to the provider it names, or it is an
+  intent that the router resolves. Catalog identities are always intent, even
+  when they share tokens with a configured provider key — the case that let a
+  request naming one vendor reach another on that vendor's key and billing.
+  There is no silent third kind: an entry that cannot be classified is dropped
+  from the offered list rather than advertised as an intent. (FAI-251)
+- **Provider lifecycle comes from the recorded response, not from hand-set
+  rows.** The lifecycle a catalog entry carries is now read from a captured
+  provider `/models` body — for BytePlus, 58 entries whose stated statuses are 28
+  unmarked, 17 Retiring and 13 Shutdown. Where a short name is ambiguous, the
+  entry states which versioned id it resolves to and on what basis, instead of
+  leaving the reader to guess. (FAI-239-A)
+
+### Fixed
+
+- **A runtime-resolved alias no longer carries ownership it cannot have.** The
+  convention that BytePlus is a platform rather than a model maker rested on a
+  single recorded model reporting `owned_by="byteplus"`. The 2026-09-29
+  re-recording returns 58 models and none of them claims an owner, which is the
+  stronger basis: where the endpoint makes no ownership claim, the registry
+  records none. The guard now asserts that across all 58 and fails loudly if the
+  recording it rests on disappears. (FAI-241-A)
+
 ## v2.9.3 - 2026-09-24
 
 ### Fixed

@@ -63,7 +63,13 @@ from .lane_registry import (
     get_route_add_recommendations,
 )
 from .metrics import MetricsStore, calc_cost
-from .model_identity import ModelIdentity, ModelIdentityResolver, catalog_model_identities, derive_short_name
+from .model_identity import (
+    ModelIdentity,
+    ModelIdentityResolver,
+    catalog_model_identities,
+    classify_entry_binding,
+    derive_short_name,
+)
 from .oauth_readiness import oauth_readiness_block
 from .provider_availability import (
     record_availability_from_config,
@@ -84,6 +90,13 @@ from .provider_catalog_refresh import (
 from .provider_catalog_store import ProviderCatalogStore
 from .provider_sources import list_provider_sources
 from .providers import ProviderBackend, ProviderError, classify_runtime_issue, create_provider_backend
+from .reachability import (
+    addressability_coverage_holds,
+    addressable_provider_names,
+    providers_routed_to_themselves,
+    static_rule_targets,
+    uncovered_addressability_layers,
+)
 from .router import Router, RoutingDecision
 from .updates import (
     UpdateChecker,
@@ -654,7 +667,11 @@ def _metadata_resolver_config() -> ResolverConfig:
 
 
 async def _refresh_metadata_catalog(*, force: bool = False) -> dict[str, Any]:
-    """Refresh the curated metadata catalog cache outside the request path."""
+    """Refresh the curated metadata catalog cache outside the request path.
+
+    When *force* is ``True`` the result includes a before/after change
+    comparison produced by :meth:`CatalogResolver.trigger_sync`.
+    """
     metadata_cfg = _config.metadata
     if not metadata_cfg.get("enabled", True):
         return {"skipped": True, "reason": "disabled"}
@@ -663,19 +680,32 @@ async def _refresh_metadata_catalog(*, force: bool = False) -> dict[str, Any]:
         return {"skipped": True, "reason": "refresh disabled"}
 
     resolver = CatalogResolver(config=_metadata_resolver_config())
-    resolved = await asyncio.to_thread(resolver.resolve, force_refresh=force)
-    provider_count = len(resolved.payload.get("providers", {}))
+    result = await asyncio.to_thread(
+        resolver.trigger_sync if force else resolver.resolve,
+    )
+    if force:
+        # trigger_sync returns the rich dict directly
+        provider_count = result["providers_after"]
+        logger.info(
+            "Metadata catalog refresh completed: source=%s providers=%s changes=%s",
+            result["source"],
+            provider_count,
+            result["changes"]["kind"],
+        )
+        return result
+    # resolve() returns a ResolvedCatalog
+    provider_count = len(result.payload.get("providers", {}))
     logger.info(
         "Metadata catalog refresh completed: source=%s providers=%s%s",
-        resolved.source,
+        result.source,
         provider_count,
         " force" if force else "",
     )
     return {
-        "source": resolved.source,
+        "source": result.source,
         "providers": provider_count,
-        "etag": resolved.etag,
-        "notes": resolved.notes,
+        "etag": result.etag,
+        "notes": result.notes,
     }
 
 
@@ -1180,6 +1210,109 @@ def _provider_request_readiness(provider: Any) -> dict[str, Any]:
         )
         state["operator_hint"] = "prefer lower-pressure siblings while this route recovers"
     return state
+
+
+def _mode_eligible_provider_names(
+    config: Config | None = None,
+    providers: dict[str, Any] | None = None,
+) -> set[str]:
+    """Return the provider names at least one enabled routing mode could select.
+
+    A routing mode is an address: a client that asks for the mode (or for
+    ``auto``, which resolves to the default mode) reaches whichever provider the
+    mode's policy selector ranks first. A provider that is eligible in some mode
+    is therefore addressable even when no static rule names it — exactly the
+    case ``Router._select_policy_provider`` serves.
+
+    Eligibility is decided by the same method the request path uses
+    (``Router._provider_matches_policy``) rather than re-derived here, so the
+    addressability answer cannot drift from the routing it describes.
+    """
+    cfg = config if config is not None else _config
+    provider_map = providers if providers is not None else _providers
+    if cfg is None or not provider_map:
+        return set()
+
+    modes = cfg.routing_modes
+    if not modes.get("enabled"):
+        return set()
+
+    router = Router(cfg)
+    ctx = _mode_probe_context(provider_map)
+    eligible: set[str] = set()
+    for name, provider in provider_map.items():
+        provider_cfg = cfg.provider(name)
+        if not isinstance(provider_cfg, dict):
+            provider_cfg = _provider_config_view(provider)
+        for mode in modes.get("modes", {}).values():
+            if router._provider_matches_policy(provider_cfg, name, mode.get("select", {}) or {}, ctx):
+                eligible.add(name)
+                break
+    return eligible
+
+
+def _provider_config_view(provider: Any) -> dict[str, Any]:
+    """Return the config-shaped mapping a backend exposes, for policy matching.
+
+    ``_provider_matches_policy`` reads the provider's identity ``name``,
+    ``capabilities`` and ``tier`` off this mapping — its allow/deny filters
+    match against that ``name``. When a provider is not in the config (a virtual
+    provider registered by a community hook) the caller falls back to the
+    backend instance, which carries the same fields, so eligibility is still
+    answered by the routing method itself.
+    """
+    return {
+        "name": str(getattr(provider, "name", "") or ""),
+        "capabilities": dict(getattr(provider, "capabilities", {}) or {}),
+        "tier": str(getattr(provider, "tier", "") or ""),
+    }
+
+
+def _mode_probe_context(provider_map: dict[str, Any]) -> Any:
+    """Build a request-shaped context for policy eligibility probes.
+
+    Policy matching is dimension-aware (tier, cost, capability, image sizing),
+    so it needs a context. Addressability asks the *weakest* question — "could
+    any request reach this name" — so the context carries no requirements, which
+    makes every provider that a mode's allow/deny/capability filters permit
+    eligible.
+
+    ``providers`` holds the **config mapping** per name, not the backend: the
+    policy selector reads provider fields off this mapping (see
+    ``_provider_config_view``), and handing it backends would leave those reads
+    empty so that name-based allow/deny filters silently matched nothing.
+    """
+    from .router import _RoutingContext as _RouterCtx
+
+    return _RouterCtx(
+        system_prompt="",
+        last_user_message="",
+        full_text="",
+        total_tokens=0,
+        stable_prefix_tokens=0,
+        requested_output_tokens=0,
+        total_requested_tokens=0,
+        requested_image_outputs=0,
+        requested_image_side_px=0,
+        requested_image_size="",
+        requested_image_policy="",
+        required_capability="",
+        cache_preference="",
+        model_requested="auto",
+        has_tools=False,
+        client_profile="",
+        profile_hints={},
+        hook_hints={},
+        applied_hooks=[],
+        headers={},
+        provider_health={},
+        provider_runtime_state={},
+        providers={
+            str(name): (provider if isinstance(provider, dict) else _provider_config_view(provider))
+            for name, provider in provider_map.items()
+        },
+        request_insights={},
+    )
 
 
 def _request_readiness_summary() -> dict[str, Any]:
@@ -2698,14 +2831,53 @@ async def lifespan(app: FastAPI):
     )
 
     _config = load_config()
+    _router = Router(_config)
     logger.info("Loaded config with %d providers", len(_config.providers))
 
-    # Initialize provider backends
+    # Addressability is a property of the whole routing contract, not of a
+    # provider: whether a request can reach a configured key by its name is
+    # decided by the layers (static rules, policy modes, the named-provider
+    # layer), not by the provider's own key or endpoint. Derive it once here
+    # from that contract and hand each backend the answer, so readiness reports
+    # 'not-addressable' for the keys no layer can route to instead of calling
+    # them ready because their key resolved.
+    # Each layer reports how many configured providers it reaches, so the
+    # coverage gate below can fail on a layer that measured nothing instead of
+    # trusting the layer list it was handed.
+    _rule_targets = static_rule_targets(_config.static_rules) & set(_config.providers)
+    _mode_targets = _mode_eligible_provider_names(providers=_config.providers) & set(_config.providers)
+    _name_targets = providers_routed_to_themselves(_router, _config.providers) & set(_config.providers)
+    _addressability_layer_coverage = {
+        "static-rules": _rule_targets,
+        "policy-modes": _mode_targets,
+        "named-provider": _name_targets,
+    }
+    # Addressability is only trusted once every routing layer has been measured.
+    # When coverage doesn't hold, no addressability claim is made — providers
+    # keep their historical ready state — so a false 'not-addressable' signal
+    # never reaches /health.  See :func:`faigate.reachability.addressability_coverage_holds`.
+    if addressability_coverage_holds(
+        provider_names=_config.providers,
+        layer_coverage=_addressability_layer_coverage,
+    ):
+        _addressable_names = addressable_provider_names(
+            provider_names=_config.providers,
+            static_rules=_config.static_rules,
+            mode_providers=_mode_targets,
+            named_provider_names=_name_targets,
+        )
+    else:
+        logger.error(
+            "Addressability coverage is incomplete: routing layer(s) %s address no configured provider. "
+            "'not-addressable' readiness is not trustworthy until every layer is measured.",
+            ", ".join(uncovered_addressability_layers(layer_coverage=_addressability_layer_coverage)),
+        )
+        _addressable_names = None
     for name, pcfg in _config.providers.items():
         if _provider_requires_static_api_key(name, pcfg) and not pcfg.get("api_key"):
             logger.warning("Provider %s has no API key, skipping", name)
             continue
-        _providers[name] = create_provider_backend(name, pcfg)
+        _providers[name] = create_provider_backend(name, pcfg, addressable_names=_addressable_names)
         logger.info("  ✓ %s → %s (%s)", name, pcfg["model"], pcfg.get("tier", "default"))
 
     # Merge virtual providers registered by community hooks
@@ -2724,7 +2896,22 @@ async def lifespan(app: FastAPI):
         except Exception as exc:  # noqa: BLE001
             logger.warning("Failed to register virtual provider %s: %s", vp_name, exc)
 
-    _router = Router(_config)
+    # Surface the negative signal here so an operator can act on it without
+    # reading /health closely. Only logged when addressability was actually
+    # derived — None means the gate above fired and the measurement cannot
+    # be trusted.
+    if _addressable_names is not None:
+        _not_addressable = sorted(
+            name
+            for name in _providers
+            if _provider_request_readiness(_providers[name]).get("status") == "not-addressable"
+        )
+        if _not_addressable:
+            logger.warning(
+                "%d provider(s) are configured but no routing layer targets their name: %s",
+                len(_not_addressable),
+                ", ".join(_not_addressable),
+            )
     _adaptive_state = AdaptiveRouteState()
     await _refresh_local_worker_probes(force=True)
     _update_checker = UpdateChecker(
@@ -2915,6 +3102,56 @@ async def health():
     }
 
 
+@app.get("/livez")
+async def liveness():
+    """Lightweight liveness check — answers without external work.
+
+    Criterion 1 (F13-A): never triggers provider probes or background
+    tasks.  Only confirms the process is alive and the ASGI loop
+    responds.
+    """
+    return {"status": "ok"}
+
+
+@app.get("/readyz")
+async def readiness():
+    """Readiness check — 503 when a required provider is not reachable.
+
+    Criterion 2 (F13-A): only checks providers listed in
+    ``health.required_providers``.  An optional provider's failure does
+    NOT affect readiness; a required provider's failure returns 503.
+
+    Criterion 5 (F13-A): this is NOT the path that a full health-check
+    queries — the detailed diagnosis stays on /health.
+    """
+    required = _config.health.get("required_providers", [])
+    if not required:
+        # No required providers configured → trivially ready
+        return {"status": "ok", "ready": True}
+
+    unreachable: list[str] = []
+    for name in required:
+        provider = _providers.get(name)
+        if provider is None:
+            unreachable.append(name)
+            continue
+        state = _provider_request_readiness(provider)
+        if not state.get("ready", False):
+            unreachable.append(name)
+
+    if unreachable:
+        return JSONResponse(
+            {
+                "status": "service_unavailable",
+                "ready": False,
+                "unreachable_required": sorted(unreachable),
+            },
+            status_code=503,
+        )
+
+    return {"status": "ok", "ready": True}
+
+
 @app.get("/api/providers")
 async def provider_inventory(
     capability: str | None = None,
@@ -2964,6 +3201,42 @@ async def provider_catalog():
         "source_alerts": list(source_catalog.get("alerts") or []),
         "source_alert_summary": dict(source_catalog.get("alert_summary") or {}),
     }
+
+
+@app.post("/api/provider-catalog/sync")
+async def provider_catalog_sync(request: Request):
+    """Trigger an immediate metadata catalog sync and report what changed.
+
+    This endpoint is deliberately restricted to loopback-only (127.0.0.1
+    and ::1) as the only practical defence against accidental or external
+    invocation in the current absence of an authentication layer. The
+    gateway has no auth system today (assessment F03), so a non-loopback
+    guard was chosen over an API key or bearer token because:
+
+    * No key to configure, rotate, or leak.
+    * No token to embed in monitoring or automation tooling.
+    * Loopback-only is the strongest available isolation for an endpoint
+      whose purpose is to trigger outbound HTTP traffic: it can only be
+      reached from the host the gateway runs on, and an operator who has
+      shell access to that host is already trusted with the gateway
+      process.
+
+    The cost is that monitoring agents, health checks, or automation that
+    live on other hosts cannot reach this endpoint directly — they must
+    invoke it via a local sidecar or ``localhost`` proxy.
+
+    Returns 200 with the sync result or 403 if called from a non-loopback
+    address.
+    """
+    client_host = request.client.host if request.client else ""
+    if client_host not in ("127.0.0.1", "::1"):
+        logger.warning("catalog sync rejected: non-loopback client %s", client_host)
+        return JSONResponse(
+            {"error": "sync endpoint is restricted to loopback"},
+            status_code=403,
+        )
+    result = await _refresh_metadata_catalog(force=True)
+    return result
 
 
 @app.get("/api/provider-discovery")
@@ -3328,7 +3601,28 @@ def _routable_model_entries(
         },
     )
 
-    return entries
+    # ── Binding classification (FAI-251) ─────────────────────────────
+    #
+    # Every offered name carries a binding class.  A name that cannot be
+    # classified as either provider-bound or intent is silently dropped so
+    # the gateway never advertises a name whose routing semantics are
+    # unclear.
+    configured_names = {n.strip().lower() for n in provider_map}
+    filtered: dict[str, dict[str, Any]] = {}
+    for name_key, entry in entries.items():
+        binding, binds_to = classify_entry_binding(
+            entry.get("id", name_key),
+            entry,
+            configured_names,
+        )
+        if binding == "unknown":
+            continue
+        entry["binding"] = binding
+        if binding == "provider-bound" and binds_to:
+            entry["binds_to"] = binds_to
+        filtered[name_key] = entry
+
+    return filtered
 
 
 def _routable_model_ids(

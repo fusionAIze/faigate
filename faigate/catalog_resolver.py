@@ -22,6 +22,7 @@ from importlib import resources
 from typing import Any
 
 from .catalog_cache import CatalogCache
+from .catalog_local_overlay import OverlayError, load_overlay, merge_local_overlay
 from .metadata_catalog_sync import (
     DEFAULT_TIMEOUT_SECONDS,
     MetadataCatalogSync,
@@ -178,6 +179,48 @@ def _invalidate_bundled_snapshot_cache() -> None:
     _BUNDLED_SNAPSHOT_CACHE.pop(_BUNDLED_SNAPSHOT_CACHE_KEY, None)
 
 
+def _compute_catalog_changes(
+    before: dict[str, Any] | None,
+    after: dict[str, Any],
+) -> dict[str, Any]:
+    """Compare two catalog payloads and return a change summary.
+
+    Returns a dict with ``kind`` (``"no_change"`` or ``"changed"``) and
+    optional ``added``, ``removed``, ``changed`` lists of provider IDs.
+    When *before* is ``None`` the result is ``kind: "changed"`` with no
+    diff lists (first sync).
+    """
+    if before is None:
+        return {"kind": "changed"}
+
+    before_providers = set((before.get("providers") or {}).keys())
+    after_providers = set((after.get("providers") or {}).keys())
+
+    added = sorted(after_providers - before_providers)
+    removed = sorted(before_providers - after_providers)
+
+    # Providers present in both with different payloads
+    both = before_providers & after_providers
+    changed_ids: list[str] = []
+    bp = before.get("providers") or {}
+    ap = after.get("providers") or {}
+    for pid in sorted(both):
+        if bp.get(pid) != ap.get(pid):
+            changed_ids.append(pid)
+
+    if not added and not removed and not changed_ids:
+        return {"kind": "no_change"}
+
+    result: dict[str, Any] = {"kind": "changed"}
+    if added:
+        result["added"] = added
+    if removed:
+        result["removed"] = removed
+    if changed_ids:
+        result["changed"] = changed_ids
+    return result
+
+
 class CatalogResolver:
     """Run the private→public→bundled chain with cache + sync."""
 
@@ -187,10 +230,23 @@ class CatalogResolver:
         config: ResolverConfig | None = None,
         cache: CatalogCache | None = None,
         sync: MetadataCatalogSync | None = None,
+        overlay: dict[str, Any] | None = None,
     ) -> None:
         self._config = config or ResolverConfig.from_env()
         self._cache = cache or CatalogCache()
         self._sync = sync or MetadataCatalogSync()
+        self._overlay_warning: str | None = None
+        if overlay is not None:
+            self._overlay = overlay
+        else:
+            self._overlay = {}
+            try:
+                loaded = load_overlay()
+                if not loaded.is_empty():
+                    self._overlay = loaded
+            except OverlayError as exc:
+                self._overlay_warning = f"local overlay not applied: {exc}"
+                logger.warning("catalog_resolver: %s", self._overlay_warning)
 
     @property
     def config(self) -> ResolverConfig:
@@ -198,7 +254,24 @@ class CatalogResolver:
 
     def resolve(self, *, force_refresh: bool = False) -> ResolvedCatalog:
         """Return the best-available catalog right now."""
+        result = self._resolve_raw(force_refresh=force_refresh)
+        # Record overlay-load warning if one was set at construction
+        if self._overlay_warning:
+            result.notes.append(self._overlay_warning)
+        # Apply local overlay on top of whatever the resolution produced
+        if self._overlay:
+            try:
+                result.payload = merge_local_overlay(result.payload, self._overlay)
+            except OverlayError as exc:
+                msg = f"local overlay merge failed: {exc}"
+                logger.warning("catalog_resolver.resolve: %s", msg)
+                result.notes.append(msg)
+        return result
+
+    def _resolve_raw(self, *, force_refresh: bool = False) -> ResolvedCatalog:
+        """Resolution chain without local overlay — used by trigger_sync for comparison."""
         notes: list[str] = []
+        result: ResolvedCatalog | None = None
 
         # Tier 1: private (only if token configured)
         if self._config.token:
@@ -209,41 +282,42 @@ class CatalogResolver:
                 force_refresh=force_refresh,
                 notes=notes,
             )
-            if result is not None:
-                return result
 
         # Tier 2: public (anonymous)
-        result = self._try_remote(
-            tier="public",
-            url=self._config.public_url,
-            token=None,
-            force_refresh=force_refresh,
-            notes=notes,
-        )
-        if result is not None:
-            return result
+        if result is None:
+            result = self._try_remote(
+                tier="public",
+                url=self._config.public_url,
+                token=None,
+                force_refresh=force_refresh,
+                notes=notes,
+            )
 
         # Tier 3: bundled snapshot
-        bundled = _load_bundled_snapshot()
-        if bundled is not None:
-            notes.append("falling back to bundled snapshot")
-            logger.info("catalog resolve: using bundled snapshot")
-            return ResolvedCatalog(
-                payload=bundled,
-                source="bundled",
+        if result is None:
+            bundled = _load_bundled_snapshot()
+            if bundled is not None:
+                notes.append("falling back to bundled snapshot")
+                logger.info("catalog resolve: using bundled snapshot")
+                result = ResolvedCatalog(
+                    payload=bundled,
+                    source="bundled",
+                    etag=None,
+                    notes=notes,
+                )
+
+        # Tier 4: total failure — empty catalog
+        if result is None:
+            notes.append("no catalog source available")
+            logger.warning("catalog resolve: no source available — empty catalog")
+            result = ResolvedCatalog(
+                payload={"providers": {}},
+                source="empty",
                 etag=None,
                 notes=notes,
             )
 
-        # Total failure: empty catalog
-        notes.append("no catalog source available")
-        logger.warning("catalog resolve: no source available — empty catalog")
-        return ResolvedCatalog(
-            payload={"providers": {}},
-            source="empty",
-            etag=None,
-            notes=notes,
-        )
+        return result
 
     def _try_remote(
         self,
@@ -348,6 +422,83 @@ class CatalogResolver:
                 reason,
             )
         return None
+
+    def trigger_sync(self) -> dict[str, Any]:
+        """Force a remote sync and report what changed.
+
+        Captures the cached catalog *before* the sync, then forces a full
+        remote refresh. The result includes a diff of provider IDs so the
+        caller can see exactly what was added, removed, or changed rather
+        than only "sync ran OK".
+
+        Returns a dict with:
+
+        * ``source`` — resolved catalog source (``"public"``, ``"private"``,
+          ``"public-cache"``, ``"private-cache"``, ``"bundled"``, ``"empty"``)
+        * ``providers_before`` — provider count before the sync
+        * ``providers_after`` — provider count after the sync
+        * ``etag`` — new ETag (if any)
+        * ``changes`` — diff detail (``kind``: ``"no_change"`` or
+          ``"changed"``; optional ``added``, ``removed``, ``changed`` lists)
+        * ``notes`` — resolution notes
+        * ``last_success_at`` — epoch of most recent successful sync across
+          all tiers, or ``None``
+        """
+        # Capture "before" state from whichever tier has a cache
+        before: dict[str, Any] | None = None
+        for tier in ("private", "public"):
+            cached = self._cache.load(tier)
+            if cached is not None:
+                before = cached.payload
+                break
+
+        before_providers_count = len((before or {"providers": {}}).get("providers", {}))
+
+        # Force a full remote refresh (raw, without overlay) so the diff
+        # compares remote catalogs, not remote+overlay.
+        raw = self._resolve_raw(force_refresh=True)
+
+        # Detect changes between before and after
+        changes = _compute_catalog_changes(before, raw.payload)
+
+        # Apply overlay on the resolved result for consumers
+        resolved = raw
+        if self._overlay:
+            notes = list(raw.notes)
+            if self._overlay_warning:
+                notes.append(self._overlay_warning)
+            try:
+                payload = merge_local_overlay(raw.payload, self._overlay)
+            except OverlayError as exc:
+                msg = f"local overlay merge failed: {exc}"
+                logger.warning("catalog_resolver.trigger_sync: %s", msg)
+                notes.append(msg)
+                payload = dict(raw.payload)
+            resolved = ResolvedCatalog(
+                payload=payload,
+                source=raw.source,
+                etag=raw.etag,
+                fetched_at=raw.fetched_at,
+                notes=notes,
+            )
+
+        # Latest successful sync across all tiers
+        last_success_at: float | None = None
+        for tier in ("private", "public"):
+            state = self._cache.load_state(tier)
+            if state is not None and state.last_success_at is not None:
+                if last_success_at is None or state.last_success_at > last_success_at:
+                    last_success_at = state.last_success_at
+
+        return {
+            "source": resolved.source,
+            "providers_before": before_providers_count,
+            "providers_after": len(resolved.payload.get("providers", {})),
+            "etag": resolved.etag,
+            "changes": changes,
+            "notes": resolved.notes,
+            "last_success_at": last_success_at,
+        }
 
     def status(self) -> dict[str, Any]:
         """Surface cache state for `faigate models status` and dashboards.

@@ -59,10 +59,21 @@ ENV_OVERLAY_PATH = "FAIGATE_CATALOG_LOCAL_OVERLAY"
 #: somebody has to remember to keep.
 DEFAULT_OVERLAY_PATH = Path.home() / ".cache" / "faigate" / "catalog-local-overlay.v1.json"
 
+#: Self-hosted proof level: signals that the operator IS the manufacturer
+#: for their own infrastructure. Entries carrying this value bypass the
+#: physical-fact rejection because the facts are the operator's own
+#: measurements, not a vendor's claim.
+PROOF_LEVEL_SELF_HOSTED = "self_hosted"
+
 #: The allowlist: the only fact keys an overlay may carry. Each one is an
 #: operator-bound fact -- tied to a key, an account, or a billing plan --
 #: rather than a property of the model. Anything outside this set is a
 #: physical fact and is rejected.
+#:
+#: Note that ``proof_level`` is intentionally absent: it is a provenance
+#: signal, not an operator field. Validation checks it *before* the
+#: allowlist so self-hosted entries bypass physical-fact rejection without
+#: polluting the operator-field concept.
 OPERATOR_FIELDS = ("account_tier", "key_limits", "quota")
 
 #: Physical facts that an overlay is most likely to reach for by mistake.
@@ -103,6 +114,24 @@ class OverlayRejectedError(OverlayError):
         self.field_name = field_name
         self.reason = reason
         super().__init__(f"local overlay for provider {provider_id!r} rejected: field {field_name!r} {reason}")
+
+
+class OverlayCollisionError(OverlayError):
+    """A self-hosted overlay entry uses the same name as a curated provider.
+
+    The combination of provider and model is unique. A self-hosted provider is
+    a different provider from a curated one with the same name, so the
+    operator must rename the local entry to avoid ambiguity.
+
+    ``provider_id`` names the colliding entry.
+    """
+
+    def __init__(self, *, provider_id: str) -> None:
+        self.provider_id = provider_id
+        super().__init__(
+            f"self-hosted overlay provider {provider_id!r} collides with a "
+            f"curated provider; rename the local entry to avoid ambiguity"
+        )
 
 
 @dataclass
@@ -154,10 +183,21 @@ def validate_overlay(payload: Mapping[str, Any]) -> LocalOverlay:
                 field_name="<entry>",
                 reason="must be a mapping of operator fields",
             )
-        for field_name in sorted(entry):
-            if field_name not in OPERATOR_FIELDS:
-                raise _reject(str(provider_id), str(field_name))
-        validated[str(provider_id)] = dict(entry)
+
+        # A self-hosted entry is allowed to carry physical facts because
+        # the operator and the manufacturer are the same person: the
+        # context window, modalities, etc. are the operator's own
+        # measurements, not a vendor's claim.
+        is_self_hosted = entry.get("proof_level") == PROOF_LEVEL_SELF_HOSTED
+
+        if is_self_hosted:
+            # Accept all fields; the operator IS the manufacturer.
+            validated[str(provider_id)] = dict(entry)
+        else:
+            for field_name in sorted(entry):
+                if field_name not in OPERATOR_FIELDS:
+                    raise _reject(str(provider_id), str(field_name))
+            validated[str(provider_id)] = dict(entry)
 
     return LocalOverlay(
         providers=validated,
@@ -215,6 +255,14 @@ def merge_local_overlay(
     two runs over the same inputs produce byte-identical output, independent
     of the input's dict ordering.
 
+    A **self-hosted** overlay entry (``proof_level == "self_hosted"``) is
+    treated as the operator's own infrastructure. It may carry physical facts
+    (context window, modalities, etc.) and fully replaces the curated entry
+    rather than overlaying only operator fields. If a self-hosted name
+    collides with a curated provider, :class:`OverlayCollisionError` is raised
+    -- the operator must rename the local entry because a self-hosted provider
+    is a different provider from a curated one with the same name.
+
     An overlay built from raw mappings is validated first, so a forbidden
     field raises :class:`OverlayRejectedError` here too rather than slipping
     through.
@@ -231,6 +279,18 @@ def merge_local_overlay(
 
     for provider_id in sorted(overlay.providers):
         operator_fields = overlay.providers[provider_id]
+        is_self_hosted = operator_fields.get("proof_level") == PROOF_LEVEL_SELF_HOSTED
+
+        # Self-hosted entry: replace curated entry entirely.
+        if is_self_hosted:
+            if provider_id in merged_providers:
+                raise OverlayCollisionError(provider_id=provider_id)
+            merged_providers[provider_id] = dict(operator_fields)
+            # Tag as local so consumers can see it is operator-defined.
+            local_keys = sorted(operator_fields)
+            merged_providers[provider_id]["_local_overlay"] = local_keys
+            continue
+
         existing = merged_providers.get(provider_id)
         if not isinstance(existing, Mapping):
             existing = {}
@@ -279,6 +339,17 @@ def filter_catalog(
     merged_providers: dict[str, Any] = {}
     for provider_id in sorted(selection.providers):
         overlay_fields = selection.providers[provider_id]
+        is_self_hosted = overlay_fields.get("proof_level") == PROOF_LEVEL_SELF_HOSTED
+
+        # Self-hosted entry: full authority, the operator's own
+        # infrastructure. No catalog facts are carried over.
+        if is_self_hosted:
+            if provider_id in catalog_providers:
+                raise OverlayCollisionError(provider_id=provider_id)
+            merged_providers[provider_id] = dict(overlay_fields)
+            local_keys = sorted(overlay_fields)
+            merged_providers[provider_id]["_local_overlay"] = local_keys
+            continue
 
         # Guard: even a hand-built LocalOverlay must not smuggle a
         # physical fact past validation.
