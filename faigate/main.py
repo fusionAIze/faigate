@@ -87,10 +87,11 @@ from .providers import ProviderBackend, ProviderError, classify_runtime_issue, c
 from .reachability import (
     addressability_coverage_holds,
     addressable_provider_names,
+    providers_routed_to_themselves,
     static_rule_targets,
     uncovered_addressability_layers,
 )
-from .router import Router, RoutingDecision, providers_routed_to_themselves
+from .router import Router, RoutingDecision
 from .updates import (
     UpdateChecker,
     apply_auto_update_guardrails,

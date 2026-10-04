@@ -24,6 +24,7 @@ from __future__ import annotations
 from typing import Any
 
 from .registry import is_runtime_dependent_model
+from .router import Router
 
 # The routing engine carries two non-names: ``auto`` asks the layers to decide
 # and the empty string means "no name given".  Router._layer_named_provider
@@ -246,3 +247,38 @@ def provider_name_is_its_own_address(provider_name: str | None) -> bool:
     """
     name = str(provider_name or "").strip()
     return bool(name) and name not in _NON_ADDRESS_NAMES
+
+
+def providers_routed_to_themselves(
+    router: Router,
+    providers: dict[str, Any] | None,
+) -> set[str]:
+    """Return the configured keys the router resolves to themselves by name.
+
+    This measures the **named-provider layer** (1b): for each configured key it
+    runs the name through the addressing layers in the order the request path
+    uses them and keeps the key only when the decision lands back on it. That is
+    the honest answer to "can a request reach this provider by its own name", and
+    it is *not* the same as the raw key list:
+
+    - ``auto`` and ``""`` are excluded — they mean "let the routing decide".
+    - a key a higher layer captures to a **different** provider (a bare token a
+      static rule redirects) never reaches itself, because the rule answers
+      before layer 1b runs.
+
+    The whole addressing chain is evaluated, not layer 1b in isolation: asking
+    the named-provider layer directly would report every key that is not a rule
+    target, including the ones another rule captures to a different provider.
+    """
+    if not providers:
+        return set()
+    from .router import _context_for_model_requested  # avoid top-level circular import
+
+    routed: set[str] = set()
+    for name in providers:
+        key = str(name)
+        ctx = _context_for_model_requested(providers, key)
+        decision = router._layer_policy(ctx) or router._layer_static(ctx) or router._layer_named_provider(ctx)
+        if decision is not None and str(decision.provider_name) == key:
+            routed.add(key)
+    return routed

@@ -14,10 +14,11 @@ from faigate.reachability import (
     ROUTING_LAYERS,
     addressability_coverage_holds,
     addressable_provider_names,
+    providers_routed_to_themselves,
     static_rule_targets,
     uncovered_addressability_layers,
 )
-from faigate.router import Router, providers_routed_to_themselves
+from faigate.router import Router
 
 
 class FakeJsonFetcher:
