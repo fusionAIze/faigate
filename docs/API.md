@@ -153,11 +153,45 @@ curl -fsS http://127.0.0.1:8090/v1/images/edits \
 
 ## Operator Endpoints
 
+### `GET /livez`
+
+Answers that the process is alive and the ASGI loop responds. It never triggers
+a provider probe or a background task, so it is safe to poll at a short
+interval.
+
+```bash
+curl -fsS http://127.0.0.1:8090/livez
+```
+
+### `GET /readyz`
+
+Answers whether the gateway may take traffic. It checks only the providers
+listed in `health.required_providers`; an optional provider's failure does not
+affect it. With no required providers configured it is trivially ready.
+
+- `200` with `{"status": "ok", "ready": true}` when every required provider is reachable
+- `503` with `{"status": "service_unavailable", "ready": false, "unreachable_required": [...]}` otherwise
+
+This is not the path for a diagnosis — the detailed provider-level view stays on
+`/health`.
+
+```bash
+curl -fsS http://127.0.0.1:8090/readyz
+```
+
 ### `GET /health`
 
 Returns overall service status, provider summary, and capability coverage.
 
 Each provider entry includes health, failure counters, average latency, last error, contract, backend, tier, capabilities, and image metadata.
+
+A provider that no routing layer can address reports the readiness status
+`not-addressable`, with an operator hint naming what would give it an address: a
+static rule, a mode selector, or routing its name explicitly. The answer is
+derived from the routing contract as a whole rather than asked of the provider,
+and it is withheld while any routing layer is unmeasured — in that case
+providers keep their previous ready state, so an unmeasured layer cannot produce
+a false `not-addressable`.
 
 ```bash
 curl -fsS http://127.0.0.1:8090/health
@@ -187,6 +221,23 @@ For local operator use, the same discovery block is also available via:
 ```bash
 ./scripts/faigate-provider-discovery
 ./scripts/faigate-provider-discovery --json
+```
+
+### `POST /api/provider-catalog/sync`
+
+Runs a metadata catalog sync immediately instead of waiting for the next
+scheduled refresh, and reports what changed. When the refresh is disabled in
+configuration it answers `{"skipped": true, "reason": ...}` rather than syncing.
+
+**Loopback only.** The gateway has no authentication layer, so this endpoint is
+restricted to `127.0.0.1` and `::1` and answers `403` for any other client. That
+is the strongest isolation available for an endpoint whose purpose is to trigger
+outbound HTTP traffic: it can only be reached from the host the gateway runs on.
+The cost is that a monitoring agent on another host cannot call it directly and
+needs a local sidecar or a `localhost` proxy.
+
+```bash
+curl -fsS -X POST http://127.0.0.1:8090/api/provider-catalog/sync
 ```
 
 ### `GET /api/provider-discovery`

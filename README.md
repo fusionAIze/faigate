@@ -353,6 +353,8 @@ fusionAIze Gate keeps the primary surface compact and OpenAI-compatible. The ful
 
 | Endpoint | Purpose |
 | --- | --- |
+| `GET /livez` | Liveness: the process answers, with no provider probe |
+| `GET /readyz` | Readiness: 503 while a required provider is unreachable |
 | `GET /health` | Service health, provider status, and capability coverage |
 | `GET /v1/models` | OpenAI-compatible model list |
 | `POST /v1/chat/completions` | OpenAI-compatible chat routing |
@@ -364,6 +366,7 @@ fusionAIze Gate keeps the primary surface compact and OpenAI-compatible. The ful
 | `POST /api/route/image` | Image routing dry-run |
 | `GET /api/providers` | Provider inventory and filterable coverage view |
 | `GET /api/update` | Update status, guardrails, and rollout advice |
+| `POST /api/provider-catalog/sync` | Run a catalog sync now (loopback only) |
 
 Quick checks:
 

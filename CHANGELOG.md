@@ -1,5 +1,52 @@
 # fusionAIze Gate Changelog
 
+## v2.10.1 - 2026-10-04
+
+### Fixed
+
+- **The surfaces 2.10.0 added were not documented anywhere.** The README listed
+  eleven endpoints and none of the three new ones; `docs/API.md` documented
+  eighteen and was missing the same three; `faigate-models probe-window`,
+  self-hosted catalog entries, the `not-addressable` readiness state and the
+  overlay path appeared nowhere outside the code. The README now carries the
+  three endpoints, and the reference documents them in full — including that
+  `POST /api/provider-catalog/sync` is restricted to loopback and answers `403`
+  elsewhere, which is a security property an operator has to know before
+  wiring monitoring to it, and that an addressability claim is withheld while
+  any routing layer is unmeasured. `docs/CONFIGURATION.md` documents the local
+  catalog overlay, its environment variable and default path, and the
+  `proof_level` marker a self-hosted entry needs.
+- **The model-updater planning artifacts left the product repository.** A PRD,
+  its task list, a progress log and agent notes — 804 lines — were tracked under
+  `docs/blueprints/` and shipped with the documentation of a public,
+  Apache-2.0 licensed repository. The two documents that linked to them are
+  updated rather than left dangling, and one of them no longer describes
+  `MetadataCatalogSync` as upcoming: it has shipped.
+- **Thirty-four German comments and docstrings are now English**, including
+  those of `/livez` and `/readyz`. Comments and docstrings only; the suite
+  result is unchanged either side of the change.
+
+- **A tagged release was published with no release notes.** The notes workflow
+  ran `git-cliff --unreleased`, but it is triggered *by* the tag push, so by the
+  time it runs the tag exists and nothing is unreleased — the body came out
+  empty, which is how v2.10.0 reached the public release page with no notes at
+  all. It now uses `--current`, the section for the tag being built. Measured
+  against v2.10.0: `--unreleased` yields 3 lines and only a heading, `--current`
+  yields 54 lines of content.
+- **The release-notes heading carried a doubled version prefix.** The workflow
+  passes `--tag v2.10.0` and the template prepended another `v`, so the heading
+  read `## vv2.10.0`. The template now strips a leading `v` from the version it
+  is given.
+
+### Changed
+
+- **Dependency caps and the lint pin move forward.** `fastapi` to `<0.142`,
+  `uvicorn[standard]` to `<0.55`, and `ruff` pinned at `0.16.9`. The
+  pre-commit hook revision is raised with it: the dependency update moved the
+  pin in `pyproject.toml` and left the hook at `v0.16.4`, so the two linters a
+  contributor runs disagreed on their own version. Verified under `ruff 0.16.9`:
+  all checks passed, 190 files already formatted.
+
 ## v2.10.0 - 2026-10-04
 
 ### Added
