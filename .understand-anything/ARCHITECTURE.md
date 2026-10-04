@@ -160,10 +160,10 @@ Extensible pre-routing logic allowing custom modifications:
 ```python
 @dataclass
 class RequestHookResult:
-    body_updates: dict[str, Any]           # Modify request (messages, model, tools, temperature, etc)
-    profile_override: str | None           # Override client profile
-    routing_hints: dict[str, Any]          # Inject routing hints (allow/deny/prefer constraints)
-    notes: list[str]                       # Attach metadata
+    body_updates: dict[str, Any]  # Modify request (messages, model, tools, temperature, etc)
+    profile_override: str | None  # Override client profile
+    routing_hints: dict[str, Any]  # Inject routing hints (allow/deny/prefer constraints)
+    notes: list[str]  # Attach metadata
 ```
 
 **Hook Lifecycle:**

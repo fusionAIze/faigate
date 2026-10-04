@@ -1,6 +1,11 @@
 name: Prerelease — filtered release notes
 
 # Runs on tag push, before release-artifacts.yml builds the dist.
+#
+# The notes are generated with --current, not --unreleased. The workflow is
+# triggered BY the tag push, so by the time git-cliff runs the tag already
+# exists and nothing is unreleased: --unreleased produced an empty body, which
+# is how v2.10.0 came to be published with no release notes at all.
 # Generates a changelog with git-cliff, strips lines that mention
 # non-faigate topics (personal tooling, local setup details), and
 # attaches the filtered notes to the GitHub release.
@@ -45,7 +50,7 @@ jobs:
         with:
           version: latest
           config: .cliff.toml
-          args: --tag ${{ steps.tag.outputs.ref }} --strip header --unreleased
+          args: --tag ${{ steps.tag.outputs.ref }} --strip header --current
         env:
           OUTPUT: raw-notes.md
 

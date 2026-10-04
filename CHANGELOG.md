@@ -26,6 +26,18 @@
   those of `/livez` and `/readyz`. Comments and docstrings only; the suite
   result is unchanged either side of the change.
 
+- **A tagged release was published with no release notes.** The notes workflow
+  ran `git-cliff --unreleased`, but it is triggered *by* the tag push, so by the
+  time it runs the tag exists and nothing is unreleased — the body came out
+  empty, which is how v2.10.0 reached the public release page with no notes at
+  all. It now uses `--current`, the section for the tag being built. Measured
+  against v2.10.0: `--unreleased` yields 3 lines and only a heading, `--current`
+  yields 54 lines of content.
+- **The release-notes heading carried a doubled version prefix.** The workflow
+  passes `--tag v2.10.0` and the template prepended another `v`, so the heading
+  read `## vv2.10.0`. The template now strips a leading `v` from the version it
+  is given.
+
 ### Changed
 
 - **Dependency caps and the lint pin move forward.** `fastapi` to `<0.142`,
