@@ -29,7 +29,7 @@ dependencies = [
     "fastapi>=0.115.0,<0.143",
     "uvicorn[standard]>=0.32.0,<0.55",
     "httpx>=0.27.0,<0.29",
-    "pydantic>=2.9,<2.14",
+    "pydantic>=2.9,<2.15",
     "pyyaml>=6.0.2",
     # ruamel.yaml powers comment-preserving round-trip writes to config.yaml
     # from the dashboard settings endpoint. Standard yaml.safe_dump would
