@@ -1,5 +1,19 @@
 # fusionAIze Gate Changelog
 
+## v2.10.3 - 2026-11-15
+
+### Changed
+
+- **The README states where the repository lives.** It now names the canonical
+  home and the mirror at both ends of the document, without naming the host.
+- **A notice marks the GitHub copy as a mirror.** The notice follows the same
+  wording across the organisation's repositories.
+
+### Fixed
+
+- **Two changelog entries named the wrong release.** They are now attributed to
+  the release that shipped them.
+
 ## v2.10.2 - 2026-10-04
 
 ### Fixed
