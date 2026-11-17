@@ -90,10 +90,10 @@ def find_release_calls(root: Path) -> list[str]:
                     continue
                 if any(pattern.search(candidate) for pattern in _RELEASE_CALL_PATTERNS):
                     failures.append(
-                        "ReleaseWriterError: %s:%d executes a release-creating call "
-                        "(%s). The ops-engine is the single writer; remove the "
-                        "call or make it skip when the engine writes."
-                        % (path.relative_to(root), lineno, raw.strip())
+                        f"ReleaseWriterError: {path.relative_to(root)}:{lineno} "
+                        f"executes a release-creating call ({raw.strip()}). The "
+                        "ops-engine is the single writer; remove the call or make "
+                        "it skip when the engine writes."
                     )
     return failures
 
@@ -125,7 +125,7 @@ def find_title_failures(root: Path) -> list[str]:
             "ReleaseTitleTemplateError: .ops.yaml is missing. Until the title "
             "template is declared in the repository's release block, ops-engine "
             "3.6.2 renders the default '{repo_name} {tag_name}' -> "
-            "'faigate %s', which the title convention refuses." % SAMPLE_TAG
+            f"'faigate {SAMPLE_TAG}', which the title convention refuses."
         ]
     data = yaml.safe_load(ops_path.read_text(encoding="utf-8")) or {}
     release = data.get("release") or {}
@@ -134,27 +134,25 @@ def find_title_failures(root: Path) -> list[str]:
         return [
             "ReleaseTitleTemplateError: .ops.yaml declares no "
             "release.name_template. ops-engine 3.6.2 (P36-021) then falls back "
-            "to '{repo_name} {tag_name}' -> 'faigate %s', and notify-tap's gate "
-            "^%s vX.Y.Z$ refuses, so the Homebrew dispatch never fires."
-            % (SAMPLE_TAG, prefix)
+            f"to '{{repo_name}} {{tag_name}}' -> 'faigate {SAMPLE_TAG}', and "
+            f"notify-tap's gate ^{prefix} vX.Y.Z$ refuses, so the Homebrew "
+            "dispatch never fires."
         ]
 
     rendered = render_template(template, CANONICAL_REPO, SAMPLE_TAG)
-    expected = "%s %s" % (prefix, SAMPLE_TAG)
+    expected = f"{prefix} {SAMPLE_TAG}"
     if rendered != expected:
         return [
-            "ReleaseTitleTemplateError: .ops.yaml release.name_template %r "
-            "renders %r, but .release-title-prefix requires %r. The engine "
-            "creates the release under the rendered name and notify-tap refuses "
-            "anything else." % (template, rendered, expected)
+            "ReleaseTitleTemplateError: .ops.yaml release.name_template "
+            f"{template!r} renders {rendered!r}, but .release-title-prefix "
+            f"requires {expected!r}. The engine creates the release under the "
+            "rendered name and notify-tap refuses anything else."
         ]
     return []
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description="Refuse a second release writer or a non-conforming release title."
-    )
+    parser = argparse.ArgumentParser(description="Refuse a second release writer or a non-conforming release title.")
     parser.add_argument(
         "--root",
         default=None,
@@ -163,11 +161,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    root = (
-        Path(args.root).resolve()
-        if args.root is not None
-        else Path(__file__).resolve().parents[2]
-    )
+    root = Path(args.root).resolve() if args.root is not None else Path(__file__).resolve().parents[2]
 
     failures = find_release_calls(root) + find_title_failures(root)
     if failures:
@@ -175,19 +169,14 @@ def main(argv: list[str] | None = None) -> int:
             sys.stderr.write(failure + "\n")
         return 1
 
+    template = (
+        (yaml.safe_load((root / ".ops.yaml").read_text(encoding="utf-8")) or {}).get("release", {}).get("name_template")
+    )
+    prefix = (root / ".release-title-prefix").read_text(encoding="utf-8").strip()
+    expected = f"{prefix} {SAMPLE_TAG}"
     sys.stdout.write(
         "release path check: PASS - one writer (the ops-engine) and the title "
-        "template %r renders %r.\n"
-        % (
-            (yaml.safe_load((root / ".ops.yaml").read_text(encoding="utf-8")) or {})
-            .get("release", {})
-            .get("name_template"),
-            "%s %s"
-            % (
-                (root / ".release-title-prefix").read_text(encoding="utf-8").strip(),
-                SAMPLE_TAG,
-            ),
-        )
+        f"template {template!r} renders {expected!r}.\n"
     )
     return 0
 

@@ -58,7 +58,7 @@ def test_release_creating_calls_are_detected_and_echoed_advice_is_not(tmp_path):
         "  release:\n"
         "    steps:\n"
         "      - run: |\n"
-        "          gh release create \"$TAG\" --title x --notes-file notes.md\n",
+        '          gh release create "$TAG" --title x --notes-file notes.md\n',
         encoding="utf-8",
     )
     assert module.find_release_calls(tmp_path)
