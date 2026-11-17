@@ -1,16 +1,24 @@
 name: Gate the Forgejo Release
 
-# Forgejo is canonical; GitHub is the public mirror. This workflow no longer
-# creates or edits a release object on any forge. The ops-engine creates the
-# release object on tag_push, resolving every destination from the committed
-# .ops.yaml and publishing the CHANGELOG section as the body. The repository-side
-# writer that used to call ReleaseHandler.publish_release here was the conflict:
-# two writers aimed at the same release object, the first create won and the
-# second returned 409/422. The writer is gone; the gates stay.
+# Forgejo is canonical; GitHub is the public mirror. Nothing in this file
+# creates, edits or deletes a release object on either forge. The release
+# object belongs to the ops-engine, which creates it on tag_push from the
+# layover's configuration. The repository-side writer that used to call
+# ReleaseHandler.publish_release here aimed at that same object: the first
+# create won and the second returned 409/422. The writer is gone; the gates stay.
 #
-# Why the gates stay here instead of relying on the engine alone: the run is the
-# earliest place an operator sees a tag that would publish under the wrong name
-# or with no authored notes. None of the steps below writes a release object.
+# Which engine version runs is the layover's pin, not this file's —
+# fusionaize-ops declares it in pyproject.toml and this workflow installs
+# nothing from the engine. What the engine does with the tag therefore follows
+# that pin. At ops-engine 3.6.2 (P36-021) the engine resolves the title
+# template from the repository's own .ops.yaml `release.name_template`, refuses
+# a tag with no CHANGELOG section instead of posting commit subjects, and
+# resolves every destination before writing. An older pin does less; the steps
+# below are this repository's own gates and hold either way, so a tag that
+# would publish under the wrong name or with no authored notes stops here
+# first.
+#
+# The gates below write no release object:
 #   title      -> must be exactly "<prefix> vX.Y.Z" (or -rcN), not the bare tag
 #   body       -> the notes are the CHANGELOG section for the tag; a version with
 #                 no section is refused instead of publishing commit subjects
@@ -48,7 +56,6 @@ jobs:
       # is not the convention, and v1.5.2's title had to be corrected by hand
       # because of it.
       - name: Gate the release title
-        id: title
         env:
           TAG_NAME: "${{ github.event.inputs.tag_name || github.ref_name }}"
         run: |
@@ -73,19 +80,18 @@ jobs:
               sys.exit(2)
           sys.stdout.write("title gate: %r conforms\n" % name)
           TITLE_GATE_PY
-          echo "release_name=${RELEASE_NAME}" >> "$GITHUB_OUTPUT"
 
       # The release body is the CHANGELOG entry for this version, never commit
       # subjects. A tag whose version has no section fails here, before the
       # engine creates any release object — which is the correct outcome: a
       # release with no authored notes is a release nobody can read.
       #
-      # The extractor is a byte-for-byte copy of the one in ops-engine v3.4.0's
-      # own release workflow, and it is stdlib-only on purpose: importing
-      # ops_engine at this point would pull yaml and pydantic, which the bare
-      # runner image does not carry. The heading pattern accepts every form
-      # CHANGELOG.md uses: `## v1.5.2 (2026-09-02)`, `## v1.3.13 (2026-08-31) —
-      # Dynamic Routing and Anti-Masking`, and the bracketed `## [2.1.2] — ...`.
+      # The extractor carries its own copy of the ops-engine heading pattern
+      # (`release_gates.py`, pinned below) and is stdlib-only on purpose:
+      # importing ops_engine here would pull yaml and pydantic, which the bare
+      # runner image does not carry. The pattern accepts every form CHANGELOG.md
+      # uses: `## v1.5.2 (2026-09-02)`, `## v1.3.13 (2026-08-31) — Dynamic
+      # Routing and Anti-Masking`, and the bracketed `## [2.1.2] — ...`.
       - name: Extract release notes from CHANGELOG
         id: notes
         env:
@@ -148,30 +154,47 @@ jobs:
       # mirrored, so this needs no credential — the same fetch the version gate
       # in mirror.yml already uses.
       #
-      # Pinned to the v3.4.2 tag. An earlier revision of this workflow pinned a
-      # commit instead, because the mirror's v3.4.0 tag pointed twenty commits
-      # behind the canonical one and installing from it delivered 3.4.0's name
-      # with 3.3.0's code. ops-engine closed that at its source: its own release
-      # job now pushes the canonical tag ref onto the mirror before publishing
-      # and refuses by name when the two peel to different commits. Measured
-      # here: v3.4.0, v3.4.1 and v3.4.2 target the same commit on both forges,
-      # and this script is byte-identical between the mirror tag and the
-      # canonical one. The tag is a fixed point again, so the pin follows it.
+      # Pinned to the v3.6.2 tag, the engine version the layover declares. An
+      # earlier revision of this workflow pinned a commit instead, because the
+      # mirror's v3.4.0 tag pointed twenty commits behind the canonical one and
+      # installing from it delivered 3.4.0's name with 3.3.0's code. ops-engine
+      # closed that at its source: its own release job pushes the canonical tag
+      # ref onto the mirror before publishing and refuses by name when the two
+      # peel to different commits. Measured here: v3.6.2 targets
+      # 01ca1cc1e437969d178023fe85edf8777f4ef0c1 on both forges. The tag is a
+      # fixed point again, so the pin follows it.
+      #
+      # TWO files, because since OE-007 the script is no longer self-contained:
+      # it loads `check_release_notes_audience` from
+      # `src/ops_engine/modules/release_gates.py` by a path relative to its own
+      # location, and carries no copy of the ticket check. Fetching only the
+      # script would fail at import time; fetching both into the same relative
+      # layout keeps the engine's own gate authoritative instead of
+      # reintroducing a private copy of the ticket regex.
       - name: Fetch the audience gate (canonical, ops-engine)
         run: |
           set -euo pipefail
-          curl -fsSL \
-            "https://raw.githubusercontent.com/LangeVC/ops-engine/v3.4.2/scripts/release_notes_audience_gate.py" \
-            -o "$RUNNER_TEMP/release_notes_audience_gate.py"
+          GATE_ROOT="$RUNNER_TEMP/ops-engine-gate"
+          mkdir -p "$GATE_ROOT/scripts" "$GATE_ROOT/src/ops_engine/modules"
+          BASE="https://raw.githubusercontent.com/LangeVC/ops-engine/v3.6.2"
+          curl -fsSL "$BASE/scripts/release_notes_audience_gate.py" \
+            -o "$GATE_ROOT/scripts/release_notes_audience_gate.py"
+          curl -fsSL "$BASE/src/ops_engine/modules/release_gates.py" \
+            -o "$GATE_ROOT/src/ops_engine/modules/release_gates.py"
 
           # Prove what arrived. Without this the step reports success even when
           # it fetched an HTML page: a redirect to a login page returns 200 and
           # curl -f never triggers, so the failure surfaces later as a
-          # SyntaxError on "<!DOCTYPE html>".
-          python3 -c "import ast,sys; ast.parse(open(sys.argv[1]).read())" \
-            "$RUNNER_TEMP/release_notes_audience_gate.py" \
-            || { echo "fetched file is not Python — first three lines:"; \
-                 head -3 "$RUNNER_TEMP/release_notes_audience_gate.py"; exit 1; }
+          # SyntaxError on "<!DOCTYPE html>". Both files are parsed; the gate
+          # resolves the second by its path relative to the first, so a syntax
+          # error in either is a broken gate.
+          for fetched in \
+            "$GATE_ROOT/scripts/release_notes_audience_gate.py" \
+            "$GATE_ROOT/src/ops_engine/modules/release_gates.py"; do
+            python3 -c "import ast,sys; ast.parse(open(sys.argv[1]).read())" "$fetched" \
+              || { echo "fetched file is not Python — first three lines:"; \
+                   head -3 "$fetched"; exit 1; }
+          done
 
       # The release body is addressed at an external reader. A section that
       # still names an internal ticket addresses the tracker that produced the
@@ -216,6 +239,6 @@ jobs:
           Path(out).write_text("\n".join(prefixes) + ("\n" if prefixes else ""),
                                encoding="utf-8")
           PREFIXES_PY
-          python3 "$RUNNER_TEMP/release_notes_audience_gate.py" \
+          python3 "$RUNNER_TEMP/ops-engine-gate/scripts/release_notes_audience_gate.py" \
             --ticket-prefixes "$PREFIXES_FILE" \
             "$NOTES_FILE"
