@@ -2,13 +2,19 @@ name: Prerelease — filtered release notes
 
 # Runs on tag push, before release-artifacts.yml builds the dist.
 #
+# This workflow does not write a release object. The ops-engine creates the
+# release on tag_push, resolving every destination from the committed .ops.yaml;
+# the repo-local `gh release create/edit` that used to run here was a second
+# writer of the same release object, so the step is gone. What remains is the
+# content-boundary check: git-cliff generates the notes, then
+# .github/scripts/filter-changelog.py strips lines that mention non-faigate
+# topics (personal tooling, local setup details), and the filtered result is
+# kept as a workflow artifact for an operator to read.
+#
 # The notes are generated with --current, not --unreleased. The workflow is
 # triggered BY the tag push, so by the time git-cliff runs the tag already
 # exists and nothing is unreleased: --unreleased produced an empty body, which
 # is how v2.10.0 came to be published with no release notes at all.
-# Generates a changelog with git-cliff, strips lines that mention
-# non-faigate topics (personal tooling, local setup details), and
-# attaches the filtered notes to the GitHub release.
 #
 # Content boundary policy lives in .github/scripts/filter-changelog.py
 # and is documented in AGENTS.md → "Content boundary".
@@ -25,7 +31,7 @@ on:
         type: string
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   filtered-notes:
@@ -73,19 +79,6 @@ jobs:
           wc -l filtered-notes.md
           echo "--- filtered preview ---"
           head -40 filtered-notes.md
-
-      - name: Update GitHub release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ steps.tag.outputs.ref }}
-        run: |
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release edit "$TAG" --notes-file filtered-notes.md
-            echo "updated existing release $TAG"
-          else
-            gh release create "$TAG" --title "fusionAIze Gate $TAG" --notes-file filtered-notes.md
-            echo "created release $TAG"
-          fi
 
       - name: Upload filtered notes artifact
         uses: actions/upload-artifact@v4

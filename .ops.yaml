@@ -16,6 +16,18 @@ destinations:
     role: release
     visibility: public
 
+# The release title, declared where the engine reads it (P36-021).
+#
+# ops-engine 3.6.2 resolves the template from the repository's own release block
+# before the layover's, so the title travels with the code that renders it. The
+# default is "{repo_name} {tag_name}", which renders "faigate vX.Y.Z" — a title
+# notify-tap refuses, which is how the Homebrew formula update stopped firing.
+# The prefix is the same one .release-title-prefix holds for the Forgejo title
+# gate and notify-tap; .github/scripts/check-release-path.py compares the two so
+# they cannot drift.
+release:
+  name_template: "fusionAIze Gate {tag_name}"
+
 # This repository's tracker prefixes. The release workflow reads them from here and
 # hands them to the audience gate, so no workflow carries a vocabulary as a literal.
 # Measured, not guessed: these are the prefixes that actually occur in this
