@@ -1,5 +1,13 @@
 # fusionAIze Gate Changelog
 
+## v2.10.4 - 2026-11-18
+
+### Changed
+
+- **The release object is written by the ops-engine alone.** The repository's own release workflow gates the title and the notes but no longer creates the release itself, so there is one writer and one object per destination.
+- **The release title follows the organisation's template.** The title template is declared once in the layover configuration.
+- The audience gate for release notes is pinned to the engine version the layover declares, and the release-path checker passes the repository's lint gates.
+
 ## v2.10.3 - 2026-11-15
 
 ### Changed
