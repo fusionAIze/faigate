@@ -7,16 +7,19 @@ name: Gate the Forgejo Release
 # ReleaseHandler.publish_release here aimed at that same object: the first
 # create won and the second returned 409/422. The writer is gone; the gates stay.
 #
-# Which engine version runs is the layover's pin, not this file's —
-# fusionaize-ops declares it in pyproject.toml and this workflow installs
-# nothing from the engine. What the engine does with the tag therefore follows
-# that pin. At ops-engine 3.6.2 (P36-021) the engine resolves the title
-# template from the repository's own .ops.yaml `release.name_template`, refuses
-# a tag with no CHANGELOG section instead of posting commit subjects, and
-# resolves every destination before writing. An older pin does less; the steps
-# below are this repository's own gates and hold either way, so a tag that
-# would publish under the wrong name or with no authored notes stops here
-# first.
+# Two pins meet here and they are different on purpose. The publishing engine —
+# the code that creates the release object on tag_push — is the layover's pin,
+# declared in fusionaize-ops/pyproject.toml (v3.6.2 at the time of writing);
+# this workflow installs no package from the engine. The audience gate below is
+# gate tooling with its own pin: it fetches two files from the v3.7.3 tag. Those
+# two files are byte-identical at v3.6.2 and v3.7.3, so the two pins cannot
+# disagree about a verdict. What the publishing engine does with the tag
+# follows the layover's pin: at 3.6.2 (P36-021) it resolves the title template
+# from the repository's own .ops.yaml `release.name_template`, refuses a tag
+# with no CHANGELOG section instead of posting commit subjects, and resolves
+# every destination before writing. An older pin does less; the steps below are
+# this repository's own gates and hold either way, so a tag that would publish
+# under the wrong name or with no authored notes stops here first.
 #
 # The gates below write no release object:
 #   title      -> must be exactly "<prefix> vX.Y.Z" (or -rcN), not the bare tag
