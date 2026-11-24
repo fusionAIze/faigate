@@ -151,17 +151,24 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       # Generic tooling lives in the open base. ops-engine is OSS and publicly
-      # mirrored, so this needs no credential — the same fetch the version gate
-      # in mirror.yml already uses.
+      # mirrored, so this needs no credential.
       #
-      # Pinned to the v3.6.2 tag, the engine version the layover declares. An
-      # earlier revision of this workflow pinned a commit instead, because the
-      # mirror's v3.4.0 tag pointed twenty commits behind the canonical one and
-      # installing from it delivered 3.4.0's name with 3.3.0's code. ops-engine
-      # closed that at its source: its own release job pushes the canonical tag
-      # ref onto the mirror before publishing and refuses by name when the two
-      # peel to different commits. Measured here: v3.6.2 targets
-      # 01ca1cc1e437969d178023fe85edf8777f4ef0c1 on both forges. The tag is a
+      # Pinned to the v3.7.3 tag, the current ops-engine release. This is a
+      # gate-tooling pin, not the publishing engine: the release object is
+      # still created by the layover, whose own pin is declared in
+      # fusionaize-ops/pyproject.toml and is not read here. The audience gate
+      # below is the only engine code this workflow runs, and at v3.6.2 and at
+      # v3.7.3 that gate (both fetched files) is byte-identical, so moving the
+      # pin changes no verdict — it only stops this file naming an engine
+      # release older than the one the gate scripts come from.
+      #
+      # An earlier revision of this workflow pinned a commit instead, because
+      # the mirror's v3.4.0 tag pointed twenty commits behind the canonical one
+      # and installing from it delivered 3.4.0's name with 3.3.0's code.
+      # ops-engine closed that at its source: its own release job pushes the
+      # canonical tag ref onto the mirror before publishing and refuses by name
+      # when the two peel to different commits. Measured here: v3.7.3 targets
+      # 10e7348721c754f984802c7bb5a4172267efc875 on both forges. The tag is a
       # fixed point again, so the pin follows it.
       #
       # TWO files, because since OE-007 the script is no longer self-contained:
@@ -176,7 +183,7 @@ jobs:
           set -euo pipefail
           GATE_ROOT="$RUNNER_TEMP/ops-engine-gate"
           mkdir -p "$GATE_ROOT/scripts" "$GATE_ROOT/src/ops_engine/modules"
-          BASE="https://raw.githubusercontent.com/LangeVC/ops-engine/v3.6.2"
+          BASE="https://raw.githubusercontent.com/LangeVC/ops-engine/v3.7.3"
           curl -fsSL "$BASE/scripts/release_notes_audience_gate.py" \
             -o "$GATE_ROOT/scripts/release_notes_audience_gate.py"
           curl -fsSL "$BASE/src/ops_engine/modules/release_gates.py" \
